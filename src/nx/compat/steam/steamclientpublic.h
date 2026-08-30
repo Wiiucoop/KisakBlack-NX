@@ -1,0 +1,4 @@
+#ifndef NX_COMPAT_STEAM_STEAMCLIENTPUBLIC_H
+#define NX_COMPAT_STEAM_STEAMCLIENTPUBLIC_H
+#include "steam_api.h"
+#endif

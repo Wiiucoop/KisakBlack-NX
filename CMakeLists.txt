@@ -4,13 +4,20 @@ project(KisakBlack)
 set(BIN_NAME "KisakBlack")
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_GENERATOR_PLATFORM "WIN32")
+if(NOT NINTENDO_SWITCH)
+    set(CMAKE_GENERATOR_PLATFORM "WIN32")
+endif()
 
 set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(TL_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/tl")
 set(DW_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/DemonWare")
 
 include(cmake_files.cmake)
+
+if(NINTENDO_SWITCH)
+    include(cmake/switch.cmake)
+    return()
+endif()
 
 # phys_gjk.cpp specific flag (experimental)
 set_source_files_properties(

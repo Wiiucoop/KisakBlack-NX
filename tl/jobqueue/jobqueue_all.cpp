@@ -728,6 +728,16 @@ void __cdecl jqAttachQueueToWorkers(jqQueue *Queue, unsigned int ProcessorMask)
         }
 
         // Atomically assign the queue to the worker
+#ifdef KISAK_NX
+        // LP64: Queues[] holds pointers; a 32-bit CAS would tear them.
+        while (InterlockedCompareExchangePointer(
+            reinterpret_cast<void *volatile *>(&worker->Queues[queueSlot]),
+            reinterpret_cast<void *>(Queue),
+            0) != 0)
+        {
+            // retry until successful
+        }
+#else
         while (_InterlockedCompareExchange(
             reinterpret_cast<volatile LONG *>(&worker->Queues[queueSlot]),
             reinterpret_cast<LONG>(Queue),
@@ -735,6 +745,7 @@ void __cdecl jqAttachQueueToWorkers(jqQueue *Queue, unsigned int ProcessorMask)
         {
             // retry until successful
         }
+#endif
 
         // Increment worker's queue count
         _InterlockedExchangeAdd(reinterpret_cast<volatile LONG *>(&worker->NumQueues), 1);
@@ -1573,7 +1584,9 @@ void __cdecl jqWorkerLoop(jqWorker *Worker, jqBatchGroup *GroupID, bool BreakWhe
                     if (!freeList)
                     {
                         block = (jqAtomicQueue<jqBatch,32>::NodeType *)tlMemAlloc(sizeof(jqAtomicQueue<jqBatch, 32>::NodeType) * 32 + 8, 4, 0);
+#ifndef KISAK_NX // nx-port: x86 layout assert
                         static_assert(sizeof(jqAtomicQueue<jqBatch, 32>::NodeType) * 32 + 8 == 0x1008);
+#endif
 
                         //v17 = block;
                         //v18 = 31;
@@ -1736,7 +1749,9 @@ void __cdecl jqTempWorkerLoop(jqWorker *Worker, jqBatchGroup *GroupID, bool (__c
         {
 
           block = (jqAtomicQueue<jqBatch, 32>::NodeType *)tlMemAlloc(sizeof(jqAtomicQueue<jqBatch, 32>::NodeType) * 32 + 8, 4u, 0);
+#ifndef KISAK_NX // nx-port: x86 layout assert
           static_assert(sizeof(jqAtomicQueue<jqBatch, 32>::NodeType) * 32 + 8 == 0x1008);
+#endif
 
           //v12 = block;
           //v13 = 31;
@@ -2436,46 +2451,40 @@ void jqAtomicHeap::Init(
   {
     __debugbreak();
   }
-  v8 = 0;
+    // Was raw int-pointer arithmetic stepping 5 words per LevelInfo, which is
+  // its x86 size (0x14). On LP64 the two cell pointers make it 32 bytes, so
+  // index the array properly instead.
   i = 0;
-  if ( this->NLevels > 0 )
+  for ( int lvl = 0; lvl < this->NLevels; ++lvl )
   {
-    p_NBlocks = &this->Levels[0].NBlocks;
-    do
-    {
-      p_NBlocks += 5;
-      *(p_NBlocks - 6) = this->BlockSize << v8;
-      v10 = this->NLevels - v8++ - 1;
-      *(p_NBlocks - 5) = 1 << v10;
-      *(p_NBlocks - 4) = (unsigned int)((1 << v10) + 63) >> 6;
-      i += (int)((*(p_NBlocks - 5) + 1023) & 0xFFFFFC00) / 8;
-    }
-    while ( v8 < this->NLevels );
+    LevelInfo &L = this->Levels[lvl];
+    const int shift = this->NLevels - lvl - 1;
+    L.BlockSize = this->BlockSize << lvl;
+    L.NBlocks   = 1 << shift;
+    L.NCells    = (unsigned int)((1 << shift) + 63) >> 6;
+    i += (int)(((unsigned int)L.NBlocks + 1023) & 0xFFFFFC00) / 8;
   }
+
   v11 = (unsigned __int8 *)tlMemAlloc(2 * i, 0x80u, 0);
   this->LevelData = v11;
   memset(v11, 0, 2 * i);
-  LevelData = this->LevelData;
-  v13 = (unsigned __int64 *)&LevelData[i];
-  ia = 0;
-  if ( this->NLevels > 0 )
-  {
-    p_CellAvailable = &this->Levels[0].CellAvailable;
-    do
     {
-      v15 = ((unsigned int)*(p_CellAvailable - 2) + 1023) & 0xFFFFFC00;
-      *p_CellAvailable = (unsigned __int64 *)LevelData;
-      p_CellAvailable[1] = v13;
-      LevelData += v15 / 8;
-      v13 = (unsigned __int64 *)((char *)v13 + v15 / 8);
-      p_CellAvailable += 5;
-      ++ia;
+    unsigned __int8 *avail = this->LevelData;
+    unsigned __int8 *alloc = this->LevelData + i;
+    for ( int lvl = 0; lvl < this->NLevels; ++lvl )
+    {
+      LevelInfo &L = this->Levels[lvl];
+      const unsigned int bytes = ((unsigned int)L.NBlocks + 1023) & 0xFFFFFC00;
+      L.CellAvailable = (unsigned __int64 *)avail;
+      L.CellAllocated = (unsigned __int64 *)alloc;
+      avail += bytes / 8;
+      alloc += bytes / 8;
     }
-    while ( ia < this->NLevels );
   }
-  v16 = (unsigned int *)*((unsigned int *)&this->TotalBlocks + 5 * this->NLevels);
-  *v16 = 1;
-  v16[1] = 0;
+    // 5*NLevels words from &TotalBlocks landed exactly on
+  // Levels[NLevels-1].CellAvailable under the x86 layout. Mark the single
+  // top-level block as available.
+  this->Levels[this->NLevels - 1].CellAvailable[0] = 1;
 }
 
 //void jqAtomicQueue<jqBatch,32>::Init(jqAtomicQueue<jqBatch,32> *SharedFreeList)

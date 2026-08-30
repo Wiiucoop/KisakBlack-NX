@@ -235,7 +235,11 @@ int DDL_MoveTo(const ddlState_t *searchState, ddlState_t *resultState, int argNu
 {
     const char *v3; // kr00_4
     int i; // [esp+0h] [ebp-Ch]
+#ifdef KISAK_NX
+    va_list args;
+#else
     char *args; // [esp+8h] [ebp-4h]
+#endif
     va_list va; // [esp+20h] [ebp+14h] BYREF
 
     va_start(va, argNum);

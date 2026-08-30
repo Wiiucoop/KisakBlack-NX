@@ -182,7 +182,7 @@ void __cdecl UI_BuildServerDisplayList(int localClientNum, uiInfo_s *uiInfo, int
                             if (atoi(v13) != ui_browserHardcore->current.integer)
                                 goto LABEL_64;
                         }
-                        if ((*(char*)ui_browserGameMode->current.integer == 48
+                        if ((*(char*)ui_browserGameMode->current.string == 48
                             || (v14 = Info_ValueForKey(info, "gametype"), !I_stricmp(ui_browserGameMode->current.string, v14)))
                             && (ui_browserMap->current.integer <= 0
                                 || ui_browserMap->current.integer >= sharedUiInfo.mapCount + 1
@@ -644,8 +644,7 @@ void __cdecl UI_ServersSort(__int64 column)
         sharedUiInfo.serverStatus.sortKey = column;
         qsort(
             &sharedUiInfo.serverStatusInfo.lines[31][1],
-            sharedUiInfo.serverStatus.numDisplayServers,
-            4u,
+            sharedUiInfo.serverStatus.numDisplayServers, sizeof((&sharedUiInfo.serverStatusInfo.lines[31][1])[0]),
             (int(__cdecl *)(const void *, const void *))UI_ServersQsortCompare);
     }
 }

@@ -1346,7 +1346,7 @@ void __cdecl SP_worldspawn(SpawnVar *spawnVar)
     }
     G_SpawnString(spawnVar, "message", "", &s);
     SV_SetConfigstring(4, (char *)s);
-    SV_SetConfigstring(11, (char *)g_motd->current.integer);
+    SV_SetConfigstring(11, (char *)g_motd->current.string);
     G_SpawnString(spawnVar, "gravity", "800", &s);
     if ( !bg_gravity
         && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\g_spawn_mp.cpp", 1381, 0, "%s", "bg_gravity") )

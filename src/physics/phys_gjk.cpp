@@ -9,7 +9,7 @@
 // (Honestly it should probably be turned on for the entire project)
 // `mp_array`, I was having endless (endless, and not sometimes!) gjk warnings about max iterations. This seems to have fixed it.
 // Could also be fixed with more iterations, but that's a hack.
-#if !defined(_M_IX86_FP) || _M_IX86_FP != 0
+#if (!defined(_M_IX86_FP) || _M_IX86_FP != 0) && !defined(KISAK_NX)
 // to turn on x87: Edit the vcxproj 
 // <ClCompile Include="src\physics\phys_gjk.cpp">
 // <EnableEnhancedInstructionSet Condition = "'$(Platform)'=='Win32'" > NoExtensions< / EnableEnhancedInstructionSet>

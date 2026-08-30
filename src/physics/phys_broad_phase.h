@@ -139,7 +139,7 @@ struct broad_phase_group : broad_phase_base // sizeof=0x60
     void collision_epilog();
 };
 
-const struct __declspec(align(16)) broad_phase_environment_query_input // sizeof=0x40
+struct __declspec(align(16)) broad_phase_environment_query_input // sizeof=0x40
 {                                       // XREF: ?bp_env_jq_batch_function2@@YAHPAUjqBatch@@@Z/r
     phys_vec3 trace_aabb_min_wace;
     phys_vec3 trace_aabb_max_wace;
@@ -181,7 +181,11 @@ struct broad_phase_terrain_query_callback // sizeof=0x4
     //{
     //    void (__thiscall *query)(broad_phase_terrain_query_callback *this, const broad_phase_environment_query_input *, broad_phase_environement_query_results *);
     //};
+#ifdef KISAK_NX
+    virtual void query(const broad_phase_environment_query_input *, broad_phase_environement_query_results *) {}
+#else
     virtual void query(const broad_phase_environment_query_input *, broad_phase_environement_query_results *);
+#endif
 };
 
 struct broad_phase_collision_pair // sizeof=0xC
@@ -221,7 +225,9 @@ struct broad_phase_memory // sizeof=0xCD8
     void list_bpb_remove(broad_phase_base *bpb_to_remove);
     static broad_phase_memory *allocate_buffer(const broad_phase_memory_info *bpmi);
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(broad_phase_memory) == 0xCD8);
+#endif
 
 struct bpi_environment_collision_info // sizeof=0x10
 {                                       // XREF: ?broad_phase_process_object_environment_collision@@YAXXZ/r
@@ -324,7 +330,9 @@ struct axis_aligned_sweep_and_prune // sizeof=0x28
     void process_active_pair_list();
     void process();
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(axis_aligned_sweep_and_prune) == 40);
+#endif
 
 struct __declspec(align(8)) broad_phase_info : broad_phase_base // sizeof=0x70
 {                                                                             // XREF: phys_free_list<broad_phase_info>::T_internal/r

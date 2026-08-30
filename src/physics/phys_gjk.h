@@ -100,7 +100,7 @@ struct bpei_database_t // sizeof=0x10
 };
 
 
-const struct cached_simplex_info // sizeof=0x30
+struct cached_simplex_info // sizeof=0x30
 {                                                                             // XREF: phys_gjk_cache_info/r
     phys_vec3 m_indices[3];
 
@@ -237,7 +237,9 @@ struct phys_heap_gjk_cache_system_avl_tree // sizeof=0x10
         phys_inplace_avl_tree_node<phys_heap_gjk_cache_system_avl_tree::phys_gjk_cache_info_internal> m_avl_tree_node;
         phys_heap_gjk_cache_system_avl_tree::phys_gjk_cache_info_internal *m_next_gjk_ci;
     };
+#ifndef KISAK_NX // nx-port: x86 layout assert
     static_assert(sizeof(phys_heap_gjk_cache_system_avl_tree::phys_gjk_cache_info_internal) == 0x90);
+#endif
 
     phys_simple_allocator<phys_heap_gjk_cache_system_avl_tree::phys_gjk_cache_info_internal> m_list_phys_gjk_cache_info_internal;
     phys_inplace_avl_tree<phys_gjk_geom_id_pair_key, phys_heap_gjk_cache_system_avl_tree::phys_gjk_cache_info_internal, phys_heap_gjk_cache_system_avl_tree::phys_gjk_cache_info_internal::avl_tree_accessor> m_search_tree;
@@ -318,7 +320,7 @@ struct __declspec(align(16)) gjk_geom_info_t // sizeof=0x40
     struct gjk_entity_info_t *get_xform();
 };
 
-const struct __declspec(align(16)) gjk_query_input // sizeof=0x80
+struct __declspec(align(16)) gjk_query_input // sizeof=0x80
 {                                       // XREF: gjk_trace_input_t/r
                                         // ?cached_query_resize@gjk_query_output@@QAEX_NPAV?$colgeom_visitor_inlined_t@$0MI@@@H@Z/r
     phys_vec3 m_cg_aabb_min;
@@ -863,7 +865,9 @@ struct __declspec(align(16)) gjk_trace_output_t // sizeof=0x50
     // padding byte
     // padding byte
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(gjk_trace_output_t) == 80);
+#endif
 
 struct __declspec(align(4)) gjk_slide_move_input_t // sizeof=0x2C
 {                                       // XREF: ai_gjk_slide_move_input_t/r

@@ -346,7 +346,7 @@ void __cdecl SV_AP_GetControlFileName(char *buf, int buflen)
 #ifdef KISAK_LIVE
     char *filename; // [esp+0h] [ebp-4h]
 
-    if ( (!sv_geolocation || !*(_BYTE *)sv_geolocation->current.integer)
+    if ( (!sv_geolocation || !*(_BYTE *)sv_geolocation->current.string)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\server_mp\\sv_autoplaylist.cpp",
                     299,
@@ -356,7 +356,7 @@ void __cdecl SV_AP_GetControlFileName(char *buf, int buflen)
     {
         __debugbreak();
     }
-    if ( sv_geolocation && *(_BYTE *)sv_geolocation->current.integer )
+    if ( sv_geolocation && *(_BYTE *)sv_geolocation->current.string )
     {
         filename = va("%s%s", sv_geolocation->current.string, ".csv");
         I_strncpyz(buf, filename, buflen);
@@ -547,7 +547,7 @@ void __cdecl SV_Groups_ParseGeos(const char *geoblob)
     {
         __debugbreak();
     }
-    if ( sv_geolocation && *(_BYTE *)sv_geolocation->current.integer )
+    if ( sv_geolocation && *(_BYTE *)sv_geolocation->current.string )
     {
         Com_Printf(15, "Setting location to %s\n", sv_geolocation->current.string);
     }

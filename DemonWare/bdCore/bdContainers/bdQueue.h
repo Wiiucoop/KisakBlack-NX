@@ -56,4 +56,6 @@ struct bdQueue
     }
 };
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(bdQueue<void *>) == 0x0C, "bdQueue size mismatch");
+#endif

@@ -151,4 +151,9 @@ void __cdecl Scr_FreeDebugExprValue(scriptInstance_t inst, sval_u val);
 
 
 extern int g_script_error_level[2];
+#ifdef KISAK_NX
+#include <setjmp.h>
+extern jmp_buf g_script_error[2][33];
+#else
 extern int g_script_error[2][33][16];
+#endif

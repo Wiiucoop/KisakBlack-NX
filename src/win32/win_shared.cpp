@@ -31,6 +31,16 @@ unsigned int __cdecl Sys_MillisecondsRaw()
 //}
 
 // https://github.com/id-Software/Quake-III-Arena/blob/master/code/win32/win_shared.c
+#ifdef KISAK_NX
+// x87 fistp rounds to nearest-even; lrintf does the same under the default
+// AArch64 FP rounding mode.
+void Sys_SnapVector(float *v)
+{
+    v[0] = (float)(int)lrintf(v[0]);
+    v[1] = (float)(int)lrintf(v[1]);
+    v[2] = (float)(int)lrintf(v[2]);
+}
+#else
 void Sys_SnapVector(float *v)
 {
     int i;
@@ -51,3 +61,4 @@ void Sys_SnapVector(float *v)
     __asm	fistp	i;
     *v = i;
 }
+#endif

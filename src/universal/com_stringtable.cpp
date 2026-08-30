@@ -364,7 +364,15 @@ int __cdecl StringTable_Checksum(const StringTable *table, unsigned int initialC
 
 void __cdecl StringTable_GetAsset_FastFile(const char *filename, XAssetHeader *tablePtr)
 {
+#ifdef KISAK_NX
+    // errorIfMissing=0: return null on a missing table instead of loading the
+    // default and fatal-erroring. Lets boot proceed past optional stringtables
+    // (e.g. the dev-console restricted-access lists) while the fastfile asset
+    // format is still being ported to 64-bit.
+    tablePtr->xmodelPieces = DB_FindXAssetHeader(ASSET_TYPE_STRINGTABLE, (char*)filename, 0, -1).xmodelPieces;
+#else
     tablePtr->xmodelPieces = DB_FindXAssetHeader(ASSET_TYPE_STRINGTABLE, (char*)filename, 1, -1).xmodelPieces;
+#endif
 }
 
 void __cdecl StringTable_GetAsset(const char *filename, XAssetHeader *tablePtr)

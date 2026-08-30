@@ -36,7 +36,7 @@ void __cdecl RB_TouchAllImages()
   if ( tess.indexCount )
     RB_EndTessSurface();
   R_GetImageList(&imageList);
-  qsort(imageList.image, imageList.count, 4u, (_CoreCrtNonSecureSearchSortCompareFunction)RB_CompareTouchImages);
+  qsort(imageList.image, imageList.count, sizeof((imageList.image)[0]), (_CoreCrtNonSecureSearchSortCompareFunction)RB_CompareTouchImages);
   v9 = 0;
   for ( i = 0; i < imageList.count && imageList.image[i]->semantic; ++i )
   {

@@ -38,7 +38,12 @@ void __cdecl RB_Resource_CreateTexture(
                 int flags,
                 _D3DFORMAT imageFormat);
 r_resource_action *__cdecl RB_Resource_AllocEntry();
-void __cdecl RB_Resource_Release(IUnknown *resource);
+#ifdef KISAK_NX
+typedef IUnknown9Like RbD3DUnknown; // null-D3D9 objects have no COM IUnknown
+#else
+typedef IUnknown RbD3DUnknown;
+#endif
+void __cdecl RB_Resource_Release(RbD3DUnknown *resource);
 void __cdecl RB_Resource_ReloadTexture(GfxImage *image, void *data);
 void __cdecl RB_Resource_Callback(void (__cdecl *callback)());
 void __cdecl RB_Resource_CallbackParam(void (__cdecl *callback)(void *), void *data);

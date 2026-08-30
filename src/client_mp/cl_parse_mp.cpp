@@ -543,7 +543,7 @@ void __cdecl CL_ParseWWWDownload(int localClientNum, msg_t *msg)
     char strBuf[1024]; // [esp+4h] [ebp-508h] BYREF
     char toOSPath[260]; // [esp+404h] [ebp-108h] BYREF
 
-    downloadPath = (char *)fs_homepath->current.integer;
+    downloadPath = (char *)fs_homepath->current.string;
     I_strncpyz(cls.originalDownloadName, cls.downloadName, 64);
     String = MSG_ReadString(msg, strBuf, 0x400u);
     I_strncpyz(cls.downloadName, String, 256);

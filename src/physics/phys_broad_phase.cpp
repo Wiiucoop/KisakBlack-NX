@@ -1862,7 +1862,9 @@ void __cdecl destroy_broad_phase_info(broad_phase_info *bpi)
     if (bpi)
     {
         using TI = phys_free_list<broad_phase_info>::T_internal;
+#ifndef KISAK_NX // nx-port: x86 layout assert
         static_assert(sizeof(TI) == 0x90, "size mismatch");
+#endif
         TI *ti = (TI *)((char *)bpi - offsetof(TI, m_data));
         PMM_VALIDATE((char *)ti, sizeof(TI), 16);
         G_BPM->g_list_broad_phase_info.remove(ti);

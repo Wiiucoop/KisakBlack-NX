@@ -79,7 +79,7 @@ UILocalVarContext *__cdecl UILocalVar_FindOrCreate(UILocalVarContext *context, c
     var = &context->table[hash];
     var->name = CopyString(name, "UILocalVar_FindOrCreate", 36, SCRIPTINSTANCE_SERVER);
     var->type = UILOCALVAR_INT;
-    var->u.integer = 0;
+    var->u.string = 0;
     return (UILocalVarContext *)var;
 }
 
@@ -183,7 +183,7 @@ char *__cdecl UILocalVar_GetString(const UILocalVar *var, char *stringBuf, unsig
             {
                 __debugbreak();
             }
-            return (char *)var->u.integer;
+            return (char *)var->u.string;
         }
     }
     else
@@ -222,6 +222,6 @@ void __cdecl UILocalVar_SetString(UILocalVar *var, char *s)
     if ( var->type == UILOCALVAR_STRING )
         FreeString(var->u.string, 36, SCRIPTINSTANCE_SERVER);
     var->type = UILOCALVAR_STRING;
-    var->u.integer = (int)CopyString(s, "UILocalVar_SetString", 36, SCRIPTINSTANCE_SERVER);
+    var->u.string = (const char *)CopyString(s, "UILocalVar_SetString", 36, SCRIPTINSTANCE_SERVER);
 }
 

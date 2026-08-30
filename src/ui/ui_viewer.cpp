@@ -1473,15 +1473,15 @@ void __thiscall UIViewer::AddPlayerToScene(
     if (strcmp(this->playerCameraName, this->playerCameraDvar->current.string))
     {
         if (this->ingame)
-            v7 = UIViewer::SetCameraPos((char*)this->playerCameraDvar->current.integer, (char*)"ingame", animate);
+            v7 = UIViewer::SetCameraPos((char*)this->playerCameraDvar->current.string, (char*)"ingame", animate);
         else
-            v7 = UIViewer::SetCameraPos((char *)this->playerCameraDvar->current.integer, (char *)"none", animate);
+            v7 = UIViewer::SetCameraPos((char *)this->playerCameraDvar->current.string, (char *)"none", animate);
         if (!v7)
         {
             Dvar_SetString((dvar_s*)this->playerCameraDvar, "player");
-            UIViewer::SetCameraPos((char *)this->playerCameraDvar->current.integer, (char *)"none", animate);
+            UIViewer::SetCameraPos((char *)this->playerCameraDvar->current.string, (char *)"none", animate);
         }
-        integer = (char*)this->playerCameraDvar->current.integer;
+        integer = (char*)this->playerCameraDvar->current.string;
         playerCameraName = this->playerCameraName;
         do
         {

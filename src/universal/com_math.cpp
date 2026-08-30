@@ -3352,13 +3352,13 @@ float __cdecl Vec2Normalize(float *v)
 {
         float ilength; // [esp+Ch] [ebp-8h]
         float length; // [esp+10h] [ebp-4h]
-        
-        length = Vec2Length(v);
+
+        length = sqrt(v[0] * v[0] + v[1] * v[1]);
 
         if (length > 0.0f)
-            ilength = 1.0f / length;
+                ilength = 1.0f / length;
         else
-            ilength = 1.0f;
+                ilength = 1.0f;
 
         v[0] = v[0] * ilength;
         v[1] = v[1] * ilength;
@@ -3383,7 +3383,7 @@ bool __cdecl Vec3IsNormalized(const float *v)
 
 float __cdecl Vec2Length(const float *v)
 {
-    return sqrtf(v[1] * v[1] + v[0] * v[0]);
+        return sqrtf(v[1] * v[1] + v[0] * v[0]);
 }
 
 float Vec2LengthSq(const float *v)

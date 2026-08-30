@@ -161,4 +161,6 @@ struct bdLinkedList
     }
 };
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(bdLinkedList<void *>) == 0x0C, "bdLinkedList size mismatch");
+#endif

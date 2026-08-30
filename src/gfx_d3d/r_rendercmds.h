@@ -252,7 +252,9 @@ struct GfxViewRenderControl // sizeof=0x38
     unsigned int renderingMode;
     unsigned int additionalPostFX;
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(GfxViewRenderControl) == 0x38);
+#endif
 
 struct GfxUI3DBackend // sizeof=0xE0
 {                                       // XREF: GfxViewInfo/r
@@ -556,7 +558,7 @@ struct __declspec(align(16)) GfxSpotShadow // sizeof=0x1D0
     // padding byte
 };
 
-const struct __declspec(align(32)) GfxBackEndData // sizeof=0x186300
+struct __declspec(align(32)) GfxBackEndData // sizeof=0x186300
 {                                       // XREF: .data:s_backEndData/r
                                         // GfxBackEndDataArray/r
     unsigned __int8 surfsBuffer[262144];

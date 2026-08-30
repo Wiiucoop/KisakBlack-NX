@@ -16,7 +16,11 @@
 scrEvaluateGlob_t gScrEvaluateGlob[2];
 
 int g_script_error_level[2];
+#ifdef KISAK_NX
+jmp_buf g_script_error[2][33];
+#else
 int g_script_error[2][33][16];
+#endif
 
 int __cdecl Scr_CompareCanonicalStrings(unsigned int *arg1, unsigned int *arg2)
 {

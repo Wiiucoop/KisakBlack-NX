@@ -341,7 +341,7 @@ void __cdecl CL_ConnectHackDW()
 
 bool __cdecl CL_CDKeyValidate(netadr_t addr)
 {
-#ifdef WIN32
+#if defined(WIN32) || defined(KISAK_NX)
     return Steam_UpdateClientAuthTicket(addr);
 #else
 #error Steam Auth for Arch
@@ -1276,7 +1276,7 @@ void __cdecl CL_WWWDownload()
         else if ( ret == DL_DONE)
         {
             cls.download = 0;
-            FS_BuildOSPath((char *)fs_homepath->current.integer, 0, cls.originalDownloadName, to_ospath);
+            FS_BuildOSPath((char *)fs_homepath->current.string, 0, cls.originalDownloadName, to_ospath);
             remove(to_ospath);
             if ( rename(cls.downloadTempName, to_ospath) )
             {

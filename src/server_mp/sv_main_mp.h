@@ -448,7 +448,9 @@ struct __declspec(align(4)) server_t // sizeof=0x5C28C
     // padding byte
     // padding byte
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(server_t) == 377548);
+#endif
 
 struct bdSecurityID;
 

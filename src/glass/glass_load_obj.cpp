@@ -33,7 +33,7 @@ Glasses *__cdecl GetGlasses()
 {
     bool v1; // [esp+4h] [ebp-8h]
 
-    v1 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.integer;
+    v1 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string;
     if ( v1 || !useFastFile->current.enabled )
         return (Glasses *)((int (__cdecl *)(Glasses *(__cdecl *)()))GetGlasses_LoadObj)(GetGlasses_LoadObj);
     else

@@ -1645,9 +1645,9 @@ LABEL_14:
     }
 }
 
-void Vec2Sub(const vec2r a, const vec2r b, vec2r diff)
+void __cdecl Vec2Sub(const float *a, const float *b, float *diff)
 {
-    diff[0] = a[0] - b[0];
+    *diff = *a - *b;
     diff[1] = a[1] - b[1];
 }
 
@@ -5009,23 +5009,29 @@ void __cdecl Actor_CheckOverridePos(actor_s *self, const float *prevGoalPos)
 
 void __fastcall Actor_SetGoalRadius(actor_goal_s *goal, float radius)
 {
-    iassert(goal);
-    iassert(radius >= 0);
-
-    if (radius < 4.0f)
+    if ( !goal && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp", 5770, 0, "%s", "goal") )
+        __debugbreak();
+    if ( radius < 0.0
+        && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp", 5771, 0, "%s", "radius >= 0") )
+    {
+        __debugbreak();
+    }
+    if ( radius < 4.0 )
         radius = 4.0f;
-
     goal->radius = radius;
 }
 
 void __fastcall Actor_SetGoalHeight(actor_goal_s *goal, float height)
 {
-    iassert(goal);
-    iassert(height >= 0);
-
-    if (height < 80.0)
+    if ( !goal && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp", 5784, 0, "%s", "goal") )
+        __debugbreak();
+    if ( height < 0.0
+        && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp", 5785, 0, "%s", "height >= 0") )
+    {
+        __debugbreak();
+    }
+    if ( height < 80.0 )
         height = 80.0f;
-
     goal->height = height;
 }
 

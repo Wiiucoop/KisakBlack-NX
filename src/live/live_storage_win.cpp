@@ -328,7 +328,7 @@ void LiveStorage_InitCustomClassesNames()
         {
             __debugbreak();
         }
-        if ( *(_BYTE *)customclass[i]->current.integer )
+        if ( *(_BYTE *)customclass[i]->current.string )
             allUnitialized = 0;
     }
     if ( allUnitialized )
@@ -3135,7 +3135,7 @@ void __cdecl SV_FetchWADDeferred()
     bool v0; // [esp+0h] [ebp-4h]
 
     SV_SetPlaylistFetchedTime();
-    v0 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.integer;
+    v0 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string;
     if ( !v0 && Dvar_GetBool("playlist_enabled") && !LiveStorage_FetchingOnlineWAD() )
     {
         dwEnterDeferredCritsec();

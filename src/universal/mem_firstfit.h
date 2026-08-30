@@ -1,10 +1,24 @@
 #pragma once
 #include "mem_userhunk.h"
+#include <stdint.h>
 
-struct _firstfit_heapnode // sizeof=0x8
-{                                       // XREF: FIRSTFIT_HEAPNODE/r
+struct _firstfit_heapnode
+{
     _firstfit_heapnode *next;
     int size;
+};
+
+// The original laid this out as two consecutive HunkUser slots, reusing the
+// second one's fields as size / free-list head / marker / used-bytes. That
+// worked while pointers were 4 bytes. Named fields instead, so the struct
+// grows correctly on LP64.
+struct FirstFitHunkUser
+{
+    HunkUser            hunkUser;
+    size_t              size;
+    _firstfit_heapnode *freeBlocks;
+    intptr_t            marker;
+    size_t              used;
 };
 
 HunkUser *__cdecl Hunk_FirstFitInit(
@@ -17,5 +31,5 @@ HunkUser *__cdecl Hunk_FirstFitInit(
                 int type);
 void __cdecl Hunk_FirstFitReset(HunkUser *_user);
 void __cdecl Hunk_FirstFitDestroy(HunkUser *_user);
-int __cdecl Hunk_FirstFitAlloc(HunkUser *_user, int size, int alignment);
-void __cdecl Hunk_FirstFitFree(HunkUser *_user, unsigned int *ptr);
+void *__cdecl Hunk_FirstFitAlloc(HunkUser *_user, int size, int alignment);
+void __cdecl Hunk_FirstFitFree(HunkUser *_user, void *ptr);

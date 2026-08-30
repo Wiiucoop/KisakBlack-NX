@@ -6899,7 +6899,7 @@ void    VEH_UpdatePath(gentity_s *ent)
             }
             G_VehUpdatePathPos(&nextVpp, -1);
         }
-        if (*(_BYTE *)g_vehicleDrawPath->current.integer && *(_BYTE *)g_vehicleDrawPath->current.integer == 49)
+        if (*(_BYTE *)g_vehicleDrawPath->current.string && *(_BYTE *)g_vehicleDrawPath->current.string == 49)
             VP_DrawPath(&nextVpp);
         if (veh->pathPos.endOfPath && (veh->flags & 0x100) == 0)
             veh->speed = 0.0f;

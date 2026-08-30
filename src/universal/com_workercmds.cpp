@@ -48,7 +48,14 @@ void __cdecl jqSafeFlush(jqBatchGroup *group, unsigned __int64 batchCount)
 
 jqWorkerCmd *jqGetWorkercmdParam(jqBatch *batch)
 {
+#ifdef KISAK_NX
+    // LP64: the pointer spans ParamData[0..1]; read it unaligned-safe.
+    jqWorkerCmd *cmd;
+    memcpy(&cmd, batch->ParamData, sizeof(cmd));
+    return cmd;
+#else
     return *reinterpret_cast<jqWorkerCmd **> (batch->ParamData);
+#endif
 }
 
 void *__cdecl jqLockData(jqBatch *batch)
@@ -83,8 +90,16 @@ void __cdecl Sys_AddWorkerCmdInternal(jqWorkerCmd *name, unsigned __int8 *data, 
         batch.ConditionalAddress = cond->address;
         batch.ConditionalValue = cond->value;
     }
+#ifdef KISAK_NX
+    // LP64: store the full pointer across ParamData[0..1]. The fence value
+    // written to ParamData[1] on x86 is never read back from the batch; keep
+    // the atomic increment only for its side effect on ppu_fence.
+    memcpy(batch.ParamData, &name, sizeof(name));
+    _InterlockedExchangeAdd(&name->ppu_fence, 1u);
+#else
     batch.ParamData[0] = (unsigned int)name;
     batch.ParamData[1] = _InterlockedExchangeAdd(&name->ppu_fence, 1u);
+#endif
     jqAddBatch(&batch, name->queue);
 }
 

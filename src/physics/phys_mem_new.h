@@ -46,7 +46,9 @@ struct alignas(8) phys_slot_pool // sizeof=0x18
     void  free_slot(unsigned __int8 *slot);
     char *allocate_slot();
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(phys_slot_pool) == 0x18);
+#endif
 
 struct phys_memory_manager // sizeof=0x3D0
 {
@@ -70,12 +72,14 @@ struct phys_memory_manager // sizeof=0x3D0
 
     phys_memory_manager(char *memory_buffer, int memory_buffer_size);
 
-    int allocate(unsigned int size, unsigned int alignment);
+    void *allocate(unsigned int size, unsigned int alignment);
     phys_slot_pool *allocate_slot_pool();
     phys_slot_pool *get_slot_pool(unsigned int slot_size, unsigned int slot_alignment);
 };
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(phys_memory_manager) == 0x3D0);
+#endif
 
 void __cdecl phys_memory_manager_term();
 void __cdecl ppu_pmm_get_linear_buffer(char ***linear_buffer_cur, char **linear_buffer_end);

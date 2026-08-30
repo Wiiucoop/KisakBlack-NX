@@ -429,8 +429,12 @@ const char *gScriptVarsAlloc = "ScriptVars";
 
 void __cdecl Scr_InitVariables(scriptInstance_t inst)
 {
+        // 0x7DFFC8 was 0x47FFE entries times the x86 sizeof (0x1C). The struct
+    // is wider on LP64, so derive the byte count instead of hardcoding it --
+    // otherwise Scr_InitVariableRange writes past the block and lands in
+    // whatever PMem handed out next.
     gScrVarGlob[inst].variableList = (VariableValueInternal *)_PMem_AllocNamed(
-        0x7DFFC8u,
+        0x47FFEu * sizeof(VariableValueInternal),
         0x80u,
         4,
         1u,
@@ -468,14 +472,16 @@ void __cdecl Scr_InitVariables(scriptInstance_t inst)
     gScrVarPub[inst].numScriptObjects = 0;
     if (gScrVarDebugPub[inst])
     {
+                // Same story: 0x11FFF8 assumed 4-byte pointers.
         gScrVarDebugPub[inst]->varUsage = (const char **)_PMem_AllocNamed(
-            0x11FFF8u,
+            0x47FFEu * sizeof(const char *),
             4u,
             4,
             1u,
             gScriptVarsAlloc,
             TRACK_SCRIPT);
-        memset((unsigned __int8 *)gScrVarDebugPub[inst]->varUsage, 0, 0x11FFF8u);
+        memset((unsigned __int8 *)gScrVarDebugPub[inst]->varUsage, 0,
+               0x47FFEu * sizeof(const char *));
     }
     Scr_InitVariableRange(inst, 1u, 0x7FFFu);
     Scr_InitVariableRange(inst, 0x8000u, 0x47FFEu);

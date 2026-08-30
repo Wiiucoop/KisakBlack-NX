@@ -64,7 +64,7 @@ gentity_s *__fastcall Actor_GetScriptTargetEntity(actor_s *self);
 void __cdecl Actor_Think(gentity_s *self);
 actor_think_result_t __fastcall Actor_CallThink(actor_s *self);
 void __fastcall Actor_UpdateCloseEnt(actor_s *self);
-void Vec2Sub(const vec2r a, const vec2r b, vec2r diff);
+void __cdecl Vec2Sub(const float *a, const float *b, float *diff);
 double __cdecl Vec2DistanceSq(const float *v0, const float *v1);
 void __fastcall Actor_UpdatePlayerPush(actor_s *self, gentity_s *player);
 void __fastcall Actor_CheckNotify(actor_s *self);

@@ -1751,7 +1751,7 @@ void __cdecl CL_DownloadsComplete(int localClientNum)
     else
     {
         Com_SyncThreads();
-        if ( fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.integer )
+        if ( fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string )
         {
             v1 = va("%s/%s", fs_homepath->current.string, fs_gameDirVar->current.string);
             Sys_Mkdir(v1);

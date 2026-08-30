@@ -699,7 +699,7 @@ char *__cdecl Dvar_InfoString(int localClientNum, int bit)
         index = localClientNum;
         Username = CL_ControllerIndex_GetUsername();
         Info_SetValueForKey(info1, (char*)"name", Username);
-        if ( clanName && *(_BYTE *)clanName->current.integer )
+        if ( clanName && *(_BYTE *)clanName->current.string )
         {
             I_strncpyz(tempbuf, clanName->current.string, 5);
             I_CleanStr(tempbuf);

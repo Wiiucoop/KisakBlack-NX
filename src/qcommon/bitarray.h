@@ -15,7 +15,11 @@ struct bitarray // sizeof=0x10
     {
         unsigned int v2; // kr00_4
         int i; // [esp+0h] [ebp-Ch]
+#ifdef KISAK_NX
+        va_list argList;
+#else
         char *argList; // [esp+8h] [ebp-4h]
+#endif
         va_list va; // [esp+1Ch] [ebp+10h] BYREF
 
         va_start(va, first);

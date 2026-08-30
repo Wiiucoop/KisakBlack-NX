@@ -80,7 +80,7 @@ unsigned int __cdecl BG_GetWeaponIndex(const WeaponVariantDef *weapVariantDef)
 
 void __cdecl BG_ShutdownWeaponDefFiles()
 {
-    if ( fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.integer )
+    if ( fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string )
     {
         BG_ClearWeaponDefInternal();
         BG_FreeWeaponDefStrings();
@@ -408,7 +408,7 @@ bool __cdecl BG_IsDefaultWeapon(const char *name)
 {
     bool v2; // [esp+0h] [ebp-8h]
 
-    v2 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.integer;
+    v2 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string;
     return !v2 && useFastFile->current.enabled && DB_IsXAssetDefault(ASSET_TYPE_WEAPON, name);
 }
 

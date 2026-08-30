@@ -86,7 +86,9 @@ struct alignas(16) hybrid_vector // sizeof=0x10
 {                                                                             // XREF: colgeom_visitor_t/r
         float4 vec;                                                 // XREF: AimTarget_IsTargetVisible+1B/w
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(hybrid_vector) == 16);
+#endif
 
 struct orientation_t // sizeof=0x30
 {                                                                             // XREF: .rdata:orientation_t const orIdentity/r
@@ -94,6 +96,10 @@ struct orientation_t // sizeof=0x30
     float axis[3][3];                                     // XREF: CG_Laser_Add(centity_s *,DObj *,cpose_t *,float const * const,LaserOwnerEnum)+50/o
 };
 
+#ifdef KISAK_NX
+// newlib declares long random(void); rename the game version everywhere.
+#define random kb_random
+#endif
 double __cdecl random();
 double __cdecl crandom();
 void __cdecl GaussianRandom(float *f0, float *f1);

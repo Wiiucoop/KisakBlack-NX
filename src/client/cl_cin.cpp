@@ -41,7 +41,7 @@ void __cdecl SCR_StopCinematic()
                 CL_SetLocalClientConnectionState(clientNum, CA_DISCONNECTED);
             }
         }
-        if ( oneClientWasChanged && *(_BYTE *)nextmap->current.integer )
+        if ( oneClientWasChanged && *(_BYTE *)nextmap->current.string )
         {
             v0 = va("%s\n", nextmap->current.string);
             Cbuf_AddText(0, v0);

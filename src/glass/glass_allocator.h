@@ -47,6 +47,11 @@ struct SmallAllocatorTemplate//<GlassPhysics * *> // sizeof=0x4
     {
         using other = SmallAllocatorTemplate<U>;
     };
+
+    template<class U>
+    bool operator==(const SmallAllocatorTemplate<U> &other) const noexcept { return alloc == other.alloc; }
+    template<class U>
+    bool operator!=(const SmallAllocatorTemplate<U> &other) const noexcept { return alloc != other.alloc; }
 };
 
 // aislop

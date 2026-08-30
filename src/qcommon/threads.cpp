@@ -8,6 +8,7 @@
 #include <gfx_d3d/r_cinematic.h>
 #include <gfx_d3d/rb_resource.h>
 #include <win32/win_common.h>
+#include <stdio.h>
 
 const char *s_threadNames[15] =
 {
@@ -270,12 +271,14 @@ void __cdecl SetThreadName(unsigned int dwThreadID, const char *szThreadName)
     if ( dwThreadID == 0xFFFFFFFF || dwThreadID == GetCurrentThreadId() )
         PROF_THREADNAME(szThreadName);
 
+#ifndef KISAK_NX
     // LWSS: this try/except needs to be here, otherwise it wont run without a debugger :D
     __try {
         RaiseException(0x406D1388, 0, sizeof(info) / sizeof(DWORD), (ULONG_PTR *)&info);
     }
     __except (EXCEPTION_EXECUTE_HANDLER) {
     }
+#endif
 }
 
 DWORD WINAPI Sys_ThreadMain(LPVOID parameter)
@@ -360,7 +363,10 @@ char __cdecl Sys_SpawnServerThread(void (__cdecl *function)(unsigned int))
 
 char __cdecl Sys_SpawnDatabaseThread(void (__cdecl *function)(unsigned int))
 {
-    Sys_CreateEvent(0, 0, &wakeDatabaseEvent);
+        Sys_CreateEvent(0, 0, &wakeDatabaseEvent);
+    printf("DB: wakeDatabaseEvent=%p type=%08x\n",
+           wakeDatabaseEvent,
+           wakeDatabaseEvent ? *(unsigned int *)wakeDatabaseEvent : 0);
     Sys_CreateEvent(1, 1, &databaseCompletedEvent);
     Sys_CreateEvent(1, 1, &databaseCompletedEvent2);
     Sys_CreateEvent(1, 1, &resumedDatabaseEvent);
@@ -582,6 +588,9 @@ void __cdecl Sys_DatabaseCompleted()
 
 void __cdecl Sys_WaitStartDatabase()
 {
+    printf("DB thread: wakeDatabaseEvent=%p type=%08x\n",
+           wakeDatabaseEvent,
+           wakeDatabaseEvent ? *(unsigned int *)wakeDatabaseEvent : 0);
     Sys_WaitForSingleObject(&wakeDatabaseEvent);
 }
 

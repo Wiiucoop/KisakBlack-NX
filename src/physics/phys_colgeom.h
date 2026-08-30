@@ -253,7 +253,9 @@ struct __declspec(align(16)) gjk_aabb_t : gjk_base_t // sizeof=0x80
         virtual bool is_walkable(const phys_vec3 *hit_point, const phys_vec3 *up) override;
         virtual const cbrush_t *get_brush() const override;
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(gjk_aabb_t) == 128);
+#endif
 
 struct BrushWrapper // sizeof=0x60
 {
@@ -338,7 +340,9 @@ struct gjk_obb_t : gjk_base_t // sizeof=0xA0
         // is_walkable() - gjk_base_t
         // get_brush() - gjk_base_t
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(gjk_obb_t) == 160);
+#endif
 
 struct __declspec(align(8)) gjk_brush_t : gjk_base_t // sizeof=0x60
 {
@@ -397,7 +401,9 @@ struct __declspec(align(8)) gjk_brush_t : gjk_base_t // sizeof=0x60
         virtual bool is_walkable(const phys_vec3 *hit_point, const phys_vec3 *up) override;
         virtual const cbrush_t *get_brush() const override;
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(gjk_brush_t) == 96);
+#endif
 
 struct CollisionBorder // sizeof=0x1C
 {
@@ -408,7 +414,7 @@ struct CollisionBorder // sizeof=0x1C
         float length;
 };
 
-const struct CollisionPartition // sizeof=0x14
+struct CollisionPartition // sizeof=0x14
 {
         unsigned __int8 triCount;
         unsigned __int8 borderCount;
@@ -492,7 +498,9 @@ struct __declspec(align(16)) gjk_partition_t : gjk_base_t // sizeof=0x70
         virtual bool is_walkable(const phys_vec3 *hit_point, const phys_vec3 *up) override;
         // get_brush() - gjk_base_t
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(gjk_partition_t) == 112);
+#endif
 
 struct gjk_double_sphere_t : gjk_base_t // sizeof=0x90
 {
@@ -550,7 +558,9 @@ struct gjk_double_sphere_t : gjk_base_t // sizeof=0x90
         // is_walkable() - gjk_base_t
         // get_brush() - gjk_base_t
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(gjk_double_sphere_t) == 144);
+#endif
 
 struct gjk_cylinder_t : gjk_base_t // sizeof=0xA0
 {
@@ -613,7 +623,9 @@ struct gjk_cylinder_t : gjk_base_t // sizeof=0xA0
 
         const phys_vec3 * get_dims(phys_vec3 *result) const;
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(gjk_cylinder_t) == 160);
+#endif
 
 struct __declspec(align(8)) gjk_polygon_cylinder_t : gjk_base_t // sizeof=0x80
 {                                                                             // XREF: ?render_gjkcc_collision@@YAXAAY02$$CBM00@Z/r
@@ -735,7 +747,9 @@ struct __declspec(align(8)) gjk_polygon_cylinder_t : gjk_base_t // sizeof=0x80
 
         //gjk_polygon_cylinder_t::poly_verts gjk_polygon_cylinder_t::s_poly_verts
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(gjk_polygon_cylinder_t) == 128);
+#endif
 
 struct gjk_geom_list_t // sizeof=0x8
 {

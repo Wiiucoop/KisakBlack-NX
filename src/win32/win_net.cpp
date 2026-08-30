@@ -683,7 +683,7 @@ int __cdecl dwPlatformInit(bdNetStartParams *params)
     if ( ip && I_strcmp(ip->current.string, "localhost") )
     {
         params->m_useAnyIP = 0;
-        //bdInetAddr::bdInetAddr(&forceAddr, (char *)ip->current.integer);
+        //bdInetAddr::bdInetAddr(&forceAddr, (char *)ip->current.string);
         bindAddr = forceAddr;
         //bdInetAddr::~bdInetAddr(&forceAddr);
     }
@@ -1025,7 +1025,11 @@ unsigned int __cdecl NET_TCPIPSocket(char *net_interface, int port, int type)
         if ( net_interface && *net_interface && I_stricmp(net_interface, "localhost") )
             Sys_StringToSockaddr(net_interface, (sockaddr *)&address);
         else
+#ifdef KISAK_NX
+            address.sin_addr.s_addr = 0;
+#else
             address.sin_addr.S_un.S_addr = 0;
+#endif
         if ( port == -1 )
             address.sin_port = 0;
         else
@@ -1070,10 +1074,17 @@ int __cdecl NET_Select(unsigned int socket)
     fd_set writefds; // [esp+110h] [ebp-110h] BYREF
     timeval time; // [esp+218h] [ebp-8h] BYREF
 
+#ifdef KISAK_NX
+    FD_ZERO(&readfds);
+    FD_SET((int)socket, &readfds);
+    FD_ZERO(&writefds);
+    FD_SET((int)socket, &writefds);
+#else
     readfds.fd_count = 1;
     readfds.fd_array[0] = socket;
     writefds.fd_count = 1;
     writefds.fd_array[0] = socket;
+#endif
     time.tv_sec = 5;
     time.tv_usec = 0;
     err = select(0, &readfds, &writefds, 0, &time);

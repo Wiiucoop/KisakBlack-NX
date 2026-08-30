@@ -12,6 +12,10 @@
 #include <win32/win_shared.h>
 #include "db_file_load.h"
 #include <win32/win_net.h>
+#ifdef KISAK_NX
+extern "C" int NX_TryLoadKbz(const char *zoneName, const char *ffFilename); // src/nx/nx_kbz.cpp
+extern bool g_minimumFastFileLoaded;                                        // db_file_load.cpp
+#endif
 #include <algorithm>
 #include <win32/win_local.h>
 #include <win32/win_main.h>
@@ -1751,6 +1755,28 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
     unsigned int assetEntryIndex; // [esp+4h] [ebp-8h]
     XAssetEntryPoolEntry *assetEntry; // [esp+8h] [ebp-4h]
 
+#ifdef KISAK_NX
+    // One-time diagnostic: how many assets actually registered in the pool, and
+    // does the first-bucket name pointer read back sanely? A count near zero
+    // means DB linking is broken; thousands means the fastfile assets are in
+    // but this specific lookup missed.
+    static int s_nxDiag = 0;
+    if (!s_nxDiag) {
+        s_nxDiag = 1;
+        int inuse = 0;
+        for (int i = 1; i < 32768; ++i)
+            if (g_assetEntryPool[i].entry.inuse) ++inuse;
+        printf("[nx-db] asset pool inuse=%d; looking up type=%d name='%s'\n", inuse, (int)type, name ? name : "(null)");
+        for (unsigned int ai = db_hashTable[DB_HashForName(name, type) % 0x8000u]; ai; ) {
+            XAssetEntryPoolEntry *e = &g_assetEntryPool[ai];
+            const char *nm = DB_GetXAssetName(&e->entry.asset);
+            printf("[nx-db]   bucket entry idx=%u type=%d name=%p '%.32s'\n", ai, (int)e->entry.asset.type,
+                   (void *)nm, nm ? nm : "(null)");
+            ai = e->entry.nextHash;
+        }
+    }
+#endif
+
     for ( assetEntryIndex = db_hashTable[DB_HashForName(name, type) % 0x8000u];
                 assetEntryIndex;
                 assetEntryIndex = assetEntry->entry.nextHash )
@@ -1806,7 +1832,7 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, const char *name)
     DB_CloneXAssetInternal(&asset, &newEntry->asset);
     hash = DB_HashForName(name, type);
     newEntry->nextHash = db_hashTable[hash % 0x8000u];
-    db_hashTable[hash % 0x8000u] = ((char *)newEntry - (char *)g_assetEntryPool) >> 4;
+    db_hashTable[hash % 0x8000u] = (int)(((char *)newEntry - (char *)g_assetEntryPool) / sizeof(g_assetEntryPool[0]));
     String = SL_GetString((char*)name, 4u, SCRIPTINSTANCE_SERVER);
     v4 = SL_ConvertToString(String, SCRIPTINSTANCE_SERVER);
     DB_SetXAssetName(&newEntry->asset, v4);
@@ -1842,7 +1868,12 @@ XAssetEntryPoolEntry *__cdecl DB_AllocXAssetEntry(XAssetType type, unsigned __in
     }
     if ( ++XAssetEntryHighCount > XAssetEntryHighWaterMark )
         XAssetEntryHighWaterMark = XAssetEntryHighCount;
-    g_freeAssetEntryHead = (XAssetEntryPoolEntry *)freeHead->entry.asset.type;
+    // nx-port: the free list threads through the union's `next` pointer (see
+    // DB_Init / DB_FreeXAssetEntry). The decompile popped it via
+    // `entry.asset.type`, a 4-byte XAssetType that aliases `next` on x86 but
+    // TRUNCATES the 8-byte pointer on LP64 -> corrupt list -> null deref on the
+    // next alloc. Read the full-width `next` (identical to .asset.type on x86).
+    g_freeAssetEntryHead = freeHead->next;
     freeHead->entry.asset.type = type;
     freeHead->entry.asset.header = DB_AllocXAssetHeader(type);
     freeHead->entry.zoneIndex = zoneIndex;
@@ -2413,7 +2444,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntry *newEntry, int allo
             }
         }
         newEntry->nextHash = db_hashTable[hash % 0x8000];
-        db_hashTable[hash % 0x8000] = ((char *)newEntry - (char *)g_assetEntryPool) >> 4;
+        db_hashTable[hash % 0x8000] = (int)(((char *)newEntry - (char *)g_assetEntryPool) / sizeof(g_assetEntryPool[0]));
         if ( db_xassetdebug->current.enabled )
         {
             if ( db_xassetdebugtype->current.integer == -1
@@ -2481,7 +2512,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntry *newEntry, int allo
                 }
             }
             newEntry->nextOverride = *pOverrideAssetEntryIndex;
-            *pOverrideAssetEntryIndex = ((char *)newEntry - (char *)g_assetEntryPool) >> 4;
+            *pOverrideAssetEntryIndex = (int)(((char *)newEntry - (char *)g_assetEntryPool) / sizeof(g_assetEntryPool[0]));
             return existingEntrya;
         }
         goto LABEL_106;
@@ -2555,7 +2586,7 @@ LABEL_106:
                 }
             }
             newEntry->nextOverride = existingEntrya->entry.nextOverride;
-            existingEntrya->entry.nextOverride = ((char *)newEntry - (char *)g_assetEntryPool) >> 4;
+            existingEntrya->entry.nextOverride = (int)(((char *)newEntry - (char *)g_assetEntryPool) / sizeof(g_assetEntryPool[0]));
             DB_SwapXAsset(&newEntry->asset, &existingEntrya->entry.asset);
             zoneIndex = existingEntrya->entry.zoneIndex;
             existingEntrya->entry.zoneIndex = newEntry->zoneIndex;
@@ -3807,6 +3838,28 @@ int __cdecl DB_TryLoadXFileInternal(const char *zoneName, int zoneFlags)
                 skipLoadingMaterialsHack = 542;
             }
         }
+#ifdef KISAK_NX
+        // nx-port: the .ff stream format hard-wires 32-bit pointers and x86
+        // struct sizes and cannot be consumed by this 64-bit build. If a
+        // prelinked "<zone>.kbz" (produced offline by tools/ffconv) sits next
+        // to the .ff, load that. Otherwise SKIP the zone: running the x86
+        // loader on the raw .ff would corrupt pointers and crash, so we treat
+        // the zone as an (empty) success and let assets be reported missing at
+        // lookup -- which pinpoints the next asset type to add to the converter.
+        int nxKbz = NX_TryLoadKbz(g_zoneNames[g_zoneIndex].name, filename);
+        CloseHandle(zoneFile); // DB_LoadXFile would have consumed+closed it
+        if ( nxKbz == 0 )
+            Com_PrintWarning(10, "nx: no .kbz for zone '%s'; skipping raw .ff load\n",
+                             g_zoneNames[g_zoneIndex].name);
+        succeeded = (nxKbz != -1); // 1=loaded, 0=skipped-empty both count as ok
+        // DB_LoadXFile (bypassed above) decrements g_loadingAssets once per zone
+        // at the end of a load; mirror that or DB_TryLoadXFile's !g_loadingAssets
+        // assert fires after the queue drains. Also mirror the minimum-fastfile
+        // flag (code_pre carries flag 1) which gates DB-readiness checks.
+        --g_loadingAssets;
+        if ( (zoneFlags & 1) != 0 )
+            g_minimumFastFileLoaded = 1;
+#else
         succeeded = DB_LoadXFile(
                                     filename,
                                     zoneFile,
@@ -3816,6 +3869,7 @@ int __cdecl DB_TryLoadXFileInternal(const char *zoneName, int zoneFlags)
                                     g_fileBuf,
                                     g_zoneAllocType,
                                     zoneFlags);
+#endif
         if ( (zoneFlags & 0x40000000) == 0 )
             PMem_EndAlloc(g_zoneNames[g_zoneIndex].name, g_zoneAllocType);
         if ( succeeded )
@@ -4026,10 +4080,10 @@ void __cdecl DB_ModXFileHandle(const char *zoneName, void **zoneFile, FF_DIR *zo
     bool v6; // [esp+4h] [ebp-10Ch]
     char filename[260]; // [esp+8h] [ebp-108h] BYREF
 
-    v6 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.integer;
+    v6 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string;
     if ( !v6 || I_stricmp(zoneName, "mod") )
     {
-        if ( fs_usermapDir && *(_BYTE *)fs_usermapDir->current.integer )
+        if ( fs_usermapDir && *(_BYTE *)fs_usermapDir->current.string )
         {
             String = Dvar_GetString("fs_usermapDir");
             v4 = va("%s\\%s", String, zoneName);
@@ -4056,7 +4110,7 @@ void __cdecl DB_BuildOSPath_FromSource(const char *zoneName, FF_DIR source, unsi
     {
         if ( source == FFD_MOD_DIR )
         {
-            v4 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.integer;
+            v4 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string;
             if ( !v4
                 && !Assert_MyHandler(
                             "C:\\projects_pc\\cod\\codsrc\\src\\database\\db_registry.cpp",
@@ -4916,7 +4970,7 @@ char __cdecl DB_ModFileExists()
     char filename[256]; // [esp+4h] [ebp-108h] BYREF
     void *zoneFile; // [esp+108h] [ebp-4h]
 
-    if ( !fs_gameDirVar || !*(_BYTE *)fs_gameDirVar->current.integer )
+    if ( !fs_gameDirVar || !*(_BYTE *)fs_gameDirVar->current.string )
         return 0;
     DB_BuildOSPath_FromSource("mod", FFD_MOD_DIR, 0x100u, filename);
     zoneFile = CreateFileA(filename, 0x80000000, 1u, 0, 3u, 0x60000000u, 0);

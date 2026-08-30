@@ -338,7 +338,9 @@ struct centity_s // sizeof=0x328
         // padding bit
         // padding bit
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(centity_s) == 0x328);
+#endif
 
 struct fake_centity_s // sizeof=0x32C
 {                                                                             // XREF: fake_centity_t/r
@@ -728,7 +730,9 @@ struct playerState_s // sizeof=0x26A4
                 hudelem_s archival[31];
         } hud;
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(playerState_s) == 9892);
+#endif
 
 struct lerpFrame_t // sizeof=0x34
 {                                                                             // XREF: clientInfo_t/r

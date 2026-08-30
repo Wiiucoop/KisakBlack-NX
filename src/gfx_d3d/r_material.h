@@ -33,7 +33,7 @@ enum surfaceType_t : __int32
     SF_GLASS_MESH           = 0xF,
     SF_END_FX               = 0x10,
     SF_NUM_SURFACE_TYPES    = 0x10,
-    SF_FORCE_32_BITS        = 0xFFFFFFFF,
+    SF_FORCE_32_BITS        = (-1),
 };
 
 enum GfxDepthRangeType : __int32
@@ -41,7 +41,7 @@ enum GfxDepthRangeType : __int32
                                         // ?R_ChangeDepthRange@@YAXPAUGfxCmdBufState@@W4GfxDepthRangeType@@@Z/r ...
     GFX_DEPTH_RANGE_SCENE     = 0x0,
     GFX_DEPTH_RANGE_VIEWMODEL = 0x2,
-    GFX_DEPTH_RANGE_FULL      = 0xFFFFFFFF,
+    GFX_DEPTH_RANGE_FULL      = (-1),
 };
 
 enum MaterialVertexDeclType : __int32
@@ -232,7 +232,9 @@ struct MaterialTechniqueSet // sizeof=0x210
         unsigned __int16 techsetFlags;
         MaterialTechnique *techniques[130];
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(MaterialTechniqueSet) == 528);
+#endif
 
 struct __declspec(align(4)) GfxImageLoadDef // sizeof=0x10
 {
@@ -394,7 +396,9 @@ struct Material // sizeof=0xC0
         };
         GfxStateBits *stateBitsTable;
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(Material) == 192);
+#endif
 
 
 struct stream_source_info_t // sizeof=0x3

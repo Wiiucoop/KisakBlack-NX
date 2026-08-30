@@ -39,7 +39,7 @@ struct view_limits_t // sizeof=0x10
     float vertSpanDown;
 };
 
-const struct VehicleParameter // sizeof=0x124
+struct VehicleParameter // sizeof=0x124
 {                                       // XREF: .data:VehicleParameter g_default_params/r
                                         // vehicle_info_t/r ...
     VehicleParameter();
@@ -92,7 +92,7 @@ const struct VehicleParameter // sizeof=0x124
     float m_tire_fric_side_max;
 };
 
-const struct vehicle_info_t // sizeof=0x1DD8
+struct vehicle_info_t // sizeof=0x1DD8
 {                                       // XREF: .data:vehicle_info_t * bg_vehicleInfos/r
     char name[64];
     __int16 type;                       // XREF: G_SpawnHelicopter(gentity_s *,gentity_s *,char const *,char const *)+70/w
@@ -482,7 +482,9 @@ struct alignas(16) NitrousVehicle // sizeof=0x440
     // padding byte
     // padding byte
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(NitrousVehicle) == 0x440);
+#endif
 
 struct PhysObjUserData *__cdecl Phys_ObjCreateNitrousVehicle(
                 const float *position,

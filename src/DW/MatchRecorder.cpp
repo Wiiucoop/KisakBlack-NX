@@ -832,7 +832,7 @@ void __cdecl MatchRecord_GeneratePooledFileDetails(int controllerIndex)
     else if ( fileDetails->context == FILESHARE_POOLEDFILEDETAILS_FRIEND
                  && selectedPlayerXuid
                  && selectedPlayerXuid->current.integer
-                 && *(_BYTE *)selectedPlayerXuid->current.integer )
+                 && *(_BYTE *)selectedPlayerXuid->current.string )
     {
         xuid = I_atoi64(selectedPlayerXuid->current.string);
     }

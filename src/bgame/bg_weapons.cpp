@@ -5260,7 +5260,7 @@ WeaponVariantDef *__cdecl BG_LoadWeaponVariantDef(const char *name)
 {
     bool v2; // [esp+4h] [ebp-8h]
 
-    v2 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.integer;
+    v2 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string;
     if ( v2 || !useFastFile->current.enabled )
         return BG_LoadWeaponVariantDef_LoadObj((char*)name);
     else

@@ -743,12 +743,12 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
 
     G_srand(randomSeed);
 
-    if (*(_BYTE *)g_log->current.integer)
+    if (*(_BYTE *)g_log->current.string)
     {
         if (g_logSync->current.enabled)
-            FS_FOpenFileByMode((char *)g_log->current.integer, &level.logFile, FS_APPEND_SYNC);
+            FS_FOpenFileByMode((char *)g_log->current.string, &level.logFile, FS_APPEND_SYNC);
         else
-            FS_FOpenFileByMode((char *)g_log->current.integer, &level.logFile, FS_APPEND);
+            FS_FOpenFileByMode((char *)g_log->current.string, &level.logFile, FS_APPEND);
         if (level.logFile)
         {
             char serverinfo[1024];
@@ -806,7 +806,9 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
     if (!restart)
     {
         memset(&bgs->animData->animScriptData, 0, sizeof(animScriptData_t)/*0x8D388u*/);
+#ifndef KISAK_NX // nx-port: x86 layout assert
         static_assert(sizeof(animScriptData_t) == 0x8D388);
+#endif
 
         bgs->animData->animScriptData.soundAlias = SND_FindAlias;
         bgs->animData->animScriptData.playSoundAlias = G_AnimScriptSound;
@@ -2145,7 +2147,7 @@ void G_PrintAllFastFileErrors()
     }
     G_PrintFastFileErrors((char*)"code_post_gfx_mp");
     G_PrintFastFileErrors((char*)"common_mp");
-    G_PrintFastFileErrors((char *)sv_mapname->current.integer);
+    G_PrintFastFileErrors((char *)sv_mapname->current.string);
 }
 
 void __cdecl G_PrintFastFileErrors(char *fastfile)
@@ -2354,7 +2356,7 @@ void __cdecl CalculateRanks()
                 ++level.numVotingClients;
         }
     }
-    qsort(level.sortedClients, level.numConnectedClients, 4u, (int (__cdecl *)(const void *, const void *))SortRanks);
+    qsort(level.sortedClients, level.numConnectedClients, sizeof((level.sortedClients)[0]), (int (__cdecl *)(const void *, const void *))SortRanks);
     for ( ia = 0; ia < level.numConnectedClients; ++ia )
     {
         clientNum = level.sortedClients[ia];

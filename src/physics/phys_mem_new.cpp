@@ -3,6 +3,7 @@
 #include <Windows.h> // interlockedexchange
 #include <new>
 #include <universal/q_shared.h>
+#include <stdint.h>
 
 void *g_phys_memory_buffer;
 int g_phys_memory_buffer_size;
@@ -40,36 +41,29 @@ void __cdecl transient_allocator_update_largest_size()
     ;
 }
 
-int phys_memory_manager::allocate(unsigned int size, unsigned int alignment)
+// Lock-free bump allocator. The original read m_buffer_cur through a
+// volatile uint32 alias and did the whole compare-and-swap in 32 bits,
+// which silently drops the top half of every address on LP64.
+void *phys_memory_manager::allocate(unsigned int size, unsigned int alignment)
 {
-    unsigned int v3; // edx
-    unsigned int v4; // eax
-    volatile unsigned __int32 *p_m_buffer_cur; // edi
-    signed __int32 v6; // esi
-    int v7; // edx
-    unsigned int v9; // [esp+Ch] [ebp-8h]
-    //phys_memory_manager *v10; // [esp+10h] [ebp-4h]
-    unsigned int alignmenta; // [esp+20h] [ebp+Ch]
+    const uintptr_t mask = (uintptr_t)alignment - 1;
 
-    v3 = alignment - 1;
-    v4 = ~(alignment - 1);
-    //v10 = this;
-    alignmenta = alignment - 1;
-    v9 = v4;
-    p_m_buffer_cur = (volatile unsigned __int32 *)&this->m_buffer_cur;
-    while ( 1 )
+    for (;;)
     {
-        v7 = v4 & (*p_m_buffer_cur + v3);
-        if ( (char *)(v7 + size) > this->m_buffer_end )
-            return 0;
-        v6 = *p_m_buffer_cur;
-        if ( _InterlockedCompareExchange(p_m_buffer_cur, v7 + size, v6) == v6 )
-            break;
-        //this = v10;
-        v3 = alignmenta;
-        v4 = v9;
+        char *cur = __atomic_load_n(&this->m_buffer_cur, __ATOMIC_ACQUIRE);
+        char *aligned = (char *)(((uintptr_t)cur + mask) & ~mask);
+
+        if (aligned + size > this->m_buffer_end)
+            return nullptr;
+
+        char *next = aligned + size;
+        if (__atomic_compare_exchange_n(&this->m_buffer_cur, &cur, next,
+                                        false, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE))
+        {
+            return aligned;
+        }
     }
-    return v7;
 }
 
 phys_slot_pool *phys_memory_manager::allocate_slot_pool()
@@ -77,7 +71,7 @@ phys_slot_pool *phys_memory_manager::allocate_slot_pool()
     minspec_mutex *p_m_slot_pool_allocate_mutex; // ebx
     int m_list_preallocated_slot_pools_count; // eax
     phys_slot_pool *v4; // edi
-    int v6; // eax
+    void *v6; // was int -- truncated the pointer from allocate()
     volatile unsigned int Target; // [esp+Ch] [ebp-4h] BYREF
 
     p_m_slot_pool_allocate_mutex = &this->m_slot_pool_allocate_mutex;
@@ -253,7 +247,7 @@ phys_memory_manager::phys_memory_manager(char *memory_buffer, int memory_buffer_
 
 void __cdecl phys_memory_manager_init(void *const memory_buffer, int memory_buffer_size)
 {
-    unsigned int v2; // ecx
+    uintptr_t v2; // was unsigned int -- truncated the buffer pointer on LP64
 
     if ( g_phys_memory_buffer
         && _tlAssert("source/phys_mem_new.cpp", 237, "g_phys_memory_buffer == NULL", "") )
@@ -270,13 +264,15 @@ void __cdecl phys_memory_manager_init(void *const memory_buffer, int memory_buff
     {
         __debugbreak();
     }
-    v2 = ((unsigned int)memory_buffer + 7) & 0xFFFFFFF8;
+    v2 = ((uintptr_t)memory_buffer + 7) & ~(uintptr_t)7;
     g_phys_memory_buffer = memory_buffer;
     g_phys_memory_buffer_size = memory_buffer_size;
     g_phys_memory_manager = (phys_memory_manager *)v2;
     if (v2)
     {
-        new ((void*)v2) phys_memory_manager((char*)(v2 + sizeof(phys_memory_manager)), (int)(((unsigned int)memory_buffer + memory_buffer_size) - v2 - sizeof(phys_memory_manager)));
+        new ((void*)v2) phys_memory_manager(
+            (char *)(v2 + sizeof(phys_memory_manager)),
+            (int)(((uintptr_t)memory_buffer + memory_buffer_size) - v2 - sizeof(phys_memory_manager)));
         //phys_memory_manager::phys_memory_manager(
         //    (phys_memory_manager *)v2,
         //    (char *)(v2 + 976),
@@ -668,7 +664,7 @@ char * phys_slot_pool::allocate_slot()
         // CAS failed, retry
     }
 
-    // No free slots — allocate fresh from memory manager
+    // No free slots ï¿½ allocate fresh from memory manager
     char *v5 = (char *)g_phys_memory_manager->allocate(
         (unsigned __int16)this->m_map_key,
         (unsigned int)this->m_map_key >> 16);

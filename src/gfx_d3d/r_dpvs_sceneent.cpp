@@ -2,6 +2,12 @@
 #include <universal/com_workercmds.h>
 #include "r_dpvs_entity.h"
 #include "r_scene.h"
+#ifdef KISAK_NX
+// This file carries a duplicate of r_dpvs.cpp's R_CullSphereDpvs. The header
+// declares it extern, which overrides the `static` here on GCC; rename the
+// local copy (and this file's calls to it).
+#define R_CullSphereDpvs R_CullSphereDpvs_sceneent_local
+#endif
 
 #if 0
 void    R_AddCellSceneEntSurfacesInFrustumCmd(GfxWorldDpvsPlanes *data)
@@ -334,7 +340,7 @@ void R_AddCellSceneEntSurfacesInFrustumCmd(GfxWorldDpvsPlanes *data)
     {
         __debugbreak();
     }
-    entInfo = (GfxEntCellRefInfo *)scene.dynSModelVisBitsCamera[localClientNum - 4];
+    entInfo = scene.dpvs.entInfo[localClientNum];
     sceneXModelIndex = scene.dpvs.sceneXModelIndex;
     sceneDObjIndex = scene.dpvs.sceneDObjIndex;
     viewIndex = dpvsCell->viewIndex;

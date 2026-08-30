@@ -8,6 +8,12 @@
 #include "bg_mantle.h"
 #include "bg_perks.h"
 #include <universal/com_math_anglevectors.h>
+#ifdef KISAK_NX
+#include <algorithm>
+using std::min;
+using std::max;
+#endif
+
 
 double __cdecl BG_GetBobCycle(const playerState_s *ps)
 {

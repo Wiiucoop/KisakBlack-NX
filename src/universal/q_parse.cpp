@@ -239,7 +239,11 @@ const char *__cdecl Com_GetScriptWarningPrefix()
 void Com_ScriptErrorDrop(const char *msg, ...)
 {
     char string[4096]; // [esp+0h] [ebp-1010h] BYREF
+#ifdef KISAK_NX
+    va_list ap;
+#else
     char *ap; // [esp+1004h] [ebp-Ch]
+#endif
     parseInfo_t *v3; // [esp+1008h] [ebp-8h]
     ParseThreadInfo *ParseThreadInfo; // [esp+100Ch] [ebp-4h]
     va_list va; // [esp+101Ch] [ebp+Ch] BYREF
@@ -249,7 +253,11 @@ void Com_ScriptErrorDrop(const char *msg, ...)
     v3 = &ParseThreadInfo->parseInfo[ParseThreadInfo->parseInfoNum];
     va_copy(ap, va);
     _vsnprintf(string, 0x1000u, msg, va);
+#ifdef KISAK_NX
+    va_end(ap);
+#else
     ap = 0;
+#endif
     if ( ParseThreadInfo->parseInfoNum )
         Com_Error(ERR_DROP, "%sFile %s, line %i: %s", v3->errorPrefix, v3->parseFile, v3->lines, string);
     else
@@ -259,7 +267,11 @@ void Com_ScriptErrorDrop(const char *msg, ...)
 void Com_ScriptError(const char *msg, ...)
 {
     char string[4096]; // [esp+0h] [ebp-1010h] BYREF
+#ifdef KISAK_NX
+    va_list ap;
+#else
     char *ap; // [esp+1004h] [ebp-Ch]
+#endif
     parseInfo_t *v3; // [esp+1008h] [ebp-8h]
     ParseThreadInfo *ParseThreadInfo; // [esp+100Ch] [ebp-4h]
     va_list va; // [esp+101Ch] [ebp+Ch] BYREF
@@ -269,7 +281,11 @@ void Com_ScriptError(const char *msg, ...)
     v3 = &ParseThreadInfo->parseInfo[ParseThreadInfo->parseInfoNum];
     va_copy(ap, va);
     _vsnprintf(string, 0x1000u, msg, va);
+#ifdef KISAK_NX
+    va_end(ap);
+#else
     ap = 0;
+#endif
     if ( ParseThreadInfo->parseInfoNum )
         Com_PrintError(24, "%sFile %s, line %i: %s", v3->warningPrefix, v3->parseFile, v3->lines, string);
     else
@@ -279,7 +295,11 @@ void Com_ScriptError(const char *msg, ...)
 void Com_ScriptWarning(const char *msg, ...)
 {
     char string[4096]; // [esp+0h] [ebp-1010h] BYREF
+#ifdef KISAK_NX
+    va_list ap;
+#else
     char *ap; // [esp+1004h] [ebp-Ch]
+#endif
     parseInfo_t *v3; // [esp+1008h] [ebp-8h]
     ParseThreadInfo *ParseThreadInfo; // [esp+100Ch] [ebp-4h]
     va_list va; // [esp+101Ch] [ebp+Ch] BYREF
@@ -289,7 +309,11 @@ void Com_ScriptWarning(const char *msg, ...)
     v3 = &ParseThreadInfo->parseInfo[ParseThreadInfo->parseInfoNum];
     va_copy(ap, va);
     _vsnprintf(string, 0x1000u, msg, va);
+#ifdef KISAK_NX
+    va_end(ap);
+#else
     ap = 0;
+#endif
     if ( ParseThreadInfo->parseInfoNum )
         Com_PrintWarning(24, "%sFile %s, line %i: %s", v3->warningPrefix, v3->parseFile, v3->lines, string);
     else

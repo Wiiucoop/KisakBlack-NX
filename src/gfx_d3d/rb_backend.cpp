@@ -5204,7 +5204,11 @@ void __cdecl RB_UpdateDynamicBuffers(GfxBackEndData *backendData)
     *backendData->dynamicBufferCurrentFrame = 0;
 }
 
+#ifdef KISAK_NX
+static const void *data; // an unrelated global `data` also exists in r_water_sim.cpp
+#else
 const void *data;
+#endif
 void     RB_RenderThread(unsigned int threadContext)
 {
     void *Value; // eax

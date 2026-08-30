@@ -77,7 +77,7 @@ HunkUser **__cdecl Sys_ListFiles(char *directory, char *extension, char *filter,
         *numfiles = numfilesa;
         if ( numfilesa )
         {
-            v9 = (HunkUser **)Hunk_UserAlloc(user, 4 * numfilesa + 8, 4, 0);
+            v9 = (HunkUser **)Hunk_UserAlloc(user, sizeof(char *) * (numfilesa + 2), sizeof(char *), 0);
             *v9++ = user;
             for ( i = 0; i < numfilesa; ++i )
                 v9[i] = (HunkUser *)list[i];
@@ -136,7 +136,7 @@ HunkUser **__cdecl Sys_ListFiles(char *directory, char *extension, char *filter,
             *numfiles = numfilesa;
             if ( numfilesa )
             {
-                v9 = (HunkUser **)Hunk_UserAlloc(user, 4 * numfilesa + 8, 4, 0);
+                v9 = (HunkUser **)Hunk_UserAlloc(user, sizeof(char *) * (numfilesa + 2), sizeof(char *), 0);
                 *v9++ = user;
                 for ( i = 0; i < numfilesa; ++i )
                     v9[i] = (HunkUser *)list[i];

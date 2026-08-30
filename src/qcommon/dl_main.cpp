@@ -8,7 +8,13 @@ int __cdecl DL_VPrintf(const char *fmt, char *argptr)
 {
     char msg[1028]; // [esp+10h] [ebp-408h] BYREF
 
+#ifdef KISAK_NX
+    strncpy(msg, fmt, 0x400u); // downloader is stubbed; argptr is a fake va_list
+    msg[0x400] = 0;
+    (void)argptr;
+#else
     _vsnprintf(msg, 0x400u, fmt, argptr);
+#endif
     Com_Printf(0, "%s", msg);
     return &msg[strlen(msg) + 1] - &msg[1];
 }

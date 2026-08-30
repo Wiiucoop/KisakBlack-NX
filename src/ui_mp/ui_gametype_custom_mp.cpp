@@ -244,7 +244,7 @@ void __cdecl UI_Gametype_WriteDvarChunk(MemoryFile *memFile, char *dvarName)
                 MemFile_WriteInt(memFile, dvar->current.integer);
                 break;
             case DVAR_TYPE_STRING:
-                MemFile_WriteCString(memFile, (char *)dvar->current.integer);
+                MemFile_WriteCString(memFile, (char *)dvar->current.string);
                 break;
             case DVAR_TYPE_COLOR:
                 MemFile_WriteByte(memFile, dvar->current.color[0]);

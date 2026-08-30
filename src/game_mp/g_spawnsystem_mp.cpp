@@ -2043,7 +2043,7 @@ void SpawnSystem_DebugRender()
         if ( !g_entities[0].client || g_entities[0].client->sess.connected != CON_CONNECTED )
             localPlayer = 0;
         player = 0;
-        if ( *(_BYTE *)spawnsystem_debug_team->current.integer )
+        if ( *(_BYTE *)spawnsystem_debug_team->current.string )
         {
             if ( !_stricmp(spawnsystem_debug_team->current.string, "allies") )
             {
@@ -2073,7 +2073,7 @@ void SpawnSystem_DebugRender()
             {
                 ent = &g_entities[i];
                 if ( ent->client->sess.connected == CON_CONNECTED
-                    && (!*(_BYTE *)spawnsystem_debug_player->current.integer
+                    && (!*(_BYTE *)spawnsystem_debug_player->current.string
                      || !_stricmp(ent->client->sess.cs.name, spawnsystem_debug_player->current.string)) )
                 {
                     point_team = 1 << ent->client->sess.cs.team;

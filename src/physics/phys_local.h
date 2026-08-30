@@ -177,7 +177,9 @@ public:
         return r;
     }
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(alignof(phys_vec3) == 16, "Alignment broken"); // The physics system expects in a dozen+ places that the alignment is 16 (sizeof phys_vec3)
+#endif
 
 
 // KISAKTODO: operator cleanup
@@ -247,7 +249,9 @@ struct chull_t // sizeof=0x20
     int touched;
     chull_t *next_list;
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(chull_t) == 0x20);
+#endif
 
 struct minspec_mutex // sizeof=0x4
 {                                       // XREF: .data:minspec_mutex g_render_mutex/r

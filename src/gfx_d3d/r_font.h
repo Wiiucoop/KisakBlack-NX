@@ -14,7 +14,9 @@ struct Glyph // sizeof=0x18
     float s1;
     float t1;
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(Glyph) == 24);
+#endif
 
 struct Font_s // sizeof=0x18
 {                                       // XREF: XAssetPoolEntry<Font_s>/r
@@ -25,7 +27,9 @@ struct Font_s // sizeof=0x18
     struct Material *glowMaterial;
     Glyph *glyphs;
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(Font_s) == 24);
+#endif
 
 const Glyph *__cdecl R_GetCharacterGlyph(Font_s *font, unsigned int letter);
 unsigned int __cdecl R_FontGetRandomLetter(Font_s *font, int seed);

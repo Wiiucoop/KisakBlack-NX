@@ -564,7 +564,9 @@ struct gameState_t // sizeof=0x132F8
         int matchUIVisibilityFlags;                 // XREF: CG_SetupGameInformation+16/r
                                                                                 // CL_WriteUncompressedDemoInfo(int)+83B/r ...
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(gameState_t) == 78584);
+#endif
 
 struct clientStatic_t // sizeof=0x1CF2800
 {                                                                             // XREF: .data:clientStatic_t cls/r

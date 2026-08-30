@@ -1109,7 +1109,7 @@ char *__cdecl Scr_ReadFile_LoadObj(
     len = FS_FOpenFileByMode(extFilename, &f, FS_READ);
     if (len >= 0)
     {
-        if (!fs_gameDirVar || !*(_BYTE *)fs_gameDirVar->current.integer)
+        if (!fs_gameDirVar || !*(_BYTE *)fs_gameDirVar->current.string)
             g_loadedImpureScript = 1;
         sourceBuf = (char *)Hunk_AllocateTempMemoryHigh(len + 1, "Scr_ReadFile");
         FS_Read((unsigned __int8 *)sourceBuf, len, f);
@@ -1134,7 +1134,7 @@ char *__cdecl Scr_ReadFile(
 {
     int file; // [esp+34h] [ebp-4h] BYREF
 
-    if ( fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.integer )
+    if ( fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string )
     {
         if ( (FS_FOpenFileRead(extFilename, &file) & 0x80000000) != 0 )
         {
@@ -1221,7 +1221,7 @@ char *__cdecl x(
     len = FS_FOpenFileByMode(extFilename, &f, FS_READ);
     if ( len >= 0 )
     {
-        if ( !fs_gameDirVar || !*(_BYTE *)fs_gameDirVar->current.integer )
+        if ( !fs_gameDirVar || !*(_BYTE *)fs_gameDirVar->current.string )
             g_loadedImpureScript = 1;
         sourceBuf = (char *)Hunk_AllocateTempMemoryHigh(len + 1, "Scr_ReadFile");
         FS_Read((unsigned __int8 *)sourceBuf, len, f);

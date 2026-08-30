@@ -1259,7 +1259,7 @@ void __cdecl CL_FirstSnapshot(int localClientNum)
         LocalClientGlobals->serverTime = LocalClientGlobals->snap.serverTime;
         clc->timeDemoBaseTime = LocalClientGlobals->snap.serverTime;
         Con_TimeJumped(localClientNum, LocalClientGlobals->serverTime);
-        if ( *(_BYTE *)cl_activeAction->current.integer )
+        if ( *(_BYTE *)cl_activeAction->current.string )
         {
             Cbuf_AddText(localClientNum, cl_activeAction->current.string);
             Cbuf_AddText(localClientNum, "\n");

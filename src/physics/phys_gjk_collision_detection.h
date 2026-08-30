@@ -43,7 +43,9 @@ struct destructible_ent_aa : phys_auto_activate_callback // sizeof=0xC
     }
     void auto_activate(struct broad_phase_info *bpi_impactor);
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(destructible_ent_aa) == 12);
+#endif
 
 struct dynamic_ent_aa : phys_auto_activate_callback // sizeof=0xC
 {

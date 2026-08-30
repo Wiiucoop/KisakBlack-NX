@@ -64,7 +64,7 @@ r_resource_action *__cdecl RB_Resource_AllocEntry()
     return &resourceActions[numResourceActions++];
 }
 
-void __cdecl RB_Resource_Release(IUnknown *resource)
+void __cdecl RB_Resource_Release(RbD3DUnknown *resource)
 {
     r_resource_action *action; // [esp+0h] [ebp-8h]
 

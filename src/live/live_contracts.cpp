@@ -1939,8 +1939,7 @@ void __cdecl LiveContracts_RebuildFilteredList(int controllerIndex)
         contractSortControllerIndex = controllerIndex;
         qsort(
             s_contractFilteredList,
-            s_contractFilteredListCount,
-            4u,
+            s_contractFilteredListCount, sizeof((s_contractFilteredList)[0]),
             (int (__cdecl *)(const void *, const void *))FilteredContractListSort);
         for ( j = 0; j < (int)s_contractFilteredListCount; ++j )
             s_contractFilteredList[j] = s_contractDisplayOrder[s_contractFilteredList[j]];

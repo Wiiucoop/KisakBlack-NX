@@ -8,3 +8,4 @@ void __cdecl TL_DebugPrint(char *Text);
 void *__cdecl TL_MemAlloc(unsigned int Size, unsigned int Align);
 void __cdecl TL_MemFree(void *Ptr);
 void __cdecl TL_CriticalError(const char *msg);
+void TL_DebugDumpHunk(const char *where);

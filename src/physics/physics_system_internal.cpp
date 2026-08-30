@@ -2163,7 +2163,9 @@ void physics_system::validate_member(environment_rigid_body *rb)
             if ((m_flags & 0x20) != 0)
             {
                 using TI = phys_free_list<user_rigid_body>::T_internal;
+#ifndef KISAK_NX // nx-port: x86 layout assert
                 static_assert(sizeof(TI) == 0x1D0, "size mismatch");
+#endif
                 TI *ti = (TI *)((char *)rb - offsetof(TI, m_data));
                 PMM_VALIDATE((char *)ti, sizeof(TI), 16);
 
@@ -2172,7 +2174,9 @@ void physics_system::validate_member(environment_rigid_body *rb)
             else
             {
                 using TI = phys_free_list<rigid_body>::T_internal;
+#ifndef KISAK_NX // nx-port: x86 layout assert
                 static_assert(sizeof(TI) == 0x180, "size mismatch");
+#endif
                 TI *ti = (TI *)((char *)rb - offsetof(TI, m_data));
                 PMM_VALIDATE((char *)ti, sizeof(TI), 16);
 

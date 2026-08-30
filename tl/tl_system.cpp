@@ -112,7 +112,11 @@ void __cdecl tlVPrintf(const char *Format, char *args)
 {
   char Work[512]; // [esp+0h] [ebp-204h] BYREF
 
+#ifdef KISAK_NX
+  vsprintf(Work, Format, *(va_list *)args); // callers pass a real va_list through char*
+#else
   vsprintf(Work, Format, args);
+#endif
   if ( tlCurSystemCallbacks.DebugPrint )
     tlCurSystemCallbacks.DebugPrint(Work);
   else

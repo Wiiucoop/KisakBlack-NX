@@ -139,7 +139,8 @@ unsigned int __cdecl G_NewString(const char *string)
 }
 
 char str[8][32];
-int index;
+static int s_vtosIndex;
+#define index s_vtosIndex // shadows newlib's index() within this file
 char *__cdecl vtos(const float *v)
 {
     char *s; // [esp+0h] [ebp-4h]

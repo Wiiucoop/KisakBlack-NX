@@ -6,6 +6,12 @@
 #include "r_dvars.h"
 #include <qcommon/com_bsp_load_obj.h>
 #include <set>
+#ifdef KISAK_NX
+#include <algorithm>
+using std::min;
+using std::max;
+#endif
+
 
 #if 0
 void __cdecl XModelReadSurface(XModel *model, unsigned __int8 **pos, void *(__cdecl *Alloc)(int), XSurface *surface)

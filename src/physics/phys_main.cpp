@@ -2910,7 +2910,7 @@ void __cdecl print_static_models_stats()
     num = numStaticModels;
     for ( i = 0; i < (int)num; ++i )
         base[i] = (unsigned int) & cm.staticModelList[i];
-    qsort(base, num, 4u, SortModelsFunc);
+    qsort(base, num, sizeof((base)[0]), SortModelsFunc);
     refcount = 1;
     smodel = (cStaticModel_s *)base[0];
     dims = *(float *)(base[0] + 68) - *(float *)(base[0] + 56);

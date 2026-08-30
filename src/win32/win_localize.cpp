@@ -46,6 +46,18 @@ int Win_InitLocalization()
     localization.language = language_buffer;
     sizea = FS_FileRead(language_buffer, size, fp);
     FS_FileClose(fp);
+#ifdef KISAK_NX
+    // Opened with "rt": on Windows the CRT strips CR in text mode. newlib
+    // has no text mode, so strip them here -- otherwise the language parses
+    // as "english\r" and every zone\<lang>\*.ff path misses.
+    {
+        int rd = 0, wr = 0;
+        for (; rd < sizea; ++rd)
+            if (language_buffer[rd] != 0x0D)
+                language_buffer[wr++] = language_buffer[rd];
+        sizea = wr;
+    }
+#endif
     if (sizea)
     {
         localization.language[sizea] = 0;

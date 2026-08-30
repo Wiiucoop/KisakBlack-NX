@@ -2096,7 +2096,7 @@ int __thiscall GlassShard::Shatter(const GlassShard **newShards, int maxNewShard
             if (ns)
             {
                 numNewShards += ns;
-                qsort(newShards, numNewShards, 4u, compareShards);
+                qsort(newShards, numNewShards, sizeof((newShards)[0]), compareShards);
                 if (maxShardSize > (&(*newShards)->outline)->Area())
                     break;
             }
@@ -2795,7 +2795,7 @@ LABEL_38:
             if ( v47 )
             {
                 numNewShards += v47;
-                qsort(newShards, numNewShards, 4u, (int (__cdecl *)(const void *, const void *))compareShards);
+                qsort(newShards, numNewShards, sizeof((newShards)[0]), (int (__cdecl *)(const void *, const void *))compareShards);
             }
         }
     }

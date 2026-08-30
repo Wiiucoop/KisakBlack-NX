@@ -612,7 +612,7 @@ int __cdecl Live_GetControllerFromXUID(unsigned __int64 player)
 
 void __cdecl Live_GiveAchievement(int localControllerIndex, const char *achievementName)
 {
-    if ( !fs_gameDirVar || !*(_BYTE *)fs_gameDirVar->current.integer )
+    if ( !fs_gameDirVar || !*(_BYTE *)fs_gameDirVar->current.string )
         LiveSteam_GiveAchievement(achievementName);
 }
 

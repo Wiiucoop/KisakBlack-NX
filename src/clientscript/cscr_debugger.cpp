@@ -950,8 +950,7 @@ void __thiscall Scr_ScriptList::Init(scriptInstance_t inst)
     }
     qsort(
         &scriptWindowsNames[1],
-        this->numLines - 1,
-        4u,
+        this->numLines - 1, sizeof((&scriptWindowsNames[1])[0]),
         (int (__cdecl *)(const void *, const void *))ConDrawInput_CompareStrings);
     this->scriptWindows = (Scr_ScriptWindow **)Scr_AllocDebugMem(inst, 4 * this->numLines, "Scr_ScriptList::Init2");
     memset(&info, 0, sizeof(info));
@@ -1645,7 +1644,7 @@ void __thiscall Scr_ScriptWatch::EvaluateWatchChildren(
                 compare = v12;
             }
             gDebuggerInstance = inst;
-            qsort(&names[hardcodedCount], count - hardcodedCount, 4u, compare);
+            qsort(&names[hardcodedCount], count - hardcodedCount, sizeof((&names[hardcodedCount])[0]), compare);
             oldElements = parentElement->childArrayHead;
             oldChildCount = parentElement->childCount;
             newElements = (Scr_WatchElement_s *)Scr_AllocDebugMem(
@@ -2335,7 +2334,7 @@ void __cdecl Scr_SortElementChildren(scriptInstance_t inst, Scr_WatchElement_s *
         elementList[newIndex] = (unsigned int)&newElements[newIndex];
     Sys_EnterCriticalSection(CRITSECT_SCRIPT_DEBUGGER_SORT);
     sortInst = inst;
-    qsort(elementList, count, 4u, (int (__cdecl *)(const void *, const void *))CompareThreadElements);
+    qsort(elementList, count, sizeof((elementList)[0]), (int (__cdecl *)(const void *, const void *))CompareThreadElements);
     Sys_LeaveCriticalSection(CRITSECT_SCRIPT_DEBUGGER_SORT);
     for ( newIndexa = 0; newIndexa < count; ++newIndexa )
     {

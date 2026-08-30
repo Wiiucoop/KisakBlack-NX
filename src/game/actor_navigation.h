@@ -83,11 +83,11 @@ struct CustomSearchInfo_CouldAttack // sizeof=0x8
 };
 
 
-float Path_GetPathDir(float *delta, const float *vFrom, const float *vTo);
+double __fastcall Path_GetPathDir(float *delta, const float *vFrom, const float *vTo);
 pathnode_t *__fastcall Path_GetNegotiationNode(const path_t *pPath);
 void __fastcall Path_IncrementNodeUserCount(path_t *pPath);
 void __fastcall Path_AddTrimmedAmount(path_t *pPath, const float *vStartPos);
-float Path_GetDistToPathSegment(const float *vStartPos, const pathpoint_t *pt);
+double __fastcall Path_GetDistToPathSegment(const float *vStartPos, const pathpoint_t *pt);
 pathnode_t *__fastcall Path_FindCloseNode(
                 team_t eTeam,
                 pathnode_t *pNodeFrom,

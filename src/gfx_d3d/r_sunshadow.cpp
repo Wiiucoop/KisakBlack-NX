@@ -3,6 +3,12 @@
 #include "r_dpvs_static.h"
 #include <universal/com_convexhull.h>
 #include "r_pretess.h"
+#ifdef KISAK_NX
+#include <algorithm>
+using std::min;
+using std::max;
+#endif
+
 
 const float g_shadowFrustumBound[5][2] =
 { { -1.0, -1.0 }, { -1.0, 1.0 }, { 1.0, 1.0 }, { 1.0, -1.0 }, { -1.0, -1.0 } };

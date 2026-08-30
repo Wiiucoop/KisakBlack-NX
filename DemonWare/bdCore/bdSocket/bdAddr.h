@@ -454,7 +454,9 @@ struct __declspec(align(4)) bdAddr
 };
 
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(bdAddr) == 8, "bdAddr size mismatch");
+#endif
 
 //struct __declspec(align(4)) bdCommonAddr : bdReferencable // sizeof=0x28
 //{

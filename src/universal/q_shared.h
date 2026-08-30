@@ -62,6 +62,36 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 
 #endif // WIN32
 
+//======================= SWITCH (libnx) DEFINES ========================
+#ifdef KISAK_NX
+
+#define	MAC_STATIC
+
+#undef QDECL
+#define	QDECL	__cdecl
+
+#define	CPUSTRING	"nx-aarch64"
+
+// angle indexes
+#define	PITCH				0		// up / down
+#define	YAW					1		// left / right
+#define	ROLL				2		// fall over
+
+#define ID_INLINE inline
+
+int __cdecl ShortSwap(__int16 l);
+int __cdecl LongSwap(int l);
+
+static ID_INLINE short BigShort(short l) { return (short)ShortSwap(l); }
+#define LittleShort
+static ID_INLINE int BigLong(int l) { return LongSwap(l); }
+#define LittleLong
+#define LittleFloat
+
+#define	PATH_SEP '\'
+
+#endif // KISAK_NX
+
 
 #define MAX_LOCAL_CENTITIES 0x600
 
@@ -138,7 +168,8 @@ typedef     signed short    sint16;
 typedef unsigned short    uint16;
 typedef __int32				int32;
 typedef unsigned __int32 uint32;
-typedef signed long			sint32;
+// LP64 note: `long` is 8 bytes on AArch64; sint32 must stay 4 bytes.
+typedef signed int			sint32;
 typedef ll                            int64;
 typedef ll                            sint64;
 typedef ull                         uint64;

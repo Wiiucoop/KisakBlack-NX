@@ -23,7 +23,11 @@ struct va_info_t
 
 va_info_t va_info[15];
 TraceThreadInfo g_traceThreadInfo[15];
+#ifdef KISAK_NX
+jmp_buf g_com_error[15]; // real AArch64 jmp_bufs (x86 int[16] is far too small)
+#else
 int g_com_error[15][16];
+#endif
 int valueindex;
 
 // *WARNING* One or more selections were skipped as they could not be interpreted as c data

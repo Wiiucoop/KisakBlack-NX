@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stdint.h>
+#include <stddef.h>
+
 #define HF_FIXEDSIZE 4
 
 enum HU_ALLOCATION_SCHEME : __int32
@@ -19,15 +22,24 @@ struct HunkUser // sizeof=0x10
     int type;
 };
 
+// buffer[0..3] were the HunkUser, buffer[4] the pointer to the FirstFit hunk
+// that follows inline. Named so the offsets stay right when pointers are 8
+// bytes.
+struct DebugHunkUser
+{
+    HunkUser  hunkUser;
+    HunkUser *firstFit;
+};
+
 struct __declspec(align(4)) HunkUserDefault // sizeof=0x2C
 {
     HunkUser hunkUser;
     HunkUserDefault *current;
     HunkUserDefault *next;
     int maxSize;
-    int end;
-    int pos;
-    int locked;
+    intptr_t end;
+    intptr_t pos;
+    intptr_t locked;
     unsigned __int8 buf[1];
     // padding byte
     // padding byte
@@ -44,8 +56,8 @@ HunkUser *__cdecl Hunk_UserDebugInit(
                 int type);
 void __cdecl Hunk_UserDebugReset(HunkUser *_user);
 void __cdecl Hunk_UserDebugDestroy(HunkUser *_user);
-int __cdecl Hunk_UserDebugAlloc(HunkUser *_user, int size, int alignment);
-void __cdecl Hunk_UserDebugFree(HunkUser *_user, unsigned int *ptr);
+void *__cdecl Hunk_UserDebugAlloc(HunkUser *_user, int size, int alignment);
+void __cdecl Hunk_UserDebugFree(HunkUser *_user, void *ptr);
 HunkUser *__cdecl Hunk_UserDefaultInit(
                 unsigned __int8 *buffer,
                 int size,
@@ -56,7 +68,7 @@ HunkUser *__cdecl Hunk_UserDefaultInit(
                 int type);
 void __cdecl Hunk_UserDefaultReset(HunkUserDefault *_user);
 void __cdecl Hunk_UserDefaultDestroy(HunkUserDefault *_user);
-int __cdecl Hunk_UserDefaultAlloc(HunkUserDefault *_user, unsigned int size, int alignment, const char *name);
+void *__cdecl Hunk_UserDefaultAlloc(HunkUserDefault *_user, unsigned int size, int alignment, const char *name);
 void __cdecl Hunk_UserDefaultFree(HunkUser *user, void *ptr);
 void __cdecl Hunk_UserStartup();
 void __cdecl Hunk_UserShutdown();

@@ -510,6 +510,9 @@ void __cdecl R_ClearScene_For_ExtraCam(int localClientNum);
 int __cdecl R_GetLocalClientNum();
 void __cdecl R_SetLodOrigin(const refdef_s *refdef);
 void __cdecl R_UpdateFrameFog(unsigned int localClientNum);
+#ifdef KISAK_NX
+#define lerp(from, to, t) kb_lerp(from, to, t) // avoid C++20 std::lerp ambiguity (function-like: entityState_s has a `lerp` member)
+#endif
 double __cdecl lerp(float from, float to, float t);
 void __cdecl R_SetViewParmsForScene(const refdef_s *refdef, GfxViewParms *viewParms);
 void __cdecl R_SetupProjection(float tanHalfFovX, float tanHalfFovY, GfxViewParms *viewParms);

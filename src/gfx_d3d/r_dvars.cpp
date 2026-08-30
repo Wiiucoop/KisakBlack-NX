@@ -2586,7 +2586,11 @@ void __cdecl R_RegisterDvars()
 #endif
     sv_cheats = _Dvar_RegisterBool("sv_cheats", 1, 0x48u, "Allow server side cheats");
     com_statmon = _Dvar_RegisterBool("com_statmon", 0, 0, "Draw stats monitor");
+#ifdef KISAK_SSE_SKINNING // KISAKTODO: fix sse skinning (broken)
     r_sse_skinning = _Dvar_RegisterBool("r_sse_skinning", 1, 0, "Use Streaming SIMD Extensions for skinning");
+#else
+    r_sse_skinning = _Dvar_RegisterBool("r_sse_skinning", 0, 0, "Use Streaming SIMD Extensions for skinning");
+#endif
     r_monitor = _Dvar_RegisterInt(
                                 "r_monitor",
                                 0,

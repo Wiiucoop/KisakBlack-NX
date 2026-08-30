@@ -847,7 +847,7 @@ int __cdecl GetSortedHudElems(int localClientNum, hudelem_s **elems)
     elemCount = 0;
     CopyInUseHudElems(elems, &elemCount, ps->hud.current, 31);
     CopyInUseHudElems(elems, &elemCount, ps->hud.archival, 31);
-    qsort(elems, elemCount, 4u, compare_hudelems);
+    qsort(elems, elemCount, sizeof((elems)[0]), compare_hudelems);
     return elemCount;
 }
 
@@ -876,7 +876,7 @@ int __cdecl GetSortedDebugHudElems(hudelem_s **elems)
 
     elemCount = 0;
     CopyInUseDebugHudElems(elems, &elemCount, g_hudelems, 1024);
-    qsort(elems, elemCount, 4u, compare_hudelems);
+    qsort(elems, elemCount, sizeof((elems)[0]), compare_hudelems);
     return elemCount;
 }
 

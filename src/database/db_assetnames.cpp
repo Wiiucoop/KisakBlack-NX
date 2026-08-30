@@ -16,6 +16,9 @@
 #include <bgame/bg_emblems.h>
 #include <qcommon/com_bsp.h>
 #include <gfx_d3d/r_extracam.h>
+#ifdef KISAK_NX
+#include <stringed/stringed_hooks.h> // LocalizeEntry (for LP64 clone sizes)
+#endif
 
 const char *(__cdecl *DB_XAssetGetNameHandler[43])(const XAssetHeader *) =
 {
@@ -158,45 +161,59 @@ void(__cdecl *DB_XAssetSetNameHandler[43])(XAssetHeader *, const char *) =
   NULL
 };
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(RawFile) == 12);
+#endif
 int __cdecl DB_SizeofXAsset_RawFile_()
 {
     return 12;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(PhysPreset) == 84);
+#endif
 int __cdecl DB_SizeofXAsset_PhysPreset_()
 {
     return 84;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(PhysConstraints) == 2696);
+#endif
 int __cdecl DB_SizeofXAsset_PhysConstraints_()
 {
     return 2696;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(DestructibleDef) == 24);
+#endif
 //int __cdecl SV_GetMaxAttachCount()
 int __cdecl DB_SizeofXAsset_DestructibleDef_()
 {
     return 24;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(Font_s) == 24);
+#endif
 int __cdecl DB_SizeofXAsset_Font_s_()
 {
     return 24;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(XAnimParts) == 104);
+#endif
 //int __cdecl PM_MediumLandingForSurface()
 int __cdecl DB_SizeofXAsset_XAnimParts_()
 {
     return 104;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(XModel) == 252);
+#endif
 int __cdecl DB_SizeofXAsset_XModel_()
 {
     return 252;
@@ -208,91 +225,121 @@ int __cdecl DB_SizeofXAsset_Material_()
     return 192;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(MaterialTechniqueSet) == 528);
+#endif
 int __cdecl DB_SizeofXAsset_MaterialTechniqueSet_()
 {
     return 528;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(SndDriverGlobals) == 52);
+#endif
 int __cdecl DB_SizeofXAsset_SndDriverGlobals_()
 {
     return 52;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(XGlobals) == 40);
+#endif
 int __cdecl DB_SizeofXAsset_XGlobals_()
 {
     return 40;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(StringTable) == 20);
+#endif
 int __cdecl DB_SizeofXAsset_StringTable_()
 {
     return 20;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(clipMap_t) == 332);
+#endif
 int __cdecl DB_SizeofXAsset_clipMap_t_()
 {
     return 332;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(ComWorld) == 64);
+#endif
 int __cdecl DB_SizeofXAsset_ComWorld_()
 {
     return 64;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(EmblemSet) == 44);
+#endif
 int __cdecl DB_SizeofXAsset_EmblemSet_()
 {
     return 44;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(GfxWorld) == 1084);
+#endif
 int __cdecl DB_SizeofXAsset_GfxWorld_()
 {
     return 1084;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(GfxLightDef) == 16);
+#endif
 int __cdecl DB_SizeofXAsset_GfxLightDef_()
 {
     return 16;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(menuDef_t) == 400);
+#endif
 int __cdecl DB_SizeofXAsset_menuDef_t_()
 {
     return 400;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(XAnimTree_s) == 8);
+#endif
 //int __cdecl XAnimTreeSize()
 //{
 //    return 8;
 //}
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(WeaponVariantDef) == 228);
+#endif
 int __cdecl DB_SizeofXAsset_WeaponVariantDef_()
 {
     return 228;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(FxEffectDef) == 60);
+#endif
 int __cdecl DB_SizeofXAsset_FxEffectDef_()
 {
     return 60;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(PackIndex) == 28);
+#endif
 int __cdecl DB_SizeofXAsset_PackIndex_()
 {
     return 28;
 }
 
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(Glasses) == 56);
+#endif
 int __cdecl DB_SizeofXAsset_Glasses_()
 {
     return 56;
@@ -363,12 +410,17 @@ void __cdecl DB_ImageSetName(XAssetHeader *header, const char *name)
 
 const char *__cdecl DB_LocalizeEntryGetName(const XAssetHeader *header)
 {
-    return (const char *)header->xmodelPieces->numpieces;
+    // nx-port: the decompile read the name via XModelPieces::numpieces -- an int
+    // field that aliased LocalizeEntry::name at offset 4 on x86 but (a) sits at
+    // the wrong offset on LP64 (name is at 8) and (b) TRUNCATES the 8-byte
+    // pointer through a 4-byte int, yielding a garbage name -> null deref in
+    // DB_HashForName. Use the real union member + field (identical on x86).
+    return header->localize->name;
 }
 
 void __cdecl DB_LocalizeEntrySetName(XAssetHeader *header, const char *name)
 {
-    header->xmodelPieces->numpieces = (int)name;
+    header->localize->name = name;
 }
 
 void __cdecl DB_DDLSetname(XAssetHeader *header, const char *name)
@@ -454,6 +506,20 @@ void __cdecl DB_SetXAssetName(XAsset *asset, const char *name)
 
 int __cdecl DB_GetXAssetTypeSize(int type)
 {
+#ifdef KISAK_NX
+    // nx-port: the x86 size handlers return 32-bit struct sizes, and several are
+    // shared by coincidence (e.g. localize -> XAnimTreeSize because both were 8
+    // bytes on x86). DB_CloneXAssetInternal memcpy's this many bytes from the
+    // KBZ source struct into the pool slot, so on LP64 it MUST be the true
+    // native sizeof or inner pointers get dropped. Return correct sizes for the
+    // asset types the KBZ loader registers; extend as more types are converted.
+    switch (type) {
+    case ASSET_TYPE_LOCALIZE_ENTRY: return (int)sizeof(LocalizeEntry);
+    case ASSET_TYPE_RAWFILE:        return (int)sizeof(RawFile);
+    case ASSET_TYPE_STRINGTABLE:    return (int)sizeof(StringTable);
+    default: break;
+    }
+#endif
     if ( !DB_GetXAssetSizeHandler[type]
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\database\\db_assetnames.cpp",

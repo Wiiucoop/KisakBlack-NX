@@ -137,7 +137,9 @@ struct __declspec(align(4)) phys_surface_type_info // sizeof=0x10
     // padding byte
     // padding byte
 };
+#ifndef KISAK_NX // nx-port: x86 layout assert
 static_assert(sizeof(phys_surface_type_info) == 16);
+#endif
 
 
 struct PhysGlob // sizeof=0x480

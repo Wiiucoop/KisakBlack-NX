@@ -698,6 +698,11 @@ void __cdecl Sys_NormalExit()
 char g_ExceptionStr[32768];
 int __cdecl PrivateUnhandledExceptionFilter(_EXCEPTION_POINTERS *ExceptionInfo)
 {
+#ifdef KISAK_NX
+    // x86 CONTEXT register dump; never installed on Switch.
+    (void)ExceptionInfo;
+    return 1; // EXCEPTION_EXECUTE_HANDLER
+#else
     char *v2; // eax
     unsigned int ExceptionCode; // [esp+148h] [ebp-10h]
     int j; // [esp+14Ch] [ebp-Ch]
@@ -847,6 +852,7 @@ int __cdecl PrivateUnhandledExceptionFilter(_EXCEPTION_POINTERS *ExceptionInfo)
     v2 = Win_LocalizeRef("WIN_ERROR");
     Com_Error(ERR_FATAL, v2);
     return 1;
+#endif // !KISAK_NX
 }
 
 char sys_cmdline[1024];

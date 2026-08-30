@@ -88,6 +88,7 @@
 #include <gfx_d3d/r_cinematic.h>
 #include <cgame/cg_clouds.h>
 #include <devgui/devgui.h>
+#include "tl_support.h"
 
 cmd_function_s Com_Error_f_VAR;
 cmd_function_s Com_Crash_f_VAR;
@@ -739,7 +740,11 @@ void Com_Error(errorParm_t code, const char *fmt, ...)
             TaskManager2_ComErrorCleanup();
             GlassCl_WaitUpdate();
             Value = (int *)Sys_GetValue(2);
+#ifdef KISAK_NX
+            longjmp(*(jmp_buf *)Value, -1);
+#else
             longjmp(Value, -1);
+#endif
         }
         if ( !com_fixedConsolePosition )
         {
@@ -767,7 +772,11 @@ void __cdecl Com_CheckError()
     if ( errorEntered )
     {
         Value = (int *)Sys_GetValue(2);
+#ifdef KISAK_NX
+        longjmp(*(jmp_buf *)Value, -1);
+#else
         longjmp(Value, -1);
+#endif
     }
 }
 
@@ -1786,7 +1795,9 @@ void __cdecl Com_Init_Try_Block_Function(char *commandLine)
     //BLOPS_NULLSUB();
 
     if ( useFastFile->current.enabled )
+        TL_DebugDumpHunk("before Com_InitCodeXAssets");
         Com_InitCodeXAssets();
+        TL_DebugDumpHunk("after Com_InitCodeXAssets");
 
     CL_InitKeyCommands();
     CL_InitGamepadCommands();
@@ -1833,6 +1844,7 @@ void __cdecl Com_Init_Try_Block_Function(char *commandLine)
 
     Com_InitHunkMemory();
     Hunk_UserStartup();
+    TL_DebugDumpHunk("after Hunk_UserStartup");
 
     dvar_modifiedFlags &= ~1u;
 
@@ -1876,19 +1888,18 @@ void __cdecl Com_Init_Try_Block_Function(char *commandLine)
     Dvar_SetString((dvar_s *)version, va("%s %s build %s %s", Com_GetBuildDisplayName(), Com_GetBuildName(), Com_GetBuildVersion(), "win-x86"));
     shortversion = _Dvar_RegisterString("shortversion", "7", 0x44u, "Short game version");
 
-    Sys_Init();
+    TL_DebugDumpHunk("before Sys_Init");
+    Sys_Init();                                 TL_DebugDumpHunk("Sys_Init");
     QueryPerformanceCounter(&PerformanceCount);
-    Netchan_Init(PerformanceCount.QuadPart);
-
-    Scr_InitVariables(SCRIPTINSTANCE_SERVER);
-    Scr_Init(SCRIPTINSTANCE_SERVER);
-
-    Com_SetScriptSettings();
-    XAnimInit();
-    DObjInit();
-    SV_Init();
-    NET_Init();
-    RMsg_Init();
+    Netchan_Init(PerformanceCount.QuadPart);    TL_DebugDumpHunk("Netchan_Init");
+    Scr_InitVariables(SCRIPTINSTANCE_SERVER);   TL_DebugDumpHunk("Scr_InitVariables");
+    Scr_Init(SCRIPTINSTANCE_SERVER);            TL_DebugDumpHunk("Scr_Init");
+    Com_SetScriptSettings();                    TL_DebugDumpHunk("Com_SetScriptSettings");
+    XAnimInit();                                TL_DebugDumpHunk("XAnimInit");
+    DObjInit();                                 TL_DebugDumpHunk("DObjInit");
+    SV_Init();                                  TL_DebugDumpHunk("SV_Init");
+    NET_Init();                                 TL_DebugDumpHunk("NET_Init");
+    RMsg_Init();                                TL_DebugDumpHunk("RMsg_Init");
 
 #ifndef KISAK_DEDICATED
     Dvar_ClearModified((dvar_s *)dedicated);
@@ -1896,6 +1907,7 @@ void __cdecl Com_Init_Try_Block_Function(char *commandLine)
 
     if (!IsDedicatedServer())
     {
+        TL_DebugDumpHunk("before CL_InitOnceForAllClients");
         CL_InitOnceForAllClients();
         for (int localClientNum = 0; localClientNum < 1; ++localClientNum)
         {

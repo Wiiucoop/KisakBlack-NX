@@ -1,0 +1,4 @@
+/c/dev/CBO1-NX/build-nx/CMakeFiles/KisakBlack.dir
+/c/dev/CBO1-NX/build-nx/CMakeFiles/KisakBlack_nro.dir
+/c/dev/CBO1-NX/build-nx/CMakeFiles/edit_cache.dir
+/c/dev/CBO1-NX/build-nx/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,4 @@
+# Hashes of file build rules.
+15fe3701ad1d4d27eb3de4847bce6bec CMakeFiles/KisakBlack_nro
+de19cbdb264d07f3c689ee6f6e44c4ff KisakBlack.nro
+6e3caf03cd3b6affa873858d6b081163 KisakBlack_nro.default.nacp

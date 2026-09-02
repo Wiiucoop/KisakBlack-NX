@@ -574,6 +574,26 @@ static void tGfxLightDef(Reader &r, Prelink &z, Prelink::Loc obj) {
     }
 }
 
+// MenuList: 12 -> 24. Name, count, and an array of menuDef_t pointers.
+// menuDef_t is the whole UI menu tree; a default menu file should not have
+// any, so stop loudly rather than guess.
+enum { AT_MENUFILE = 21, SZ_MENULIST = 24 };
+
+static void tMenuList(Reader &r, Prelink &z, Prelink::Loc obj) {
+    uint32_t nameTag   = r.u32();
+    int32_t  menuCount = r.i32();
+    uint32_t menusTag  = r.u32();
+
+    memcpy(z.at(obj) + 8, &menuCount, 4);
+    putXStringFromTag(r, z, obj, 0, nameTag);
+
+    if (menusTag != TAG_NULL) {
+        fprintf(stderr, "menulist has %d menus; menuDef_t is not transcoded yet\n",
+                menuCount);
+        exit(12);
+    }
+}
+
 // PhysConstraint: 168 -> 192. Three pointers (target_bone1, target_bone2,
 // material) push everything after them along. The uint16 targetname and
 // target_ent fields are script string indices; Load_ScriptString reads
@@ -776,7 +796,7 @@ static void tXAnimParts(Reader &r, Prelink &z, Prelink::Loc obj) {
     }
 
     uint32_t nameTag = r.u32();
-    uint8_t  counts[16];              // dataByteCount .. bStreamable (@4..19)
+    uint8_t  counts[16] = {0};        // dataByteCount .. bStreamable (@4..19)
     r.bytes(counts, 16);
     uint32_t streamedFileSize = r.u32();
     uint8_t  bones[13];               // boneCount[10], notifyCount, assetType, isDefault
@@ -858,6 +878,312 @@ static void tXAnimParts(Reader &r, Prelink &z, Prelink::Loc obj) {
         tSimpleArray(r, z, obj, 128, indicesTag, indexCount, 1, 0);
 }
 
+// XSurfaceCollisionTree: 40 -> 56. Bottom of the xmodel tree -- neither
+// XSurfaceCollisionNode (16) nor XSurfaceCollisionLeaf (2) holds a pointer.
+enum { SZ_COLLTREE = 56 };
+
+static void tXSurfaceCollisionTree(Reader &r, Prelink &z, Prelink::Loc obj,
+                                   uint32_t field) {
+    Prelink::Loc t = z.alloc(OUT, SZ_COLLTREE, 8);
+    b4Reserve(3, 40, t);
+
+    uint8_t  bounds[24];               // trans[3], scale[3]
+    r.bytes(bounds, 24);
+    uint32_t nodeCount = r.u32();
+    uint32_t nodesTag  = r.u32();
+    uint32_t leafCount = r.u32();
+    uint32_t leafsTag  = r.u32();
+
+    uint8_t *o = z.at(t);
+    memcpy(o,      bounds, 24);
+    memcpy(o + 24, &nodeCount, 4);
+    memcpy(o + 40, &leafCount, 4);
+
+    if (nodesTag != TAG_NULL) {
+        const uint32_t n = nodeCount * 16;   // AllocLoad_GfxPackedVertex0 -> 16
+        Prelink::Loc b = z.alloc(OUT, n ? n : 1, 16);
+        if (n) r.bytes(z.at(b), n);
+        b4Reserve(15, n, b);
+        z.putPtr(t, 32, b);
+    }
+
+    if (leafsTag != TAG_NULL) {
+        const uint32_t n = leafCount * 2;    // AllocLoad_XBlendInfo -> 2
+        Prelink::Loc b = z.alloc(OUT, n ? n : 1, 2);
+        if (n) r.bytes(z.at(b), n);
+        b4Reserve(1, n, b);
+        z.putPtr(t, 48, b);
+    }
+
+    z.putPtr(obj, field, t);
+}
+
+// XSurface: 68 -> 104. Load_XSurface (db_load.cpp:1843) reads the fixed block,
+// then vertInfo, then verts0, then vertList, then triIndices. vb0 and
+// indexBuffer are runtime D3D objects and stay null.
+
+enum { SZ_XSURFACE = 104, SZ_VERTINFO = 24, SZ_RIGIDVERT = 16 };
+
+static void tXSurface(Reader &r, Prelink &z, Prelink::Loc obj) {
+    uint8_t  head[12];                 // tileMode .. baseVertIndex
+    r.bytes(head, 12);
+    uint32_t triIdxTag = r.u32();
+
+    int16_t  vcInfo[4] = {0};          // vertInfo.vertCount[4]
+    r.bytes(vcInfo, 8);
+    uint32_t blendTag   = r.u32();
+    uint32_t tensionTag = r.u32();
+
+    uint32_t verts0Tag  = r.u32();
+    r.u32();                           // vb0 -- runtime object
+    uint32_t vertListTag= r.u32();
+    r.u32();                           // indexBuffer -- runtime object
+    uint8_t  partBits[20];
+    r.bytes(partBits, 20);
+
+    uint8_t *o = z.at(obj);
+    memcpy(o,       head, 12);
+    memcpy(o + 24,  vcInfo, 8);        // vertInfo.vertCount
+    memcpy(o + 80,  partBits, 20);
+
+    uint16_t vertListCount, vertCount, triCount;
+    memcpy(&vertListCount, head + 1, 1);
+    vertListCount = head[1];
+    memcpy(&vertCount, head + 4, 2);
+    memcpy(&triCount,  head + 6, 2);
+
+    // vertInfo lives inline at offset 24; its two pointers are at 32 and 40.
+    Prelink::Loc vi{obj.blk, obj.off + 24};
+
+    if (blendTag == TAG_INLINE) {
+        const uint32_t n = 7u * (uint32_t)vcInfo[3] + 5u * (uint32_t)vcInfo[2]
+                         + 3u * (uint32_t)vcInfo[1] + (uint32_t)vcInfo[0];
+        tSimpleArray(r, z, vi, 8, blendTag, n, 2, 1);
+    } else if (blendTag != TAG_NULL) {
+        putStructOffsetRef(z, vi, 8, blendTag);
+    }
+
+    if (tensionTag != TAG_NULL) {
+        fprintf(stderr, "xsurface has tensionData; not transcoded yet\n");
+        exit(10);
+    }
+
+    if (verts0Tag == TAG_INLINE) {
+        // AllocLoad_GfxPackedVertex0 -> align 16. GfxPackedVertex has no
+        // pointers, so it keeps its 32 bytes.
+        const uint32_t n = (uint32_t)vertCount * 32;
+        Prelink::Loc b = z.alloc(OUT, n ? n : 1, 16);
+        if (n) r.bytes(z.at(b), n);
+        b4Reserve(15, n, b);
+        z.putPtr(obj, 48, b);
+    } else if (verts0Tag != TAG_NULL) {
+        putStructOffsetRef(z, obj, 48, verts0Tag);
+    }
+
+    if (vertListTag == TAG_INLINE) {
+        Prelink::Loc tbl = z.alloc(OUT, (size_t)vertListCount * SZ_RIGIDVERT, 8);
+        b4Reserve(3, (uint32_t)vertListCount * 12, tbl);
+        std::vector<uint32_t> treeTags(vertListCount);
+        for (uint32_t i = 0; i < vertListCount; ++i) {
+            Prelink::Loc e{tbl.blk, tbl.off + i * SZ_RIGIDVERT};
+            uint8_t counts[8] = {0};
+            r.bytes(counts, 8);
+            memcpy(z.at(e), counts, 8);
+            treeTags[i] = r.u32();
+        }
+        for (uint32_t i = 0; i < vertListCount; ++i) {
+            Prelink::Loc e{tbl.blk, tbl.off + i * SZ_RIGIDVERT};
+            if (treeTags[i] == TAG_INLINE) {
+                tXSurfaceCollisionTree(r, z, e, 8);
+            } else if (treeTags[i] != TAG_NULL) {
+                putStructOffsetRef(z, e, 8, treeTags[i]);
+            }
+        }
+        z.putPtr(obj, 64, tbl);
+    } else if (vertListTag != TAG_NULL) {
+        putStructOffsetRef(z, obj, 64, vertListTag);
+    }
+
+    if (triIdxTag == TAG_INLINE) {
+        const uint32_t n = 3u * (uint32_t)triCount * 2u;
+        Prelink::Loc b = z.alloc(OUT, n ? n : 1, 16);
+        if (n) r.bytes(z.at(b), n);
+        b4Reserve(15, n, b);
+        z.putPtr(obj, 16, b);
+    } else if (triIdxTag != TAG_NULL) {
+        putStructOffsetRef(z, obj, 16, triIdxTag);
+    }
+}
+
+// ---- xmodel -----------------------------------------------------------------
+// XModel: 252 -> 328. Load_XModel (db_load.cpp:3171) is linear: the fixed
+// block, then the name, then a run of arrays sized from counters already in
+// the header. XModelLodInfo, XBoneInfo, DObjAnimMat and XModelHighMipBounds
+// hold no pointers and keep their sizes.
+
+enum { AT_XMODEL = 5, SZ_XMODEL = 328, SZ_COLLSURF = 48 };
+enum { SZ_COLLTRI = 48 };   // confirm against XModelCollTri_s
+
+static void tXModel(Reader &r, Prelink &z, Prelink::Loc obj) {
+    uint32_t nameTag = r.u32();
+    uint8_t  cnt[4];                       // numBones, numRootBones, numsurfs, lodRampType
+    r.bytes(cnt, 4);
+
+    uint32_t boneNamesTag = r.u32();
+    uint32_t parentTag    = r.u32();
+    uint32_t quatsTag     = r.u32();
+    uint32_t transTag     = r.u32();
+    uint32_t partClassTag = r.u32();
+    uint32_t baseMatTag   = r.u32();
+    uint32_t surfsTag     = r.u32();
+    uint32_t matHandlesTag= r.u32();
+
+    uint8_t lodInfo[128];
+    r.bytes(lodInfo, 128);
+    uint8_t lodAuto = 0;
+    r.bytes(&lodAuto, 1);
+    r.skip(3);
+
+    uint32_t collSurfsTag = r.u32();
+    int32_t  numCollSurfs = r.i32();
+    int32_t  contents     = r.i32();
+    uint32_t boneInfoTag  = r.u32();
+
+    uint8_t bounds[28];                    // radius, mins[3], maxs[3]
+    r.bytes(bounds, 28);
+    uint8_t lods[4] = {0};                 // numLods, collLod
+    r.bytes(lods, 4);
+
+    uint32_t streamTag    = r.u32();       // streamInfo.highMipBounds
+    int32_t  memUsage     = r.i32();
+    int32_t  flags        = r.i32();
+    uint8_t  bad = 0;
+    r.bytes(&bad, 1);
+    r.skip(3);
+    uint32_t physPresetTag = r.u32();
+    uint8_t  numCollmaps = 0;
+    r.bytes(&numCollmaps, 1);
+    r.skip(3);
+    uint32_t collmapsTag  = r.u32();
+    uint32_t physConstrTag= r.u32();
+
+    uint8_t *o = z.at(obj);
+    memcpy(o + 8,   cnt, 4);
+    memcpy(o + 80,  lodInfo, 128);
+    o[208] = lodAuto;
+    memcpy(o + 224, &numCollSurfs, 4);
+    memcpy(o + 228, &contents, 4);
+    memcpy(o + 240, bounds, 28);
+    memcpy(o + 268, lods, 4);
+    memcpy(o + 280, &memUsage, 4);
+    memcpy(o + 284, &flags, 4);
+    o[288] = bad;
+    o[304] = numCollmaps;
+
+    const uint32_t nBones = cnt[0];
+    const uint32_t nRoot  = cnt[1];
+    const uint32_t nSurfs = cnt[2];
+    const uint32_t nDiff  = nBones - nRoot;
+
+    putXStringFromTag(r, z, obj, 0, nameTag);
+
+    if (boneNamesTag == TAG_INLINE) tSimpleArray(r, z, obj, 16, boneNamesTag, nBones, 2, 1);
+    else if (boneNamesTag != TAG_NULL) putStructOffsetRef(z, obj, 16, boneNamesTag);
+
+    if (parentTag == TAG_INLINE) tSimpleArray(r, z, obj, 24, parentTag, nDiff, 1, 0);
+    else if (parentTag != TAG_NULL) putStructOffsetRef(z, obj, 24, parentTag);
+
+    if (quatsTag == TAG_INLINE) tSimpleArray(r, z, obj, 32, quatsTag, nDiff * 4, 2, 1);
+    else if (quatsTag != TAG_NULL) putStructOffsetRef(z, obj, 32, quatsTag);
+
+    if (transTag == TAG_INLINE) tSimpleArray(r, z, obj, 40, transTag, nDiff * 4, 4, 3);
+    else if (transTag != TAG_NULL) putStructOffsetRef(z, obj, 40, transTag);
+
+    if (partClassTag == TAG_INLINE) tSimpleArray(r, z, obj, 48, partClassTag, nBones, 1, 0);
+    else if (partClassTag != TAG_NULL) putStructOffsetRef(z, obj, 48, partClassTag);
+
+    if (baseMatTag == TAG_INLINE) tSimpleArray(r, z, obj, 56, baseMatTag, nBones, 32, 3);
+    else if (baseMatTag != TAG_NULL) putStructOffsetRef(z, obj, 56, baseMatTag);
+
+    if (surfsTag != TAG_NULL) {
+        Prelink::Loc tbl = z.alloc(OUT, (size_t)nSurfs * SZ_XSURFACE, 8);
+        b4Reserve(3, nSurfs * 68, tbl);
+        for (uint32_t i = 0; i < nSurfs; ++i) {
+            Prelink::Loc s{tbl.blk, tbl.off + i * SZ_XSURFACE};
+            tXSurface(r, z, s);
+        }
+        z.putPtr(obj, 64, tbl);
+    }
+
+    if (matHandlesTag != TAG_NULL) {
+        Prelink::Loc tbl = z.alloc(OUT, (size_t)nSurfs * 8, 8);
+        b4Reserve(3, nSurfs * 4, tbl);
+        for (uint32_t i = 0; i < nSurfs; ++i) {
+            uint32_t tag = r.u32();
+            Prelink::Loc e{tbl.blk, tbl.off + i * 8};
+            if (tag == TAG_INLINE || tag == TAG_ALIAS) {
+                Prelink::Loc m = z.alloc(OUT, SZ_MATERIAL, 8);
+                b4Reserve(3, 192, m);
+                tMaterial(r, z, m);
+                z.putPtr(e, 0, m);
+            } else if (tag != TAG_NULL) {
+                putStructOffsetRef(z, e, 0, tag);
+            }
+        }
+        z.putPtr(obj, 72, tbl);
+    }
+
+    if (collSurfsTag != TAG_NULL) {
+        Prelink::Loc tbl = z.alloc(OUT, (size_t)numCollSurfs * SZ_COLLSURF, 8);
+        b4Reserve(3, (uint32_t)numCollSurfs * 44, tbl);
+        std::vector<uint32_t> triTags(numCollSurfs);
+        std::vector<int32_t>  triCounts(numCollSurfs);
+        for (int i = 0; i < numCollSurfs; ++i) {
+            Prelink::Loc c{tbl.blk, tbl.off + (uint32_t)i * SZ_COLLSURF};
+            triTags[i]   = r.u32();
+            triCounts[i] = r.i32();
+            uint8_t rest[36];               // mins, maxs, boneIdx, contents, surfFlags
+            r.bytes(rest, 36);
+            memcpy(z.at(c) + 8, &triCounts[i], 4);
+            memcpy(z.at(c) + 12, rest, 36);
+        }
+        for (int i = 0; i < numCollSurfs; ++i) {
+            Prelink::Loc c{tbl.blk, tbl.off + (uint32_t)i * SZ_COLLSURF};
+            tSimpleArray(r, z, c, 0, triTags[i], (uint32_t)triCounts[i], SZ_COLLTRI, 3);
+        }
+        z.putPtr(obj, 216, tbl);
+    }
+
+    if (boneInfoTag != TAG_NULL)
+        tSimpleArray(r, z, obj, 232, boneInfoTag, nBones, 44, 3);
+
+    if (streamTag != TAG_NULL)
+        tSimpleArray(r, z, obj, 272, streamTag, nSurfs, 16, 3);
+
+    if (physPresetTag == TAG_INLINE || physPresetTag == TAG_ALIAS) {
+        Prelink::Loc p = z.alloc(OUT, SZ_PHYSPRESET, 8);
+        b4Reserve(3, 84, p);
+        tPhysPreset(r, z, p);
+        z.putPtr(obj, 296, p);
+    } else if (physPresetTag != TAG_NULL) {
+        putStructOffsetRef(z, obj, 296, physPresetTag);
+    }
+
+    if (collmapsTag != TAG_NULL) {
+        fprintf(stderr, "xmodel has collmaps; PhysGeomList is not transcoded yet\n");
+        exit(9);
+    }
+
+    if (physConstrTag == TAG_INLINE || physConstrTag == TAG_ALIAS) {
+        Prelink::Loc p = z.alloc(OUT, SZ_PHYSCONSTRAINTS, 8);
+        b4Reserve(3, 2696, p);
+        tPhysConstraints(r, z, p);
+        z.putPtr(obj, 320, p);
+    } else if (physConstrTag != TAG_NULL) {
+        putStructOffsetRef(z, obj, 320, physConstrTag);
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) { fprintf(stderr, "usage: convert <in.ff> <out.kbz>\n"); return 1; }
     std::vector<uint8_t> file = readFile(argv[1]);
@@ -925,6 +1251,8 @@ int main(int argc, char **argv) {
         case AT_LIGHTDEF:    { Prelink::Loc o = z.alloc(OUT, SZ_LIGHTDEF, 8);  tGfxLightDef(r, z, o); z.addAsset(AT_LIGHTDEF, o); break; }        
         case AT_PHYSCONSTRAINTS: { Prelink::Loc o = z.alloc(OUT, SZ_PHYSCONSTRAINTS, 8); tPhysConstraints(r, z, o); z.addAsset(AT_PHYSCONSTRAINTS, o); break; }        
         case AT_XANIM:       { Prelink::Loc o = z.alloc(OUT, SZ_XANIM, 8); tXAnimParts(r, z, o); z.addAsset(AT_XANIM, o); break; }
+        case AT_XMODEL:      { Prelink::Loc o = z.alloc(OUT, SZ_XMODEL, 8); tXModel(r, z, o); z.addAsset(AT_XMODEL, o); break; }        
+        case AT_MENUFILE:    { Prelink::Loc o = z.alloc(OUT, SZ_MENULIST, 8); tMenuList(r, z, o); z.addAsset(AT_MENUFILE, o); break; }        
         default:
             fprintf(stderr, "unsupported asset type %u at index %u (Stage 1 = rawfile/stringtable/localize)\n", types[i], i);
             return 3;

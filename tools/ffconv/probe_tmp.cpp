@@ -47,6 +47,8 @@ static std::vector<uint8_t> inflateAll(const uint8_t *src, size_t srcLen) {
 }
 
 // ---- block-4 x86 memory emulation (for de-dup pointer resolution) -----------
+static Reader *g_tr = 0;
+static void TR(const char *what) { if (g_tr) fprintf(stderr, "TR %-16s rem=%td ovr=%d\n", what, (ptrdiff_t)(g_tr->end - g_tr->p), (int)g_tr->overran); }
 static const int OUT = 4;                // output block we place everything in
 static uint32_t g_x86b4 = 0;             // emulated game block-4 byte cursor
 static std::unordered_map<uint32_t, Prelink::Loc> g_b4map; // x86 off -> out Loc
@@ -1345,6 +1347,7 @@ static void tWindowDefRefs(Reader &r, Prelink &z, Prelink::Loc w, WindowTags t) 
 enum { SZ_SCRIPTCONDITION = 24 };
 
 static void tScriptCondition(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
+    TR("scriptcond");
     Prelink::Loc c = z.alloc(OUT, SZ_SCRIPTCONDITION, 8);
     b4Reserve(3, 16, c);
 
@@ -1363,6 +1366,7 @@ static void tScriptCondition(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t f
 // expression and an optional ScriptCondition chain.
 static void tGenericEventScript(Reader &r, Prelink &z, Prelink::Loc obj,
                                 uint32_t field) {
+    TR("evtscript");
     Prelink::Loc s = z.alloc(OUT, SZ_EVENTSCRIPT, 8);
     b4Reserve(3, 44, s);
 
@@ -1430,6 +1434,7 @@ static void tGenericEventScript(Reader &r, Prelink &z, Prelink::Loc obj,
 // 12 -> 24.
 static void tEventHandler(Reader &r, Prelink &z, Prelink::Loc obj,
                           uint32_t field, bool firstIsString) {
+    TR("evthandler");
     Prelink::Loc h = z.alloc(OUT, SZ_EVENTHANDLER, 8);
     b4Reserve(3, 12, h);
 
@@ -1662,6 +1667,7 @@ enum { SZ_FOCUSITEMDEF = 48 };
 
 static void tFocusItemDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
                           int32_t itemType) {
+    TR("focusitem");
     Prelink::Loc f = z.alloc(OUT, SZ_FOCUSITEMDEF, 8);
     b4Reserve(3, 24, f);
 
@@ -1691,6 +1697,7 @@ enum { SZ_TEXTDEF = 80 };
 
 static void tTextDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
                      int32_t itemType) {
+    TR("textdef");
     Prelink::Loc t = z.alloc(OUT, SZ_TEXTDEF, 8);
     b4Reserve(3, 68, t);
 
@@ -1732,6 +1739,7 @@ enum { SZ_ITEMDEF = 336, SZ_RECTDATA = 96 };
 
 static void tItemDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     Prelink::Loc it = z.alloc(OUT, SZ_ITEMDEF, 8);
+    TR("item-begin");
     b4Reserve(7, 272, it);                 // AllocLoad_itemDef_t -> align 8
 
     // --- the 272-byte fixed block ---
@@ -1788,6 +1796,7 @@ static void tItemDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     // typeData -- Load_itemDefData_t (db_load.cpp:5620)
     int32_t itemType;
     memcpy(&itemType, mid, 4);
+    fprintf(stderr, "TR item type=%d td=%08x rect=%08x ev=%08x anim=%08x rem=%td\n", itemType, typeDataTag, rectExpTag, onEventTag, animInfoTag, (ptrdiff_t)(r.end-r.p));
     if (typeDataTag == TAG_NULL) {
         z.putPtr(it, 224, Prelink::none());
     } else switch (itemType) {
@@ -1833,6 +1842,8 @@ enum { SZ_MENUDEF = 456 };
 
 static void tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     Prelink::Loc m = z.alloc(OUT, SZ_MENUDEF, 8);
+    TR("menu-begin");
+    { static int n=0; ++n; if (n>=3 && n<=5) { char nm[32]; sprintf(nm, "menu%d.bin", n); FILE *f=fopen(nm,"wb"); fwrite(r.p,1,256,f); fclose(f); } }
     b4Reserve(7, 400, m);                  // AllocLoad_itemDef_t -> align 8
 
     WindowTags wt = tWindowDefFixed(r, z, m);            // window is inline at offset 0
@@ -1913,6 +1924,7 @@ static void tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     putXStringFromTag(r, z, m, 424, ryFileTag);
     tExprRpnArray(r, z, m, 440, ryRpnTag, ryNumRpn);
 
+    fprintf(stderr, "TR menu itemCount=%d itemsTag=%08x rem=%td\n", itemCount, itemsTag, (ptrdiff_t)(r.end-r.p));
     if (itemsTag != TAG_NULL) {
         Prelink::Loc tbl = z.alloc(OUT, (size_t)itemCount * 8, 8);
         b4Reserve(3, (uint32_t)itemCount * 4, tbl);
@@ -3082,6 +3094,7 @@ int main(int argc, char **argv) {
     uint32_t assetCount = r.u32(), assetsTag = r.u32();
     (void)assetsTag;
 
+    g_tr = &r;
     bool dbg = getenv("FFDBG") != nullptr;
     Prelink z;
 

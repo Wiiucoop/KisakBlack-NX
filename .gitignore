@@ -430,3 +430,4 @@ KisakCOD/.idea/*
 Debug/*
 KisakBlack/*
 __KisakBlacktools/ffconv/*.exe
+tools/ffconv/*.exe

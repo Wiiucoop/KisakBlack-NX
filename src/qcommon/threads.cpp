@@ -663,6 +663,25 @@ bool __cdecl Sys_IsRenderThread()
     return Sys_GetCurrentThreadId() == threadId[1];
 }
 
+// May the calling thread create D3D resources itself, or must it queue them for
+// the renderer thread to drain?
+//
+// On PC the answer is "only the renderer thread", and everyone else posts to the
+// RB_Resource queue and blocks in RB_Resource_Flush until the renderer signals
+// it back. This port never calls Sys_CreateThread(THREAD_CONTEXT_RENDERER), so
+// threadId[1] stays 0, Sys_IsRenderThread() is false for every thread, and
+// nothing ever drains that queue -- RB_Resource_Flush would wait forever on
+// Sys_WaitResourcesFlushedEvent(). With a single thread touching the device,
+// inline creation is both safe and the only path that terminates.
+bool __cdecl Sys_CanCreateDeviceResourcesInline()
+{
+#ifdef KISAK_NX
+    return true;
+#else
+    return Sys_IsRenderThread();
+#endif
+}
+
 bool __cdecl Sys_IsDatabaseThread()
 {
     return Sys_GetCurrentThreadId() == threadId[13];

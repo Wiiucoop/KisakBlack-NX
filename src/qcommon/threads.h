@@ -97,6 +97,7 @@ void __cdecl Sys_WakeDatabase2();
 void __cdecl Sys_StopRenderer();
 void __cdecl Sys_StartRenderer();
 bool __cdecl Sys_IsRenderThread();
+bool __cdecl Sys_CanCreateDeviceResourcesInline();
 bool __cdecl Sys_IsDatabaseThread();
 bool __cdecl Sys_IsMainThread();
 const char *__cdecl Sys_GetCurrentThreadName();

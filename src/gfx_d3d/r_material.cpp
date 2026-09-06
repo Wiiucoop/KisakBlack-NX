@@ -271,7 +271,11 @@ const PerMapMaterialTable s_permapMaterials[3] =
 };
 
 // generated with aislop from rdata
-const BuiltInMaterialTable s_builtInMaterials[122] =
+// Dimensione e conteggio derivano entrambi dall'inizializzatore: con un
+// [122] fisso e un Material_LoadBuiltIn(..., 122) a mano, togliere una riga
+// lasciava in coda voci azzerate su cui il loop chiamava
+// Material_Register(nullptr).
+const BuiltInMaterialTable s_builtInMaterials[] =
 {
     { "$default", &rgp.defaultMaterial },
     { "white", &rgp.whiteMaterial },
@@ -297,8 +301,13 @@ const BuiltInMaterialTable s_builtInMaterials[122] =
     { "stencildisplay", &rgp.stencilDisplayMaterial },
     { "floatz_display", &rgp.floatZDisplayMaterial },
 
-    { "$floatz_donotremove", &rgp.dummyMaterial },
-    { "$processed_floatz_donotremove", &rgp.dummyMaterial },
+    // Le voci "<nome>_donotremove" che stavano qui puntavano tutte a
+    // rgp.dummyMaterial, che Material_LoadBuiltIn riazzera a ogni giro e che
+    // nessuno legge: erano ancore di keep-alive per il build degli asset, non
+    // lookup reali. Nessuna esiste con quel nome nelle zone ($floatz,
+    // $processed_floatz e $ps3_aadownsample ci sono senza suffisso), quindi
+    // fallivano tutte e sei riempiendo il log di finti asset mancanti.
+
 
     { "shellshock", &rgp.shellShockBlurredMaterial },
     { "shellshock_flashed", &rgp.shellShockFlashedMaterial },
@@ -313,7 +322,6 @@ const BuiltInMaterialTable s_builtInMaterials[122] =
 
     { "cinematic", &rgp.cinematicMaterial },
 
-    { "$ps3_aadownsample_donotremove", &rgp.dummyMaterial },
 
     { "dof_downsample", &rgp.dofDownsampleMaterial },
     { "dof_downsample_nv_intz", &rgp.dofDownsampleNvIntzMaterial },
@@ -335,8 +343,6 @@ const BuiltInMaterialTable s_builtInMaterials[122] =
     { "motionblurradial", &rgp.motionblurRadialMaterial },
     { "motionblurframebased", &rgp.motionblurFrameBasedMaterial },
 
-    { "particle_blend_donotremove", &rgp.dummyMaterial },
-    { "particle_zdownsample_donotremove", &rgp.dummyMaterial },
 
     { "watersheeting_color_distort_blur", &rgp.waterSheetingFXMaterial },
     { "revivefx", &rgp.reviveFXMaterial },
@@ -415,7 +421,6 @@ const BuiltInMaterialTable s_builtInMaterials[122] =
     { "apply_lut2d", &rgp.applyLut2d },
     { "apply_lut3d", &rgp.applyLut3d },
 
-    { "$ps3_reload_zcull_donotremove", &rgp.dummyMaterial },
 
     { "composite_result", &rgp.compositeResult },
     { "infrared_white", &rgp.infraredWhite },
@@ -468,7 +473,9 @@ void __cdecl Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, Mate
     if ( r_loadForRenderer && r_loadForRenderer->current.enabled )
     {
         ProfLoad_Begin("Create pixel shader");
-        if ( Sys_IsRenderThread() )
+        // Sys_CanCreateDeviceResourcesInline, non Sys_IsRenderThread: senza
+        // thread renderer il ramo accodato qui sotto non viene mai drenato.
+        if ( Sys_CanCreateDeviceResourcesInline() )
         {
             hr = dx.device->CreatePixelShader((DWORD*)loadDef->program, (IDirect3DPixelShader9 **)&mtlShader->prog);
             if ( hr < 0 )
@@ -509,7 +516,8 @@ void __cdecl Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, Ma
     if ( r_loadForRenderer && r_loadForRenderer->current.enabled && !skipShaderCreationHack )
     {
         ProfLoad_Begin("Create vertex shader");
-        if ( Sys_IsRenderThread() )
+        // Vedi Load_CreateMaterialPixelShader.
+        if ( Sys_CanCreateDeviceResourcesInline() )
         {
             if ( r_logFile && r_logFile->current.integer )
                 RB_LogPrint("dx.device->CreateVertexShader( loadDef->program, &mtlShader->prog.vs )\n");
@@ -627,7 +635,8 @@ IDirect3DVertexDeclaration9 *__cdecl Material_BuildVertexDecl(
 
     if ( dx.device )
     {
-        if ( Sys_IsRenderThread() )
+        // Vedi Load_CreateMaterialPixelShader.
+        if ( Sys_CanCreateDeviceResourcesInline() )
         {
             if ( r_logFile && r_logFile->current.integer )
                 RB_LogPrint("dx.device->CreateVertexDeclaration( elemTable, &decl )\n");
@@ -1723,7 +1732,7 @@ void __cdecl Material_Init()
         memset((unsigned __int8 *)&materialGlobals, 0, sizeof(materialGlobals));
         Material_PreLoadAllShaderText();
     }
-    Material_LoadBuiltIn(s_builtInMaterials, 122);
+    Material_LoadBuiltIn(s_builtInMaterials, ARRAY_COUNT(s_builtInMaterials));
     Material_Register((char*)"statmon_warning_tris", 1);
 }
 

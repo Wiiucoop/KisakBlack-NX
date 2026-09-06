@@ -3,11 +3,15 @@
 // KBZ1 files are produced offline by tools/ffconv/convert.exe from the shipped
 // 32-bit .ff fastfiles. Each asset has already been transcoded to its native
 // LP64 layout and every internal pointer flattened to a (block,offset) pair in
-// a relocation table. Loading is therefore a generic three-step relocate --
-// NO per-asset parsing on device:
+// a relocation table. Loading is therefore a generic relocate -- NO per-asset
+// parsing on device:
 //   1. allocate each block and copy its image,
 //   2. walk the reloc table, writing block[tgt]+off into each pointer slot,
-//   3. register each asset into the XAssetPool via DB_AddXAsset.
+//   3. register each asset into the XAssetPool via DB_AddXAsset,
+//   4. build the runtime objects db_load.cpp would have built (see step 4 below).
+//
+// Steps 1-3 need to know nothing about any asset type. Step 4 does, and is the
+// one place where per-type knowledge lives.
 //
 // This sidesteps the fundamental blocker that the .ff stream format hard-wires
 // 4-byte pointers and x86 struct sizes, which cannot be consumed directly by a
@@ -21,6 +25,8 @@
 #include <database/database.h>
 #include <database/db_registry.h>
 #include <qcommon/common.h>
+#include <universal/q_shared.h>
+#include <gfx_d3d/r_material.h>
 
 extern "C" void nx_normalize_path(const char *in, char *out, size_t outSize);
 extern "C" const char *nx_get_install_dir(void);
@@ -52,6 +58,114 @@ uint8_t *slurp(const char *path, long *n)
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Step 4: build the runtime objects the .ff loader would have built.
+//
+// db_load.cpp does more than fill structs. After reading a block it calls back
+// into the owning subsystem to turn a load def into a live device object, and
+// those calls are the half of loading that the KBZ path drops on the floor.
+// Every field they would have written stays at the zero the transcoder left,
+// because convert.cpp deliberately does not carry runtime objects across
+// ("prog.vs (or .ps) is a runtime D3D object; only the load def carries over").
+//
+// The census of those hooks -- every Load_ function db_load.cpp calls that is
+// defined in a subsystem translation unit and constructs something, rather than
+// reading the stream:
+//
+//   asset type          hook (db_load.cpp call site)          builds
+//   ------------------  ------------------------------------  --------------------------
+//   TECHNIQUE_SET (7)   Load_CreateMaterialVertexShader :2099  MaterialVertexShader::prog.vs
+//                       Load_CreateMaterialPixelShader  :2107  MaterialPixelShader::prog.ps
+//                       Load_BuildVertexDecl            :2256  MaterialVertexDeclaration::routing.decl[18]
+//   IMAGE (8)           Load_Texture                    :1923  GfxImage::texture.basemap
+//   GFXWORLD (17)       Load_VertexBuffer         :7984,:8001  static vertex buffers
+//   MATERIAL (6)        Load_PicmipWater                :2334  water_t FFT tables (CPU-side)
+//
+// Only TECHNIQUE_SET is wired up here: it is what the first draw call needs,
+// since R_SetPixelShader (r_shade.cpp:876) asserts on a null prog.ps before it
+// touches anything else. The table below is the extension point -- one row per
+// asset type, run in table order, so a type that must be built after another
+// just goes further down the list.
+// ---------------------------------------------------------------------------
+
+// A builder returns how many runtime objects it actually created, for logging.
+typedef unsigned (*NxAssetBuilder)(XAssetHeader);
+
+struct NxBuildStep {
+    XAssetType     type;
+    NxAssetBuilder build;
+    const char    *what;   // plural noun, for the summary line
+};
+
+// Passes inside a zone share their shader and vertex-decl objects with every
+// other pass that referenced the same one in the original .ff, so a builder is
+// reached many times for the same object. The prog.vs / prog.ps / isLoaded
+// tests below are what keep the build idempotent: without them the second
+// visitor creates a duplicate and orphans the first.
+static unsigned buildTechniqueSet(XAssetHeader h)
+{
+    MaterialTechniqueSet *techSet = h.techniqueSet;
+    if (!techSet) return 0;
+
+    unsigned built = 0;
+    for (unsigned t = 0; t < ARRAY_COUNT(techSet->techniques); ++t) {
+        MaterialTechnique *tech = techSet->techniques[t];
+        if (!tech) continue;
+        for (unsigned pass_i = 0; pass_i < tech->passCount; ++pass_i) {
+            MaterialPass *pass = &tech->passArray[pass_i];
+
+            if (pass->vertexShader && !pass->vertexShader->prog.vs) {
+                Load_CreateMaterialVertexShader(&pass->vertexShader->prog.loadDef,
+                                                pass->vertexShader);
+                ++built;
+            }
+            if (pass->pixelShader && !pass->pixelShader->prog.ps) {
+                Load_CreateMaterialPixelShader(&pass->pixelShader->prog.loadDef,
+                                               pass->pixelShader);
+                ++built;
+            }
+            if (pass->vertexDecl && !pass->vertexDecl->isLoaded) {
+                Load_BuildVertexDecl(&pass->vertexDecl);
+                ++built;
+            }
+        }
+    }
+    return built;
+}
+
+static const NxBuildStep kBuildSteps[] = {
+    { ASSET_TYPE_TECHNIQUE_SET, buildTechniqueSet, "shader/vertex-decl objects" },
+};
+
+// Walk the zone's asset table once per step, in table order.
+static void buildRuntimeObjects(const char *path, const uint8_t *assetTable,
+                                const uint8_t *end, uint32_t assetCount,
+                                uint8_t *const *block, const uint32_t *blockSize,
+                                uint32_t nblk)
+{
+    for (unsigned step = 0; step < ARRAY_COUNT(kBuildSteps); ++step) {
+        const NxBuildStep *bs = &kBuildSteps[step];
+        const uint8_t *p = assetTable;
+        unsigned built = 0, visited = 0;
+
+        for (uint32_t i = 0; i < assetCount; ++i) {
+            if (p + 9 > end) break;
+            uint32_t type; memcpy(&type, p, 4); p += 4;
+            uint8_t  ab = *p++; uint32_t ao; memcpy(&ao, p, 4); p += 4;
+            if ((XAssetType)type != bs->type) continue;
+            if (ab >= nblk || !block[ab] || ao >= blockSize[ab]) continue;
+            XAssetHeader h;
+            h.data = block[ab] + ao;
+            built += bs->build(h);
+            ++visited;
+        }
+
+        if (visited)
+            Com_Printf(16, "NX_KBZ: '%s' built %u %s over %u assets of type %d\n",
+                       path, built, bs->what, visited, (int)bs->type);
+    }
+}
 
 // Parse + relocate + register a KBZ1 image already read into `file`.
 // Returns 1 on success, -1 if malformed. `path` is for logging only.
@@ -110,6 +224,7 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
 
     // 3. register each asset. The header struct is already native LP64 layout,
     // so we hand DB_AddXAsset a direct pointer into the relocated block.
+    const uint8_t *assetTable = p;
     for (uint32_t i = 0; i < assetCount; ++i) {
         if (p + 9 > end) break;
         uint32_t type; memcpy(&type, p, 4); p += 4;
@@ -119,6 +234,10 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
         h.data = block[ab] + ao;
         DB_AddXAsset((XAssetType)type, h);
     }
+
+    // 4. build the runtime objects db_load.cpp would have built. This runs
+    // after registration so a builder may look assets up by name if it needs to.
+    buildRuntimeObjects(path, assetTable, end, assetCount, block, blockSize, nblk);
 
     Com_Printf(16, "NX_TryLoadKbz: loaded '%s' (%u assets, %u relocs)\n",
                path, assetCount, relocCount);

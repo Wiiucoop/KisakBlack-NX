@@ -18,3 +18,8 @@ int __cdecl DB_GetXAssetTypeSize(int type);
 const char *__cdecl DB_GetXAssetTypeName(unsigned int type);
 
 extern const char *g_assetNames[43];
+#ifdef KISAK_NX
+// nx-port probe helper: like DB_GetXAssetName but returns NULL instead of
+// asserting. Diagnostics only.
+const char *__cdecl DB_GetXAssetNameNoAssert(const struct XAsset *asset);
+#endif

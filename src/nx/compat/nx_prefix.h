@@ -190,6 +190,29 @@ static inline uint64_t __rdtsc(void)
 #define _finite(x) __builtin_isfinite(x)
 #endif
 
+// ----- CRT rand() range --------------------------------------------------
+// MSVC's RAND_MAX is 0x7FFF; newlib's is 0x7FFFFFFF (sys/config.h:261). The
+// game was written against the MSVC contract and hardcodes it all over:
+// com_math.cpp:213 divides by 32768, forty-odd call sites divide by 32767,
+// cg_main.cpp:25 divides by 0x7FFF, RandWithSeed masks with 0x8000. Under
+// newlib those expressions come out 65536x too large, and GaussianRandom
+// (com_math.cpp:221) -- a Marsaglia polar rejection loop that retries until
+// x*x + y*y <= 1 -- then exits with probability ~2e-10 per iteration, i.e.
+// never: the engine hangs silently in R_CreateParticleCloudBuffer.
+//
+// Restore the MSVC contract once, here, instead of at every call site. The
+// top 15 bits are taken rather than the low ones, so the result stays well
+// mixed whichever generator newlib links in. RAND_MAX moves with it, which
+// keeps the rand()/RAND_MAX idiom in third-party code correct as well
+// (groupvoice/speex/misc.c:166).
+static inline int nx_rand(void)
+{
+    return (int)(((unsigned int)rand() >> 16) & 0x7FFFu);
+}
+#define rand() nx_rand()
+#undef RAND_MAX
+#define RAND_MAX 0x7FFF
+
 static inline char *_strlwr(char *s) { for (char *p = s; *p; ++p) *p = (char)tolower((unsigned char)*p); return s; }
 static inline char *_strupr(char *s) { for (char *p = s; *p; ++p) *p = (char)toupper((unsigned char)*p); return s; }
 

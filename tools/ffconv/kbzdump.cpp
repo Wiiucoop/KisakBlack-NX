@@ -14,7 +14,7 @@
 #include <cstdlib>
 #include <vector>
 
-enum { AT_LOCALIZE = 23, AT_RAWFILE = 36, AT_STRINGTABLE = 37 };
+enum { AT_IMAGE = 8, AT_LOCALIZE = 23, AT_RAWFILE = 36, AT_STRINGTABLE = 37 };
 
 // LP64 asset views (must match the transcoder / the game's native structs).
 struct RawFile      { const char *name; int len; const char *buffer; };
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     }
 
     // 3. walk assets through the now-native pointers
-    int shown = 0, nameBad = 0;
+    int shown = 0, nameBad = 0, nullName = 0;
     auto okStr = [&](const char *s) -> bool {
         if (!s) return true;                       // null is legal
         for (uint32_t b = 0; b < nblk; ++b)
@@ -87,17 +87,54 @@ int main(int argc, char **argv) {
             StringTable *st = (StringTable *)hdr; nm = st->name;
             const char *c00 = (st->values && st->rowCount && st->columnCount) ? st->values[0].string : "";
             snprintf(extra, sizeof(extra), "%dx%d cell[0]='%s'", st->rowCount, st->columnCount, c00 ? c00 : "(null)");
+        } else if (type == AT_IMAGE) {
+            // GfxImage is read at explicit byte offsets rather than through a
+            // struct, to stay honest about the LP64 layout the game actually
+            // has: name@56, hash@64, sizeof 72 -- checked with offsetof
+            // against gfx_d3d/r_material.h under the devkitA64 compiler.
+            const uint8_t *g = (const uint8_t *)hdr;
+            memcpy(&nm, g + 56, sizeof nm);
+            uint32_t hash; memcpy(&hash, g + 64, 4);
+            uint16_t w, h; memcpy(&w, g + 24, 2); memcpy(&h, g + 26, 2);
+            snprintf(extra, sizeof(extra), "%ux%u hash=%08x", w, h, hash);
         } else if (type == AT_LOCALIZE) {
             LocalizeEntry *le = (LocalizeEntry *)hdr; nm = le->name;
             snprintf(extra, sizeof(extra), "value='%.60s'", le->value ? le->value : "(null)");
         }
+        // Every asset the engine can look up must yield a name, because
+        // DB_GetXAssetHeaderName (db_assetnames.cpp:466) asserts on a null one
+        // while walking a hash bucket. The getter table (db_assetnames.cpp:23)
+        // is uniform: DB_ImageGetName reads GfxImage::name at 56,
+        // DB_LocalizeEntryGetName reads LocalizeEntry::name at 8,
+        // DB_GetEmblemSetName returns a literal, and every other type goes
+        // through DB_DDLGetName -- the pointer at offset 0.
+        const char *engineName = nullptr;
+        bool hasGetter = true;
+        {
+            const uint8_t *g = (const uint8_t *)hdr;
+            if (type == AT_IMAGE)            memcpy(&engineName, g + 56, sizeof engineName);
+            else if (type == AT_LOCALIZE)    memcpy(&engineName, g + 8,  sizeof engineName);
+            else if (type == 42)             { engineName = "emblemset"; hasGetter = false; } // literal, never in a block
+            else if (type == 19 || type == 25 || type == 26 ||
+                     (type >= 30 && type <= 35))  hasGetter = false;   // null handler
+            else                             memcpy(&engineName, g + 0,  sizeof engineName);
+        }
+        if (hasGetter && !engineName) {
+            ++nullName;
+            if (nullName <= 12) printf("  NULL name: asset %u type %u\n", i, type);
+        } else if (hasGetter && !okStr(engineName)) {
+            ++nameBad;
+            if (nameBad <= 12) printf("  DANGLING name ptr: asset %u type %u\n", i, type);
+        }
+        if (!nm) nm = (type == 42) ? nullptr : engineName;
         if (!okStr(nm)) { ++nameBad; if (nameBad <= 8) printf("  BAD name ptr asset %u type %u\n", i, type); }
         if (all || shown < 12) { printf("  [%3u] t%-2u %-28s %s\n", i, type, nm ? nm : "(null)", extra); ++shown; }
     }
 
     printf("type histogram:");
     for (int t = 0; t < 64; ++t) if (histType[t]) printf(" t%d=%d", t, histType[t]);
-    printf("\nvalidation: relocBad=%d nameBad=%d  => %s\n",
-           relocBad, nameBad, (relocBad == 0 && nameBad == 0) ? "OK" : "FAIL");
-    return (relocBad == 0 && nameBad == 0) ? 0 : 1;
+    printf("\nvalidation: relocBad=%d nameBad=%d nullName=%d  => %s\n",
+           relocBad, nameBad, nullName,
+           (relocBad == 0 && nameBad == 0 && nullName == 0) ? "OK" : "FAIL");
+    return (relocBad == 0 && nameBad == 0 && nullName == 0) ? 0 : 1;
 }

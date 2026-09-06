@@ -12,6 +12,29 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Counters for the D3D9 call census. The point is to learn which subset of
+// the API the engine actually uses before writing any real backend.
+// The two presentation paths are counted apart: RB_SwapBuffers goes through
+// the swap chain (rb_backend.cpp:4710), while the device's own Present is only
+// reached by Bink video playback (dx9rad3d.cpp:321).
+static unsigned s_nPresent, s_nSwapPresent;
+static unsigned s_nBeginScene, s_nDrawIndexed, s_nDrawPrim, s_nDrawPrimUP;
+static unsigned s_nSetRenderState, s_nSetTexture, s_nSetVertexShader;
+static unsigned s_nSetPixelShader, s_nSetStreamSource, s_nSetIndices;
+static unsigned s_nClear;
+
+static void nxDumpCallCensus(void)
+{
+    printf("[d3d census] swapPresent=%u devPresent=%u beginScene=%u clear=%u\n"
+           "             drawIndexed=%u drawPrim=%u drawPrimUP=%u\n"
+           "             setRenderState=%u setTexture=%u\n"
+           "             vs=%u ps=%u streamSource=%u indices=%u\n",
+           s_nSwapPresent, s_nPresent, s_nBeginScene, s_nClear,
+           s_nDrawIndexed, s_nDrawPrim, s_nDrawPrimUP,
+           s_nSetRenderState, s_nSetTexture,
+           s_nSetVertexShader, s_nSetPixelShader,
+           s_nSetStreamSource, s_nSetIndices);
+}
 // ===========================================================================
 // format helpers
 // ===========================================================================
@@ -487,7 +510,11 @@ HRESULT IDirect3DDevice9::Reset(D3DPRESENT_PARAMETERS *pp)
     if (pp) s_device.pp = *pp;
     return D3D_OK;
 }
-HRESULT IDirect3DDevice9::Present(const RECT *, const RECT *, HWND, const void *) { return D3D_OK; }
+HRESULT IDirect3DDevice9::Present(const RECT *, const RECT *, HWND, const void *)
+{
+    ++s_nPresent;
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::GetSwapChain(UINT, IDirect3DSwapChain9 **swapChain)
 {
     nxAddRef(&s_device.swapChain);
@@ -639,9 +666,9 @@ HRESULT IDirect3DDevice9::GetDepthStencilSurface(IDirect3DSurface9 **depthStenci
     }
     return D3D_OK;
 }
-HRESULT IDirect3DDevice9::BeginScene() { return D3D_OK; }
+HRESULT IDirect3DDevice9::BeginScene() { ++s_nBeginScene; return D3D_OK; }
 HRESULT IDirect3DDevice9::EndScene() { return D3D_OK; }
-HRESULT IDirect3DDevice9::Clear(DWORD, const D3DRECT *, DWORD, D3DCOLOR, float, DWORD) { return D3D_OK; }
+HRESULT IDirect3DDevice9::Clear(DWORD, const D3DRECT *, DWORD, D3DCOLOR, float, DWORD) { ++s_nClear; return D3D_OK; }
 HRESULT IDirect3DDevice9::SetViewport(const D3DVIEWPORT9 *) { return D3D_OK; }
 HRESULT IDirect3DDevice9::GetViewport(D3DVIEWPORT9 *viewport)
 {
@@ -653,27 +680,27 @@ HRESULT IDirect3DDevice9::GetViewport(D3DVIEWPORT9 *viewport)
     }
     return D3D_OK;
 }
-HRESULT IDirect3DDevice9::SetRenderState(D3DRENDERSTATETYPE, DWORD) { return D3D_OK; }
+HRESULT IDirect3DDevice9::SetRenderState(D3DRENDERSTATETYPE, DWORD) { ++s_nSetRenderState; return D3D_OK; }
 HRESULT IDirect3DDevice9::GetRenderState(D3DRENDERSTATETYPE, DWORD *value)
 {
     if (value) *value = 0;
     return D3D_OK;
 }
-HRESULT IDirect3DDevice9::SetTexture(DWORD, IDirect3DBaseTexture9 *) { return D3D_OK; }
+HRESULT IDirect3DDevice9::SetTexture(DWORD, IDirect3DBaseTexture9 *) { ++s_nSetTexture; return D3D_OK; }
 HRESULT IDirect3DDevice9::SetTextureStageState(DWORD, D3DTEXTURESTAGESTATETYPE, DWORD) { return D3D_OK; }
 HRESULT IDirect3DDevice9::SetSamplerState(DWORD, D3DSAMPLERSTATETYPE, DWORD) { return D3D_OK; }
 HRESULT IDirect3DDevice9::SetScissorRect(const RECT *) { return D3D_OK; }
-HRESULT IDirect3DDevice9::DrawPrimitive(D3DPRIMITIVETYPE, UINT, UINT) { return D3D_OK; }
-HRESULT IDirect3DDevice9::DrawIndexedPrimitive(D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT) { return D3D_OK; }
-HRESULT IDirect3DDevice9::DrawPrimitiveUP(D3DPRIMITIVETYPE, UINT, const void *, UINT) { return D3D_OK; }
+HRESULT IDirect3DDevice9::DrawPrimitive(D3DPRIMITIVETYPE, UINT, UINT) { ++s_nDrawPrim; return D3D_OK; }
+HRESULT IDirect3DDevice9::DrawIndexedPrimitive(D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT) { ++s_nDrawIndexed; return D3D_OK; }
+HRESULT IDirect3DDevice9::DrawPrimitiveUP(D3DPRIMITIVETYPE, UINT, const void *, UINT) { ++s_nDrawPrimUP; return D3D_OK; }
 HRESULT IDirect3DDevice9::SetVertexDeclaration(IDirect3DVertexDeclaration9 *) { return D3D_OK; }
 HRESULT IDirect3DDevice9::SetFVF(DWORD) { return D3D_OK; }
-HRESULT IDirect3DDevice9::SetVertexShader(IDirect3DVertexShader9 *) { return D3D_OK; }
+HRESULT IDirect3DDevice9::SetVertexShader(IDirect3DVertexShader9 *) { ++s_nSetVertexShader; return D3D_OK; }
 HRESULT IDirect3DDevice9::SetVertexShaderConstantF(UINT, const float *, UINT) { return D3D_OK; }
-HRESULT IDirect3DDevice9::SetPixelShader(IDirect3DPixelShader9 *) { return D3D_OK; }
+HRESULT IDirect3DDevice9::SetPixelShader(IDirect3DPixelShader9 *) { ++s_nSetPixelShader; return D3D_OK; }
 HRESULT IDirect3DDevice9::SetPixelShaderConstantF(UINT, const float *, UINT) { return D3D_OK; }
-HRESULT IDirect3DDevice9::SetStreamSource(UINT, IDirect3DVertexBuffer9 *, UINT, UINT) { return D3D_OK; }
-HRESULT IDirect3DDevice9::SetIndices(IDirect3DIndexBuffer9 *) { return D3D_OK; }
+HRESULT IDirect3DDevice9::SetStreamSource(UINT, IDirect3DVertexBuffer9 *, UINT, UINT) { ++s_nSetStreamSource; return D3D_OK; }
+HRESULT IDirect3DDevice9::SetIndices(IDirect3DIndexBuffer9 *) { ++s_nSetIndices; return D3D_OK; }
 HRESULT IDirect3DDevice9::EvictManagedResources() { return D3D_OK; }
 
 // ===========================================================================
@@ -681,6 +708,7 @@ HRESULT IDirect3DDevice9::EvictManagedResources() { return D3D_OK; }
 // ===========================================================================
 HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const void *, DWORD)
 {
+    if ((++s_nSwapPresent % 60) == 1) nxDumpCallCensus();
     return D3D_OK;
 }
 HRESULT IDirect3DSwapChain9::GetBackBuffer(UINT, D3DBACKBUFFER_TYPE, IDirect3DSurface9 **surface)

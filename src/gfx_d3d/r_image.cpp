@@ -906,6 +906,13 @@ GfxImage *__cdecl Image_FindExisting_FastFile(const char *name)
 
 GfxImage *__cdecl Image_Register(char *imageName, unsigned __int8 semantic, int imageTrack)
 {
+#ifdef KISAK_NX
+    // Probe: R_InitCodeImages registers ~20 system images in a row and any
+    // assert inside the lookup reports only an asset type, not which one was
+    // in flight. Printing the name here identifies the exact call.
+    printf("[nx-img] Image_Register('%s') semantic=%u track=%d\n",
+           imageName ? imageName : "(null)", (unsigned)semantic, imageTrack);
+#endif
     if ( useFastFile->current.enabled )
         return (GfxImage *)((int (__cdecl *)(char *, unsigned int, int))Image_Register_FastFile)(imageName, semantic, imageTrack);
     else

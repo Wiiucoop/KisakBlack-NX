@@ -217,6 +217,86 @@ XAssetHeader(__cdecl *DB_AllocXAssetHeaderHandler[43])(void *) =
   DB_AllocXAsset<EmblemSet>
 };
 
+#ifdef KISAK_NX
+// nx-port: the true LP64 size of each asset's struct, in the same slot order as
+// DB_AllocXAssetHeaderHandler above -- that table is the authority on which
+// type each slot holds, so the two are meant to be read side by side.
+//
+// This exists because DB_GetXAssetSizeHandler (db_assetnames.cpp:348) returns
+// hardcoded *x86* sizes, and several of its entries are shared between
+// unrelated types purely because those types happened to be the same size on
+// x86 and the decompiler merged the identical functions: image and
+// snddriverglobals both mapped to DB_SizeofXAsset_SndDriverGlobals_ (52), and
+// localize, impactfx and ddl all mapped to XAnimTreeSize (8). Under LP64 those
+// coincidences are gone and every constant is too small.
+//
+// DB_CloneXAssetInternal memcpy's this many bytes from a source struct into a
+// pool slot, so a short size silently truncates the tail of the struct. For
+// GfxImage that tail is exactly `name` (offset 56) and `hash` (64), which is
+// how a pool entry ends up with a null name.
+//
+// 0 marks a slot with no struct behind it: the alloc table has NULL there
+// (ui_map, weapondef, weaponvariant, aitype..xmodelalias). Those fall back to
+// the legacy handler, which asserts, exactly as before.
+static const int s_nxAssetTypeSize[43] = {
+    (int)sizeof(XModelPieces),          //  0 xmodelpieces
+    (int)sizeof(PhysPreset),            //  1 physpreset
+    (int)sizeof(PhysConstraints),       //  2 physconstraints
+    (int)sizeof(DestructibleDef),       //  3 destructibledef
+    (int)sizeof(XAnimParts),            //  4 xanim
+    (int)sizeof(XModel),                //  5 xmodel
+    (int)sizeof(Material),              //  6 material
+    (int)sizeof(MaterialTechniqueSet),  //  7 techset
+    (int)sizeof(GfxImage),              //  8 image        (was 52, the x86 size)
+    (int)sizeof(SndBank),               //  9 sound
+    (int)sizeof(snd_alias_list_t),      // 10 sound_patch
+    (int)sizeof(clipMap_t),             // 11 col_map_sp
+    (int)sizeof(clipMap_t),             // 12 col_map_mp
+    (int)sizeof(ComWorld),              // 13 com_map
+    (int)sizeof(GameWorldSp),           // 14 game_map_sp
+    (int)sizeof(GameWorldMp),           // 15 game_map_mp
+    (int)sizeof(MapEnts),               // 16 map_ents
+    (int)sizeof(GfxWorld),              // 17 gfx_map
+    (int)sizeof(GfxLightDef),           // 18 lightdef
+    0,                                  // 19 ui_map       (no alloc handler)
+    (int)sizeof(Font_s),                // 20 font
+    (int)sizeof(MenuList),              // 21 menufile
+    (int)sizeof(menuDef_t),             // 22 menu
+    (int)sizeof(LocalizeEntry),         // 23 localize
+    (int)sizeof(WeaponVariantDef),      // 24 weapon
+    0,                                  // 25 weapondef    (no alloc handler)
+    0,                                  // 26 weaponvariant(no alloc handler)
+    (int)sizeof(SndDriverGlobals),      // 27 snddriverglobals
+    (int)sizeof(FxEffectDef),           // 28 fx
+    (int)sizeof(FxImpactTable),         // 29 impactfx     (was 8, via XAnimTreeSize)
+    0,                                  // 30 aitype
+    0,                                  // 31 mptype
+    0,                                  // 32 mpbody
+    0,                                  // 33 mphead
+    0,                                  // 34 character
+    0,                                  // 35 xmodelalias
+    (int)sizeof(RawFile),               // 36 rawfile
+    (int)sizeof(StringTable),           // 37 stringtable
+    (int)sizeof(PackIndex),             // 38 packindex
+    (int)sizeof(XGlobals),              // 39 xGlobals
+    // 40 ddl: the asset header is ddlRoot_t, not ddlDef_t -- Load_ddlRoot_t
+    // (db_load.cpp:7638) reads 8 bytes and hangs the ddlDef off it, and the old
+    // x86 constant was 8 = sizeof(ddlRoot_t). The alloc handler above says
+    // DB_AllocXAsset<ddlDef_t>, which merely over-allocates the pool slot;
+    // cloning ddlDef_t's size would over-READ 32 bytes past the source struct.
+    (int)sizeof(ddlRoot_t),             // 40 ddl          (was 8, via XAnimTreeSize)
+    (int)sizeof(Glasses),               // 41 glasses
+    (int)sizeof(EmblemSet),             // 42 emblemset
+};
+
+// Returns 0 for slots with no struct, so the caller can fall through.
+int __cdecl DB_GetXAssetTypeSizeNative(int type)
+{
+    if (type < 0 || type >= 43) return 0;
+    return s_nxAssetTypeSize[type];
+}
+#endif // KISAK_NX
+
 
 XAssetPool<XModelPieces, POOLSIZE_XMODELPIECES>         g_XModelPiecesPool;
 XAssetPool<PhysPreset, POOLSIZE_PHYSPRESET>             g_PhysPresetPool;
@@ -1769,9 +1849,20 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         printf("[nx-db] asset pool inuse=%d; looking up type=%d name='%s'\n", inuse, (int)type, name ? name : "(null)");
         for (unsigned int ai = db_hashTable[DB_HashForName(name, type) % 0x8000u]; ai; ) {
             XAssetEntryPoolEntry *e = &g_assetEntryPool[ai];
-            const char *nm = DB_GetXAssetName(&e->entry.asset);
-            printf("[nx-db]   bucket entry idx=%u type=%d name=%p '%.32s'\n", ai, (int)e->entry.asset.type,
-                   (void *)nm, nm ? nm : "(null)");
+            // Mirror the real loop below and only name entries of the type we
+            // asked for. Without this guard the walk calls DB_GetXAssetName on
+            // bucket neighbours of any type, and asserts inside
+            // DB_GetXAssetHeaderName (db_assetnames.cpp:466) on the first one
+            // whose handler is null or whose name is -- i.e. the diagnostic can
+            // manufacture the very failure it is meant to observe.
+            if (e->entry.asset.type == type) {
+                const char *nm = DB_GetXAssetName(&e->entry.asset);
+                printf("[nx-db]   bucket entry idx=%u type=%d name=%p '%.32s'\n", ai, (int)e->entry.asset.type,
+                       (void *)nm, nm ? nm : "(null)");
+            } else {
+                printf("[nx-db]   bucket entry idx=%u type=%d (other type, name not read)\n",
+                       ai, (int)e->entry.asset.type);
+            }
             ai = e->entry.nextHash;
         }
     }
@@ -1784,6 +1875,21 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         assetEntry = &g_assetEntryPool[assetEntryIndex];
         if ( assetEntry->entry.asset.type == type )
         {
+#ifdef KISAK_NX
+            // Probe: name the offending entry before DB_GetXAssetName asserts
+            // on it (db_assetnames.cpp:466), which otherwise reports only the
+            // asset type. Reads the name a second time and changes nothing.
+            {
+                const char *probeName = DB_GetXAssetNameNoAssert(&assetEntry->entry.asset);
+                if (!probeName)
+                    printf("[nx-db] NULL name in pool: idx=%u type=%d (%s) zone=%u inuse=%d"
+                           " while looking up '%s'\n",
+                           assetEntryIndex, (int)assetEntry->entry.asset.type,
+                           g_assetNames[assetEntry->entry.asset.type],
+                           (unsigned)assetEntry->entry.zoneIndex,
+                           (int)assetEntry->entry.inuse, name ? name : "(null)");
+            }
+#endif
             XAssetName = DB_GetXAssetName(&assetEntry->entry.asset);
             if ( !I_stricmp(XAssetName, name) )
                 return &g_assetEntryPool[assetEntryIndex];

@@ -273,6 +273,12 @@ void __cdecl DB_Sleep(unsigned int msec);
 XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *name);
 XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, const char *name);
 XAssetEntryPoolEntry *__cdecl DB_AllocXAssetEntry(XAssetType type, unsigned __int8 zoneIndex);
+#ifdef KISAK_NX
+// nx-port: true LP64 sizeof for each asset slot; 0 where no struct exists.
+// Defined next to DB_AllocXAssetHeaderHandler, which is the authority on the
+// type each slot holds. See the comment there.
+int __cdecl DB_GetXAssetTypeSizeNative(int type);
+#endif
 void __cdecl DB_CloneXAssetInternal(const XAsset *from, XAsset *to);
 void __cdecl PrintWaitedError(XAssetType type, char *name, int waitedMsec);
 bool __cdecl IsConfigFile(char *name);

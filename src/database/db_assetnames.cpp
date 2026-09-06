@@ -479,6 +479,20 @@ const char *__cdecl DB_GetXAssetHeaderName(int type, const XAssetHeader *header)
     return name;
 }
 
+#ifdef KISAK_NX
+// nx-port probe helper: same lookup as DB_GetXAssetName but returns NULL
+// instead of asserting, so a caller can report the offending pool entry before
+// the assert fires. No behavioural use -- diagnostics only.
+const char *__cdecl DB_GetXAssetNameNoAssert(const XAsset *asset)
+{
+    if (!asset) return 0;
+    if ((unsigned)asset->type >= 43) return 0;
+    if (!DB_XAssetGetNameHandler[asset->type]) return 0;
+    if (!asset->header.xmodelPieces) return 0;
+    return DB_XAssetGetNameHandler[asset->type](&asset->header);
+}
+#endif
+
 const char *__cdecl DB_GetXAssetName(const XAsset *asset)
 {
     if ( !asset
@@ -507,17 +521,17 @@ void __cdecl DB_SetXAssetName(XAsset *asset, const char *name)
 int __cdecl DB_GetXAssetTypeSize(int type)
 {
 #ifdef KISAK_NX
-    // nx-port: the x86 size handlers return 32-bit struct sizes, and several are
-    // shared by coincidence (e.g. localize -> XAnimTreeSize because both were 8
-    // bytes on x86). DB_CloneXAssetInternal memcpy's this many bytes from the
-    // KBZ source struct into the pool slot, so on LP64 it MUST be the true
-    // native sizeof or inner pointers get dropped. Return correct sizes for the
-    // asset types the KBZ loader registers; extend as more types are converted.
-    switch (type) {
-    case ASSET_TYPE_LOCALIZE_ENTRY: return (int)sizeof(LocalizeEntry);
-    case ASSET_TYPE_RAWFILE:        return (int)sizeof(RawFile);
-    case ASSET_TYPE_STRINGTABLE:    return (int)sizeof(StringTable);
-    default: break;
+    // nx-port: DB_GetXAssetSizeHandler below returns hardcoded *x86* struct
+    // sizes, and several of its entries are shared between unrelated types
+    // purely because those types were the same size on x86 and the decompiler
+    // merged the identical functions (image/snddriverglobals -> 52;
+    // localize/impactfx/ddl -> XAnimTreeSize -> 8). DB_CloneXAssetInternal
+    // memcpy's this many bytes into a pool slot, so a short size silently
+    // truncates the struct's tail -- for GfxImage that tail is exactly `name`
+    // and `hash`. Use the real LP64 sizes for every type that has a struct.
+    {
+        const int nativeSize = DB_GetXAssetTypeSizeNative(type);
+        if (nativeSize) return nativeSize;
     }
 #endif
     if ( !DB_GetXAssetSizeHandler[type]

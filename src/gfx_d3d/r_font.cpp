@@ -137,7 +137,10 @@ unsigned int __cdecl R_FontGetRandomNumberCharacter(Font_s *font, int seed)
 Font_s *__cdecl R_RegisterFont(const char *name, int imageTrack)
 {
     if ( useFastFile->current.enabled )
-        return (Font_s *)((int (__cdecl *)(const char *, int))R_RegisterFont_FastFile)(name, imageTrack);
+        // x86: cast a un puntatore a funzione con ritorno int. Su LP64
+        // troncherebbe il puntatore a 32 bit. Gli argomenti in eccesso
+        // erano gia' ignorati dal callee.
+        return R_RegisterFont_FastFile(name);
     else
         return R_RegisterFont_LoadObj(name, imageTrack);
 }

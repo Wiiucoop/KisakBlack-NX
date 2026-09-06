@@ -3602,9 +3602,12 @@ void __cdecl Item_SetupKeywordHash()
 MenuList *__cdecl UI_LoadMenu(const char *menuFile, int imageTrack)
 {
     if ( useFastFile->current.enabled )
-        return (MenuList *)((int (__cdecl *)(const char *, int))UI_LoadMenus_FastFile)(menuFile, imageTrack);
+        // x86: cast a un puntatore a funzione con ritorno int. Su LP64
+        // troncherebbe il puntatore a 32 bit. Gli argomenti in eccesso
+        // erano gia' ignorati dal callee.
+        return UI_LoadMenus_FastFile(menuFile);
     else
-        return (MenuList *)((int (__cdecl *)(const char *, int))UI_LoadMenu_LoadObj)(menuFile, imageTrack);
+        return UI_LoadMenu_LoadObj((char *)menuFile, imageTrack);
 }
 
 MenuList * UI_LoadMenu_LoadObj(char *menuFile, int imageTrack)
@@ -3835,8 +3838,11 @@ MenuList *__cdecl UI_LoadMenus(const char *menuFile, int imageTrack)
     if ( G_ExitAfterToolComplete() )
         return 0;
     if ( useFastFile->current.enabled )
-        return (MenuList *)((int (__cdecl *)(const char *, int))UI_LoadMenus_FastFile)(menuFile, imageTrack);
-    return (MenuList *)((int (__cdecl *)(const char *, int))UI_LoadMenus_LoadObj)(menuFile, imageTrack);
+        // x86: cast a un puntatore a funzione con ritorno int. Su LP64
+        // troncherebbe il puntatore a 32 bit. Gli argomenti in eccesso
+        // erano gia' ignorati dal callee.
+        return UI_LoadMenus_FastFile(menuFile);
+    return UI_LoadMenus_LoadObj((char *)menuFile, imageTrack);
 }
 
 char menuBuf[32768];

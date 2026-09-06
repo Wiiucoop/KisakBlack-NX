@@ -35,8 +35,11 @@ Glasses *__cdecl GetGlasses()
 
     v1 = fs_gameDirVar && *(_BYTE *)fs_gameDirVar->current.string;
     if ( v1 || !useFastFile->current.enabled )
-        return (Glasses *)((int (__cdecl *)(Glasses *(__cdecl *)()))GetGlasses_LoadObj)(GetGlasses_LoadObj);
+        // x86: cast a un puntatore a funzione con ritorno int. Su LP64
+        // troncherebbe il puntatore a 32 bit. Gli argomenti in eccesso
+        // erano gia' ignorati dal callee.
+        return GetGlasses_LoadObj();
     else
-        return (Glasses *)((int (__cdecl *)(Glasses *(__cdecl *)()))GetGlasses_FastFile)(GetGlasses_FastFile);
+        return GetGlasses_FastFile();
 }
 

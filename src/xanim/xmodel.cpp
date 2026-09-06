@@ -74,10 +74,10 @@ void __cdecl XModelSurfsSetData(const char *name, XModelSurfs *modelSurfs, void 
 XModel *__cdecl XModelPrecache(char *name, void *(__cdecl *Alloc)(int), void *(__cdecl *AllocColl)(int))
 {
     if ( useFastFile->current.enabled )
-        return (XModel *)((int (__cdecl *)(char *, void *(__cdecl *)(int), void *(__cdecl *)(int)))XModelPrecache_FastFile)(
-                                             name,
-                                             Alloc,
-                                             AllocColl);
+        // x86: cast a un puntatore a funzione con ritorno int. Su LP64
+        // troncherebbe il puntatore a 32 bit. Gli argomenti in eccesso
+        // erano gia' ignorati dal callee.
+        return XModelPrecache_FastFile(name);
     else
         return XModelPrecache_LoadObj(name, Alloc, AllocColl);
 }

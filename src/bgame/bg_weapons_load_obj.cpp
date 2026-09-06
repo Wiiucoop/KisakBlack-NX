@@ -2279,9 +2279,15 @@ bool __cdecl BG_FlameTableUpdateField(const char *flameTableName, char *keyValue
 WeaponVariantDef *__cdecl BG_LoadDefaultWeaponVariantDef()
 {
     if ( useFastFile->current.enabled )
-        return (WeaponVariantDef *)((int (__cdecl *)(WeaponVariantDef *(__cdecl *)()))BG_LoadDefaultWeaponVariantDef_FastFile)(BG_LoadDefaultWeaponVariantDef_FastFile);
+        // x86: cast a un puntatore a funzione con ritorno int. Su LP64
+        // troncherebbe il puntatore a 32 bit. Gli argomenti in eccesso
+        // erano gia' ignorati dal callee.
+        return BG_LoadDefaultWeaponVariantDef_FastFile();
     else
-        return (WeaponVariantDef *)((int (__cdecl *)(WeaponFullDef *(__cdecl *)()))BG_LoadDefaultWeaponVariantDef_LoadObj)(BG_LoadDefaultWeaponVariantDef_LoadObj);
+        // La variante LoadObj restituisce la WeaponFullDef che contiene la
+        // WeaponVariantDef come primo membro: il reinterpret cast x86 era la
+        // stessa cosa, ma qui lo diciamo esplicitamente.
+        return &BG_LoadDefaultWeaponVariantDef_LoadObj()->weapVariantDef;
 }
 
 WeaponFullDef *__cdecl BG_LoadDefaultWeaponVariantDef_LoadObj()

@@ -1108,7 +1108,10 @@ void __cdecl Material_GetHashIndex(const char *name, unsigned __int16 *hashIndex
 Material *__cdecl Material_Register(char *name, int imageTrack)
 {
     if ( useFastFile->current.enabled )
-        return (Material *)((int (__cdecl *)(char *, int))Material_Register_FastFile)(name, imageTrack);
+        // x86: cast a un puntatore a funzione con ritorno int. Su LP64
+        // troncherebbe il puntatore a 32 bit. Gli argomenti in eccesso
+        // erano gia' ignorati dal callee.
+        return Material_Register_FastFile(name);
     else
         return Material_Register_LoadObj(name, imageTrack);
 }

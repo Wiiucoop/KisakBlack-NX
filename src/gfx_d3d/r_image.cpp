@@ -329,7 +329,9 @@ void __cdecl R_ShutdownImages()
     GfxImage *imagea; // [esp+0h] [ebp-2014h]
     int v2; // [esp+4h] [ebp-2010h]
     unsigned int i; // [esp+8h] [ebp-200Ch]
-    unsigned int v4[2049]; // [esp+Ch] [ebp-2008h]
+    // x86 parcheggiava qui i GfxImage * come unsigned int; su LP64 li
+    // troncherebbe a 32 bit e li rileggerebbe corrotti nel secondo ciclo.
+    GfxImage *v4[2049]; // [esp+Ch] [ebp-2008h]
     int j; // [esp+2010h] [ebp-4h]
 
     RB_UnbindAllImages();
@@ -340,7 +342,7 @@ void __cdecl R_ShutdownImages()
         if ( image )
         {
             if ( Image_IsProg(image) )
-                v4[v2++] = (unsigned int)image;
+                v4[v2++] = image;
             else
                 Image_Free(imageGlobals.imageHashTable[i]);
         }
@@ -348,14 +350,16 @@ void __cdecl R_ShutdownImages()
     memset((unsigned __int8 *)&imageGlobals, 0, 0x2000u);
     for ( j = 0; j < v2; ++j )
     {
-        imagea = (GfxImage *)v4[j];
+        imagea = v4[j];
         imageGlobals.imageHashTable[Image_GetAvailableHashLocation(imagea->name)] = imagea;
     }
 }
 
 bool __cdecl Image_IsProg(GfxImage *image)
 {
-    return image >= g_imageProgs && image < &g_imageProgs[30];
+    // x86 confrontava con &g_imageProgs[30] su un array di 29: un elemento
+    // oltre la fine. Image_AllocProg indicizza solo 0..28.
+    return image >= g_imageProgs && image < &g_imageProgs[ARRAY_COUNT(g_imageProgs)];
 }
 
 void __cdecl Image_Free(GfxImage *image)
@@ -914,7 +918,11 @@ GfxImage *__cdecl Image_Register(char *imageName, unsigned __int8 semantic, int 
            imageName ? imageName : "(null)", (unsigned)semantic, imageTrack);
 #endif
     if ( useFastFile->current.enabled )
-        return (GfxImage *)((int (__cdecl *)(char *, unsigned int, int))Image_Register_FastFile)(imageName, semantic, imageTrack);
+        // x86 originale: cast a (int (*)(char*, unsigned, int)) su una funzione
+        // che prende un solo argomento e restituisce un puntatore. Su LP64 il
+        // ritorno int tronca l'handle a 32 bit; semantic/imageTrack erano gia'
+        // ignorati dal callee.
+        return Image_Register_FastFile(imageName);
     else
         return Image_Register_LoadObj(imageName, semantic, imageTrack);
 }

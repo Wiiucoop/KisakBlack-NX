@@ -50,22 +50,41 @@ static std::vector<uint8_t> inflateAll(const uint8_t *src, size_t srcLen) {
 static const int OUT = 4;                // output block we place everything in
 static uint32_t g_x86b4 = 0;             // emulated game block-4 byte cursor
 static std::unordered_map<uint32_t, Prelink::Loc> g_b4map; // x86 off -> out Loc
-struct Deferred { Prelink::Loc obj; uint32_t field; uint32_t x86off; };
+struct Deferred { Prelink::Loc obj; uint32_t field; uint32_t x86off; int asset; int line; };
 static std::vector<Deferred> g_deferred; // block-4 offset refs, resolved in pass 2
 static int g_cntAlias = 0, g_cntOffOther = 0;
+static int g_curAsset = -1;              // asset being transcoded, for diagnostics
 
 // DB_AllocStreamPos(param): align the cursor up. param 0->none, 1->2, 3->4.
 static inline uint32_t alignUp(uint32_t v, uint32_t param) { return (v + param) & ~param; }
 
 // Reserve `size` bytes in the emulated block-4 image at alignment `param`,
 // mapping that x86 offset to output location `out` (if valid). Returns x86 off.
-static uint32_t b4Reserve(uint32_t param, uint32_t size, Prelink::Loc out) {
+static bool g_traceB4 = false;           // FFB4=1: log every block-4 reservation
+struct B4Log { uint32_t off, size; int line; };
+static std::vector<B4Log> g_b4log;       // every reservation, in order
+static uint32_t b4Reserve(uint32_t param, uint32_t size, Prelink::Loc out,
+                          int line = __builtin_LINE()) {
     g_x86b4 = alignUp(g_x86b4, param);
     uint32_t off = g_x86b4;
     if (out.valid()) g_b4map[off] = out;
+    g_b4log.push_back({off, size, line});
+    if (g_traceB4) fprintf(stderr, "    b4 asset=%d off=%u +%u (line %d)\n",
+                           g_curAsset, off, size, line);
     g_x86b4 += size;
     return off;
 }
+
+// ...but an asset's OWN struct never lands in block 4. Every Load_<T>Ptr
+// wraps its allocation in DB_PushStreamPos(0) / DB_PopStreamPos, and popping
+// out of block 0 rewinds that block's cursor (db_stream.cpp:69): block 0 is
+// scratch, reused by the next asset. Only what Load_<T> goes on to reference,
+// under its own DB_PushStreamPos(4), advances the block-4 cursor.
+// Load_GfxTextureLoad (db_load.cpp:1904) does the same for the whole
+// GfxImageLoadDef, pixel payload included -- the loader hands it to the GPU
+// and drops it. Counted separately so the accounting stays visible.
+static uint32_t g_x86temp = 0;
+static void tempReserve(uint32_t size) { g_x86temp += size; }
 
 // Emit an inline string to the output block and mirror its block-4 x86 alloc
 // (AllocLoad_raw_byte = DB_AllocStreamPos(0), then strlen+1 bytes).
@@ -80,12 +99,13 @@ static Prelink::Loc emitInlineStr(Prelink &z, const std::string &s) {
 //   -1         -> inline NUL-terminated string follows now
 //   -2 (alias) -> pointer-insert back-ref (unused in code_* zones)
 //   other      -> block/offset back-ref into already-emitted data (resolved p2)
-static void putXStringFromTag(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag) {
+static void putXStringFromTag(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag,
+                              int line = __builtin_LINE()) {
     if (tag == TAG_NULL) { z.putPtr(obj, field, Prelink::none()); return; }
     if (tag == TAG_INLINE) { std::string s = r.cstr(); z.putPtr(obj, field, emitInlineStr(z, s)); return; }
     if (tag == TAG_ALIAS) { ++g_cntAlias; z.putPtr(obj, field, Prelink::none()); return; }
     uint32_t blk = (tag - 1) >> 29, off = (tag - 1) & 0x1FFFFFFF;
-    if (blk == 4) g_deferred.push_back({obj, field, off}); // slot stays zero until pass 2
+    if (blk == 4) g_deferred.push_back({obj, field, off, g_curAsset, line}); // zero until pass 2
     else { ++g_cntOffOther; z.putPtr(obj, field, Prelink::none()); }
 }
 
@@ -170,11 +190,69 @@ static void putU16(Prelink &z, Prelink::Loc l, uint32_t field, uint16_t v) {
     memcpy(z.at(l) + field, &v, 2);
 }
 
-// Resolve a non-string pointer slot from its stream tag.
-static void putStructOffsetRef(Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag) {
+// Resolve a non-string pointer slot from its stream tag. This is the
+// DB_ConvertOffsetToPointer form (db_stream_load.cpp:82): the offset names the
+// datum itself.
+static void putStructOffsetRef(Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag,
+                               int line = __builtin_LINE()) {
     uint32_t blk = (tag - 1) >> 29, off = (tag - 1) & 0x1FFFFFFF;
-    if (blk == 4) g_deferred.push_back({obj, field, off});
+    if (blk == 4) g_deferred.push_back({obj, field, off, g_curAsset, line});
     else { ++g_cntOffOther; z.putPtr(obj, field, Prelink::none()); }
+}
+
+// ---- asset handles ----------------------------------------------------------
+// Asset pointers do NOT resolve like the above. Load_<T>Ptr's fallback is
+// DB_ConvertOffsetToAlias (db_stream_load.cpp:63), which *dereferences*:
+// the offset names a 4-byte slot in block 4 whose contents are the asset
+// pointer. Two things fill such slots:
+//   - XAsset[i].header, at assetArray + i*8 + 4, once asset i is loaded;
+//   - a slot DB_InsertPointer (db_stream.cpp:113) reserves when the asset was
+//     written with tag -2, which is why -2 costs 4 block-4 bytes that -1 does
+//     not.
+// A slot is filled before anything can reference it -- the stream is written
+// in load order -- so alias references resolve immediately, which also makes
+// a chain of aliases resolve for free.
+static std::unordered_map<uint32_t, Prelink::Loc> g_aliasMap;   // slot off -> asset
+static int g_cntAliasOther = 0, g_aliasOk = 0, g_aliasBad = 0;
+
+// DB_InsertPointer: reserve the 4-byte alias slot, in block 4, align 4.
+static uint32_t insertPointerSlot() {
+    return b4Reserve(3, 4, Prelink::none());
+}
+
+// Record that the 4-byte block-4 slot at x86 offset `slot` holds a pointer to
+// `target`. Any pointer field of a block-4 struct is a candidate source for a
+// later alias reference, so callers pass the slot's x86 offset where they know
+// it; 0 means "this pointer does not live in block 4" (an asset's own header,
+// for instance, which sits in the rewound temp block).
+static void noteAliasSlot(uint32_t slot, Prelink::Loc target) {
+    if (slot && target.valid()) g_aliasMap[slot] = target;
+}
+
+static Prelink::Loc putAssetHandleRef(Prelink &z, Prelink::Loc obj, uint32_t field,
+                                      uint32_t tag, int line = __builtin_LINE()) {
+    uint32_t blk = (tag - 1) >> 29, off = (tag - 1) & 0x1FFFFFFF;
+    if (blk != 4) {
+        ++g_cntAliasOther; z.putPtr(obj, field, Prelink::none());
+        return Prelink::none();
+    }
+    auto it = g_aliasMap.find(off);
+    if (it == g_aliasMap.end()) {
+        ++g_aliasBad;
+        if (getenv("FFDBG") && g_aliasBad <= 20) {
+            uint32_t st = 0, sz = 0; int ln = 0;
+            for (const auto &e : g_b4log)
+                if (e.off <= off && e.off >= st) { st = e.off; sz = e.size; ln = e.line; }
+            fprintf(stderr, "  UNRESOLVED alias slot=%u (asset %d, ref from line %d)"
+                    " inside [%u,+%u) at +%u  reserved at line %d\n",
+                    off, g_curAsset, line, st, sz, off - st, ln);
+        }
+        z.putPtr(obj, field, Prelink::none());
+        return Prelink::none();
+    }
+    ++g_aliasOk;
+    z.putPtr(obj, field, it->second);
+    return it->second;
 }
 
 // MaterialVertexDeclaration: 108 flat -> 184. The trailing decl[18] are D3D
@@ -347,7 +425,7 @@ enum { AT_IMAGE = 8, SZ_IMAGE = 72 };
 // GfxImageLoadDef: {u8 levelCount; u8 flags; pad2; int format; int
 // resourceSize; u8 data[]}. No pointers, so the header keeps its x86 shape --
 // only the trailing pixel blob varies in length.
-static void tGfxImageLoadDef(Reader &r, Prelink &z, Prelink::Loc img) {
+static Prelink::Loc tGfxImageLoadDef(Reader &r, Prelink &z, Prelink::Loc img) {
     uint8_t  levelCount = 0, flags = 0;
     r.bytes(&levelCount, 1);
     r.bytes(&flags, 1);
@@ -357,7 +435,7 @@ static void tGfxImageLoadDef(Reader &r, Prelink &z, Prelink::Loc img) {
 
     const uint32_t total = 12 + (uint32_t)(resourceSize > 0 ? resourceSize : 0);
     Prelink::Loc def = z.alloc(OUT, total, 4);
-    b4Reserve(3, total, def);
+    tempReserve(total);            // Load_GfxTextureLoad -> block 0
 
     uint8_t *d = z.at(def);
     d[0] = levelCount;
@@ -367,6 +445,7 @@ static void tGfxImageLoadDef(Reader &r, Prelink &z, Prelink::Loc img) {
     if (resourceSize > 0) r.bytes(d + 12, (size_t)resourceSize);
 
     z.putPtr(img, 0, def);                    // GfxImage.texture.loadDef
+    return def;
 }
 
 static void tGfxImage(Reader &r, Prelink &z, Prelink::Loc obj) {
@@ -400,9 +479,11 @@ static void tGfxImage(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     // Load_GfxTextureLoad: -1 and -2 both mean the load def follows inline.
     if (texTag == TAG_INLINE || texTag == TAG_ALIAS) {
-        tGfxImageLoadDef(r, z, obj);
+        uint32_t slot = (texTag == TAG_ALIAS) ? insertPointerSlot() : 0;
+        Prelink::Loc def = tGfxImageLoadDef(r, z, obj);
+        if (texTag == TAG_ALIAS) g_aliasMap[slot] = def;
     } else if (texTag != TAG_NULL) {
-        putStructOffsetRef(z, obj, 0, texTag);
+        putAssetHandleRef(z, obj, 0, texTag);
     }
 }
 
@@ -444,11 +525,12 @@ static void tMaterial(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     if (techTag == TAG_INLINE || techTag == TAG_ALIAS) {
         Prelink::Loc t = z.alloc(OUT, SZ_TECHSET, 8);
-        b4Reserve(3, 528, t);
+        tempReserve(528);      // Load_MaterialTechniqueSetPtr -> block 0
+        if (techTag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = t;
         tMaterialTechniqueSet(r, z, t);
         z.putPtr(obj, 176, t);
     } else if (techTag != TAG_NULL) {
-        putStructOffsetRef(z, obj, 176, techTag);
+        putAssetHandleRef(z, obj, 176, techTag);
     }
 
     const int nTex   = counts[0];
@@ -457,7 +539,7 @@ static void tMaterial(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     if (texTag == TAG_INLINE) {
         Prelink::Loc tbl = z.alloc(OUT, (size_t)nTex * SZ_TEXDEF, 8);
-        b4Reserve(3, (uint32_t)nTex * 16, tbl);
+        const uint32_t tblX86 = b4Reserve(3, (uint32_t)nTex * 16, tbl);
 
         // Array loader: every fixed 16-byte record first, then per-element data.
         std::vector<uint32_t> hashes(nTex), uTags(nTex);
@@ -479,13 +561,16 @@ static void tMaterial(Reader &r, Prelink &z, Prelink::Loc obj) {
                                 "water_t is not transcoded yet\n", i);
                 exit(5);
             }
+            const uint32_t uSlot = tblX86 + (uint32_t)i * 16 + 12;  // .u
             if (uTags[i] == TAG_INLINE || uTags[i] == TAG_ALIAS) {
                 Prelink::Loc im = z.alloc(OUT, SZ_IMAGE, 8);
-                b4Reserve(3, 52, im);
+                tempReserve(52);   // Load_GfxImagePtr -> block 0
+                if (uTags[i] == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = im;
+                noteAliasSlot(uSlot, im);
                 tGfxImage(r, z, im);
                 z.putPtr(e, 16, im);
             } else if (uTags[i] != TAG_NULL) {
-                putStructOffsetRef(z, e, 16, uTags[i]);
+                noteAliasSlot(uSlot, putAssetHandleRef(z, e, 16, uTags[i]));
             }
         }
         z.putPtr(obj, 184, tbl);
@@ -542,14 +627,16 @@ static void tPhysPreset(Reader &r, Prelink &z, Prelink::Loc obj) {
 // Load_MaterialHandle (db_load.cpp:2504): -1 and -2 both mean an inline
 // Material follows; any other non-zero value is an offset alias.
 static void tMaterialHandle(Reader &r, Prelink &z, Prelink::Loc obj,
-                            uint32_t field, uint32_t tag) {
+                            uint32_t field, uint32_t tag, uint32_t x86slot = 0) {
     if (tag == TAG_INLINE || tag == TAG_ALIAS) {
         Prelink::Loc m = z.alloc(OUT, SZ_MATERIAL, 8);
-        b4Reserve(3, 192, m);
+        tempReserve(192);      // Load_MaterialHandle -> block 0
+        if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = m;
+        noteAliasSlot(x86slot, m);
         tMaterial(r, z, m);
         z.putPtr(obj, field, m);
     } else if (tag != TAG_NULL) {
-        putStructOffsetRef(z, obj, field, tag);
+        noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
     } else {
         z.putPtr(obj, field, Prelink::none());
     }
@@ -582,12 +669,35 @@ static void tGfxLightDef(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     if (imageTag == TAG_INLINE || imageTag == TAG_ALIAS) {
         Prelink::Loc im = z.alloc(OUT, SZ_IMAGE, 8);
-        b4Reserve(3, 52, im);
+        tempReserve(52);       // Load_GfxImagePtr -> block 0
+        if (imageTag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = im;
         tGfxImage(r, z, im);
         z.putPtr(obj, 8, im);           // attenuation.image
     } else if (imageTag != TAG_NULL) {
-        putStructOffsetRef(z, obj, 8, imageTag);
+        putAssetHandleRef(z, obj, 8, imageTag);
     }
+}
+
+// ---- menu tracing (FFMTRACE=1) ----------------------------------------------
+// A menu tree desync only shows up as garbage several structs later, so the
+// cheapest check is the window name each menuDef and itemDef reads: while the
+// cursor is aligned every one of them is a legible identifier.
+static const uint8_t *g_zoneBase = nullptr;
+static bool g_mtrace = false;
+static int  g_menuIdx = -1, g_itemIdx = -1;
+
+static void mtrace(Reader &r, const char *what, int val, uint32_t nameTag) {
+    if (!g_mtrace) return;
+    char name[64] = "<noname>";
+    if (nameTag == TAG_INLINE) {                 // the name follows at r.p
+        size_t n = 0;
+        while (n < sizeof(name) - 1 && r.p + n < r.end && r.p[n]) {
+            name[n] = (char)r.p[n]; ++n;
+        }
+        name[n] = 0;
+    }
+    fprintf(stderr, "  T menu=%d item=%d off=%zu %s=%d %s\n",
+            g_menuIdx, g_itemIdx, (size_t)(r.p - g_zoneBase), what, val, name);
 }
 
 // MenuList: 12 -> 24. Name, count, and an array of menuDef_t pointers.
@@ -595,7 +705,7 @@ static void tGfxLightDef(Reader &r, Prelink &z, Prelink::Loc obj) {
 // any, so stop loudly rather than guess.
 enum { AT_MENUFILE = 21, SZ_MENULIST = 24 };
 
-static void tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field);
+static Prelink::Loc tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field);
 
 static void tMenuList(Reader &r, Prelink &z, Prelink::Loc obj) {
     uint32_t nameTag   = r.u32();
@@ -611,13 +721,16 @@ static void tMenuList(Reader &r, Prelink &z, Prelink::Loc obj) {
         std::vector<uint32_t> tags(menuCount);
         for (int i = 0; i < menuCount; ++i) tags[i] = r.u32();
         for (int i = 0; i < menuCount; ++i) {
+            g_menuIdx = i; g_itemIdx = -1;
             // Load_menuDef_ptr tests for -1 and -2; every other non-zero value
             // is an alias that consumes no stream.
             Prelink::Loc e{tbl.blk, tbl.off + (uint32_t)i * 8};
-            if (tags[i] == TAG_INLINE || tags[i] == TAG_ALIAS)
-                tMenuDef(r, z, tbl, (uint32_t)i * 8);
-            else if (tags[i] != TAG_NULL)
-                putStructOffsetRef(z, e, 0, tags[i]);
+            if (tags[i] == TAG_INLINE || tags[i] == TAG_ALIAS) {
+                uint32_t slot = (tags[i] == TAG_ALIAS) ? insertPointerSlot() : 0;
+                Prelink::Loc md = tMenuDef(r, z, tbl, (uint32_t)i * 8);
+                if (tags[i] == TAG_ALIAS) g_aliasMap[slot] = md;
+            } else if (tags[i] != TAG_NULL)
+                putAssetHandleRef(z, e, 0, tags[i]);
             else
                 z.putPtr(e, 0, Prelink::none());
         }
@@ -1166,12 +1279,13 @@ static void tXModel(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     if (matHandlesTag != TAG_NULL) {
         Prelink::Loc tbl = z.alloc(OUT, (size_t)nSurfs * 8, 8);
-        b4Reserve(3, nSurfs * 4, tbl);
+        const uint32_t tblX86 = b4Reserve(3, nSurfs * 4, tbl);
         // Load_MaterialHandleArray reads the whole 4*count pointer run first.
         std::vector<uint32_t> tags(nSurfs);
         for (uint32_t i = 0; i < nSurfs; ++i) tags[i] = r.u32();
         for (uint32_t i = 0; i < nSurfs; ++i)
-            tMaterialHandle(r, z, Prelink::Loc{tbl.blk, tbl.off + i * 8}, 0, tags[i]);
+            tMaterialHandle(r, z, Prelink::Loc{tbl.blk, tbl.off + i * 8}, 0, tags[i],
+                            tblX86 + i * 4);
         z.putPtr(obj, 72, tbl);
     }
 
@@ -1204,11 +1318,12 @@ static void tXModel(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     if (physPresetTag == TAG_INLINE || physPresetTag == TAG_ALIAS) {
         Prelink::Loc p = z.alloc(OUT, SZ_PHYSPRESET, 8);
-        b4Reserve(3, 84, p);
+        tempReserve(84);       // Load_PhysPresetPtr -> block 0
+        if (physPresetTag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = p;
         tPhysPreset(r, z, p);
         z.putPtr(obj, 296, p);
     } else if (physPresetTag != TAG_NULL) {
-        putStructOffsetRef(z, obj, 296, physPresetTag);
+        putAssetHandleRef(z, obj, 296, physPresetTag);
     }
 
     if (collmapsTag != TAG_NULL) {
@@ -1218,11 +1333,12 @@ static void tXModel(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     if (physConstrTag == TAG_INLINE || physConstrTag == TAG_ALIAS) {
         Prelink::Loc p = z.alloc(OUT, SZ_PHYSCONSTRAINTS, 8);
-        b4Reserve(3, 2696, p);
+        tempReserve(2696);     // Load_PhysConstraintsPtr -> block 0
+        if (physConstrTag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = p;
         tPhysConstraints(r, z, p);
         z.putPtr(obj, 320, p);
     } else if (physConstrTag != TAG_NULL) {
-        putStructOffsetRef(z, obj, 320, physConstrTag);
+        putAssetHandleRef(z, obj, 320, physConstrTag);
     }
 }
 
@@ -1332,11 +1448,14 @@ static WindowTags tWindowDefFixed(Reader &r, Prelink &z, Prelink::Loc w) {
     return t;
 }
 
-static void tWindowDefRefs(Reader &r, Prelink &z, Prelink::Loc w, WindowTags t) {
+// `winX86` is the window's own x86 offset in block 4, or 0 when the enclosing
+// struct lives in the temp block (a menuDef does).
+static void tWindowDefRefs(Reader &r, Prelink &z, Prelink::Loc w, WindowTags t,
+                           uint32_t winX86 = 0) {
     putXStringFromTag(r, z, w, 0,  t.name);
     putXStringFromTag(r, z, w, 56, t.group);
 
-    tMaterialHandle(r, z, w, 168, t.background);
+    tMaterialHandle(r, z, w, 168, t.background, winX86 ? winX86 + 160 : 0);
 }
 
 // ScriptCondition: 16 -> 24, a linked list of {fireOnTrue, constructID,
@@ -1723,6 +1842,71 @@ static void tTextDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
     }
 }
 
+// animParamsDef_t: 108 -> 120. Load_animParamsDef_t (db_load.cpp:5344) reads
+// the fixed block, the name string, then an optional GenericEventHandler.
+// UIAnimInfo: 236 -> 272. Load_UIAnimInfo (db_load.cpp:5660) reads the whole
+// block -- the two inline animParamsDef_t scratch states included, whose own
+// name/onEvent pointers it never resolves -- then the animStates array.
+enum { SZ_ANIMPARAMS = 120, SZ_UIANIMINFO = 272 };
+
+// Copy the pointer-free body of an x86 animParamsDef_t into its LP64 record.
+static void animParamsBody(uint8_t *d, const uint8_t *src) {
+    memcpy(d + 8,   src + 4,  24);     // rectClient
+    memcpy(d + 32,  src + 28, 4);      // borderSize
+    memcpy(d + 36,  src + 32, 64);     // fore/back/border/outlineColor
+    memcpy(d + 100, src + 96, 8);      // textScale, rotation
+}
+
+static void tAnimParamsDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
+    Prelink::Loc a = z.alloc(OUT, SZ_ANIMPARAMS, 8);
+    b4Reserve(3, 108, a);
+
+    uint8_t blk[108];
+    r.bytes(blk, 108);
+    uint32_t nameTag, onEventTag;
+    memcpy(&nameTag, blk, 4);
+    memcpy(&onEventTag, blk + 104, 4);
+
+    animParamsBody(z.at(a), blk);
+    z.putPtr(obj, field, a);
+
+    putXStringFromTag(r, z, a, 0, nameTag);
+    if (onEventTag != TAG_NULL) tEventHandler(r, z, a, 112, true);
+    else                        z.putPtr(a, 112, Prelink::none());
+}
+
+static void tUIAnimInfo(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
+    Prelink::Loc u = z.alloc(OUT, SZ_UIANIMINFO, 8);
+    b4Reserve(3, 236, u);
+
+    int32_t  stateCount = r.i32();
+    uint32_t statesTag  = r.u32();
+    uint8_t  cur[108] = {0}, nxt[108] = {0}, tail[12] = {0};
+    r.bytes(cur, 108);
+    r.bytes(nxt, 108);
+    r.bytes(tail, 12);                 // animating, animStartTime, animDuration
+
+    uint8_t *o = z.at(u);
+    memcpy(o, &stateCount, 4);
+    animParamsBody(o + 16,  cur);      // currentAnimState
+    animParamsBody(o + 136, nxt);      // nextAnimState
+    memcpy(o + 256, tail, 12);
+
+    z.putPtr(obj, field, u);
+
+    // Load_animParamsDef_ptr tests only against zero: any other value means
+    // the record follows inline.
+    if (statesTag == TAG_NULL) { z.putPtr(u, 8, Prelink::none()); return; }
+    int32_t n = stateCount > 0 ? stateCount : 0;
+    Prelink::Loc tbl = z.alloc(OUT, n ? (size_t)n * 8 : 1, 8);
+    b4Reserve(3, (uint32_t)n * 4, tbl);
+    std::vector<uint32_t> tags(n);
+    for (int i = 0; i < n; ++i) tags[i] = r.u32();
+    for (int i = 0; i < n; ++i)
+        if (tags[i] != TAG_NULL) tAnimParamsDef(r, z, tbl, (uint32_t)i * 8);
+    z.putPtr(u, 8, tbl);
+}
+
 // itemDef_s: 272 -> 336. Load_itemDef_t (db_load.cpp:5671) walks the window,
 // three dvar strings, the type-discriminated typeData union, rectExpData,
 // two expressions, the event handler and the animation info. `parent` is a
@@ -1732,7 +1916,7 @@ enum { SZ_ITEMDEF = 336, SZ_RECTDATA = 96 };
 
 static void tItemDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     Prelink::Loc it = z.alloc(OUT, SZ_ITEMDEF, 8);
-    b4Reserve(7, 272, it);                 // AllocLoad_itemDef_t -> align 8
+    const uint32_t itX86 = b4Reserve(7, 272, it);   // AllocLoad_itemDef_t, align 8
 
     // --- the 272-byte fixed block ---
     // window is inline at offset 0; tWindowDef reads its 164 bytes.
@@ -1780,7 +1964,11 @@ static void tItemDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     z.putPtr(obj, field, it);
 
     // --- referenced data, in load order ---
-    tWindowDefRefs(r, z, it, wt);
+    {
+        int32_t ty; memcpy(&ty, mid, 4);
+        mtrace(r, "itemDef type", ty, wt.name);
+    }
+    tWindowDefRefs(r, z, it, wt, itX86);
     putXStringFromTag(r, z, it, 192, dvarTag);
     putXStringFromTag(r, z, it, 200, dvarTestTag);
     putXStringFromTag(r, z, it, 208, enableDvarTag);
@@ -1807,8 +1995,27 @@ static void tItemDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     if (rectExpTag != TAG_NULL) {
         Prelink::Loc rd = z.alloc(OUT, SZ_RECTDATA, 8);
         b4Reserve(3, 64, rd);
-        for (int i = 0; i < 4; ++i)
-            tExpressionStatement(r, z, rd, (uint32_t)i * SZ_EXPRSTMT);
+        // Load_rectData_t (db_load.cpp:5605) reads the whole 64-byte block --
+        // all four ExpressionStatement headers -- and only then calls
+        // Load_ExpressionStatement(0) four times, which re-read nothing.
+        // Interleaving header and referenced data reads the first rpn array
+        // out of the following headers.
+        uint32_t fileTag[4], rpnTag[4];
+        int32_t  numRpn[4];
+        for (int i = 0; i < 4; ++i) {
+            fileTag[i]    = r.u32();
+            int32_t line  = r.i32();
+            numRpn[i]     = r.i32();
+            rpnTag[i]     = r.u32();
+            uint8_t *d = z.at(rd) + (uint32_t)i * SZ_EXPRSTMT;
+            memcpy(d + 8,  &line, 4);
+            memcpy(d + 12, &numRpn[i], 4);
+        }
+        for (int i = 0; i < 4; ++i) {
+            Prelink::Loc e{rd.blk, rd.off + (uint32_t)i * SZ_EXPRSTMT};
+            putXStringFromTag(r, z, e, 0, fileTag[i]);
+            tExprRpnArray(r, z, e, 16, rpnTag[i], numRpn[i]);
+        }
         z.putPtr(it, 240, rd);
     }
 
@@ -1822,18 +2029,16 @@ static void tItemDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     if (onEventTag != TAG_NULL)
         tEventHandler(r, z, it, 320, true);
 
-    if (animInfoTag != TAG_NULL) {
-        fprintf(stderr, "itemDef has animInfo; UIAnimInfo is not transcoded yet\n");
-        exit(17);
-    }
+    if (animInfoTag != TAG_NULL) tUIAnimInfo(r, z, it, 328);
+    else                         z.putPtr(it, 328, Prelink::none());
 }
 
 // menuDef_t: 400 -> 456. The root of the UI tree.
 enum { SZ_MENUDEF = 456 };
 
-static void tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
+static Prelink::Loc tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     Prelink::Loc m = z.alloc(OUT, SZ_MENUDEF, 8);
-    b4Reserve(7, 400, m);                  // AllocLoad_itemDef_t -> align 8
+    tempReserve(400);                      // Load_menuDef_ptr -> block 0
 
     WindowTags wt = tWindowDefFixed(r, z, m);            // window is inline at offset 0
 
@@ -1896,6 +2101,7 @@ static void tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     z.putPtr(obj, field, m);
 
     // --- referenced data, in Load_menuDef_t order ---
+    mtrace(r, "menuDef itemCount", itemCount, wt.name);
     tWindowDefRefs(r, z, m, wt);
     putXStringFromTag(r, z, m, 176, fontTag);
 
@@ -1919,10 +2125,13 @@ static void tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
         std::vector<uint32_t> tags(itemCount);
         for (int i = 0; i < itemCount; ++i) tags[i] = r.u32();
         for (int i = 0; i < itemCount; ++i)
-            if (tags[i] != TAG_NULL)
+            if (tags[i] != TAG_NULL) {
+                g_itemIdx = i;
                 tItemDef(r, z, tbl, (uint32_t)i * 8);
+            }
         z.putPtr(m, 448, tbl);
     }
+    return m;
 }    
 
 // ---- fx ---------------------------------------------------------------------
@@ -1955,20 +2164,14 @@ static void tFlatArray(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
 // FxElemVisuals: what the 4-byte union holds is decided by the elem type
 // (Load_FxElemVisuals, db_load.cpp:3889). Types 8 and 9 load nothing at all --
 // FX_CopyVisuals zeroes the slot for them -- so the slot is left null here too.
+static void tXModelHandle(Reader &r, Prelink &z, Prelink::Loc obj,
+                          uint32_t field, uint32_t tag, uint32_t x86slot = 0);
+
 static void tFxElemVisuals(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
-                           uint8_t elemType, uint32_t tag) {
+                           uint8_t elemType, uint32_t tag, uint32_t x86slot = 0) {
     switch (elemType) {
     case 7:                                          // XModel
-        if (tag == TAG_INLINE || tag == TAG_ALIAS) {
-            Prelink::Loc m = z.alloc(OUT, SZ_XMODEL, 8);
-            b4Reserve(3, 252, m);
-            tXModel(r, z, m);
-            z.putPtr(obj, field, m);
-        } else if (tag != TAG_NULL) {
-            putStructOffsetRef(z, obj, field, tag);
-        } else {
-            z.putPtr(obj, field, Prelink::none());
-        }
+        tXModelHandle(r, z, obj, field, tag, x86slot);
         break;
     case 0xC:                                        // FxEffectDefRef, by name
     case 0xA:                                        // soundName
@@ -1978,7 +2181,7 @@ static void tFxElemVisuals(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t fie
         z.putPtr(obj, field, Prelink::none());
         break;
     default:
-        tMaterialHandle(r, z, obj, field, tag);
+        tMaterialHandle(r, z, obj, field, tag, x86slot);
         break;
     }
 }
@@ -1987,31 +2190,32 @@ static void tFxElemVisuals(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t fie
 // FxElemMarkVisuals, visualCount > 1 an array of FxElemVisuals, and anything
 // else a single inline FxElemVisuals.
 static void tFxElemDefVisuals(Reader &r, Prelink &z, Prelink::Loc ed, uint32_t field,
-                              uint8_t elemType, uint8_t visualCount, uint32_t tag) {
+                              uint8_t elemType, uint8_t visualCount, uint32_t tag,
+                              uint32_t x86slot = 0) {
     if (elemType == 11) {
         if (tag == TAG_NULL) { z.putPtr(ed, field, Prelink::none()); return; }
         Prelink::Loc tbl = z.alloc(OUT, (size_t)visualCount * SZ_FXMARKVIS, 8);
-        b4Reserve(3, (uint32_t)visualCount * 8, tbl);
+        const uint32_t tblX86 = b4Reserve(3, (uint32_t)visualCount * 8, tbl);
         std::vector<uint32_t> mats((size_t)visualCount * 2);
         for (size_t i = 0; i < mats.size(); ++i) mats[i] = r.u32();
         for (int i = 0; i < visualCount; ++i) {
             Prelink::Loc mv{tbl.blk, tbl.off + (uint32_t)i * SZ_FXMARKVIS};
-            tMaterialHandle(r, z, mv, 0, mats[(size_t)i * 2]);
-            tMaterialHandle(r, z, mv, 8, mats[(size_t)i * 2 + 1]);
+            tMaterialHandle(r, z, mv, 0, mats[(size_t)i * 2], tblX86 + (uint32_t)i * 8);
+            tMaterialHandle(r, z, mv, 8, mats[(size_t)i * 2 + 1], tblX86 + (uint32_t)i * 8 + 4);
         }
         z.putPtr(ed, field, tbl);
     } else if (visualCount > 1) {
         if (tag == TAG_NULL) { z.putPtr(ed, field, Prelink::none()); return; }
         Prelink::Loc tbl = z.alloc(OUT, (size_t)visualCount * SZ_FXVISUALS, 8);
-        b4Reserve(3, (uint32_t)visualCount * 4, tbl);
+        const uint32_t tblX86 = b4Reserve(3, (uint32_t)visualCount * 4, tbl);
         std::vector<uint32_t> tags(visualCount);
         for (int i = 0; i < visualCount; ++i) tags[i] = r.u32();
         for (int i = 0; i < visualCount; ++i)
             tFxElemVisuals(r, z, Prelink::Loc{tbl.blk, tbl.off + (uint32_t)i * SZ_FXVISUALS},
-                           0, elemType, tags[i]);
+                           0, elemType, tags[i], tblX86 + (uint32_t)i * 4);
         z.putPtr(ed, field, tbl);
     } else {
-        tFxElemVisuals(r, z, ed, field, elemType, tag);
+        tFxElemVisuals(r, z, ed, field, elemType, tag, x86slot);
     }
 }
 
@@ -2094,7 +2298,8 @@ static FxElemTags tFxElemDefFixed(Reader &r, Prelink &z, Prelink::Loc ed) {
     return t;
 }
 
-static void tFxElemDefRefs(Reader &r, Prelink &z, Prelink::Loc ed, const FxElemTags &t) {
+static void tFxElemDefRefs(Reader &r, Prelink &z, Prelink::Loc ed, const FxElemTags &t,
+                           uint32_t edX86 = 0) {
     // FxElemVelStateSample is 96 flat bytes, FxElemVisStateSample 48; neither
     // holds a pointer, so both arrays copy across unchanged.
     if (t.velSamples != TAG_NULL)
@@ -2107,7 +2312,8 @@ static void tFxElemDefRefs(Reader &r, Prelink &z, Prelink::Loc ed, const FxElemT
     else
         z.putPtr(ed, 200, Prelink::none());
 
-    tFxElemDefVisuals(r, z, ed, 208, t.elemType, t.visualCount, t.visuals);
+    tFxElemDefVisuals(r, z, ed, 208, t.elemType, t.visualCount, t.visuals,
+                      edX86 ? edX86 + 196 : 0);   // FxElemDef.visuals
 
     putXStringFromTag(r, z, ed, 240, t.onImpact);
     putXStringFromTag(r, z, ed, 248, t.onDeath);
@@ -2153,13 +2359,14 @@ static void tFxEffectDef(Reader &r, Prelink &z, Prelink::Loc obj) {
     }
 
     Prelink::Loc tbl = z.alloc(OUT, (size_t)count * SZ_FXELEMDEF, 8);
-    b4Reserve(3, (uint32_t)count * 292, tbl);
+    const uint32_t tblX86 = b4Reserve(3, (uint32_t)count * 292, tbl);
 
     std::vector<FxElemTags> tags(count);
     for (int i = 0; i < count; ++i)
         tags[i] = tFxElemDefFixed(r, z, Prelink::Loc{tbl.blk, tbl.off + (uint32_t)i * SZ_FXELEMDEF});
     for (int i = 0; i < count; ++i)
-        tFxElemDefRefs(r, z, Prelink::Loc{tbl.blk, tbl.off + (uint32_t)i * SZ_FXELEMDEF}, tags[i]);
+        tFxElemDefRefs(r, z, Prelink::Loc{tbl.blk, tbl.off + (uint32_t)i * SZ_FXELEMDEF}, tags[i],
+                       tblX86 + (uint32_t)i * 292);
 
     z.putPtr(obj, 32, tbl);
 }
@@ -2178,6 +2385,16 @@ static void tFxEffectDef(Reader &r, Prelink &z, Prelink::Loc obj) {
 
 struct FixedBlock {
     std::unordered_map<uint32_t, uint32_t> tag;   // LP64 offset -> stream tag
+    std::unordered_map<uint32_t, uint32_t> x86;   // LP64 offset -> x86 offset
+    uint32_t base = 0;                            // struct's own block-4 offset
+
+    // Absolute x86 offset of a pointer slot, or 0 when the struct does not
+    // live in block 4 and so cannot be aliased.
+    uint32_t slot(uint32_t lp64off) const {
+        if (!base) return 0;
+        auto it = x86.find(lp64off);
+        return it == x86.end() ? 0 : base + it->second;
+    }
 
     // Looking up an offset that is not a pointer slot means the caller mistyped
     // one; that must not silently turn into a null.
@@ -2194,8 +2411,10 @@ struct FixedBlock {
 static FixedBlock tReadFixed(Reader &r, Prelink &z, Prelink::Loc obj,
                              uint32_t x86size,
                              const uint32_t (*flat)[3], size_t nflat,
-                             const uint32_t (*ptrs)[2], size_t nptrs) {
+                             const uint32_t (*ptrs)[2], size_t nptrs,
+                             uint32_t x86base = 0) {
     FixedBlock fb;
+    fb.base = x86base;
     uint32_t cur = 0;
     size_t fi = 0, pi = 0;
     while (fi < nflat || pi < nptrs) {
@@ -2209,6 +2428,7 @@ static FixedBlock tReadFixed(Reader &r, Prelink &z, Prelink::Loc obj,
             ++fi;
         } else {
             fb.tag[ptrs[pi][1]] = r.u32();
+            fb.x86[ptrs[pi][1]] = ptrs[pi][0];
             cur += 4;
             ++pi;
         }
@@ -2443,28 +2663,32 @@ static const uint32_t kFlameTablePtrs[][2] = {
 // asset-handle shape: -1 and -2 mean the asset follows inline, anything else
 // non-zero is an offset alias.
 static void tXModelHandle(Reader &r, Prelink &z, Prelink::Loc obj,
-                          uint32_t field, uint32_t tag) {
+                          uint32_t field, uint32_t tag, uint32_t x86slot) {
     if (tag == TAG_INLINE || tag == TAG_ALIAS) {
         Prelink::Loc m = z.alloc(OUT, SZ_XMODEL, 8);
-        b4Reserve(3, 252, m);
+        tempReserve(252);      // Load_XModelPtr -> block 0
+        if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = m;
+        noteAliasSlot(x86slot, m);
         tXModel(r, z, m);
         z.putPtr(obj, field, m);
     } else if (tag != TAG_NULL) {
-        putStructOffsetRef(z, obj, field, tag);
+        noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
     } else {
         z.putPtr(obj, field, Prelink::none());
     }
 }
 
 static void tFxEffectDefHandle(Reader &r, Prelink &z, Prelink::Loc obj,
-                               uint32_t field, uint32_t tag) {
+                               uint32_t field, uint32_t tag, uint32_t x86slot = 0) {
     if (tag == TAG_INLINE || tag == TAG_ALIAS) {
         Prelink::Loc f = z.alloc(OUT, SZ_FXEFFECTDEF, 8);
-        b4Reserve(3, 60, f);
+        tempReserve(60);       // Load_FxEffectDefHandle -> block 0
+        if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = f;
+        noteAliasSlot(x86slot, f);
         tFxEffectDef(r, z, f);
         z.putPtr(obj, field, f);
     } else if (tag != TAG_NULL) {
-        putStructOffsetRef(z, obj, field, tag);
+        noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
     } else {
         z.putPtr(obj, field, Prelink::none());
     }
@@ -2508,15 +2732,15 @@ static void tFlameTable(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
     if (tag != TAG_INLINE) { putStructOffsetRef(z, obj, field, tag); return; }
 
     Prelink::Loc ft = z.alloc(OUT, SZ_FLAMETABLE, 8);
-    b4Reserve(3, X86SZ_FLAMETABLE, ft);
+    const uint32_t ftX86 = b4Reserve(3, X86SZ_FLAMETABLE, ft);
     FixedBlock fb = tReadFixed(r, z, ft, X86SZ_FLAMETABLE,
                                kFlameTableFlat, sizeof kFlameTableFlat / 12,
-                               kFlameTablePtrs, sizeof kFlameTablePtrs / 8);
+                               kFlameTablePtrs, sizeof kFlameTablePtrs / 8, ftX86);
     z.putPtr(obj, field, ft);
 
     putXStringFromTag(r, z, ft, 424, fb.at(424));            // name
     for (uint32_t o = 432; o <= 488; o += 8)                 // fire .. streamFlame2
-        tMaterialHandle(r, z, ft, o, fb.at(o));
+        tMaterialHandle(r, z, ft, o, fb.at(o), fb.slot(o));
     for (uint32_t o = 496; o <= 520; o += 8)                 // the four sounds
         putXStringFromTag(r, z, ft, o, fb.at(o));
 }
@@ -2530,15 +2754,15 @@ static void tWeaponDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
     if (tag != TAG_INLINE) { putStructOffsetRef(z, obj, field, tag); return; }
 
     Prelink::Loc w = z.alloc(OUT, SZ_WEAPONDEF, 8);
-    b4Reserve(3, X86SZ_WEAPONDEF, w);
+    const uint32_t wX86 = b4Reserve(3, X86SZ_WEAPONDEF, w);
     FixedBlock fb = tReadFixed(r, z, w, X86SZ_WEAPONDEF,
                                kWeaponDefFlat, sizeof kWeaponDefFlat / 12,
-                               kWeaponDefPtrs, sizeof kWeaponDefPtrs / 8);
+                               kWeaponDefPtrs, sizeof kWeaponDefPtrs / 8, wX86);
     z.putPtr(obj, field, w);
 
     putXStringFromTag(r, z, w, 0, fb.at(0));                 // szOverlayName
     tXModelHandleArray(r, z, w, 8, fb.at(8), 16);            // gunXModel[16]
-    tXModelHandle(r, z, w, 16, fb.at(16));                   // handXModel
+    tXModelHandle(r, z, w, 16, fb.at(16), fb.slot(16));                   // handXModel
     putXStringFromTag(r, z, w, 24, fb.at(24));               // szModeName
 
     // notetrackSoundMapKeys / Values: 20 script strings, AllocLoad_XBlendInfo.
@@ -2546,8 +2770,8 @@ static void tWeaponDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
     tOffsetOrArray(r, z, w, 40, fb.at(40), 20, 2, 1);
 
     putXStringFromTag(r, z, w, 88, fb.at(88));               // parentWeaponName
-    tFxEffectDefHandle(r, z, w, 152, fb.at(152));            // viewFlashEffect
-    tFxEffectDefHandle(r, z, w, 160, fb.at(160));            // worldFlashEffect
+    tFxEffectDefHandle(r, z, w, 152, fb.at(152), fb.slot(152));            // viewFlashEffect
+    tFxEffectDefHandle(r, z, w, 160, fb.at(160), fb.slot(160));            // worldFlashEffect
 
     // pickupSound .. adsZoomSound: 62 plain strings in field order.
     for (uint32_t o = 168; o <= 656; o += 8)
@@ -2558,16 +2782,16 @@ static void tWeaponDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
         putXStringFromTag(r, z, w, o, fb.at(o));
 
     for (uint32_t o = 712; o <= 736; o += 8)                 // the four eject effects
-        tFxEffectDefHandle(r, z, w, o, fb.at(o));
-    tMaterialHandle(r, z, w, 744, fb.at(744));               // reticleCenter
-    tMaterialHandle(r, z, w, 752, fb.at(752));               // reticleSide
+        tFxEffectDefHandle(r, z, w, o, fb.at(o), fb.slot(o));
+    tMaterialHandle(r, z, w, 744, fb.at(744), fb.slot(744));               // reticleCenter
+    tMaterialHandle(r, z, w, 752, fb.at(752), fb.slot(752));               // reticleSide
 
     tXModelHandleArray(r, z, w, 1120, fb.at(1120), 16);      // worldModel[16]
     for (uint32_t o = 1128; o <= 1152; o += 8)               // worldClip .. addMelee
-        tXModelHandle(r, z, w, o, fb.at(o));
+        tXModelHandle(r, z, w, o, fb.at(o), fb.slot(o));
 
-    tMaterialHandle(r, z, w, 1160, fb.at(1160));             // hudIcon
-    tMaterialHandle(r, z, w, 1192, fb.at(1192));             // ammoCounterIcon
+    tMaterialHandle(r, z, w, 1160, fb.at(1160), fb.slot(1160));             // hudIcon
+    tMaterialHandle(r, z, w, 1192, fb.at(1192), fb.slot(1192));             // ammoCounterIcon
     putXStringFromTag(r, z, w, 1224, fb.at(1224));           // szSharedAmmoCapName
     // explosionTag is a script string inside the fixed block; it loads nothing.
 
@@ -2575,21 +2799,21 @@ static void tWeaponDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
         putXStringFromTag(r, z, w, o, fb.at(o));
     putXStringFromTag(r, z, w, 1576, fb.at(1576));           // stackSound
 
-    tMaterialHandle(r, z, w, 1816, fb.at(1816));             // killIcon
-    tMaterialHandle(r, z, w, 1176, fb.at(1176));             // indicatorIcon
+    tMaterialHandle(r, z, w, 1816, fb.at(1816), fb.slot(1816));             // killIcon
+    tMaterialHandle(r, z, w, 1176, fb.at(1176), fb.slot(1176));             // indicatorIcon
     putXStringFromTag(r, z, w, 1840, fb.at(1840));           // szSpawnedGrenadeWeaponName
     putXStringFromTag(r, z, w, 1848, fb.at(1848));           // szDualWieldWeaponName
 
-    tXModelHandle(r, z, w, 1944, fb.at(1944));               // projectileModel
+    tXModelHandle(r, z, w, 1944, fb.at(1944), fb.slot(1944));               // projectileModel
     for (uint32_t o = 1960; o <= 2040; o += 16)              // projExplosionEffect 1..5, dud
-        tFxEffectDefHandle(r, z, w, o, fb.at(o));
+        tFxEffectDefHandle(r, z, w, o, fb.at(o), fb.slot(o));
     for (uint32_t o = 2048; o <= 2072; o += 8)               // the four projectile sounds
         putXStringFromTag(r, z, w, o, fb.at(o));
 
     tOffsetOrArray(r, z, w, 2120, fb.at(2120), 31, 4, 3);    // parallelBounce[31]
     tOffsetOrArray(r, z, w, 2128, fb.at(2128), 31, 4, 3);    // perpendicularBounce[31]
-    tFxEffectDefHandle(r, z, w, 2136, fb.at(2136));          // projTrailEffect
-    tFxEffectDefHandle(r, z, w, 2168, fb.at(2168));          // projIgnitionEffect
+    tFxEffectDefHandle(r, z, w, 2136, fb.at(2136), fb.slot(2136));          // projTrailEffect
+    tFxEffectDefHandle(r, z, w, 2168, fb.at(2168), fb.slot(2168));          // projIgnitionEffect
     putXStringFromTag(r, z, w, 2176, fb.at(2176));           // projIgnitionSound
 
     // Both knot arrays of a graph are sized by accuracyGraphKnotCount[i]; the
@@ -2613,8 +2837,8 @@ static void tWeaponDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
     putXStringFromTag(r, z, w, 2616, fb.at(2616));           // flameTableThirdPerson
     tFlameTable(r, z, w, 2624, fb.at(2624));
     tFlameTable(r, z, w, 2632, fb.at(2632));
-    tFxEffectDefHandle(r, z, w, 2640, fb.at(2640));          // tagFx_preparationEffect
-    tFxEffectDefHandle(r, z, w, 2648, fb.at(2648));          // tagFlash_preparationEffect
+    tFxEffectDefHandle(r, z, w, 2640, fb.at(2640), fb.slot(2640));          // tagFx_preparationEffect
+    tFxEffectDefHandle(r, z, w, 2648, fb.at(2648), fb.slot(2648));          // tagFlash_preparationEffect
 }
 
 // WeaponVariantDef: 228 -> 288, the asset type 24 payload.
@@ -3068,6 +3292,149 @@ static void tSndBank(Reader &r, Prelink &z, Prelink::Loc obj) {
         z.putPtr(obj, 64, Prelink::none());
 }
 
+// ---- emblems ----------------------------------------------------------------
+// EmblemSet -> layers / categories / icons / backgrounds / backgroundLookup.
+// Load_EmblemSet (db_load.cpp:7211) reads the 44-byte block, then the five
+// arrays in that order. Every array loader reads all its fixed records as one
+// Load_Stream before walking them.
+
+enum { AT_EMBLEMSET = 42, SZ_EMBLEMSET = 80,
+       SZ_EMBLEMCATEGORY = 16, SZ_EMBLEMICON = 48, SZ_EMBLEMBACKGROUND = 32 };
+
+// Load_GfxImagePtr (db_load.cpp:1978): like Load_MaterialHandle, -1 and -2
+// both mean an inline GfxImage follows; any other non-zero value is an alias.
+static void tGfxImagePtr(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
+                         uint32_t tag, uint32_t x86slot = 0) {
+    if (tag == TAG_INLINE || tag == TAG_ALIAS) {
+        Prelink::Loc im = z.alloc(OUT, SZ_IMAGE, 8);
+        tempReserve(52);       // Load_GfxImagePtr -> block 0
+        if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = im;
+        noteAliasSlot(x86slot, im);
+        tGfxImage(r, z, im);
+        z.putPtr(obj, field, im);
+    } else if (tag != TAG_NULL) {
+        noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
+    } else {
+        z.putPtr(obj, field, Prelink::none());
+    }
+}
+
+// EmblemCategory: 8 -> 16, two strings.
+static void tEmblemCategoryArray(Reader &r, Prelink &z, Prelink::Loc obj,
+                                 uint32_t field, int32_t count) {
+    Prelink::Loc tbl = z.alloc(OUT, count ? (size_t)count * SZ_EMBLEMCATEGORY : 1, 8);
+    b4Reserve(3, (uint32_t)count * 8, tbl);
+
+    std::vector<uint32_t> nameTag(count), descTag(count);
+    for (int i = 0; i < count; ++i) { nameTag[i] = r.u32(); descTag[i] = r.u32(); }
+    for (int i = 0; i < count; ++i) {
+        Prelink::Loc c{tbl.blk, tbl.off + (uint32_t)i * SZ_EMBLEMCATEGORY};
+        putXStringFromTag(r, z, c, 0, nameTag[i]);
+        putXStringFromTag(r, z, c, 8, descTag[i]);
+    }
+    z.putPtr(obj, field, tbl);
+}
+
+// EmblemIcon: 40 -> 48. An image handle, a string, and eight scalars.
+static void tEmblemIconArray(Reader &r, Prelink &z, Prelink::Loc obj,
+                             uint32_t field, int32_t count) {
+    Prelink::Loc tbl = z.alloc(OUT, count ? (size_t)count * SZ_EMBLEMICON : 1, 8);
+    b4Reserve(3, (uint32_t)count * 40, tbl);
+
+    std::vector<uint32_t> imgTag(count), descTag(count);
+    for (int i = 0; i < count; ++i) {
+        imgTag[i]  = r.u32();
+        descTag[i] = r.u32();
+        uint8_t scalars[32] = {0};     // outlineSize .. category
+        r.bytes(scalars, 32);
+        memcpy(z.at(Prelink::Loc{tbl.blk, tbl.off + (uint32_t)i * SZ_EMBLEMICON}) + 16,
+               scalars, 32);
+    }
+    for (int i = 0; i < count; ++i) {
+        Prelink::Loc c{tbl.blk, tbl.off + (uint32_t)i * SZ_EMBLEMICON};
+        tGfxImagePtr(r, z, c, 0, imgTag[i]);
+        putXStringFromTag(r, z, c, 8, descTag[i]);
+    }
+    z.putPtr(obj, field, tbl);
+}
+
+// EmblemBackground: 24 -> 32. A material handle, a string, four ints.
+static void tEmblemBackgroundArray(Reader &r, Prelink &z, Prelink::Loc obj,
+                                   uint32_t field, int32_t count) {
+    Prelink::Loc tbl = z.alloc(OUT, count ? (size_t)count * SZ_EMBLEMBACKGROUND : 1, 8);
+    b4Reserve(3, (uint32_t)count * 24, tbl);
+
+    std::vector<uint32_t> matTag(count), descTag(count);
+    for (int i = 0; i < count; ++i) {
+        matTag[i]  = r.u32();
+        descTag[i] = r.u32();
+        uint8_t scalars[16] = {0};     // cost, unlockLevel, unlockPLevel, unclassifyAt
+        r.bytes(scalars, 16);
+        memcpy(z.at(Prelink::Loc{tbl.blk, tbl.off + (uint32_t)i * SZ_EMBLEMBACKGROUND}) + 16,
+               scalars, 16);
+    }
+    for (int i = 0; i < count; ++i) {
+        Prelink::Loc c{tbl.blk, tbl.off + (uint32_t)i * SZ_EMBLEMBACKGROUND};
+        tMaterialHandle(r, z, c, 0, matTag[i]);
+        putXStringFromTag(r, z, c, 8, descTag[i]);
+    }
+    z.putPtr(obj, field, tbl);
+}
+
+// EmblemSet: 44 -> 80. Each of the five pointers is tested only against zero.
+static void tEmblemSet(Reader &r, Prelink &z, Prelink::Loc obj) {
+    int32_t  colorCount   = r.i32();
+    int32_t  layerCount   = r.i32();
+    uint32_t layersTag    = r.u32();
+    int32_t  catCount     = r.i32();
+    uint32_t catsTag      = r.u32();
+    int32_t  iconCount    = r.i32();
+    uint32_t iconsTag     = r.u32();
+    int32_t  bgCount      = r.i32();
+    uint32_t bgsTag       = r.u32();
+    int32_t  lookupCount  = r.i32();
+    uint32_t lookupTag    = r.u32();
+
+    uint8_t *o = z.at(obj);
+    memcpy(o,      &colorCount, 4);
+    memcpy(o + 4,  &layerCount, 4);
+    memcpy(o + 16, &catCount, 4);
+    memcpy(o + 32, &iconCount, 4);
+    memcpy(o + 48, &bgCount, 4);
+    memcpy(o + 64, &lookupCount, 4);
+
+    // EmblemLayer is three ints, so the array copies across byte for byte.
+    if (layersTag != TAG_NULL)
+        tFlatArray(r, z, obj, 8, 12u * (uint32_t)(layerCount > 0 ? layerCount : 0), 3);
+    else
+        z.putPtr(obj, 8, Prelink::none());
+
+    if (catsTag != TAG_NULL)
+        tEmblemCategoryArray(r, z, obj, 24, catCount > 0 ? catCount : 0);
+    else
+        z.putPtr(obj, 24, Prelink::none());
+
+    if (iconsTag != TAG_NULL)
+        tEmblemIconArray(r, z, obj, 40, iconCount > 0 ? iconCount : 0);
+    else
+        z.putPtr(obj, 40, Prelink::none());
+
+    if (bgsTag != TAG_NULL)
+        tEmblemBackgroundArray(r, z, obj, 56, bgCount > 0 ? bgCount : 0);
+    else
+        z.putPtr(obj, 56, Prelink::none());
+
+    if (lookupTag != TAG_NULL) {       // AllocLoad_XBlendInfo -> align 2
+        uint32_t n = 2u * (uint32_t)(lookupCount > 0 ? lookupCount : 0);
+        Prelink::Loc b = z.alloc(OUT, n ? n : 1, 2);
+        if (n) r.bytes(z.at(b), n);
+        b4Reserve(1, n, b);
+        z.putPtr(obj, 72, b);
+    } else {
+        z.putPtr(obj, 72, Prelink::none());
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) { fprintf(stderr, "usage: convert <in.ff> <out.kbz>\n"); return 1; }
     std::vector<uint8_t> file = readFile(argv[1]);
@@ -3083,6 +3450,9 @@ int main(int argc, char **argv) {
     (void)assetsTag;
 
     bool dbg = getenv("FFDBG") != nullptr;
+    g_zoneBase = zone.data();
+    g_mtrace = getenv("FFMTRACE") != nullptr;
+    g_traceB4 = getenv("FFB4") != nullptr;
     Prelink z;
 
     // Script string list -- Load_ScriptStringList (src/database/db_load.cpp:613).
@@ -3118,11 +3488,14 @@ int main(int argc, char **argv) {
     }
 
     // The XAsset array follows the script strings in block 4, so reserve it
-    // rather than resetting the cursor.
-    b4Reserve(0, 8 * assetCount, Prelink::none());
+    // rather than resetting the cursor. AllocLoad_FxElemVisStateSample, align 4.
+    if (dbg) fprintf(stderr, "script strings: count=%u  block4 cursor now %u\n",
+                     stringCount, g_x86b4);
+    const uint32_t assetArrayOff = b4Reserve(3, 8 * assetCount, Prelink::none());
     
     for (uint32_t i = 0; i < assetCount; ++i) {
         const uint8_t *pre = r.p;
+        g_curAsset = (int)i;
         switch (types[i]) {
         case AT_RAWFILE:     { Prelink::Loc o = z.alloc(OUT, 24, 8); tRawFile(r, z, o);      z.addAsset(AT_RAWFILE, o); break; }
         case AT_STRINGTABLE: { Prelink::Loc o = z.alloc(OUT, 32, 8); tStringTable(r, z, o);  z.addAsset(AT_STRINGTABLE, o); break; }
@@ -3143,7 +3516,8 @@ int main(int argc, char **argv) {
         case AT_SNDDRIVERGLOBALS: { Prelink::Loc o = z.alloc(OUT, SZ_SNDDRIVERGLOBALS, 8); tSndDriverGlobals(r, z, o); z.addAsset(AT_SNDDRIVERGLOBALS, o); break; }
         case AT_FONT:        { Prelink::Loc o = z.alloc(OUT, SZ_FONT, 8); tFont(r, z, o); z.addAsset(AT_FONT, o); break; }
         case AT_DDL:         { Prelink::Loc o = z.alloc(OUT, SZ_DDLROOT, 8); tDdlRoot(r, z, o); z.addAsset(AT_DDL, o); break; }
-        case AT_SOUND:       { Prelink::Loc o = z.alloc(OUT, SZ_SNDBANK, 8); tSndBank(r, z, o); z.addAsset(AT_SOUND, o); break; }        
+        case AT_SOUND:       { Prelink::Loc o = z.alloc(OUT, SZ_SNDBANK, 8); tSndBank(r, z, o); z.addAsset(AT_SOUND, o); break; }
+        case AT_EMBLEMSET:   { Prelink::Loc o = z.alloc(OUT, SZ_EMBLEMSET, 8); tEmblemSet(r, z, o); z.addAsset(AT_EMBLEMSET, o); break; }
         default:
             fprintf(stderr, "unsupported asset type %u at index %u (Stage 1 = rawfile/stringtable/localize)\n", types[i], i);
             return 3;
@@ -3152,14 +3526,30 @@ int main(int argc, char **argv) {
             printf("[%3u] type=%2u off=%6zu consumed=%3zd hdrTag=%08x\n",
                    i, types[i], (size_t)(pre - zone.data()), (ptrdiff_t)(r.p - pre), hdrTag[i]);
         if (r.overran) { fprintf(stderr, "stream overran at asset %u -- transcoder desync\n", i); return 4; }
+        // XAsset[i].header now holds this asset's pointer, and that slot is
+        // what a later DB_ConvertOffsetToAlias reference dereferences.
+        if (!z.assets.empty()) {
+            const Prelink::AssetRef &a = z.assets.back();
+            g_aliasMap[assetArrayOff + i * 8 + 4] = Prelink::Loc{(int)a.blk, a.off};
+        }
     }
 
     // pass 2: resolve deferred block-4 offset refs against the emulated map
-    int resolved = 0, missing = 0;
+    int resolved = 0, missing = 0, firstBad = -1;
     for (const Deferred &d : g_deferred) {
         auto it = g_b4map.find(d.x86off);
         if (it != g_b4map.end()) { z.putPtr(d.obj, d.field, it->second); ++resolved; }
-        else { ++missing; if (dbg) printf("  UNRESOLVED block4 off=%u\n", d.x86off); }
+        else {
+            ++missing;
+            if (firstBad < 0) firstBad = d.asset;
+            if (dbg && missing <= 20) {
+                uint32_t st = 0, sz = 0; int ln = 0;
+                for (const auto &e : g_b4log)
+                    if (e.off <= d.x86off && e.off >= st) { st = e.off; sz = e.size; ln = e.line; }
+                printf("  UNRESOLVED off=%u (asset %d, ref from line %d) inside [%u,+%u) at +%u  reserved at line %d\n",
+                       d.x86off, d.asset, d.line, st, sz, d.x86off - st, ln);
+            }
+        }
     }
 
     z.write(argv[2]);
@@ -3171,7 +3561,11 @@ int main(int argc, char **argv) {
            g_x86b4, blockSize4, b4ok ? "MATCH" : "*** MISMATCH ***");
     printf("  dedup refs: resolved=%d missing=%d  alias=%d  offOtherBlock=%d\n",
            resolved, missing, g_cntAlias, g_cntOffOther);
-    return (b4ok && missing == 0) ? 0 : 5;
+    printf("  asset handles: resolved=%d missing=%d  otherBlock=%d\n",
+           g_aliasOk, g_aliasBad, g_cntAliasOther);
+    if (missing) printf("  first unresolved ref comes from asset %d\n", firstBad);
+    printf("  temp (block 0) bytes, not counted in block 4: %u\n", g_x86temp);
+    return (b4ok && missing == 0 && g_aliasBad == 0) ? 0 : 5;
 }
 
 // KBZ1 writer.

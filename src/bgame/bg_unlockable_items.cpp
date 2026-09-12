@@ -718,13 +718,21 @@ const char *__cdecl BG_UnlockablesGetLoadoutName(loadoutSlot_t loadoutSlot)
         return s_loadoutNames[loadoutSlot];
 }
 
+// Sorts an array of itemInfo_t*, so each argument is an itemInfo_t** -- read it
+// as one. The decompiled form went through `unsigned int`, which truncated the
+// element pointer to its low 32 bits, and reached the sort key at the hardcoded
+// x86 offset 264. Neither survives LP64: itemInfo_t carries five `const char *`
+// before its scalar tail, so sizeof goes 296 -> 320 and sortKey 264 -> 288, and
+// 264 now lands inside defaultClass[19].
 int __cdecl BG_UnlockablesCompareItemsBySortKey(const void *arg0, const void *arg1)
 {
+    const itemInfo_t *item0 = *(const itemInfo_t *const *)arg0;
+    const itemInfo_t *item1 = *(const itemInfo_t *const *)arg1;
     int returnValue; // [esp+0h] [ebp-Ch]
 
-    returnValue = *(unsigned int *)(*(unsigned int *)arg0 + 264) - *(unsigned int *)(*(unsigned int *)arg1 + 264);
+    returnValue = item0->sortKey - item1->sortKey;
     if ( !returnValue )
-        return **(unsigned int **)arg0 - **(unsigned int **)arg1;
+        return item0->index - item1->index;
     return returnValue;
 }
 

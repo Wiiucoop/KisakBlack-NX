@@ -145412,9 +145412,20 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/client/screen_placement.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/database/database.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/database/db_registry.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/game/teams.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/r_bsp.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/r_dpvs_dynmodel.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/r_font.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/r_gfx.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/r_material.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/r_pointlights.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/r_sky.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/r_utils.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/r_world_lod.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/rb_light.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/gfx_d3d/rb_resource.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/XAPOBase.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/XAudio2.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/d3d9.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/nx_prefix.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/windows.h
@@ -145427,6 +145438,11 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/qcommon/ent.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/qcommon/msg_mp.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/qcommon/net_chan_mp.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/sound/snd.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/sound/snd_bank.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/sound/snd_driver_xaudio2_dsp.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/sound/snd_dsp.h
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/sound/snd_radverb.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/ui/ui_main.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/ui/ui_shared.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/universal/assertive.h

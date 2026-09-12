@@ -146,4 +146,19 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o: \
  C:/dev/CBO1-NX/src/universal/fft.h C:/dev/CBO1-NX/src/gfx_d3d/r_gfx.h \
  C:/dev/CBO1-NX/src/xanim/xmodel.h C:/dev/CBO1-NX/src/qcommon/common.h \
  C:/dev/CBO1-NX/src/qcommon/net_chan_mp.h \
- C:/dev/CBO1-NX/src/nx/compat/xmmintrin.h
+ C:/dev/CBO1-NX/src/nx/compat/xmmintrin.h \
+ C:/dev/CBO1-NX/src/gfx_d3d/rb_resource.h \
+ C:/dev/CBO1-NX/src/gfx_d3d/r_bsp.h \
+ C:/dev/CBO1-NX/src/gfx_d3d/r_dpvs_dynmodel.h \
+ C:/dev/CBO1-NX/src/gfx_d3d/r_sky.h \
+ C:/dev/CBO1-NX/src/gfx_d3d/r_world_lod.h \
+ C:/dev/CBO1-NX/src/gfx_d3d/rb_light.h \
+ C:/dev/CBO1-NX/src/gfx_d3d/r_utils.h \
+ C:/dev/CBO1-NX/src/gfx_d3d/r_pointlights.h \
+ C:/dev/CBO1-NX/src/sound/snd_bank.h C:/dev/CBO1-NX/src/sound/snd.h \
+ C:/dev/CBO1-NX/src/game/teams.h C:/dev/CBO1-NX/src/sound/snd_dsp.h \
+ C:/dev/CBO1-NX/src/sound/snd_driver_xaudio2_dsp.h \
+ C:/dev/CBO1-NX/src/nx/compat/XAPOBase.h \
+ C:/dev/CBO1-NX/src/nx/compat/XAudio2.h \
+ C:/dev/CBO1-NX/src/nx/compat/XAudio2.h \
+ C:/dev/CBO1-NX/src/sound/snd_radverb.h

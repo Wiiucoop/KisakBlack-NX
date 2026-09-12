@@ -7,11 +7,14 @@
 // parsing on device:
 //   1. allocate each block and copy its image,
 //   2. walk the reloc table, writing block[tgt]+off into each pointer slot,
-//   3. register each asset into the XAssetPool via DB_AddXAsset,
+//   3. register each asset into the XAssetPool, running the same hooks
+//      Load_<T>Ptr would have run (see step 3 below),
 //   4. build the runtime objects db_load.cpp would have built (see step 4 below).
 //
-// Steps 1-3 need to know nothing about any asset type. Step 4 does, and is the
-// one place where per-type knowledge lives.
+// Steps 1-2 need to know nothing about any asset type. Steps 3 and 4 do, and
+// they are the two places where per-type knowledge lives: step 3 mirrors the
+// Load_<T>Asset hooks of db_registry.cpp, step 4 the Load_Create* builders
+// db_load.cpp calls into the subsystems.
 //
 // This sidesteps the fundamental blocker that the .ff stream format hard-wires
 // 4-byte pointers and x86 struct sizes, which cannot be consumed directly by a
@@ -27,6 +30,9 @@
 #include <qcommon/common.h>
 #include <universal/q_shared.h>
 #include <gfx_d3d/r_material.h>
+#include <gfx_d3d/rb_resource.h>
+#include <sound/snd_bank.h>
+#include <ui/ui_shared.h>
 
 extern "C" void nx_normalize_path(const char *in, char *out, size_t outSize);
 extern "C" const char *nx_get_install_dir(void);
@@ -58,6 +64,73 @@ uint8_t *slurp(const char *path, long *n)
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Step 3: register an asset, running the hooks Load_<T>Ptr would have run.
+//
+// Every Load_<T>Ptr in db_load.cpp ends with a call to Load_<T>Asset, and those
+// hooks (db_registry.cpp) are not all the same: most are a bare DB_AddXAsset,
+// but four of them also hand the asset to the subsystem that owns it. Calling
+// DB_AddXAsset alone -- what this loader used to do -- registers the asset in
+// the pool but leaves that subsystem unaware it exists.
+//
+// The census of the hooks that do more than register, over the whole of
+// db_registry.cpp:
+//
+//   asset type         hook                   extra work
+//   -----------------  ---------------------  ----------------------------------
+//   IMAGE (8)          Load_GfxImageAsset     RB_Resource_Flush() *before* adding
+//   SOUND (9)          Load_SndBankAsset      SND_AddBank -> g_snd_banks[]
+//   SOUND_PATCH (10)   Load_SndPatchAsset     SND_AddPatch -> g_snd_patches[]
+//   MENU (22)          Load_MenuAsset         items[i]->parent = the added menu
+//
+// SOUND is the one that bites first: SND_GetSnapshotById (snd_bank.cpp:398)
+// walks g_snd_banks[], not the SndDriverGlobals asset, so with no bank ever
+// added it returns null for every id -- including g_snd.defaultHash, whose
+// `defaultHash != id` guard stops the fallback from recursing. SND_Init ->
+// SND_InitSnapshot -> SND_UpdateSnapshot (snd.cpp:2940) then dereferences that
+// null immediately, because snapshotGroupCount (61 in code_post_gfx_mp) makes
+// the inner loop run. On PC the bank ships in the same fastfile and is added
+// during the load, so the table is never empty there and the engine is right
+// not to guard.
+//
+// Two details are load-bearing and copied from the hooks verbatim:
+//  - DB_AddXAsset dedups. It returns the header of the entry that won, which
+//    may not be the one passed in, and the hooks all hand the subsystem the
+//    RETURNED pointer. Load_MenuAsset is the one that needs both: it reparents
+//    the items of the menu it was given onto the menu that won.
+//  - RB_Resource_Flush runs before the add, not after.
+//
+// This runs in the asset table's own order, which is the order the .ff had:
+// SND_AddBank reapplies every patch registered so far (snd_bank.cpp:64-69), so
+// banks and patches must interleave the way the fastfile wrote them.
+// ---------------------------------------------------------------------------
+static XAssetHeader registerAsset(XAssetType type, XAssetHeader h)
+{
+    if (type == ASSET_TYPE_IMAGE)
+        RB_Resource_Flush();
+
+    XAssetHeader given = h;
+    XAssetHeader added = DB_AddXAsset(type, h);
+
+    switch (type) {
+    case ASSET_TYPE_SOUND:
+        SND_AddBank(added.sound);
+        break;
+    case ASSET_TYPE_SOUND_PATCH:
+        SND_AddPatch(added.soundPatch);
+        break;
+    case ASSET_TYPE_MENU:
+        if (given.menu)
+            for (int i = 0; i < given.menu->itemCount; ++i)
+                if (given.menu->items[i])
+                    given.menu->items[i]->parent = added.menu;
+        break;
+    default:
+        break;
+    }
+    return added;
+}
 
 // ---------------------------------------------------------------------------
 // Step 4: build the runtime objects the .ff loader would have built.
@@ -232,7 +305,7 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
         if (ab >= nblk || !block[ab] || ao >= blockSize[ab]) continue;
         XAssetHeader h;
         h.data = block[ab] + ao;
-        DB_AddXAsset((XAssetType)type, h);
+        registerAsset((XAssetType)type, h);
     }
 
     // 4. build the runtime objects db_load.cpp would have built. This runs

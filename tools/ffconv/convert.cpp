@@ -717,7 +717,11 @@ static void tMenuList(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     if (menusTag != TAG_NULL) {
         Prelink::Loc tbl = z.alloc(OUT, (size_t)menuCount * 8, 8);
-        b4Reserve(3, (uint32_t)menuCount * 4, tbl);
+        // menus[] lives in block 4, so every element Load_menuDef_ptr fills
+        // (db_load.cpp:5790/5803 both write through *varmenuDef_ptr) is itself
+        // an alias slot a later reference can dereference. ui_mp/menus.txt
+        // lists the same menu more than once and does exactly that.
+        uint32_t tblX86 = b4Reserve(3, (uint32_t)menuCount * 4, tbl);
         std::vector<uint32_t> tags(menuCount);
         for (int i = 0; i < menuCount; ++i) tags[i] = r.u32();
         for (int i = 0; i < menuCount; ++i) {
@@ -725,12 +729,14 @@ static void tMenuList(Reader &r, Prelink &z, Prelink::Loc obj) {
             // Load_menuDef_ptr tests for -1 and -2; every other non-zero value
             // is an alias that consumes no stream.
             Prelink::Loc e{tbl.blk, tbl.off + (uint32_t)i * 8};
+            const uint32_t slotX86 = tblX86 + (uint32_t)i * 4;
             if (tags[i] == TAG_INLINE || tags[i] == TAG_ALIAS) {
                 uint32_t slot = (tags[i] == TAG_ALIAS) ? insertPointerSlot() : 0;
                 Prelink::Loc md = tMenuDef(r, z, tbl, (uint32_t)i * 8);
                 if (tags[i] == TAG_ALIAS) g_aliasMap[slot] = md;
+                noteAliasSlot(slotX86, md);
             } else if (tags[i] != TAG_NULL)
-                putAssetHandleRef(z, e, 0, tags[i]);
+                noteAliasSlot(slotX86, putAssetHandleRef(z, e, 0, tags[i]));
             else
                 z.putPtr(e, 0, Prelink::none());
         }
@@ -1188,6 +1194,140 @@ static void tXSurfaceRefs(Reader &r, Prelink &z, Prelink::Loc obj, const SurfTag
 // the header. XModelLodInfo, XBoneInfo, DObjAnimMat and XModelHighMipBounds
 // hold no pointers and keep their sizes.
 
+// ---- collision geometry -----------------------------------------------------
+// XModel::collmaps -> Collmap -> PhysGeomList -> PhysGeomInfo[] -> BrushWrapper
+// -> cbrushside_t[] / vec3[] / cplane_s[]. Mirrors Load_CollmapArray
+// (db_load.cpp:3156) down through Load_cbrushside_t (db_load.cpp:2984).
+//
+// The pointer tests are not uniform, and the difference decides whether a tag
+// consumes stream. Three loaders test only against zero, so ANY non-zero tag
+// means the data follows inline: Load_Collmap's geomList (:3148),
+// Load_PhysGeomList's geoms (:3137) and Load_BrushWrapper's sides (:3067).
+// The other four test against -1 first and treat every other value as a block-4
+// offset: PhysGeomInfo::brush (:3106), BrushWrapper::verts (:3075) and
+// ::planes (:3088), and cbrushside_t::plane (:2989).
+//
+// Allocation alignment is not uniform either. Most come from
+// AllocLoad_FxElemVisStateSample (align 4), but PhysGeomList::geoms and the
+// BrushWrapper itself come from AllocLoad_GfxPackedVertex0 -- align 16.
+//
+// Sizes: Collmap 4 -> 8, PhysGeomList 12 -> 24, PhysGeomInfo 68 -> 72,
+// BrushWrapper 96 -> 112, cbrushside_t 12 -> 16. cplane_s is pointer-free and
+// stays 20. All measured with offsetof under devkitA64.
+enum { SZ_COLLMAP = 8, SZ_PHYSGEOMLIST = 24, SZ_PHYSGEOMINFO = 72,
+       SZ_BRUSHWRAPPER = 112, SZ_CBRUSHSIDE = 16, SZ_CPLANE = 20 };
+
+// Load_BrushWrapper (db_load.cpp:3064): the whole 96-byte block, then sides,
+// verts and planes in that order. planes is numsides long, not numverts -- the
+// loader says so at :3092 and it is not a typo.
+static void tBrushWrapper(Reader &r, Prelink &z, Prelink::Loc bw) {
+    uint8_t  head[32];                     // mins[3], contents, maxs[3], numsides
+    r.bytes(head, 32);
+    uint32_t sidesTag  = r.u32();
+    uint8_t  axial[48];                    // axial_cflags[2][3], axial_sflags[2][3]
+    r.bytes(axial, 48);
+    uint32_t numverts  = r.u32();
+    uint32_t vertsTag  = r.u32();
+    uint32_t planesTag = r.u32();
+
+    uint32_t numsides;
+    memcpy(&numsides, head + 28, 4);
+
+    uint8_t *o = z.at(bw);
+    memcpy(o, head, 32);                   // mins .. numsides keep their offsets
+    memcpy(o + 40, axial, 48);
+    memcpy(o + 88, &numverts, 4);
+
+    if (sidesTag != TAG_NULL) {
+        Prelink::Loc sides = z.alloc(OUT, numsides ? (size_t)numsides * SZ_CBRUSHSIDE : 1, 8);
+        b4Reserve(3, numsides * 12, sides);
+        // Load_cbrushside_tArray reads the whole 12*count run, then walks it.
+        std::vector<uint32_t> planeTags(numsides);
+        for (uint32_t i = 0; i < numsides; ++i) {
+            uint8_t *sd = z.at(sides) + i * SZ_CBRUSHSIDE;
+            planeTags[i] = r.u32();
+            r.bytes(sd + 8, 8);            // cflags, sflags
+        }
+        for (uint32_t i = 0; i < numsides; ++i) {
+            Prelink::Loc sd{sides.blk, sides.off + i * SZ_CBRUSHSIDE};
+            if (planeTags[i] == TAG_NULL)        z.putPtr(sd, 0, Prelink::none());
+            else if (planeTags[i] != TAG_INLINE) putStructOffsetRef(z, sd, 0, planeTags[i]);
+            else {
+                Prelink::Loc pl = z.alloc(OUT, SZ_CPLANE, 4);
+                r.bytes(z.at(pl), 20);
+                b4Reserve(3, 20, pl);
+                z.putPtr(sd, 0, pl);
+            }
+        }
+        z.putPtr(bw, 32, sides);
+    } else {
+        z.putPtr(bw, 32, Prelink::none());
+    }
+
+    tOffsetOrArray(r, z, bw, 96,  vertsTag,  numverts, 12, 3);
+    tOffsetOrArray(r, z, bw, 104, planesTag, numsides, 20, 3);
+}
+
+// Load_PhysGeomInfoArray (db_load.cpp:3119): the whole 68*count run, then the
+// brush of each element.
+static void tPhysGeomInfoArray(Reader &r, Prelink &z, Prelink::Loc obj,
+                               uint32_t field, uint32_t count) {
+    Prelink::Loc tbl = z.alloc(OUT, count ? (size_t)count * SZ_PHYSGEOMINFO : 1, 8);
+    b4Reserve(15, count * 68, tbl);        // AllocLoad_GfxPackedVertex0
+    std::vector<uint32_t> brushTags(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        uint8_t *g = z.at(tbl) + i * SZ_PHYSGEOMINFO;
+        brushTags[i] = r.u32();
+        r.bytes(g + 8, 4);                 // type
+        r.bytes(g + 12, 60);               // orientation[3][3], offset[3], halfLengths[3]
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        Prelink::Loc g{tbl.blk, tbl.off + i * SZ_PHYSGEOMINFO};
+        if (brushTags[i] == TAG_NULL)        z.putPtr(g, 0, Prelink::none());
+        else if (brushTags[i] != TAG_INLINE) putStructOffsetRef(z, g, 0, brushTags[i]);
+        else {
+            Prelink::Loc bw = z.alloc(OUT, SZ_BRUSHWRAPPER, 8);
+            b4Reserve(15, 96, bw);         // AllocLoad_GfxPackedVertex0
+            tBrushWrapper(r, z, bw);
+            z.putPtr(g, 0, bw);
+        }
+    }
+    z.putPtr(obj, field, tbl);
+}
+
+// Load_PhysGeomList (db_load.cpp:3134).
+static void tPhysGeomList(Reader &r, Prelink &z, Prelink::Loc gl) {
+    uint32_t count    = r.u32();
+    uint32_t geomsTag = r.u32();
+    int32_t  contents = r.i32();
+
+    uint8_t *o = z.at(gl);
+    memcpy(o, &count, 4);
+    memcpy(o + 16, &contents, 4);
+
+    if (geomsTag != TAG_NULL) tPhysGeomInfoArray(r, z, gl, 8, count);
+    else                      z.putPtr(gl, 8, Prelink::none());
+}
+
+// Load_CollmapArray (db_load.cpp:3156): the whole 4*count pointer run, then
+// each Collmap's geomList.
+static void tCollmapArray(Reader &r, Prelink &z, Prelink::Loc obj,
+                          uint32_t field, uint32_t count) {
+    Prelink::Loc tbl = z.alloc(OUT, count ? (size_t)count * SZ_COLLMAP : 1, 8);
+    b4Reserve(3, count * 4, tbl);          // AllocLoad_FxElemVisStateSample
+    std::vector<uint32_t> tags(count);
+    for (uint32_t i = 0; i < count; ++i) tags[i] = r.u32();
+    for (uint32_t i = 0; i < count; ++i) {
+        Prelink::Loc c{tbl.blk, tbl.off + i * SZ_COLLMAP};
+        if (tags[i] == TAG_NULL) { z.putPtr(c, 0, Prelink::none()); continue; }
+        Prelink::Loc gl = z.alloc(OUT, SZ_PHYSGEOMLIST, 8);
+        b4Reserve(3, 12, gl);              // AllocLoad_FxElemVisStateSample
+        tPhysGeomList(r, z, gl);
+        z.putPtr(c, 0, gl);
+    }
+    z.putPtr(obj, field, tbl);
+}
+
 enum { AT_XMODEL = 5, SZ_XMODEL = 328, SZ_COLLSURF = 48 };
 enum { SZ_COLLTRI = 48 };   // confirm against XModelCollTri_s
 
@@ -1326,10 +1466,8 @@ static void tXModel(Reader &r, Prelink &z, Prelink::Loc obj) {
         putAssetHandleRef(z, obj, 296, physPresetTag);
     }
 
-    if (collmapsTag != TAG_NULL) {
-        fprintf(stderr, "xmodel has collmaps; PhysGeomList is not transcoded yet\n");
-        exit(9);
-    }
+    if (collmapsTag != TAG_NULL) tCollmapArray(r, z, obj, 312, numCollmaps);
+    else                         z.putPtr(obj, 312, Prelink::none());
 
     if (physConstrTag == TAG_INLINE || physConstrTag == TAG_ALIAS) {
         Prelink::Loc p = z.alloc(OUT, SZ_PHYSCONSTRAINTS, 8);

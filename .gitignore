@@ -467,3 +467,22 @@ tools/ffconv/*.exe
 
 # Local notes for coding agents
 CLAUDE.md
+
+# Game data -- never commit. Users convert from their own copy of the game.
+*.ff
+*.kbz
+*.iwd
+*.iwi
+*.d3dbsp
+*.bik
+zone/
+main/
+raw/
+kbz/
+
+# Build output
+build-nx/
+tools/ffconv/*.exe
+
+# Local notes for coding agents
+CLAUDE.md

@@ -570,7 +570,8 @@ double __cdecl GPad_GetStick(int portIndex, GamePadStick stick)
     {
         __debugbreak();
     }
-    return s_gamePads[portIndex].sticks[stick];
+    // LP64: MSVC dropped the mask because 4 * 0x40000000 wraps to 0 in 32 bits.
+    return s_gamePads[portIndex].sticks[stick & 0xBFFFFFFF];
 }
 
 bool __cdecl GPad_IsStickPressed(int portIndex, GamePadStick stick, GamePadStickDir stickDir)

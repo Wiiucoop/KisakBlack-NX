@@ -701,9 +701,12 @@ static void mtrace(Reader &r, const char *what, int val, uint32_t nameTag) {
 }
 
 // MenuList: 12 -> 24. Name, count, and an array of menuDef_t pointers.
-// menuDef_t is the whole UI menu tree; a default menu file should not have
-// any, so stop loudly rather than guess.
-enum { AT_MENUFILE = 21, SZ_MENULIST = 24 };
+// Every menu loaded inline is also an asset of its own: Load_menuDef_ptr
+// (db_load.cpp:5778) calls Load_MenuAsset right after Load_menuDef_t, so the
+// zone registers each menu (type 22) before the list that holds it (type 21).
+// Its name is window.name, the first pointer of menuDef_t, which is what
+// DB_XAssetGetNameHandler[ASSET_TYPE_MENU] (DB_DDLGetName) reads.
+enum { AT_MENUFILE = 21, AT_MENU = 22, SZ_MENULIST = 24 };
 
 static Prelink::Loc tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field);
 
@@ -733,6 +736,10 @@ static void tMenuList(Reader &r, Prelink &z, Prelink::Loc obj) {
             if (tags[i] == TAG_INLINE || tags[i] == TAG_ALIAS) {
                 uint32_t slot = (tags[i] == TAG_ALIAS) ? insertPointerSlot() : 0;
                 Prelink::Loc md = tMenuDef(r, z, tbl, (uint32_t)i * 8);
+                // Load_MenuAsset runs only on this branch, once the whole
+                // menuDef_t has been read. An alias to a menu registers
+                // nothing, so a menu listed twice is still one asset.
+                z.addAsset(AT_MENU, md);
                 if (tags[i] == TAG_ALIAS) g_aliasMap[slot] = md;
                 noteAliasSlot(slotX86, md);
             } else if (tags[i] != TAG_NULL)
@@ -3304,23 +3311,28 @@ static void tStreamedSound(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t fie
     else                             tPrimedSound(r, z, ss, 8);
 }
 
-// SoundFile: 8 -> 16. The union is a LoadedSound when type == 1 and a
-// StreamedSound otherwise (Load_SoundFileRef, db_load.cpp:1424).
+// The union half of a SoundFile, walked once its 8-byte record is in place:
+// a LoadedSound when type == 1 and a StreamedSound otherwise
+// (Load_SoundFileRef, db_load.cpp:1424).
+static void tSoundFileRef(Reader &r, Prelink &z, Prelink::Loc sf, uint32_t uTag, uint8_t type) {
+    if (uTag == TAG_NULL)        { z.putPtr(sf, 0, Prelink::none()); return; }
+    if (uTag != TAG_INLINE)      { putStructOffsetRef(z, sf, 0, uTag); return; }
+    if (type == 1)               tLoadedSound(r, z, sf, 0);
+    else                         tStreamedSound(r, z, sf, 0);
+}
+
+// SoundFile: 8 -> 16.
 static void tSoundFile(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     Prelink::Loc sf = z.alloc(OUT, SZ_SOUNDFILE, 8);
     b4Reserve(3, 8, sf);
 
     uint32_t uTag = r.u32();
-    uint8_t  tail[4];                      // type, exists, padding
+    uint8_t  tail[4] = {0};                      // type, exists, padding
     r.bytes(tail, 4);
     memcpy(z.at(sf) + 8, tail, 4);
 
     z.putPtr(obj, field, sf);
-
-    if (uTag == TAG_NULL)        { z.putPtr(sf, 0, Prelink::none()); return; }
-    if (uTag != TAG_INLINE)      { putStructOffsetRef(z, sf, 0, uTag); return; }
-    if (tail[0] == 1)            tLoadedSound(r, z, sf, 0);
-    else                         tStreamedSound(r, z, sf, 0);
+    tSoundFileRef(r, z, sf, uTag, tail[0]);
 }
 
 // snd_alias_t: 84 -> 104. Load_snd_alias_tArray reads the whole 84*count run
@@ -3428,6 +3440,80 @@ static void tSndBank(Reader &r, Prelink &z, Prelink::Loc obj) {
         tFlatArray(r, z, obj, 64, 348u * (uint32_t)(snapshotCount > 0 ? snapshotCount : 0), 3);
     else
         z.putPtr(obj, 64, Prelink::none());
+}
+
+// SndPatch: 20 -> 40, measured with aarch64-none-elf-g++ against snd_bank.h
+// (name@0, elementCount@8, elements@16, fileCount@24, files@32).
+// Load_SndPatch (db_load.cpp:1622): the 20-byte block, then under
+// DB_PushStreamPos(4) the name, the elements, the files.
+//  - elements is tested against zero only: any non-zero value means a
+//    uint[elementCount] follows, AllocLoad_FxElemVisStateSample (align 4).
+//  - files tests -1: inline SoundFile[fileCount], same allocator; any other
+//    non-zero value is a DB_ConvertOffsetToPointer reference.
+enum { AT_SOUND_PATCH = 10, SZ_SNDPATCH = 40 };
+
+// Load_SoundFileArray (db_load.cpp:1464): every 8-byte record first, then each
+// element's union. An offset reference may name any element, not only the
+// first, so each element's x86 offset is mapped to its LP64 location.
+static void tSoundFileArray(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
+                            uint32_t count) {
+    Prelink::Loc arr = z.alloc(OUT, count ? (size_t)count * SZ_SOUNDFILE : 1, 8);
+    const uint32_t x86 = b4Reserve(3, count * 8, arr);
+
+    std::vector<uint32_t> uTags(count);
+    std::vector<uint8_t>  types(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        const Prelink::Loc sf{arr.blk, arr.off + i * SZ_SOUNDFILE};
+        uTags[i] = r.u32();
+        uint8_t tail[4] = {0};                   // type, exists, padding
+        r.bytes(tail, 4);
+        memcpy(z.at(sf) + 8, tail, 4);
+        types[i] = tail[0];
+        g_b4map[x86 + i * 8] = sf;
+    }
+    z.putPtr(obj, field, arr);
+    for (uint32_t i = 0; i < count; ++i)
+        tSoundFileRef(r, z, Prelink::Loc{arr.blk, arr.off + i * SZ_SOUNDFILE}, uTags[i], types[i]);
+}
+
+static void tSndPatch(Reader &r, Prelink &z, Prelink::Loc obj) {
+    uint32_t nameTag      = r.u32();
+    uint32_t elementCount = r.u32();
+    uint32_t elementsTag  = r.u32();
+    uint32_t fileCount    = r.u32();
+    uint32_t filesTag     = r.u32();
+
+    uint8_t *o = z.at(obj);
+    memcpy(o + 8,  &elementCount, 4);
+    memcpy(o + 24, &fileCount, 4);
+
+    putXStringFromTag(r, z, obj, 0, nameTag);
+
+    // FFDBG: how many field writes each sound table receives, walked the way
+    // SND_PatchApply (snd_bank.cpp:585) walks elements[]. Table 0 is
+    // snd_alias_t, whose SND_ALIAS_FIELDS offsets are x86.
+    if (getenv("FFDBG") && elementsTag != TAG_NULL) {
+        std::vector<uint32_t> e(elementCount);
+        memcpy(e.data(), r.p, (size_t)elementCount * 4);
+        uint32_t perTable[9] = {0}, rows[9] = {0};
+        for (uint32_t i = 0; i + 1 < elementCount; ) {
+            uint32_t table = e[i] >> 16, fields = e[i] & 0xFFFF;
+            i += 2;
+            if (table < 9) { ++rows[table]; perTable[table] += fields; }
+            i += fields;
+        }
+        fprintf(stderr, "  SndPatch elements=%u files=%u  rows/fields per table:",
+                elementCount, fileCount);
+        for (int t = 0; t < 9; ++t)
+            if (rows[t]) fprintf(stderr, " t%d=%u/%u", t, rows[t], perTable[t]);
+        fprintf(stderr, "\n");
+    }
+
+    tSimpleArray(r, z, obj, 16, elementsTag, elementCount, 4, 3);
+
+    if (filesTag == TAG_NULL)        z.putPtr(obj, 32, Prelink::none());
+    else if (filesTag != TAG_INLINE) putStructOffsetRef(z, obj, 32, filesTag);
+    else                             tSoundFileArray(r, z, obj, 32, fileCount);
 }
 
 // ---- emblems ----------------------------------------------------------------
@@ -3655,6 +3741,7 @@ int main(int argc, char **argv) {
         case AT_FONT:        { Prelink::Loc o = z.alloc(OUT, SZ_FONT, 8); tFont(r, z, o); z.addAsset(AT_FONT, o); break; }
         case AT_DDL:         { Prelink::Loc o = z.alloc(OUT, SZ_DDLROOT, 8); tDdlRoot(r, z, o); z.addAsset(AT_DDL, o); break; }
         case AT_SOUND:       { Prelink::Loc o = z.alloc(OUT, SZ_SNDBANK, 8); tSndBank(r, z, o); z.addAsset(AT_SOUND, o); break; }
+        case AT_SOUND_PATCH: { Prelink::Loc o = z.alloc(OUT, SZ_SNDPATCH, 8); tSndPatch(r, z, o); z.addAsset(AT_SOUND_PATCH, o); break; }
         case AT_EMBLEMSET:   { Prelink::Loc o = z.alloc(OUT, SZ_EMBLEMSET, 8); tEmblemSet(r, z, o); z.addAsset(AT_EMBLEMSET, o); break; }
         default:
             fprintf(stderr, "unsupported asset type %u at index %u (Stage 1 = rawfile/stringtable/localize)\n", types[i], i);
@@ -3701,6 +3788,16 @@ int main(int argc, char **argv) {
            resolved, missing, g_cntAlias, g_cntOffOther);
     printf("  asset handles: resolved=%d missing=%d  otherBlock=%d\n",
            g_aliasOk, g_aliasBad, g_cntAliasOther);
+    {
+        size_t lists = 0, menus = 0;
+        for (const Prelink::AssetRef &a : z.assets) {
+            if (a.type == AT_MENUFILE) ++lists;
+            else if (a.type == AT_MENU) ++menus;
+        }
+        if (lists || menus)
+            printf("  registered: menulists=%zu menus=%zu (asset table %zu, zone header %u)\n",
+                   lists, menus, z.assets.size(), assetCount);
+    }
     if (missing) printf("  first unresolved ref comes from asset %d\n", firstBad);
     printf("  temp (block 0) bytes, not counted in block 4: %u\n", g_x86temp);
     return (b4ok && missing == 0 && g_aliasBad == 0) ? 0 : 5;

@@ -543,7 +543,19 @@ void __cdecl SND_PatchValue(unsigned int table, char *asset, unsigned int field,
     if ( asset )
     {
         meta = &SND_TABLE_METADATA[table][field];
+#ifdef KISAK_NX
+        // SND_ALIAS_FIELDS (snd_db.cpp) holds x86 snd_alias_t offsets. Every
+        // one of them is at or past flags (x86 offset 20), and the four
+        // pointers ahead of flags widen on LP64, so each field sits
+        // offsetof(flags) - 20 bytes further in. The other eight tables are
+        // pointer-free and keep their x86 offsets.
+        unsigned int metaOffset = meta->offset;
+        if (table == 0)
+            metaOffset += offsetof(snd_alias_t, flags) - 20;
+        v4 = (float *)&asset[metaOffset];
+#else
         v4 = (float *)&asset[meta->offset];
+#endif
         switch ( meta->type )
         {
             case SND_CSV_FLOAT:

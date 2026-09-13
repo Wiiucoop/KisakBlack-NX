@@ -24,6 +24,9 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <algorithm>
+#include <utility>
+#include <vector>
 
 #include <database/database.h>
 #include <database/db_registry.h>
@@ -240,6 +243,75 @@ static void buildRuntimeObjects(const char *path, const uint8_t *assetTable,
     }
 }
 
+// ---------------------------------------------------------------------------
+// Menus: point every reference at the pool entry, not at the block.
+//
+// DB_AddXAsset never keeps the header it is given. DB_LinkXAssetEntry allocates
+// a pool entry and memcpys the struct into it (DB_CloneXAssetInternal,
+// db_registry.cpp:1992), so the returned header is always a different pointer.
+// Load_MenuAsset writes that pointer back through the slot it was loaded from
+// (`menu->menu = DB_AddXAsset(...)`, db_registry.cpp:879): the menus[] element
+// of the MenuList, and the DB_InsertPointer slot when the tag was -2. Every
+// later reference to the menu in the zone is DB_ConvertOffsetToAlias, which
+// reads one of those slots, so on PC nothing in the zone keeps pointing at the
+// loaded copy -- the list, its aliases and the items' parent all agree on the
+// pool entry.
+//
+// Here those references are relocations to the block copy, fixed before any
+// asset is registered. The only relocations whose target is a menuDef_t header
+// are those references (itemDef_s::parent is runtime-only and never
+// relocated), so after a menu is registered each of them is rewritten to the
+// pool entry. It happens right after that menu's registration, before the
+// MenuList that holds it is registered, which is the PC order.
+// ---------------------------------------------------------------------------
+class MenuSlots
+{
+public:
+    void collect(const uint8_t *assetTable, const uint8_t *end, uint32_t assetCount,
+                 const uint8_t *relocTable, uint32_t relocCount,
+                 uint8_t *block[], const uint32_t blockSize[], uint32_t nblk)
+    {
+        std::vector<const void *> menus;
+        const uint8_t *p = assetTable;
+        for (uint32_t i = 0; i < assetCount && p + 9 <= end; ++i) {
+            uint32_t type; memcpy(&type, p, 4); p += 4;
+            uint8_t  ab = *p++; uint32_t ao; memcpy(&ao, p, 4); p += 4;
+            if (type == ASSET_TYPE_MENU && ab < nblk && block[ab] && ao < blockSize[ab])
+                menus.push_back(block[ab] + ao);
+        }
+        if (menus.empty())
+            return;
+        std::sort(menus.begin(), menus.end());
+
+        p = relocTable;
+        for (uint32_t i = 0; i < relocCount && p + 10 <= end; ++i) {
+            uint8_t  sb = *p++; uint32_t so; memcpy(&so, p, 4); p += 4;
+            uint8_t  tb = *p++; uint32_t to; memcpy(&to, p, 4); p += 4;
+            if (sb >= nblk || tb >= nblk || !block[sb] || !block[tb]) continue;
+            if (so + sizeof(void *) > blockSize[sb] || to > blockSize[tb]) continue;
+            const void *tgt = block[tb] + to;
+            if (std::binary_search(menus.begin(), menus.end(), tgt))
+                m_slots.emplace_back(tgt, block[sb] + so);
+        }
+        std::sort(m_slots.begin(), m_slots.end());
+    }
+
+    void redirect(const void *given, void *added)
+    {
+        if (given == added)
+            return;
+        auto it = std::lower_bound(m_slots.begin(), m_slots.end(),
+                                   std::make_pair(given, (uint8_t *)nullptr));
+        for (; it != m_slots.end() && it->first == given; ++it)
+            memcpy(it->second, &added, sizeof(void *));
+    }
+
+    uint32_t slotCount() const { return (uint32_t)m_slots.size(); }
+
+private:
+    std::vector<std::pair<const void *, uint8_t *>> m_slots; // menu header -> slot
+};
+
 // Parse + relocate + register a KBZ1 image already read into `file`.
 // Returns 1 on success, -1 if malformed. `path` is for logging only.
 static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
@@ -284,6 +356,7 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
     }
 
     // 2. apply relocations: each stored pointer slot becomes a real address.
+    const uint8_t *relocTable = p;
     for (uint32_t i = 0; i < relocCount; ++i) {
         if (p + 10 > end) break;
         uint8_t  sb = *p++; uint32_t so; memcpy(&so, p, 4); p += 4;
@@ -298,6 +371,8 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
     // 3. register each asset. The header struct is already native LP64 layout,
     // so we hand DB_AddXAsset a direct pointer into the relocated block.
     const uint8_t *assetTable = p;
+    MenuSlots menuSlots;
+    menuSlots.collect(assetTable, end, assetCount, relocTable, relocCount, block, blockSize, nblk);
     for (uint32_t i = 0; i < assetCount; ++i) {
         if (p + 9 > end) break;
         uint32_t type; memcpy(&type, p, 4); p += 4;
@@ -305,8 +380,13 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
         if (ab >= nblk || !block[ab] || ao >= blockSize[ab]) continue;
         XAssetHeader h;
         h.data = block[ab] + ao;
-        registerAsset((XAssetType)type, h);
+        XAssetHeader added = registerAsset((XAssetType)type, h);
+        if (type == ASSET_TYPE_MENU)
+            menuSlots.redirect(h.data, added.data);
     }
+    if (menuSlots.slotCount())
+        Com_Printf(16, "NX_KBZ: '%s' redirected %u menu slots to their pool entries\n",
+                   path, menuSlots.slotCount());
 
     // 4. build the runtime objects db_load.cpp would have built. This runs
     // after registration so a builder may look assets up by name if it needs to.

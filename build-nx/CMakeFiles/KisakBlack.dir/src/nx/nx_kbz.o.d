@@ -111,8 +111,47 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o: \
  C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/cstdio \
  C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/cstdint \
  C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/cstring \
- C:/dev/CBO1-NX/src/database/database.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/algorithm \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_algo.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/algorithmfwd.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/initializer_list \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_heap.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/uniform_int_dist.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_tempbuf.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ranges_algo.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ranges_algobase.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ranges_base.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/max_size_type.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/numbers \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/invoke.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ranges_util.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/pstl/glue_algorithm_defs.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/pstl/execution_defs.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/utility \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_relops.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/intcmp.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/vector \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/allocator.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/c++allocator.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/new_allocator.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/new_throw.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/memoryfwd.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_uninitialized.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/ext/alloc_traits.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/alloc_traits.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_vector.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_bvector.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/functional_hash.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/hash_bytes.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/range_access.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/erase_if.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/vector.tcc \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/memory_resource.h \
  C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/cstddef \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/uses_allocator.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/uses_allocator_args.h \
+ C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/tuple \
+ C:/dev/CBO1-NX/src/database/database.h \
  C:/dev/CBO1-NX/src/database/db_registry.h \
  C:/dev/CBO1-NX/src/win32/win_common.h \
  C:/dev/CBO1-NX/src/universal/mem_userhunk.h \

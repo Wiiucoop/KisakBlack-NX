@@ -91,7 +91,17 @@ nodetype *__cdecl Huff_initNode(huff_t *huff, int ch, int weight)
 
 int __cdecl nodeCmp(const void *left, const void *right)
 {
-    return *(unsigned int *)(*(unsigned int *)left + 12) - *(unsigned int *)(*(unsigned int *)right + 12);
+    // nx-port: sorts an array of nodetype*, so each argument is a nodetype** --
+    // read it as one. The decompiled form went through `unsigned int`, which
+    // truncated the element pointer to its low 32 bits, and reached the weight
+    // at the hardcoded x86 offset 12. Neither survives LP64: nodetype carries
+    // three pointers before its scalar tail, so sizeof goes 20 -> 32 and weight
+    // 12 -> 24, and 12 now lands in the upper half of `right`. Same defect as
+    // BG_UnlockablesCompareItemsBySortKey (c12c1b9).
+    const nodetype *lnode = *(const nodetype *const *)left;
+    const nodetype *rnode = *(const nodetype *const *)right;
+
+    return lnode->weight - rnode->weight;
 }
 
 void __cdecl Huff_BuildFromData(huff_t *huff, const int *msg_hData)

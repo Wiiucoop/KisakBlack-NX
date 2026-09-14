@@ -18,6 +18,11 @@ Four families, all found the same way:
 | `qsort` element sizes | the x86 `sizeof(T)` as a literal | [findings/qsort-element-sizes.md](findings/qsort-element-sizes.md) |
 | function-pointer casts | `(int (__cdecl *)(...))` over a pointer-returning function | [findings/function-pointer-casts.md](findings/function-pointer-casts.md) |
 | command-buffer reservations | the x86 `sizeof` of a render command | [findings/pointer-offset-reads.md](findings/pointer-offset-reads.md) |
+| truncated pointer loads | `unsigned int` where a pointer was meant | [findings/truncated-pointer-loads.md](findings/truncated-pointer-loads.md) |
+
+The last of those has **no sweep** — it is the one that has produced the hard
+crashes, and both existing sweeps are structurally blind to it. Read that page
+before trusting a clean run here.
 
 ## The method
 
@@ -191,7 +196,19 @@ The scan keys on one syntactic shape, `*((T *)base + N)`. It will not find:
 - an x86 size baked into an *allocation* rather than an access. The
   `R_GetCommandBuffer` family is exactly this, and was found by reading, not by
   the scan;
-- structs the decompiler laid out wrong in the first place.
+- structs the decompiler laid out wrong in the first place;
+- a pointer *loaded* through a 32-bit type — `*(unsigned int *)(*(unsigned int *)arg + 12)`.
+  The offset is inside the dereference and the base is an expression, so the
+  regex does not match it; and even where it does match, the pipeline only ever
+  asks *which field* an offset lands on, never whether a 32-bit read is being
+  used to hold a pointer. See
+  [findings/truncated-pointer-loads.md](findings/truncated-pointer-loads.md).
+
+The `qsort` sweep has its own blind spot, of a different kind: it reads the
+element-size argument and stops there. A call that passes `sizeof(T)` is recorded
+as correct — which it is, as far as the stride goes — but the **comparator** is a
+separate function reached through a function pointer, and nothing in the pipeline
+follows it. `nodeCmp` crashed from inside a `qsort` the census had already cleared.
 
 The ILP32 stand-in is also not x86: it matches on pointer width and, for this
 codebase's structs, on layout — `query.py`'s `check()` is what confirms that per

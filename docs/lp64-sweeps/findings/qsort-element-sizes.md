@@ -14,6 +14,14 @@ mis-ordered.
 are the table below. The other 28 already say `sizeof(T)` and are correct by
 construction.
 
+> **This page only covers the element size.** A `qsort` call has a second way to
+> be wrong on LP64 — its **comparator** — and nothing here looks at it. The
+> comparator is a separate function reached through a function pointer, and a
+> correct stride tells you nothing about whether it can read the element it is
+> handed. `nodeCmp` (`src/qcommon/huffman.cpp:94`) crashed the game from inside
+> one of the 28 calls this census had cleared as correct. Before trusting a row
+> below, read [truncated-pointer-loads.md](truncated-pointer-loads.md).
+
 ## How to read a row
 
 The verdict column is filled in only where the element type could be recovered

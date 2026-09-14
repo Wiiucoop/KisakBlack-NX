@@ -202,6 +202,86 @@ return types and the names of functions that were inlined away, and none of that
 came from the same guesswork that produced the code — which is exactly what makes
 it worth cross-checking against.
 
+## Closing the class one subsystem at a time
+
+The sweeps above find defects by *searching*. For the largest class of all —
+pointers cast through 32-bit integers — there is no need to search: **the
+compiler already diagnoses every one of them**, and `-w` in the build flags has
+been hiding them.
+
+Measured across the Switch build, with `-w` removed:
+
+```
+TUs analysed:                                    666
+files with at least one pointer<->int truncation: 460
+sites:                                          3654
+```
+
+Worst offenders: `cscr_compiler.cpp` 453, `com_expressions_eval.cpp` 308,
+`cscr_evaluate.cpp` 169, `physics_system_internal.cpp` 79.
+
+So the plan is not another census. It is a ratchet: **a per-file allowlist of
+sources that build with warnings on**, extended one subsystem at a time. Each
+file that graduates can never silently regress, because the truncation is a hard
+error from then on.
+
+### How it works
+
+`cmake/switch.cmake` holds `NX_SANITIZED_SOURCES`. Everything *not* in that list
+gets `-w -fpermissive -Wno-narrowing` applied **per source file**; the sanitised
+list gets nothing, so the default diagnostics apply.
+
+It has to be done that way round. `-w` cannot be undone by a later flag — adding
+`-Werror=…` after it on the same command line changes nothing — so the flag is
+attached to the files that still need it, rather than to the target.
+
+What makes a truncation fatal differs by language, and both were verified against
+the real toolchain:
+
+- **C++** — `(int)somePointer` is *ill-formed*; it compiles only because of
+  `-fpermissive`. Drop that and it is already an error:
+  `cast from 'const char*' to 'int' loses precision`. No `-Werror` needed.
+- **C** — the relevant options, `-Wpointer-to-int-cast` and
+  `-Wint-to-pointer-cast`, are **C-only**; passing them to `g++` just warns that
+  they are not valid for C++. They are requested explicitly as errors for
+  sanitised `.c` files.
+
+CMake prints the state at configure time:
+
+```
+-- LP64 warning policy: 10 sanitised sources build with warnings on, 2006 still build with -w
+```
+
+### Graduating a file
+
+1. Add it to `NX_SANITIZED_SOURCES` in `cmake/switch.cmake`.
+2. Reconfigure and build. Every truncation in it is now an error.
+3. Fix them — a pointer stored in an `int` field needs the field widened, not the
+   cast silenced. `(uintptr_t)` is correct only where the value provably is not
+   an address: a handle, or small indices packed into a pointer-shaped context.
+4. Keep the list additive. **Removing a file from it is a regression**, and the
+   configure-time count is there to make that visible.
+
+The list starts at `src/nx/` — the port's own code, which should hold to a higher
+standard than the decompiled tree it wraps. Turning it on there immediately
+surfaced four real problems, which is the point:
+
+- a genuine LP64 truncation in `snd_driver_xaudio2.h:82`, where two small indices
+  packed into a `void *` context were unpacked through `unsigned int`;
+- `GlobalAlloc` returning `void *` where C++ wants an explicit conversion;
+- `#define rand() nx_rand()` in `nx_prefix.h` colliding with libstdc++'s
+  `std::rand()` call inside `std::random_shuffle` — latent, because nothing
+  instantiates that template yet.
+
+### Why this beats a census
+
+A sweep tells you how many defects exist today. The allowlist makes each one
+*stay* fixed, and it costs nothing to maintain: the build is the check. The
+sweeps in this directory remain useful for the classes the compiler cannot see —
+a wrong struct offset is perfectly well-typed — but for this class they are the
+wrong tool, and `com_expressions_eval.cpp` is the next subsystem to go through
+the ratchet.
+
 ## Running it
 
 Build first — stages 2 and 3 both read the build tree.

@@ -1418,7 +1418,7 @@ BOOL HeapFree(HANDLE, DWORD, LPVOID mem) { free(mem); return TRUE; }
 
 HGLOBAL GlobalAlloc(UINT flags, SIZE_T size)
 {
-    return (flags & GMEM_ZEROINIT) ? calloc(1, size) : malloc(size);
+    return (HGLOBAL)((flags & GMEM_ZEROINIT) ? calloc(1, size) : malloc(size));
 }
 HGLOBAL GlobalFree(HGLOBAL mem) { free(mem); return NULL; }
 LPVOID GlobalLock(HGLOBAL mem) { return mem; }

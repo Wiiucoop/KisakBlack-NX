@@ -7,11 +7,2377 @@ C_DEFINES = -DKISAK_MP -DKISAK_NX -DNDEBUG -D_CRT_SECURE_NO_WARNINGS
 
 C_INCLUDES = -I/c/dev/CBO1-NX/src/nx/compat -I/c/dev/CBO1-NX -I/c/dev/CBO1-NX/src -I/c/dev/CBO1-NX/src/libs -I/c/dev/CBO1-NX/src/libs/libtomcrypt-1.17/src/headers -I/c/dev/CBO1-NX/src/libs/libtommath-1.0 -I/c/dev/CBO1-NX/src/libs/libvpx-1.5.0/include -isystem /opt/devkitpro/libnx/include
 
-C_FLAGS = -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ftls-model=local-exec -ffunction-sections -fdata-sections -D__SWITCH__ -g -O2 -DNDEBUG -fPIE -fsigned-char -fno-strict-aliasing -fwrapv -fms-extensions -ffunction-sections -fdata-sections -include /c/dev/CBO1-NX/src/nx/compat/nx_prefix.h -w -fpermissive
+C_FLAGS = -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ftls-model=local-exec -ffunction-sections -fdata-sections -D__SWITCH__ -g -O2 -DNDEBUG -fPIE -fsigned-char -fno-strict-aliasing -fwrapv -fms-extensions -ffunction-sections -fdata-sections -include /c/dev/CBO1-NX/src/nx/compat/nx_prefix.h
 
 CXX_DEFINES = -DKISAK_MP -DKISAK_NX -DNDEBUG -D_CRT_SECURE_NO_WARNINGS
 
 CXX_INCLUDES = -I/c/dev/CBO1-NX/src/nx/compat -I/c/dev/CBO1-NX -I/c/dev/CBO1-NX/src -I/c/dev/CBO1-NX/src/libs -I/c/dev/CBO1-NX/src/libs/libtomcrypt-1.17/src/headers -I/c/dev/CBO1-NX/src/libs/libtommath-1.0 -I/c/dev/CBO1-NX/src/libs/libvpx-1.5.0/include -isystem /opt/devkitpro/libnx/include
 
-CXX_FLAGS = -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ftls-model=local-exec -ffunction-sections -fdata-sections -D__SWITCH__ -g -O2 -DNDEBUG -std=gnu++20 -fPIE -fsigned-char -fno-strict-aliasing -fwrapv -fms-extensions -ffunction-sections -fdata-sections -include /c/dev/CBO1-NX/src/nx/compat/nx_prefix.h -w -fpermissive -Wno-narrowing
+CXX_FLAGS = -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ftls-model=local-exec -ffunction-sections -fdata-sections -D__SWITCH__ -g -O2 -DNDEBUG -std=gnu++20 -fPIE -fsigned-char -fno-strict-aliasing -fwrapv -fms-extensions -ffunction-sections -fdata-sections -include /c/dev/CBO1-NX/src/nx/compat/nx_prefix.h
+
+# Custom options: CMakeFiles/KisakBlack.dir/DemonWare/bdCore/bdContainers/bdBitBuffer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/DemonWare/bdCore/bdContainers/bdByteBuffer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/DemonWare/bdCore/bdCrypto/bdCypher3Des.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/DemonWare/bdCore/bdMemory/bdMemory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/DemonWare/bdCore/bdSocket/bdAddr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/DemonWare/bdCore/bdThread/bdMutex.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/DemonWare/bdCore/bdUtilities/bdBytePacker.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/DemonWare/bdPlatform/bdPlatformLog/bdPlatformLog.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/DemonWare/bdPlatform/bdPlatformThread/bdPlatformMutex.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/CubeMapGenLib/CBBoxInt32.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/CubeMapGenLib/CCubeMapProcessor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/CubeMapGenLib/CImageSurface.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/CubeMapGenLib/ErrorMsg.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/MatchMakingInfo_win32.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/MatchMakingQueries_win32.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/MatchRecorder.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwLogOn_pc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwMatchMaking.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwMessaging.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwNet.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwQoS.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwRecordEvent.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwStats.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwStorage.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwTasks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwUtils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DW/dwUtils_pc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DynEntity/DynEntity_client.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DynEntity/DynEntity_coll.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DynEntity/DynEntity_gamestate.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DynEntity/DynEntity_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DynEntity/DynEntity_pieces.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/DynEntity/DynEntity_server.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/FxCurve.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/FxCurve_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_archive.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_beam.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_convert.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_draw.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_dvars.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_graph.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_marks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_postlight.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_profile.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_random.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_sort.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_sprite.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_system.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_unique_handle.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_update.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_update_util.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/EffectsCore/fx_wind.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/aim_assist/aim_assist.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/aim_assist/aim_target.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_actor_prone.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_animation.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_animconditions.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_dog.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_dog_animations_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_dtp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_emblems.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_fire.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_jump.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_mantle.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_misc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_misctables.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_perks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_pmove.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_slidemove.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_unlockable_items.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_vehicle_anim.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_vehicles_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_weapons.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_weapons_ammo.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_weapons_attachment.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_weapons_def.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_weapons_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_weapons_util.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_weapons_view.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/bgame/bg_wind.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_ammocounter.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_bolt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_camera.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_camerashake.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_clouds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_colltree.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_compass.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_draw_debug.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_draw_indicators.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_draw_names.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_draw_reticles.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_drawtools.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_effects_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_event.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_gamepad.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_hudelem.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_info.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_laser.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_localents.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_main.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_mem_track.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_perf.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_playerstate.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_pose_utils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_scr_main.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_shellshock.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_sound.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_spawn.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_spikeacoustic.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_vehicle.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_visionsets.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_weapon_options.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_weapons.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/cg_world.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame/offhandweapons.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_actors_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_animscripted_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_animtree_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_compassfriendlies_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_consolecmds_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_draw_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_draw_net_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_ents_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_main_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_newDraw_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_players_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_pose_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_predict_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_scoreboard_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_scr_main_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_servercmds_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_snapshot_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_ui_animate_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_vehicles_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/cgame_mp/cg_view_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_cin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_compositing.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_console.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_debugdata.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_devgui.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_gamepad.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_keys.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_main.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_medal.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_milestone.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_parse.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_rank.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/cl_voice.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/con_channels.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/screen_placement.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client/splitscreen.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_cgame_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_input_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_main_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_main_pc_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_net_chan_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_parse_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_pose_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_scrn_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_ui_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/cl_ui_pc_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/console_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/g_client_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/client_mp/sv_client_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_animtree.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_compiler.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_debugger.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_evaluate.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_instance.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_main.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_memorytree.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_parser.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_parsetree.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_readwrite.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_stringlist.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_tempmemory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_variable.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_vm.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/cscr_yacc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/clientscript/scr_const.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/common/brush_edges.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/database/db_assetnames.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/database/db_auth.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/database/db_file_load.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/database/db_load.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/database/db_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/database/db_registry.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/database/db_stream.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/database/db_stream_load.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/database/db_stringtable_load.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ddl/ddl_api.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ddl/ddl_buffer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ddl/ddl_cmd.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ddl/ddl_converter.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ddl/ddl_lookup.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/demo/demo_common.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/demo/demo_files.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/demo/demo_playback.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/demo/demo_profile.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/demo/demo_recording.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/demo/demo_ui.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/demo/demo_version.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/devgui/devgui.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/devgui/devgui_input.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/devgui/devgui_util.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_class_chunk.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_class_drips.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_class_fire.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_class_smoke.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_class_stream.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_cull.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_damage.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_physics.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_sound.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/flame/flame_system.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_aim.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_animapi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_badplace.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_corpse.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_death.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_dog_exposed.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_event_listeners.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_events.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_exposed.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_fields.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_function_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_generic.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_lookat.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_navigation.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_negotiation.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_orientation.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_pain.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_physics.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_script_cmd.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_senses.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_spawner.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_state.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_team_move.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/actor_threat.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/bullet.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/enthandle.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_actor_prone.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_bsp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_client_fields.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_debug.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_helicopter1.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_hudelem.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_items.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_load_utils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_mem_track.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_missile.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_mover.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_player_corpse.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_scr_helicopter.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_scr_mover.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_scr_vehicle.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_svcmds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_targets.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_vehicle_path.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_weapon.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/g_weapon_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/pathnode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/pathnode_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/sentient.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/sentient_fields.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game/turret.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/actor_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_active_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_client_script_cmd_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_cmds_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_combat_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_main_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_misc_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_save_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_scr_main_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_spawn_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_spawnsystem_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_team_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_trigger_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/g_utils_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/player_use_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/pregame.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/game_mp/ui_gameinfo_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_add_bsp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_add_cmdbuf.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_add_staticmodel.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_adszscale.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_bsp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_bsp_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_buffers.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_caps.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_char_tech_util.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_cinematic.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_cmdbuf.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_cmds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_debug.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_debug_alloc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_devgui.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_dobj_skin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_dpvs.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_dpvs_dynmodel.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_dpvs_entity.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_dpvs_sceneent.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_dpvs_static.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_bsp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_cmdbuf.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_lit.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_material.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_method.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_model_util.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_shadowablelight.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_staticmodel.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_sunshadow.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_draw_xmodel.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_drawsurf.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_dvars.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_exposure.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_extracam.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_fog.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_foliage.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_font.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_font_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_globalgfxdata.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_hw_nvidia.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_image.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_image_load_common.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_image_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_image_wavelet.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_jpeg.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_light.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_light_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_marks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material_consts.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_mem_track.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_meshdata.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_model.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_model_lighting.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_model_lod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_model_pose.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_model_skin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_outdoor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_pixelcost_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_pointlights.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_pretess.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_primarylights.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_reflection_probe.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendertarget.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rope_render.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_scene.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_screenshot.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_setstate_d3d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_shade.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_shader_constant_set.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_sky.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_sky_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_skybox.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_spotshadow.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_sprite.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_state.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_state_utils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_staticmodel.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_staticmodel_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_staticmodelcache.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_staticmodelcache_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_stream.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_stream_util.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_streamalloc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_sunshadow.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_texturemem.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_ui3d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_utils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_vertexstream2.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_warn.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_water.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_water_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_water_sim.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_wind.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_workercmds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_workercmds_common.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_world_lod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_xsurface.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_xsurface_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_xsurface_optimize.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_compositing.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_corona.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_debug.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_depthprepass.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_draw3d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_fog.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_imagefilter.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_imagetouch.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_light.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_logfile.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_pixelcost.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_postfx.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_resource.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_shade.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_showcollision.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_sky.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_spotshadow.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_state.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_stats.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_stream.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_sunshadow.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_superflare.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_tess.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/glass/glass_allocator.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/glass/glass_client.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/glass/glass_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/glass/glass_renderer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/glass/glass_server.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/glass/glass_shard.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/decode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/encode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/play.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/record.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/bits.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/cb_search.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/exc_10_16_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/exc_10_32_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/exc_20_32_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/exc_5_256_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/exc_5_64_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/exc_8_128_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/filters.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/gain_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/gain_table_lbr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/hexc_10_32_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/hexc_table.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/high_lsp_tables.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/jitter.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/lbr_48k_tables.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/lpc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/lsp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/lsp_tables_nb.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/ltp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/math_approx.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/mdf.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/misc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/modes.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/nb_celp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/preprocess.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/quant_lsp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/sb_celp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/smallft.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/speex.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/speex_callbacks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/speex_header.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/stereo.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/vbr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/groupvoice/speex/vq.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ik/ik.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ik/ik_import.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ik/ik_layers.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ik/ik_math.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ik/ik_process.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcapimin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcapistd.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jccoefct.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jccolor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcdctmgr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jchuff.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcinit.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcmainct.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcmarker.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcmaster.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcomapi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcparam.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcphuff.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcprepct.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jcsample.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jctrans.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdapimin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdapistd.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdatadst.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdatasrc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdcoefct.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdcolor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jddctmgr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdhuff.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdinput.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdmainct.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdmarker.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdmaster.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdmerge.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdphuff.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdpostct.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdsample.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jdtrans.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jerror.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jfdctflt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jfdctfst.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jfdctint.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jidctflt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jidctfst.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jidctint.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jidctred.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jmemansi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jmemmgr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jquant1.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jquant2.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/jpeg/jutils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/anubis.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/blowfish.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/cast5.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/des.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/kasumi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/khazad.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/kseed.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/multi2.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/noekeon.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/rc2.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/rc5.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/rc6.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/skipjack.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/xtea.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/aes/aes.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/aes/aes_tab.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/safer/safer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/safer/safer_tab.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/safer/saferp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/twofish/twofish.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/ciphers/twofish/twofish_tab.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ccm/ccm_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ccm/ccm_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/eax/eax_addheader.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/eax/eax_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/eax/eax_decrypt_verify_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/eax/eax_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/eax/eax_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/eax/eax_encrypt_authenticate_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/eax/eax_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/eax/eax_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_add_aad.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_add_iv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_gf_mult.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_mult_h.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_process.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_reset.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/gcm/gcm_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_decrypt_verify_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_done_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_done_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_encrypt_authenticate_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_ntz.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_shift_xor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/ocb_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/encauth/ocb/s_ocb_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/md2.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/md5.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/rmd128.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/rmd160.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/rmd256.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/rmd320.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/sha1.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/tiger.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/chc/chc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/helper/hash_file.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/helper/hash_filehandle.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/helper/hash_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/helper/hash_memory_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/sha2/sha256.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/hashes/sha2/sha512.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/f9/f9_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/f9/f9_file.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/f9/f9_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/f9/f9_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/f9/f9_memory_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/f9/f9_process.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/f9/f9_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/hmac/hmac_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/hmac/hmac_file.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/hmac/hmac_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/hmac/hmac_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/hmac/hmac_memory_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/hmac/hmac_process.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/hmac/hmac_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/omac/omac_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/omac/omac_file.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/omac/omac_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/omac/omac_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/omac/omac_memory_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/omac/omac_process.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/omac/omac_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pelican/pelican.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pelican/pelican_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pelican/pelican_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pmac/pmac_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pmac/pmac_file.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pmac/pmac_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pmac/pmac_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pmac/pmac_memory_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pmac/pmac_ntz.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pmac/pmac_process.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pmac/pmac_shift_xor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/pmac/pmac_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/xcbc/xcbc_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/xcbc/xcbc_file.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/xcbc/xcbc_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/xcbc/xcbc_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/xcbc/xcbc_memory_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/xcbc/xcbc_process.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/mac/xcbc/xcbc_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/math/gmp_desc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/math/ltm_desc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/math/multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/math/rand_prime.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/math/tfm_desc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/math/fp/ltc_ecc_fp_mulmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/burn_stack.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/error_to_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/zeromem.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/base64/base64_decode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/base64/base64_encode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_argchk.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_cipher_descriptor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_cipher_is_valid.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_find_cipher.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_find_cipher_any.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_find_cipher_id.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_find_hash.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_find_hash_any.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_find_hash_id.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_find_hash_oid.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_find_prng.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_fsa.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_hash_descriptor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_hash_is_valid.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_ltc_mp_descriptor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_prng_descriptor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_prng_is_valid.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_register_cipher.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_register_hash.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_register_prng.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_unregister_cipher.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_unregister_hash.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/crypt/crypt_unregister_prng.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/pkcs5/pkcs_5_1.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/misc/pkcs5/pkcs_5_2.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cbc/cbc_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cbc/cbc_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cbc/cbc_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cbc/cbc_getiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cbc/cbc_setiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cbc/cbc_start.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cfb/cfb_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cfb/cfb_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cfb/cfb_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cfb/cfb_getiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cfb/cfb_setiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/cfb/cfb_start.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ctr/ctr_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ctr/ctr_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ctr/ctr_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ctr/ctr_getiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ctr/ctr_setiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ctr/ctr_start.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ctr/ctr_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ecb/ecb_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ecb/ecb_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ecb/ecb_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ecb/ecb_start.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/f8/f8_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/f8/f8_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/f8/f8_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/f8/f8_getiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/f8/f8_setiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/f8/f8_start.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/f8/f8_test_mode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ofb/ofb_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ofb/ofb_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ofb/ofb_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ofb/ofb_getiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ofb/ofb_setiv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/ofb/ofb_start.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/xts/xts_decrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/xts/xts_done.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/xts/xts_encrypt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/xts/xts_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/xts/xts_mult_x.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/modes/xts/xts_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/bit/der_decode_bit_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/bit/der_encode_bit_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/bit/der_length_bit_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/boolean/der_decode_boolean.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/boolean/der_encode_boolean.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/boolean/der_length_boolean.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/choice/der_decode_choice.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/ia5/der_decode_ia5_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/ia5/der_encode_ia5_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/ia5/der_length_ia5_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/integer/der_decode_integer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/integer/der_encode_integer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/integer/der_length_integer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/object_identifier/der_decode_object_identifier.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/object_identifier/der_encode_object_identifier.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/object_identifier/der_length_object_identifier.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/octet/der_decode_octet_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/octet/der_encode_octet_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/octet/der_length_octet_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/printable_string/der_decode_printable_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/printable_string/der_encode_printable_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/printable_string/der_length_printable_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/sequence/der_decode_sequence_ex.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/sequence/der_decode_sequence_flexi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/sequence/der_decode_sequence_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/sequence/der_encode_sequence_ex.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/sequence/der_encode_sequence_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/sequence/der_length_sequence.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/sequence/der_sequence_free.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/set/der_encode_set.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/set/der_encode_setof.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/short_integer/der_decode_short_integer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/short_integer/der_encode_short_integer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/short_integer/der_length_short_integer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/utctime/der_decode_utctime.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/utctime/der_encode_utctime.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/utctime/der_length_utctime.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/utf8/der_decode_utf8_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/utf8/der_encode_utf8_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/asn1/der/utf8/der_length_utf8_string.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_decrypt_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_encrypt_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_export.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_free.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_import.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_make_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_shared_secret.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_sign_hash.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_verify_hash.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/dsa/dsa_verify_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_ansi_x963_export.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_ansi_x963_import.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_decrypt_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_encrypt_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_export.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_free.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_get_size.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_import.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_make_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_shared_secret.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_sign_hash.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_sizes.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ecc_verify_hash.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ltc_ecc_is_valid_idx.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ltc_ecc_map.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ltc_ecc_mul2add.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ltc_ecc_mulmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ltc_ecc_mulmod_timing.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ltc_ecc_points.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ltc_ecc_projective_add_point.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/ecc/ltc_ecc_projective_dbl_point.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/katja/katja_decrypt_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/katja/katja_encrypt_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/katja/katja_export.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/katja/katja_exptmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/katja/katja_free.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/katja/katja_import.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/katja/katja_make_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/pkcs1/pkcs_1_i2osp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/pkcs1/pkcs_1_mgf1.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/pkcs1/pkcs_1_oaep_decode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/pkcs1/pkcs_1_oaep_encode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/pkcs1/pkcs_1_os2ip.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/pkcs1/pkcs_1_pss_decode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/pkcs1/pkcs_1_pss_encode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/pkcs1/pkcs_1_v1_5_decode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/pkcs1/pkcs_1_v1_5_encode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/rsa/rsa_decrypt_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/rsa/rsa_encrypt_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/rsa/rsa_export.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/rsa/rsa_exptmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/rsa/rsa_free.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/rsa/rsa_import.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/rsa/rsa_make_key.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/rsa/rsa_sign_hash.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/pk/rsa/rsa_verify_hash.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/prngs/fortuna.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/prngs/rc4.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/prngs/rng_get_bytes.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/prngs/rng_make_prng.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/prngs/sprng.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtomcrypt-1.17/src/prngs/yarrow.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_error.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_fast_mp_invmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_fast_mp_montgomery_reduce.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_fast_s_mp_mul_digs.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_fast_s_mp_mul_high_digs.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_fast_s_mp_sqr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_2expt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_abs.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_add.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_add_d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_addmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_and.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_clamp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_clear.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_clear_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_cmp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_cmp_d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_cmp_mag.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_cnt_lsb.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_copy.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_count_bits.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_div.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_div_2.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_div_2d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_div_3.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_div_d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_dr_is_modulus.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_dr_reduce.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_dr_setup.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_exch.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_export.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_expt_d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_expt_d_ex.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_exptmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_exptmod_fast.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_exteuclid.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_fread.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_fwrite.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_gcd.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_get_int.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_get_long.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_get_long_long.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_grow.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_import.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_init.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_init_copy.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_init_multi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_init_set.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_init_set_int.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_init_size.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_invmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_invmod_slow.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_is_square.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_jacobi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_karatsuba_mul.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_karatsuba_sqr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_lcm.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_lshd.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_mod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_mod_2d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_mod_d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_montgomery_calc_normalization.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_montgomery_reduce.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_montgomery_setup.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_mul.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_mul_2.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_mul_2d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_mul_d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_mulmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_n_root.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_n_root_ex.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_neg.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_or.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_prime_fermat.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_prime_is_divisible.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_prime_is_prime.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_prime_miller_rabin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_prime_next_prime.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_prime_rabin_miller_trials.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_prime_random_ex.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_radix_size.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_radix_smap.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_rand.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_read_radix.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_read_signed_bin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_read_unsigned_bin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_reduce.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_reduce_2k.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_reduce_2k_l.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_reduce_2k_setup.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_reduce_2k_setup_l.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_reduce_is_2k.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_reduce_is_2k_l.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_reduce_setup.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_rshd.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_set.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_set_int.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_set_long.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_set_long_long.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_shrink.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_signed_bin_size.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_sqr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_sqrmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_sqrt.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_sqrtmod_prime.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_sub.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_sub_d.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_submod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_to_signed_bin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_to_signed_bin_n.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_to_unsigned_bin.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_to_unsigned_bin_n.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_toom_mul.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_toom_sqr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_toradix.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_toradix_n.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_unsigned_bin_size.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_xor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_mp_zero.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_prime_tab.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_reverse.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_s_mp_add.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_s_mp_exptmod.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_s_mp_mul_digs.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_s_mp_mul_high_digs.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_s_mp_sqr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bn_s_mp_sub.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/libs/libtommath-1.0/bncore.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_anticheat.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_clans.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_combatrecord.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_contracts.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_counter.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_fileshare.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_fileshare_cache.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_fileshare_search.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_friends_pc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_groups_dw.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_leaderboard.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_meetplayer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_news.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_pcache.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_pcache_profile.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_presence_win.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_sessions.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_sessions_win.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_stats.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_steam.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_steam_achievements.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_steam_client.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_steam_server.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_steamp2p.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_storage.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_storage_pub.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_storage_win.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_ticker.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_win.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/live/live_win_common.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/minilzo/minilzo.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/mjpeg/avi.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/mjpeg/mjpeg.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/mjpeg/yuv.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/monkey/monkey.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/monkey/monkey_comm.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/destructible.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/destructibledef_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_assert.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_auto_rigid_body.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_broad_phase.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_colgeom.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_collision.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_collision_multithreaded.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_constraint_solver_multithreaded.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_contact_manifold.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_convex_hull.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_effects.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_gjk.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_gjk_collision_detection.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_gjk_sep_dir.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_main.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_mem_new.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_render.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_task_manager.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_transient_allocator.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_traverse.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/phys_util.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/physconstraints_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/physics_system.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/physics_system_internal.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/physpreset_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/rigid_body.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/rope.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/rope_gamestate.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/physics/xdoll.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/blackbox.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_load.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_mesh.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_showcollision.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_staticmodel.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_staticmodel_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_test.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_trace.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_tracebox.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cm_world.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/cmd.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/com_bsp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/com_bsp_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/com_clients.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/com_gamemodes.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/com_profilemapload.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/common.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/dl_main.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/dobj_management.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/dvar_cmds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/files.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/graph.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/huffman.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/legacyhacks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/md4.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/mem_track.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/msg.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/msg_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/net_chan_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/profanityfilter.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/radiant_remote.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/statmonitor.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/sv_msg_write.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/sv_msg_write_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/threads.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/tl_support.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/unzip.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ragdoll/ragdoll.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ragdoll/ragdoll_cmds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ragdoll/ragdoll_controller.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ragdoll/ragdoll_quat.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ragdoll/ragdoll_update.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server/sv_autoplaylist.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server/sv_game.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server/sv_live_stats.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server/sv_world.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_archive_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_bot_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_ccmds_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_init_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_main_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_main_pc_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_net_chan_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_snapshot_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_snapshot_profile_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/server_mp/sv_voice_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_bank.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_db.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_debug.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_dsp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_dvar.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_globals.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_local.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_log.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_occlusion.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_public_async.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_public_async_q.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_radverb.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_stream.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/sound/snd_utils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/stringed/stringed_hooks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/stringed/stringed_ingame.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/stringed/stringed_interface.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/stringed/stringed_remote.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/turret/turret_placement.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/l_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/l_precomp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/l_script.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_atoms.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_commands.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_emblem.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_feeders.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_friends.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_keyboard.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_localvars.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_main.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_main_pc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_mem_track.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_playlists.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_screenshot.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_server.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_shared.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_shared_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_utils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui/ui_viewer.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui_mp/ui_feeders_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui_mp/ui_gametype_custom_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui_mp/ui_gametype_variants_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/ui_mp/ui_main_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/base64.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/CurveManager.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/UserInfo.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/aabbtree.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/assertive.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_buildinfo.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_constantconfigstrings.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_convexhull.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_encode.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_expressions.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_fileaccess.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_files.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_loadutils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_math.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_math_anglevectors.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_memory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_pack.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_shared.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_stringtable.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_stringtable_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_tasks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_vector4_const.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_workercmds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/curve.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/dvar.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/eval.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/fft.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/mem_firstfit.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/mem_fixed.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/mem_largelocal.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/mem_userhunk.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/memfile.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/physicalmemory.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/q_parse.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/q_shared.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/reliablemsg.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/surfaceflags.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/universal/timing.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/vehicle/nitrous_vehicle.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/vehicle/nitrous_vehicle_constraint.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/vehicle/nitrous_vehicle_controller.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/vehicle/nitrous_vehicle_effects.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_common.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_configure.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_content.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_gamepad.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_gamerprofile.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_input.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_libspeex_misc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_localize.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_main.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_net.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_shared.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_stream.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_steam.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_tasks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_wndproc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/win32/win_workercmds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/dobj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/dobj_skel.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/dobj_utils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/xanim.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/xanim_calc.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/xanim_clientnotify.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/xanim_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/xmodel.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/xmodel_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/xmodel_load_phys_collmap.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/xanim/xmodel_utils.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/adler32.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/compress.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/crc32.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/deflate.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/gzio.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/inffast.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/inflate.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/inftrees.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/trees.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/uncompr.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/src/zlib/zutil.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/tl/gdt_remote.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/tl/tl_system.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/tl/jobqueue/jobqueue_all.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/tl/physics/rbc_def_contact.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/tl/physics/rbc_def_custom.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/tl/physics/rbc_def_generic.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/tl/physics/rbc_def_ragdoll.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
+
+# Custom options: CMakeFiles/KisakBlack.dir/tl/physics/rbc_def_vehicle.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 

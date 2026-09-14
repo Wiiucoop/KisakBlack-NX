@@ -78,15 +78,50 @@ set(NX_COMMON_FLAGS
     -ffunction-sections
     -fdata-sections
     "SHELL:-include ${NX_DIR}/compat/nx_prefix.h"
-    -w
 )
 target_compile_options(${BIN_NAME} PRIVATE
     ${NX_COMMON_FLAGS}
-    $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>
-    $<$<COMPILE_LANGUAGE:CXX>:-Wno-narrowing>
-    # legacy C (jpeg, libtomcrypt) relies on implicit decls / lax pointer types
-    $<$<COMPILE_LANGUAGE:C>:-fpermissive>
 )
+
+# ----- Warning policy: sanitised sources build with warnings on -----
+#
+# The decompiled tree casts pointers through 32-bit ints in thousands of places.
+# On x86 that was lossless; on LP64 every one of them truncates. The compiler
+# diagnoses all of them, and -w has been hiding them.
+#
+# -w cannot be undone by a later flag, so it is applied PER FILE to everything
+# that has not been cleaned yet, rather than to the whole target. A file
+# graduates by being listed in NX_SANITIZED_SOURCES; from then on it compiles
+# with warnings on, and a pointer truncation is a hard error:
+#
+#   C++  the cast is ill-formed without -fpermissive, so it errors on its own
+#        ("cast from 'const char*' to 'int' loses precision")
+#   C    -Wpointer-to-int-cast / -Wint-to-pointer-cast are C-only options, so
+#        they are requested explicitly as errors
+#
+# Keep the list additive. Removing a file from it is a regression.
+# See docs/lp64-sweeps/README.md, "Closing the class one subsystem at a time".
+set(NX_SANITIZED_SOURCES ${NX_SOURCES})
+list(FILTER NX_SANITIZED_SOURCES INCLUDE REGEX "\.(c|cpp)$")
+
+get_target_property(NX_UNSANITIZED_SOURCES ${BIN_NAME} SOURCES)
+list(REMOVE_ITEM NX_UNSANITIZED_SOURCES ${NX_SANITIZED_SOURCES})
+
+set_source_files_properties(${NX_UNSANITIZED_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "-w;-fpermissive;-Wno-narrowing")
+
+set(NX_SANITIZED_C_SOURCES ${NX_SANITIZED_SOURCES})
+list(FILTER NX_SANITIZED_C_SOURCES INCLUDE REGEX "\.c$")
+if(NX_SANITIZED_C_SOURCES)
+    set_source_files_properties(${NX_SANITIZED_C_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-Werror=pointer-to-int-cast;-Werror=int-to-pointer-cast")
+endif()
+
+list(LENGTH NX_SANITIZED_SOURCES NX_SANITIZED_COUNT)
+list(LENGTH NX_UNSANITIZED_SOURCES NX_UNSANITIZED_COUNT)
+message(STATUS
+    "LP64 warning policy: ${NX_SANITIZED_COUNT} sanitised sources build with "
+    "warnings on, ${NX_UNSANITIZED_COUNT} still build with -w")
 
 # ----- Link options / libs -----
 target_link_options(${BIN_NAME} PRIVATE

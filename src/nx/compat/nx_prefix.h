@@ -210,6 +210,13 @@ static inline int nx_rand(void)
     return (int)(((unsigned int)rand() >> 16) & 0x7FFFu);
 }
 #define rand() nx_rand()
+#ifdef __cplusplus
+// libstdc++ calls std::rand() from inside template bodies (std::random_shuffle).
+// The macro above rewrites that to std::nx_rand(), so make the name reachable
+// there as well. Without this the error only appears once warnings are on, and
+// only for a template nothing instantiates yet.
+namespace std { using ::nx_rand; }
+#endif
 #undef RAND_MAX
 #define RAND_MAX 0x7FFF
 

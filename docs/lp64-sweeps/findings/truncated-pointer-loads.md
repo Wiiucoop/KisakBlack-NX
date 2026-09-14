@@ -20,6 +20,12 @@ produced the hard crashes so far.
 Two independent x86 assumptions in one expression. The inner one is fatal on its
 own — the outer offset never gets a chance to be wrong.
 
+> **The compiler finds this class for free.** With `-w` removed, the Switch build
+> reports 3654 of these across 460 of 666 TUs. The greps below are only for
+> reading the shape; the real instrument is the per-file warning allowlist in
+> `cmake/switch.cmake` — see "Closing the class one subsystem at a time" in
+> [../README.md](../README.md).
+
 ## Sites found so far
 
 ### `nodeCmp` — `src/qcommon/huffman.cpp:94` (fixed)
@@ -54,6 +60,47 @@ Fixed by reading the argument as what it is:
 
     return lnode->weight - rnode->weight;
 ```
+
+### The expression operand stack — `com_expressions_eval.cpp` (3 of 300 fixed)
+
+A menu expression reading a dvar returned garbage, and the dvar lookup that
+followed found nothing. The cause was not the lookup and not the transcoded
+asset — both were verified correct — but the operand stack underneath.
+
+`operandInternalDataUnion` is declared `// sizeof=0x4` and holds
+
+```c
+union operandInternalDataUnion {
+    int         intVal;
+    float       floatVal;
+    const char *string;
+    operator int() { return intVal; }
+};
+```
+
+4 bytes on x86, **8 on LP64**. Every push and pop copied it through `int`:
+
+```c
+AddOperandToStack:1854   v2.intVal = (int)data->internals;                  // operator int()
+GetOperand:1630          v4.intVal = list->operands[0].internals.intVal;
+GetOperand:1662          v2.intVal = (int)dataStack->stack[0].operands[0].internals;
+```
+
+so every string operand lost its top half twice — once going on the stack, once
+coming off — and the high word kept whatever the temporary happened to hold. The
+dvar name never reached `Dvar_FindVar` intact. Fixed by copying the union whole.
+
+Two details worth keeping:
+
+- The guards did not help. Both assert on `!data->internals.intVal`, i.e. the low
+  half only, so a pointer truncated to garbage passes and a pointer whose low
+  half is zero would falsely trip. Their own message says
+  `internals.string`. Still to correct.
+- The three copies are the crash; they are not the file. 297 further sites store
+  a pointer with `result.internals.intVal = (int)CopyTempString(...)`,
+  `(int)Dvar_DisplayableValue(...)`, `(int)""`, and `GetSourceString:1695` reads
+  one back with `return (char *)operand.internals.intVal;`. That whole file goes
+  through the warning ratchet rather than by hand.
 
 ### `BG_UnlockablesCompareItemsBySortKey` (fixed in `c12c1b9`)
 

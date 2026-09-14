@@ -1627,7 +1627,10 @@ char __cdecl GetOperand(OperandStack *dataStack, Operand *data)
         list = &dataStack->stack[dataStack->numOperandLists - 1];
         if ( list->operandCount == 1 )
         {
-            v4.intVal = list->operands[0].internals.intVal;
+            // nx-port: operandInternalDataUnion holds a const char * and so is
+            // 4 bytes on x86 but 8 on LP64. Copying it through intVal kept only
+            // the low half of every string operand. Copy the union whole.
+            v4 = list->operands[0].internals;
             data->dataType = list->operands[0].dataType;
             data->internals = v4;
             --dataStack->numOperandLists;
@@ -1659,7 +1662,7 @@ char __cdecl GetOperand(OperandStack *dataStack, Operand *data)
         Expression_Error(" Invalid operation - missing parameter inside function or parenthesis\n");
         dataStack->numOperandLists = 1;
         dataStack->stack[0].operandCount = 1;
-        v2.intVal = (int)dataStack->stack[0].operands[0].internals;
+        v2 = dataStack->stack[0].operands[0].internals;   // nx-port: see above
         data->dataType = dataStack->stack[0].operands[0].dataType;
         data->internals = v2;
         data->dataType = VAL_INT;
@@ -1851,7 +1854,10 @@ void __cdecl AddOperandToStack(OperandStack *dataStack, Operand *data)
     {
         __debugbreak();
     }
-    v2.intVal = (int)data->internals;
+    // nx-port: (int) here invoked operandInternalDataUnion::operator int(), which
+    // returns intVal -- so every operand pushed lost the top half of its pointer
+    // on LP64, and the high word kept whatever v2 happened to hold.
+    v2 = data->internals;
     numOperandLists = dataStack->numOperandLists;
     dataStack->stack[numOperandLists].operands[0].dataType = data->dataType;
     dataStack->stack[numOperandLists].operands[0].internals = v2;

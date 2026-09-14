@@ -1049,7 +1049,14 @@ int __cdecl UI_GetClientNumForPlayerListNum(int playerListIndex)
     return sharedUiInfo.playerClientNums[playerListIndex - 1];
 }
 
-void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args)
+// nx-port: the decompiler fused this function's last two parameters into one
+// __int64. On x86 those were two 4-byte stack slots, so `args` aliased them
+// exactly and the code worked by accident; the halves were reached with
+// LODWORD/HIDWORD. On LP64 each half is a pointer truncated to 32 bits and
+// packed into one register, so neither survives. The original signature is
+// recorded in the decompiler's own xrefs (ui_shared.h:513) and confirmed by
+// UI_Project_RunMenuScript below, which takes the two as separate arguments.
+void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, const char **args, const char *actualScript)
 {
     int ControllerIndex; // eax
     char *v5; // eax
@@ -1092,7 +1099,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args
     UiContext *dc; // [esp+193Ch] [ebp-40Ch]
     char out[1028]; // [esp+1940h] [ebp-408h] BYREF
 
-    if (String_Parse((const char **)args, out, 1024))
+    if (String_Parse(args, out, 1024))
     {
         dc = (UiContext *)UI_UIContext_GetInfo(contextIndex);
         if (!I_stricmp(out, "Quit"))
@@ -1206,8 +1213,8 @@ void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args
                                                                                                                                                                     localClientNum,
                                                                                                                                                                     contextIndex,
                                                                                                                                                                     out,
-                                                                                                                                                                    (const char **)args,
-                                                                                                                                                                    (const char *)HIDWORD(args));
+                                                                                                                                                                    args,
+                                                                                                                                                                    actualScript);
                                                                                                                                                             else
                                                                                                                                                                 LB_OnSelect(localClientNum);
                                                                                                                                                         }
@@ -1227,7 +1234,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args
                                                                                                                                                 }
                                                                                                                                             }
                                                                                                                                             else if (UI_GetOpenOrCloseMenuOnDvarArgs(
-                                                                                                                                                (const char **)args,
+                                                                                                                                                args,
                                                                                                                                                 out,
                                                                                                                                                 v28,
                                                                                                                                                 128,
@@ -1246,7 +1253,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args
                                                                                                                                             }
                                                                                                                                         }
                                                                                                                                         else if (UI_GetOpenOrCloseMenuOnDvarArgs(
-                                                                                                                                            (const char **)args,
+                                                                                                                                            args,
                                                                                                                                             out,
                                                                                                                                             v31,
                                                                                                                                             128,
@@ -1298,12 +1305,12 @@ void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args
                                                                                                                         Cbuf_AddText(localClientNum, "startSingleplayer\n");
                                                                                                                     }
                                                                                                                 }
-                                                                                                                else if (Int_Parse((const char **)args, &status))
+                                                                                                                else if (Int_Parse(args, &status))
                                                                                                                 {
                                                                                                                     CLUI_SetPbClStatus(status);
                                                                                                                 }
                                                                                                             }
-                                                                                                            else if (String_Parse((const char **)args, name, 1024))
+                                                                                                            else if (String_Parse(args, name, 1024))
                                                                                                             {
                                                                                                                 UI_Update(name);
                                                                                                             }
@@ -1358,7 +1365,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args
                                                                                             Menus_CloseAll(localClientNum, dc);
                                                                                         }
                                                                                     }
-                                                                                    else if (Int_Parse((const char **)args, &column))
+                                                                                    else if (Int_Parse(args, &column))
                                                                                     {
                                                                                         if (column == sharedUiInfo.serverStatus.sortKey)
                                                                                             sharedUiInfo.serverStatus.sortDir = sharedUiInfo.serverStatus.sortDir == 0;
@@ -1445,7 +1452,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args
                                                             Menus_OpenByName(localClientNum, dc, "main");
                                                         }
                                                     }
-                                                    else if (Int_Parse((const char **)args, &i))
+                                                    else if (Int_Parse(args, &i))
                                                     {
                                                         UI_NetSource_UpdateDisplayList(i);
                                                     }
@@ -1515,8 +1522,8 @@ void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args
                                     Cbuf_AddText(localClientNum, v8);
                                 }
                             }
-                            else if (String_Parse((const char **)args, v40, 1024)
-                                && String_Parse((const char **)args, dvarName, 1024))
+                            else if (String_Parse(args, v40, 1024)
+                                && String_Parse(args, dvarName, 1024))
                             {
                                 feederID_4 = Dvar_GetString(dvarName);
                                 String = Dvar_GetString(v40);
@@ -1555,7 +1562,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args
                 //BG_EvalVehicleName();
             }
         }
-        else if (String_Parse((const char **)args, v41, 1024))
+        else if (String_Parse(args, v41, 1024))
         {
             Com_PrintError(13, "Fixme krassi: openurl\n ");
         }

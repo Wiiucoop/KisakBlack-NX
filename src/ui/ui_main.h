@@ -161,7 +161,7 @@ void __cdecl UI_Update(const char *name);
 void __cdecl UI_VerifyLanguage();
 void __cdecl UI_UpdateDisplayServers(int localClientNum, uiInfo_s *uiInfo);
 int __cdecl UI_GetClientNumForPlayerListNum(int playerListIndex);
-void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args);
+void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, const char **args, const char *actualScript);
 char __cdecl UI_GetOpenOrCloseMenuOnDvarArgs(
                 const char **args,
                 const char *cmd,

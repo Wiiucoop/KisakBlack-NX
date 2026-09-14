@@ -2980,7 +2980,6 @@ void __cdecl Item_RunEventScript(int localClientNum, UiContext *dc, itemDef_s *i
 
 void __cdecl Item_RunScript(int localClientNum, UiContext *dc, itemDef_s *item, const char *s)
 {
-    __int64 v4; // [esp-8h] [ebp-420h]
     int bRan; // [esp+0h] [ebp-418h]
     int controllerIndex; // [esp+4h] [ebp-414h]
     char command[1028]; // [esp+8h] [ebp-410h] BYREF
@@ -3008,9 +3007,7 @@ void __cdecl Item_RunScript(int localClientNum, UiContext *dc, itemDef_s *item, 
                 }
                 if ( !bRan )
                 {
-                    HIDWORD(v4) = (DWORD)s;
-                    LODWORD(v4) = (DWORD)&p;
-                    UI_RunMenuScript(localClientNum, dc->contextIndex, v4);
+                    UI_RunMenuScript(localClientNum, dc->contextIndex, &p, s);
                 }
             }
         }

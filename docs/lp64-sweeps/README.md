@@ -19,6 +19,7 @@ Four families, all found the same way:
 | function-pointer casts | `(int (__cdecl *)(...))` over a pointer-returning function | [findings/function-pointer-casts.md](findings/function-pointer-casts.md) |
 | command-buffer reservations | the x86 `sizeof` of a render command | [findings/pointer-offset-reads.md](findings/pointer-offset-reads.md) |
 | truncated pointer loads | `unsigned int` where a pointer was meant | [findings/truncated-pointer-loads.md](findings/truncated-pointer-loads.md) |
+| fused / dropped parameters | two 32-bit parameters read as one `__int64` | [findings/fused-parameters.md](findings/fused-parameters.md) |
 
 The last of those has **no sweep** — it is the one that has produced the hard
 crashes, and both existing sweeps are structurally blind to it. Read that page
@@ -147,6 +148,60 @@ verdict about that struct has to be thrown out.
 `ctx.py` takes `file:line@var` and prints where `var` got its value, for reading a
 site without opening the file.
 
+## A second source of truth: the decompiler's own xrefs
+
+The pipeline above compares the source against *itself* under two ABIs. There is
+a second, completely independent source in the tree, and it is the one that found
+the `UI_RunMenuScript` crash.
+
+Scattered through the headers are the decompiler's cross-reference comments:
+
+```c
+    modInfo_t modList[64];              // XREF: UI_FeederItemText_Mods+C/r
+                                        // UI_RunMenuScript(int,int,char const * *,char const *)+5FE/r
+```
+
+Those carry the **original parameter list**, recorded from the binary's own
+symbol data — and they were written independently of whatever the decompiler
+managed to recover for the function itself. So where the xref and the declaration
+disagree, the declaration lost something:
+
+```c
+// what the header declares
+void __cdecl UI_RunMenuScript(int localClientNum, int contextIndex, __int64 args);
+// what the xref says it was
+   UI_RunMenuScript(int, int, char const * *, char const *)
+```
+
+Two pointers fused into one `__int64`. On x86 that worked by accident — an
+`__int64` argument occupies two 4-byte stack slots, which aliased the two
+originals exactly. On LP64 it is one register holding two truncated halves.
+
+`xrefsigs.py` does this comparison across every header: it harvests the xref
+signatures, parses the real declarations, and prints each function declared with
+fewer parameters than its xref, flagging those whose declaration contains a
+64-bit parameter — the fusions, which are the ones that bite.
+
+```sh
+python xrefsigs.py
+```
+
+Two cautions, both learned from the output:
+
+- **A gap is a lead, not a verdict.** Same-name collisions happen: `TracePoint`
+  is declared `(const pointtrace_t *, trace_t *)` and its xref says six floats
+  and pointers, because the xref belongs to a different function of that name.
+  Confirm the xref actually names the function in front of you.
+- **A dropped trailing parameter usually is not a bug.** Caller and callee were
+  both decompiled to the same reduced form, so they agree; what is lost is a
+  behaviour, not memory safety. The fusions are the dangerous half, because the
+  body still reaches for both halves with `LODWORD`/`HIDWORD`.
+
+This technique generalises past parameter lists. The xref comments also record
+return types and the names of functions that were inlined away, and none of that
+came from the same guesswork that produced the code — which is exactly what makes
+it worth cross-checking against.
+
 ## Running it
 
 Build first — stages 2 and 3 both read the build tree.
@@ -164,7 +219,10 @@ python classify.py        # the verdicts
 python scalar_groups.py   # -> scalar_groups.txt
 python qsort_scan.py      # -> qsort.tsv, and the 72-site table
 python qsort_decls.py     # nearest declaration for each qsort site
+python xrefsigs.py        # xref signatures vs. real declarations (independent)
 ```
+
+`xrefsigs.py` reads only headers, so it needs no build and can be run first.
 
 Intermediates go to `build-nx/lp64-work/`, never into the source tree; override
 with `$LP64_WORK`. Toolchain location comes from `$DEVKITA64`, default

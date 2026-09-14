@@ -138,7 +138,7 @@ void __cdecl AimTarget_ProcessEntityInternal(int localClientNum, const centity_s
     cgameGlob = CG_GetLocalClientGlobals(localClientNum);
     if ( !ent && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\aim_assist\\aim_target.cpp", 902, 0, "%s", "ent") )
         __debugbreak();
-    if ( ((*((unsigned int *)ent + 201) >> 1) & 1) == 0
+    if ( ((ent->clientFlags >> 1) & 1) == 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\aim_assist\\aim_target.cpp",
                     903,
@@ -227,7 +227,7 @@ bool __cdecl AimTarget_IsTargetValid(const cg_s *cgameGlob, const centity_s *tar
     {
         __debugbreak();
     }
-    if ( ((*((unsigned int *)targetEnt + 201) >> 1) & 1) == 0
+    if ( ((targetEnt->clientFlags >> 1) & 1) == 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\aim_assist\\aim_target.cpp",
                     584,
@@ -787,7 +787,7 @@ void __cdecl AimTarget_UpdateClientTargets(int localClientNum)
     {
         cent = CG_GetEntity((int)localClientNum, cgameGlob->nextSnap->entities[snapEntIndex].number);
         if ( (cent->nextState.lerp.eFlags & 0x20) == 0
-            && ((*((unsigned int *)cent + 201) >> 1) & 1) != 0
+            && ((cent->clientFlags >> 1) & 1) != 0
             && cgameGlob->predictedPlayerState.clientNum != cent->nextState.number )
         {
             eType = cent->nextState.eType;

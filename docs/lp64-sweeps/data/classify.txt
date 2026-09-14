@@ -1,0 +1,38 @@
+BAD LerpEntityStateCreateDynEnt *((_QWORD*)x+2)  x86: @16 (outside struct)  |  LP64: @16 (outside struct)  [3]
+       src/cgame/cg_spawn.cpp:333
+       src/physics/destructible.cpp:1523
+       src/physics/destructible.cpp:2842
+BAD flameGeneric_s *((unsigned int*)x+23)  x86: type @92  |  LP64: listLocal.prev @88 +4 (w4 of 8)  [24]
+       src/flame/flame_class_chunk.cpp:151
+       src/flame/flame_class_chunk.cpp:209
+       src/flame/flame_class_chunk.cpp:209
+       src/flame/flame_class_chunk.cpp:210
+       src/flame/flame_class_chunk.cpp:210
+       src/flame/flame_class_chunk.cpp:211
+       src/flame/flame_class_drips.cpp:149
+       src/flame/flame_class_drips.cpp:149
+       src/flame/flame_class_fire.cpp:59
+       src/flame/flame_class_fire.cpp:106
+       src/flame/flame_class_fire.cpp:106
+       src/flame/flame_class_fire.cpp:108
+       src/flame/flame_class_fire.cpp:108
+       src/flame/flame_class_fire.cpp:108
+       src/flame/flame_class_smoke.cpp:60
+       src/flame/flame_class_smoke.cpp:88
+       src/flame/flame_class_smoke.cpp:88
+       src/flame/flame_class_smoke.cpp:90
+       src/flame/flame_class_smoke.cpp:90
+       src/flame/flame_class_smoke.cpp:90
+       src/flame/flame_class_stream.cpp:220
+       src/flame/flame_physics.cpp:636
+       src/flame/flame_physics.cpp:637
+       src/flame/flame_physics.cpp:639
+BAD spawner_ent_t *((unsigned __int16*)x+4)  x86: @8 (outside struct)  |  LP64: @8 (outside struct)  [1]
+       src/game/g_items.cpp:1574
+BAD GfxStaticModelDrawStream *((unsigned int*)x+10)  x86: viewInfoIndex @40  |  LP64: usingCrossFade @40  [6]
+       src/gfx_d3d/r_draw_staticmodel.cpp:26
+       src/gfx_d3d/r_draw_staticmodel.cpp:92
+       src/gfx_d3d/r_draw_staticmodel.cpp:293
+       src/gfx_d3d/r_draw_staticmodel.cpp:400
+       src/gfx_d3d/r_draw_staticmodel.cpp:491
+       src/gfx_d3d/r_draw_staticmodel.cpp:639

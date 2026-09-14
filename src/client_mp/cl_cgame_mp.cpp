@@ -1226,7 +1226,7 @@ void __cdecl CL_RestartCGame(int localClientNum)
     for ( entnum = 0; entnum < 1024; ++entnum )
     {
         cent = CG_GetEntity(localClientNum, entnum);
-        *((unsigned int *)cent + 201) &= ~2u;
+        cent->clientFlags &= ~2u;
         CG_ShutdownEntity(localClientNum, cent, 1);
     }
     CG_ShutdownEntity(localClientNum, &cgameGlob->predictedPlayerEntity, 1);

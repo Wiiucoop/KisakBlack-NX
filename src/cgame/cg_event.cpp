@@ -94,7 +94,7 @@ void __cdecl CG_ExplosionEvent(
     for ( i = 0; i < 32; ++i )
     {
         cent = CG_GetEntity(localClientNum, i);
-        if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 )
+        if ( ((cent->clientFlags >> 1) & 1) != 0 )
         {
             value = CScr_GetMeansOfDeathConstString(mod);
             Scr_AddConstString(value, SCRIPTINSTANCE_CLIENT);
@@ -771,7 +771,7 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                     goto LABEL_570;
                 case EV_FIRE_WEAPON:
                 case EV_FIRE_WEAPON_LASTSHOT:
-                    if (((*((_DWORD *)cent + 201) >> 1) & 1) != 0 && cent->nextState.eType == 17 || cent->nextState.eType == 1)
+                    if (((cent->clientFlags >> 1) & 1) != 0 && cent->nextState.eType == 17 || cent->nextState.eType == 1)
                     {
                         Scr_AddConstString(cscr_const.face_shoot_single, SCRIPTINSTANCE_CLIENT);
                         CScr_Notify(localClientNum, cent, cscr_const.face, 1u);
@@ -781,7 +781,7 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                     return;
                 case EV_FIRE_WEAPON_LEFT:
                 case EV_FIRE_WEAPON_LASTSHOT_LEFT:
-                    if (((*((_DWORD *)cent + 201) >> 1) & 1) != 0 && cent->nextState.eType == 17 || cent->nextState.eType == 1)
+                    if (((cent->clientFlags >> 1) & 1) != 0 && cent->nextState.eType == 17 || cent->nextState.eType == 1)
                     {
                         Scr_AddConstString(cscr_const.face_shoot_single, SCRIPTINSTANCE_CLIENT);
                         CScr_Notify(localClientNum, cent, cscr_const.face, 1u);
@@ -807,7 +807,7 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                     CG_EjectWeaponBrass(localClientNum, p_nextState, event, p_nextState->weapon);
                     return;
                 case EV_MELEE_SWIPE:
-                    if (((*((_DWORD *)cent + 201) >> 1) & 1) != 0 && cent->nextState.eType == 17 || cent->nextState.eType == 1)
+                    if (((cent->clientFlags >> 1) & 1) != 0 && cent->nextState.eType == 17 || cent->nextState.eType == 1)
                     {
                         Scr_AddConstString(cscr_const.face_melee, SCRIPTINSTANCE_CLIENT);
                         CScr_Notify(localClientNum, cent, cscr_const.face, 1u);
@@ -819,7 +819,7 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                         v7 = SND_FindAliasId((char *)meleeWeaponDef->meleeSwipeSound);
                     goto LABEL_570;
                 case EV_FIRE_MELEE:
-                    if (((*((_DWORD *)cent + 201) >> 1) & 1) != 0 && cent->nextState.eType == 17 || cent->nextState.eType == 1)
+                    if (((cent->clientFlags >> 1) & 1) != 0 && cent->nextState.eType == 17 || cent->nextState.eType == 1)
                     {
                         Scr_AddConstString(cscr_const.face_melee, SCRIPTINSTANCE_CLIENT);
                         CScr_Notify(localClientNum, cent, cscr_const.face, 1u);
@@ -931,14 +931,14 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                     else
                         CG_FireWeapon(localClientNum, cent, event, scr_const.tag_flash_2, 0, &cgameGlob->nextSnap->ps, 0);
                     attackerCent = CG_GetEntity(localClientNum, eventParm);
-                    if (((*((_DWORD *)attackerCent + 201) >> 1) & 1) != 0
+                    if (((attackerCent->clientFlags >> 1) & 1) != 0
                         && attackerCent->nextState.eType == eType
                         && ps->viewlocked_entNum != cent->nextState.number)
                     {
                         CG_CompassAddWeaponPingInfo(localClientNum, attackerCent, cent->pose.origin, 50);
                         //BG_EvalVehicleName();
                     }
-                    if (((*((_DWORD *)attackerCent + 201) >> 1) & 1) != 0 && attackerCent->nextState.eType == 11)
+                    if (((attackerCent->clientFlags >> 1) & 1) != 0 && attackerCent->nextState.eType == 11)
                         CG_AddTurretWeaponPingInfo(localClientNum, attackerCent, cent->pose.origin, 50);
                     return;
                 case EV_FIRE_QUADBARREL_1:
@@ -1500,8 +1500,8 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                     return;
                 case EV_BLOOD_IMPACTS:
                     v33 = CG_GetEntity(localClientNum, p_nextState->lerp.pos.trTime);
-                    *((_DWORD *)v33 + 201) = ((p_nextState->eventParm == 0) << 6) | *((_DWORD *)v33 + 201) & 0xFFFFFFBF;
-                    *((_DWORD *)v33 + 201) = ((p_nextState->eventParm == 2) << 7) | *((_DWORD *)v33 + 201) & 0xFFFFFF7F;
+                    v33->clientFlags = ((p_nextState->eventParm == 0) << 6) | v33->clientFlags & 0xFFFFFFBF;
+                    v33->clientFlags = ((p_nextState->eventParm == 2) << 7) | v33->clientFlags & 0xFFFFFF7F;
                     return;
                 case EV_SETWETNESS:
                     CG_SetWetness(
@@ -1631,7 +1631,7 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                     CG_StartShakeCamera(localClientNum, 0.050000001, 100, cent->pose.origin, 100.0);
                     v103 = CG_GetEntity(localClientNum, eventParm);
                     if (v103
-                        && ((*((_DWORD *)v103 + 201) >> 1) & 1) != 0
+                        && ((v103->clientFlags >> 1) & 1) != 0
                         && v103->nextState.eType == v104
                         && ps->viewlocked_entNum != cent->nextState.number)
                     {
@@ -1846,7 +1846,7 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                         break;
                     }
                     centa = CG_GetEntity(localClientNum, p_nextState->number);
-                    if (((*((_DWORD *)centa + 201) >> 1) & 1) != 0)
+                    if (((centa->clientFlags >> 1) & 1) != 0)
                         CScr_Notify(localClientNum, centa, cscr_const.face, 1u);
                     return;
                 case EV_SETLOCALWIND:
@@ -1857,11 +1857,11 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                     return;
                 case EV_FLOAT_LONGER:
                     v22 = CG_GetEntity(localClientNum, p_nextState->otherEntityNum);
-                    *((_DWORD *)v22 + 201) |= 0x80000u;
+                    v22->clientFlags |= 0x80000u;
                     return;
                 case EV_FORCE_BUOYANCY:
                     v23 = CG_GetEntity(localClientNum, p_nextState->otherEntityNum);
-                    *((_DWORD *)v23 + 201) |= 0x100000u;
+                    v23->clientFlags |= 0x100000u;
                     return;
                 case EV_DISABLE_DEPTH_BUOYANCY_ADJUSTMENTS:
                     v98 = CG_GetEntity(localClientNum, p_nextState->otherEntityNum);

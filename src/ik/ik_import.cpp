@@ -768,7 +768,7 @@ bool __cdecl IKImport_IsIKEntity_Internal(unsigned __int8 *model)
         }
         if ( !cent )
             return 0;
-        if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+        if ( ((cent->clientFlags >> 1) & 1) == 0 )
             return 0;
         if ( cent->pose.isRagdoll )
             return 0;
@@ -874,7 +874,7 @@ bool __cdecl IKImport_ApplyTerrainMapping(IKState *ikState)
     {
         LocalClientIndex = IKImport_GetLocalClientIndex(ikState);
         cent = CG_GetEntity(LocalClientIndex, entityNum);
-        if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+        if ( ((cent->clientFlags >> 1) & 1) == 0 )
             return 0;
         if ( (cent->nextState.lerp.eFlags & 0x4C000) != 0 )
             return 0;
@@ -888,7 +888,7 @@ bool __cdecl IKImport_ApplyTerrainMapping(IKState *ikState)
             groundEntityNum = cent->nextState.groundEntityNum;
             v3 = IKImport_GetLocalClientIndex(ikState);
             centGround = CG_GetEntity(v3, groundEntityNum);
-            if ( ((*((unsigned int *)centGround + 201) >> 1) & 1) == 0 )
+            if ( ((centGround->clientFlags >> 1) & 1) == 0 )
                 return 0;
             v5 = centGround->nextState.eType;
             if ( v5 == 6 || v5 == 14 )
@@ -923,7 +923,7 @@ bool __cdecl IKImport_ApplyLeftHandIK(IKState *ikState)
         __debugbreak();
     }
     cent = CG_GetEntity((char)obj[112], entityNum);
-    if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+    if ( ((cent->clientFlags >> 1) & 1) == 0 )
         return 0;
     if ( IKImport_GetVar_IK_Left_Hand_Lerp_Test() )
         return 1;
@@ -936,7 +936,7 @@ bool __cdecl IKImport_ApplyLeftHandIK(IKState *ikState)
     {
         return 0;
     }
-    return (cent->nextState.lerp.eFlags & 0x40000) == 0 && (*((unsigned int *)cent + 201) & 1) != 0;
+    return (cent->nextState.lerp.eFlags & 0x40000) == 0 && (cent->clientFlags & 1) != 0;
 }
 
 bool __cdecl IKImport_ApplyRightHandIK(IKState *ikState)
@@ -2344,7 +2344,7 @@ void __cdecl IKImport_GetVelocity(IKState *ikState, float *velocity)
         entityNum = ikState->entityNum;
         LocalClientIndex = IKImport_GetLocalClientIndex(ikState);
         cent = CG_GetEntity(LocalClientIndex, entityNum);
-        if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 )
+        if ( ((cent->clientFlags >> 1) & 1) != 0 )
         {
             v4 = IKImport_GetLocalClientIndex(ikState);
             cgameGlob = CG_GetLocalClientGlobals(v4);

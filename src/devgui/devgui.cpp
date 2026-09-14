@@ -77,7 +77,9 @@ devguiGlob_t *__cdecl DevGui_GetMenu(unsigned __int16 handle)
     {
         __debugbreak();
     }
-    return (devguiGlob_t *)((char *)&devguiGlob + 40 * handle - 40);
+    // nx-port: the decompile hard-coded the x86 sizeof(DevMenuItem) (40).
+    // DevMenuChild holds pointers, so the item is wider on LP64.
+    return (devguiGlob_t *)&devguiGlob.menus[handle - 1];
 }
 
 unsigned __int16 __cdecl DevGui_ConstructPath_r(unsigned __int16 parent, const char *path)
@@ -182,8 +184,9 @@ unsigned __int16 __cdecl DevGui_GetMenuHandle(DevMenuItem *menu)
 {
     unsigned __int16 handle; // [esp+0h] [ebp-4h]
 
-    handle = ((char *)menu - (char *)&devguiGlob) / 40 + 1;
-    if ( ((unsigned __int16)(((char *)menu - (char *)&devguiGlob) / 40) == 0xFFFF || handle > 0x800u)
+    // nx-port: element index via pointer difference, not the x86 size 40.
+    handle = (menu - devguiGlob.menus) + 1;
+    if ( ((unsigned __int16)(menu - devguiGlob.menus) == 0xFFFF || handle > 0x800u)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\devgui\\devgui.cpp",
                     233,
@@ -195,7 +198,7 @@ unsigned __int16 __cdecl DevGui_GetMenuHandle(DevMenuItem *menu)
     {
         __debugbreak();
     }
-    return ((char *)menu - (char *)&devguiGlob) / 40 + 1;
+    return handle;
 }
 
 int __cdecl DevGui_CompareMenus(const DevMenuItem *menu0, const DevMenuItem *menu1)
@@ -556,7 +559,9 @@ void __cdecl DevGui_FreeMenu_r(unsigned __int16 handle)
             DevGui_FreeMenu_r(menu->menus[0].child.menu);
         }
         DevGui_FreeMenu_r(menu->menus[0].nextSibling);
-        *(unsigned int *)menu->menus[0].label = (unsigned int)devguiGlob.nextFreeMenu;
+        // nx-port: the free list stores a full pointer in label (read back as
+        // DevMenuItem* in DevGui_CreateMenu); a 4-byte write truncated it.
+        *(DevMenuItem **)menu->menus[0].label = devguiGlob.nextFreeMenu;
         devguiGlob.nextFreeMenu = (DevMenuItem *)menu;
     }
 }
@@ -616,9 +621,12 @@ bool __cdecl DevGui_EditableMenuItem(const DevMenuItem *menu)
         return 1;
     if ( menu->childType != 1 )
         return 0;
-    if ( *((unsigned int *)menu->child.command + 4) == 7 )
+    // nx-port: the decompile read type and domain.enumeration.stringCount as
+    // x86 int indices 4 and 22 (offsets 16 and 88); on LP64 those land on
+    // hash and inside `saved`.
+    if ( menu->child.dvar->type == 7 )
         return 0;
-    return *((unsigned int *)menu->child.command + 4) != 6 || *((unsigned int *)menu->child.command + 22);
+    return menu->child.dvar->type != 6 || menu->child.dvar->domain.enumeration.stringCount;
 }
 
 void __cdecl DevGui_Draw(int localClientNum)
@@ -1564,8 +1572,8 @@ void __cdecl DevGui_Init()
     screen_xPad = RETURN_ZERO32();
     screen_yPad = RETURN_ZERO32();
     for ( menuIndex = 0; menuIndex < 0x7FF; ++menuIndex )
-        *(unsigned int *)devguiGlob.menus[menuIndex].label = (unsigned int)&devguiGlob.menus[menuIndex + 1];
-    *(unsigned int *)devguiGlob.menus[menuIndex].label = 0;
+        *(DevMenuItem **)devguiGlob.menus[menuIndex].label = &devguiGlob.menus[menuIndex + 1];
+    *(DevMenuItem **)devguiGlob.menus[menuIndex].label = 0;   // nx-port: pointer-width, as read
     devguiGlob.nextFreeMenu = (DevMenuItem *)&devguiGlob;
     devguiGlob.topmostMenu.childType = 0;
     devguiGlob.topmostMenu.childMenuMemory = 0;
@@ -2097,11 +2105,11 @@ void __cdecl DevGui_Accept(int localClientNum)
         case 3u:
             devguiGlob.editingMenuItem = !devguiGlob.editingMenuItem;
             devguiGlob.selRow = 0;
-            if ( menu->menus[0].child.command && *((unsigned int *)menu->menus[0].child.command + 4) )
-                (*((void (__cdecl **)(DevMenuChild, unsigned int, int))menu->menus[0].child.command + 4))(
-                    menu->menus[0].child,
-                    0,
-                    localClientNum);
+            // nx-port: eventCallback was read as x86 int index 4 (offset 16);
+            // on LP64 that is knotCountMax, and the call went through
+            // textCallback at offset 32.
+            if ( menu->menus[0].child.graph && menu->menus[0].child.graph->eventCallback )
+                menu->menus[0].child.graph->eventCallback(menu->menus[0].child.graph, (DevEventType)0, localClientNum);
             break;
         default:
             if ( !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\devgui\\devgui.cpp", 1850, 1, "unhandled case") )

@@ -1855,7 +1855,7 @@ void __cdecl CG_UpdateEnemyScramblerAlpha(int localClientNum)
     enemyScramblerAlpha = 0.0f;
     enemy = 0;
     cgameGlob = CG_GetLocalClientGlobals(localClientNum);
-    if ( cgameGlob->closestEnemyScrambler && ((*((unsigned int *)cgameGlob->closestEnemyScrambler + 201) >> 1) & 1) != 0 )
+    if ( cgameGlob->closestEnemyScrambler && ((cgameGlob->closestEnemyScrambler->clientFlags >> 1) & 1) != 0 )
     {
         if ( (cgameGlob->closestEnemyScrambler->nextState.faction.iHeadIconTeam & 3) != cgameGlob->bgs.clientinfo[cgameGlob->clientNum].team
             || (cgameGlob->closestEnemyScrambler->nextState.faction.iHeadIconTeam & 3) == 0

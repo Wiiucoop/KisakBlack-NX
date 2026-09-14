@@ -305,31 +305,44 @@ struct centity_s // sizeof=0x328
         unsigned int fxProjExplosion;
         unsigned int fxHeartbeat;
         centity_s *updateDelayedNext;
-        unsigned __int32 applyLeftHandIK : 1;
-        unsigned __int32 nextValid : 1;
-        unsigned __int32 bMuzzleFlash : 1;
-        unsigned __int32 bMuzzleFlashLeft : 1;
-        unsigned __int32 bTrailMade : 1;
-        unsigned __int32 isBurning : 1;
-        unsigned __int32 skipBloodImpacts : 1;
-        unsigned __int32 heroBloodImpact : 1;
-        unsigned __int32 scriptThreaded : 1;
-        unsigned __int32 clientRumbleLoop : 1;
-        unsigned __int32 didOverheatFx : 1;
-        unsigned __int32 leftFootstep : 1;
-        unsigned __int32 rightFootstep : 1;
-        unsigned __int32 leftRearFootstep : 1;
-        unsigned __int32 rightRearFootstep : 1;
-        unsigned __int32 bIsTrigger : 1;
-        unsigned __int32 bIsTriggerRadius : 1;
-        unsigned __int32 bIsOneShot : 1;
-        unsigned __int32 bIsPlaneOnRadar : 1;
-        unsigned __int32 bFloatLonger : 1;
-        unsigned __int32 bForceBuoyancy : 1;
-        unsigned __int32 bIgnoreRagdoll : 1;
-        unsigned __int32 bClientFlagsNeedProcessing : 1;
-        unsigned __int32 bUpdatedSinceReset : 1;
-        unsigned __int32 bUpdateToggle : 1;
+        // nx-port: the decompiler rendered this 25-bit flag group as a raw
+        // dword at the x86 word index 201 (byte 804) -- *((unsigned int *)cent
+        // + 201) -- all over the cgame. On LP64 the ten pointers above widen
+        // and the group moves to byte 848, so that literal index lands on
+        // nextSlideFX instead. Alias the word so those accesses can name it and
+        // follow the struct on both ABIs. The union does not change the layout.
+        union
+        {
+            unsigned int clientFlags;
+            struct
+            {
+                unsigned __int32 applyLeftHandIK : 1;
+                unsigned __int32 nextValid : 1;
+                unsigned __int32 bMuzzleFlash : 1;
+                unsigned __int32 bMuzzleFlashLeft : 1;
+                unsigned __int32 bTrailMade : 1;
+                unsigned __int32 isBurning : 1;
+                unsigned __int32 skipBloodImpacts : 1;
+                unsigned __int32 heroBloodImpact : 1;
+                unsigned __int32 scriptThreaded : 1;
+                unsigned __int32 clientRumbleLoop : 1;
+                unsigned __int32 didOverheatFx : 1;
+                unsigned __int32 leftFootstep : 1;
+                unsigned __int32 rightFootstep : 1;
+                unsigned __int32 leftRearFootstep : 1;
+                unsigned __int32 rightRearFootstep : 1;
+                unsigned __int32 bIsTrigger : 1;
+                unsigned __int32 bIsTriggerRadius : 1;
+                unsigned __int32 bIsOneShot : 1;
+                unsigned __int32 bIsPlaneOnRadar : 1;
+                unsigned __int32 bFloatLonger : 1;
+                unsigned __int32 bForceBuoyancy : 1;
+                unsigned __int32 bIgnoreRagdoll : 1;
+                unsigned __int32 bClientFlagsNeedProcessing : 1;
+                unsigned __int32 bUpdatedSinceReset : 1;
+                unsigned __int32 bUpdateToggle : 1;
+            };
+        };
         // padding bit
         // padding bit
         // padding bit

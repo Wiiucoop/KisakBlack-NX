@@ -1,0 +1,1129 @@
+src/bgame/bg_misctables.cpp	392	unsigned char*	_WORD*	pStruct	54	108	*((_WORD *)pStruct + 54) = ia;
+src/bgame/bg_misctables.cpp	410	unsigned char*	_WORD*	pStruct	176	352	*((_WORD *)pStruct + 176) = ib;
+src/bgame/bg_misctables.cpp	428	unsigned char*	unsigned int*	pStruct	1863	7452	*((unsigned int *)pStruct + 1863) = ic;
+src/bgame/bg_misctables.cpp	456	unsigned char*	unsigned int*	pStruct	1797	7188	*((unsigned int *)pStruct + 1797) = 2;
+src/bgame/bg_misctables.cpp	461	unsigned char*	unsigned int*	pStruct	1797	7188	*((unsigned int *)pStruct + 1797) = 1;
+src/bgame/bg_misctables.cpp	485	unsigned char*	_WORD*	pStruct	32	64	*((_WORD *)pStruct + 32) = i;
+src/bgame/bg_weapons.cpp	3790	const char**	_BYTE**	weapVariantDef->szXAnims	7	28	if ( **((_BYTE **)weapVariantDef->szXAnims + 7) )
+src/cgame/cg_compass.cpp	2929	?	unsigned int*	color	2	8	v47 = *((unsigned int *)color + 2);
+src/cgame/cg_compass.cpp	3020	?	float*	&v13	1	4	*((float *)&v13 + 1) = v14 - (float)(tapeAngleStretch * 0.5);
+src/cgame/cg_compass.cpp	3023	?	float*	&v13	1	4	*((float *)&v13 + 1),
+src/cgame/cg_drawtools.cpp	680	float*	unsigned int*	color	3	12	savedAlpha = *((unsigned int *)color + 3);
+src/cgame/cg_drawtools.cpp	702	float*	unsigned int*	color	3	12	*((unsigned int *)color + 3) = savedAlpha;
+src/cgame/cg_draw_indicators.cpp	454	long double*	float*	&v2	1	4	*((float *)&v2 + 1) = v5;
+src/cgame/cg_draw_indicators.cpp	456	long double*	float*	&v2	1	4	*((float *)&v2 + 1) = 0.1f;
+src/cgame/cg_draw_indicators.cpp	457	long double*	float*	&v2	1	4	color[3] = *((float *)&v2 + 1);
+src/cgame/cg_event.cpp	1528	const char**	_BYTE**	weaponVariantDef->szXAnims	40	160	if (isPlayerView && ((ps->eFlags & 0x300) != 0 || !**((_BYTE **)weaponVariantDef->szXAnims + 40)))
+src/cgame/cg_event.cpp	1536	const char**	_BYTE**	weaponVariantDef->szXAnims	41	164	if (isPlayerView && ((ps->eFlags & 0x300) != 0 || !**((_BYTE **)weaponVariantDef->szXAnims + 41)))
+src/cgame/cg_spawn.cpp	333	LerpEntityStateCreateDynEnt*	_QWORD*	&cent->nextState.lerp.u.createDynEnt	2	16	*((_QWORD *)&cent->nextState.lerp.u.createDynEnt + 2) = 0;
+src/cgame/cg_weapons.cpp	978	const char**	_BYTE**	weapVariantDef->szXAnims	65	260	if (**((_BYTE **)weapVariantDef->szXAnims + 65))
+src/cgame/cg_weapons.cpp	1085	const char**	_BYTE**	weapVariantDef->szXAnims	64	256	if ( **((_BYTE **)weapVariantDef->szXAnims + 64) && XAnimIsLooped(pAnimsa, 0x40u) )
+src/cgame/cg_weapons.cpp	1086	const char**	unsigned int*	weapVariantDef->szXAnims	64	256	Com_Error(ERR_DROP, "CG_RegisterWeapon: ADS anim [%s] cannot be looping", *((unsigned int *)weapVariantDef->szXAnims + 64));
+src/cgame/cg_weapons.cpp	1087	const char**	_BYTE**	weapVariantDef->szXAnims	65	260	if ( **((_BYTE **)weapVariantDef->szXAnims + 65) && XAnimIsLooped(pAnimsa, 0x41u) )
+src/cgame/cg_weapons.cpp	1088	const char**	unsigned int*	weapVariantDef->szXAnims	65	260	Com_Error(ERR_DROP, "CG_RegisterWeapon: ADS anim [%s] cannot be looping", *((unsigned int *)weapVariantDef->szXAnims + 65));
+src/cgame/cg_weapons.cpp	1115	const char**	unsigned int*	weapVariantDef->szXAnims	1	4	return *((unsigned int *)weapVariantDef->szXAnims + 1) && **((_BYTE **)weapVariantDef->szXAnims + 1);
+src/cgame/cg_weapons.cpp	1115	const char**	_BYTE**	weapVariantDef->szXAnims	1	4	return *((unsigned int *)weapVariantDef->szXAnims + 1) && **((_BYTE **)weapVariantDef->szXAnims + 1);
+src/cgame/cg_weapons.cpp	2923	const char**	_BYTE**	weapVariantDef->szXAnims	65	260	else if ( **((_BYTE **)weapVariantDef->szXAnims + 65) )
+src/cgame/cg_weapons.cpp	3122	const char**	_BYTE**	weapVariantDef->szXAnims	25	100	if ( **((_BYTE **)weapVariantDef->szXAnims + 25) )
+src/cgame/cg_weapons.cpp	3129	const char**	_BYTE**	weapVariantDef->szXAnims	25	100	if ( **((_BYTE **)weapVariantDef->szXAnims + 25) )
+src/cgame/cg_weapons.cpp	3138	const char**	_BYTE**	weapVariantDef->szXAnims	53	212	if ( **((_BYTE **)weapVariantDef->szXAnims + 53) )
+src/cgame/cg_weapons.cpp	3142	const char**	_BYTE**	weapVariantDef->szXAnims	27	108	if ( **((_BYTE **)weapVariantDef->szXAnims + 27) )
+src/cgame/cg_weapons.cpp	3147	const char**	_BYTE**	weapVariantDef->szXAnims	53	212	if ( **((_BYTE **)weapVariantDef->szXAnims + 53) )
+src/cgame/cg_weapons.cpp	3151	const char**	_BYTE**	weapVariantDef->szXAnims	28	112	if ( **((_BYTE **)weapVariantDef->szXAnims + 28) )
+src/cgame/cg_weapons.cpp	3156	const char**	_BYTE**	weapVariantDef->szXAnims	25	100	else if ( **((_BYTE **)weapVariantDef->szXAnims + 25) )
+src/cgame/cg_weapons.cpp	3163	const char**	_BYTE**	weapVariantDef->szXAnims	28	112	if ( **((_BYTE **)weapVariantDef->szXAnims + 28) )
+src/cgame/cg_weapons.cpp	3168	const char**	_BYTE**	weapVariantDef->szXAnims	25	100	else if ( **((_BYTE **)weapVariantDef->szXAnims + 25) )
+src/cgame/cg_weapons.cpp	3177	const char**	_BYTE**	weapVariantDef->szXAnims	53	212	if ( **((_BYTE **)weapVariantDef->szXAnims + 53) )
+src/cgame/cg_weapons.cpp	3181	const char**	_BYTE**	weapVariantDef->szXAnims	30	120	if ( **((_BYTE **)weapVariantDef->szXAnims + 30) )
+src/cgame/cg_weapons.cpp	3186	const char**	_BYTE**	weapVariantDef->szXAnims	27	108	else if ( **((_BYTE **)weapVariantDef->szXAnims + 27) )
+src/cgame/cg_weapons.cpp	3191	const char**	_BYTE**	weapVariantDef->szXAnims	53	212	if ( **((_BYTE **)weapVariantDef->szXAnims + 53) )
+src/cgame/cg_weapons.cpp	3231	const char**	_BYTE**	weapVariantDef->szXAnims	45	180	if ( **((_BYTE **)weapVariantDef->szXAnims + 45) )
+src/cgame/cg_weapons.cpp	3240	const char**	_BYTE**	weapVariantDef->szXAnims	54	216	if ( **((_BYTE **)weapVariantDef->szXAnims + 54) )
+src/cgame/cg_weapons.cpp	3244	const char**	_BYTE**	weapVariantDef->szXAnims	46	184	if ( **((_BYTE **)weapVariantDef->szXAnims + 46) )
+src/cgame/cg_weapons.cpp	3253	const char**	_BYTE**	weapVariantDef->szXAnims	55	220	if ( **((_BYTE **)weapVariantDef->szXAnims + 55) )
+src/cgame/cg_weapons.cpp	3257	const char**	_BYTE**	weapVariantDef->szXAnims	47	188	if ( **((_BYTE **)weapVariantDef->szXAnims + 47) )
+src/cgame/cg_weapons.cpp	3266	const char**	_BYTE**	weapVariantDef->szXAnims	56	224	if ( **((_BYTE **)weapVariantDef->szXAnims + 56) )
+src/cgame/cg_weapons.cpp	3270	const char**	_BYTE**	weapVariantDef->szXAnims	48	192	if ( **((_BYTE **)weapVariantDef->szXAnims + 48) )
+src/cgame/cg_weapons.cpp	3275	const char**	_BYTE**	weapVariantDef->szXAnims	45	180	else if ( **((_BYTE **)weapVariantDef->szXAnims + 45) )
+src/cgame/cg_weapons.cpp	3284	const char**	_BYTE**	weapVariantDef->szXAnims	54	216	if ( **((_BYTE **)weapVariantDef->szXAnims + 54) )
+src/cgame/cg_weapons.cpp	3288	const char**	_BYTE**	weapVariantDef->szXAnims	49	196	if ( **((_BYTE **)weapVariantDef->szXAnims + 49) )
+src/cgame/cg_weapons.cpp	3293	const char**	_BYTE**	weapVariantDef->szXAnims	46	184	else if ( **((_BYTE **)weapVariantDef->szXAnims + 46) )
+src/cgame/cg_weapons.cpp	3302	const char**	_BYTE**	weapVariantDef->szXAnims	55	220	if ( **((_BYTE **)weapVariantDef->szXAnims + 55) )
+src/cgame/cg_weapons.cpp	3306	const char**	_BYTE**	weapVariantDef->szXAnims	50	200	if ( **((_BYTE **)weapVariantDef->szXAnims + 50) )
+src/cgame/cg_weapons.cpp	3311	const char**	_BYTE**	weapVariantDef->szXAnims	47	188	else if ( **((_BYTE **)weapVariantDef->szXAnims + 47) )
+src/cgame/cg_weapons.cpp	3320	const char**	_BYTE**	weapVariantDef->szXAnims	56	224	if ( **((_BYTE **)weapVariantDef->szXAnims + 56) )
+src/cgame/cg_weapons.cpp	3324	const char**	_BYTE**	weapVariantDef->szXAnims	51	204	if ( **((_BYTE **)weapVariantDef->szXAnims + 51) )
+src/cgame/cg_weapons.cpp	3336	const char**	_BYTE**	weapVariantDef->szXAnims	52	208	if ( **((_BYTE **)weapVariantDef->szXAnims + 52) && Mantle_DoAnim(ps) )
+src/cgame/cg_weapons.cpp	3345	const char**	_BYTE**	weapVariantDef->szXAnims	57	228	if ( **((_BYTE **)weapVariantDef->szXAnims + 57) && Mantle_DoAnim(ps) )
+src/cgame_mp/cg_ents_mp.cpp	391	?	float*	&v67	1	4	if ( *((float *)&v67 + 1) >= 0.0 )
+src/cgame_mp/cg_ents_mp.cpp	426	?	float*	&v63	1	4	if ( *((float *)&v63 + 1) >= 0.0 )
+src/cgame_mp/cg_ents_mp.cpp	449	?	float*	&v14	1	4	v10 = (float)(*((float *)&v14 + 1) * *((float *)&v63 + 1))
+src/cgame_mp/cg_ents_mp.cpp	449	?	float*	&v63	1	4	v10 = (float)(*((float *)&v14 + 1) * *((float *)&v63 + 1))
+src/cgame_mp/cg_ents_mp.cpp	450	?	float*	&v28	1	4	+ (float)((float)(*((float *)&v28 + 1) * *((float *)&v67 + 1)) + (float)((float)(*((float *)&v42 + 1) * v72) + v60));
+src/cgame_mp/cg_ents_mp.cpp	450	?	float*	&v67	1	4	+ (float)((float)(*((float *)&v28 + 1) * *((float *)&v67 + 1)) + (float)((float)(*((float *)&v42 + 1) * v72) + v60));
+src/cgame_mp/cg_ents_mp.cpp	450	?	float*	&v42	1	4	+ (float)((float)(*((float *)&v28 + 1) * *((float *)&v67 + 1)) + (float)((float)(*((float *)&v42 + 1) * v72) + v60));
+src/cgame_mp/cg_ents_mp.cpp	457	?	float*	&v39	1	4	rotatedBounds[0].v[2] = (float)(*((float *)&v39 + 1) * v72) + v60;
+src/cgame_mp/cg_ents_mp.cpp	463	?	float*	&v25	1	4	rotatedBounds[0].v[2] = (float)(*((float *)&v25 + 1) * *((float *)&v67 + 1)) + rotatedBounds[0].v[2];
+src/cgame_mp/cg_ents_mp.cpp	463	?	float*	&v67	1	4	rotatedBounds[0].v[2] = (float)(*((float *)&v25 + 1) * *((float *)&v67 + 1)) + rotatedBounds[0].v[2];
+src/cgame_mp/cg_ents_mp.cpp	469	?	float*	&v63	1	4	rotatedBounds[0].v[2] = (float)(rotatedBounds[1].v[2] * *((float *)&v63 + 1)) + rotatedBounds[0].v[2];
+src/cgame_mp/cg_ents_mp.cpp	487	?	float*	&v5	1	4	*((float *)&v5 + 1) = *((float *)&v5 + 1) + g_entMoveTolVec[1];
+src/cgame_mp/cg_ents_mp.cpp	487	?	float*	&v5	1	4	*((float *)&v5 + 1) = *((float *)&v5 + 1) + g_entMoveTolVec[1];
+src/cgame_mp/cg_ents_mp.cpp	495	?	float*	&v5	1	4	*((float *)&v5 + 1) = *((float *)&v5 + 1) + 100.0;
+src/cgame_mp/cg_ents_mp.cpp	495	?	float*	&v5	1	4	*((float *)&v5 + 1) = *((float *)&v5 + 1) + 100.0;
+src/cgame_mp/cg_ents_mp.cpp	3512	const char**	char**	weapVariantDef->szXAnims	1	4	BG_CreateXAnim(pAnims, 1u, *((char **)weapVariantDef->szXAnims + 1));
+src/cgame_mp/cg_ents_mp.cpp	3513	const char**	char**	weapVariantDef->szXAnims	3	12	BG_CreateXAnim(pAnims, 2u, *((char **)weapVariantDef->szXAnims + 3));
+src/cgame_mp/cg_ents_mp.cpp	3885	XModel**	unsigned int*	weapDef->worldModel	1	4	&& *((unsigned int *)weapDef->worldModel + 1)
+src/cgame_mp/cg_ents_mp.cpp	4003	XModel**	unsigned int*	weapDef->worldModel	1	4	if ( !*((unsigned int *)weapDef->worldModel + 1)
+src/cgame_mp/cg_ents_mp.cpp	4260	XModel**	unsigned int*	weapDef->worldModel	2	8	if ( !*((unsigned int *)weapDef->worldModel + 2) )
+src/cgame_mp/cg_newDraw_mp.cpp	4625	const float*	unsigned int*	color	2	8	proneStr = (const char *)*((unsigned int *)color + 2);
+src/cgame_mp/cg_newDraw_mp.cpp	4923	float*	float*	color	3	12	*((float *)color + 3) = CG_FadeAlpha(cgameGlob->time, cgameGlob->cursorHintTime, cgameGlob->cursorHintFade, 100)
+src/cgame_mp/cg_newDraw_mp.cpp	4940	float*	float*	color	3	12	*((float *)color + 3) = (float)((float)(0.5 * v29) + 0.5) * color[3];
+src/cgame_mp/cg_view_mp.cpp	2615	?	float*	&v7	1	4	*((float *)&v7 + 1) = (float)(focusDist * focusPoint[2]) + *((float *)&v7 + 1);
+src/cgame_mp/cg_view_mp.cpp	2615	?	float*	&v7	1	4	*((float *)&v7 + 1) = (float)(focusDist * focusPoint[2]) + *((float *)&v7 + 1);
+src/cgame_mp/cg_view_mp.cpp	2628	?	float*	&v5	1	4	*((float *)&v5 + 1) = (float)(view[1] * view[1]) + (float)(view[2] * view[2]);
+src/cgame_mp/cg_view_mp.cpp	2629	?	float*	&v5	1	4	LODWORD(v5) = sqrtf(*((float *)&v5 + 1));
+src/cgame_mp/cg_view_mp.cpp	2632	?	float*	&v4	1	4	*((float *)&v4 + 1) = v10;
+src/client/cl_console.cpp	1119	char*	_WORD*	v9	2	4	*((_WORD *)v9 + 2) = *((_WORD *)v10 + 2);
+src/client/cl_console.cpp	1119	const char*	_WORD*	v10	2	4	*((_WORD *)v9 + 2) = *((_WORD *)v10 + 2);
+src/clientscript/cscr_compiler.cpp	5025	char*	_DWORD*	pos3	2	8	if (*(_DWORD *)pos3 == *((_DWORD *)pos3 + 2))
+src/clientscript/cscr_parser.cpp	1186	const char*	unsigned int*	rawfile->buffer	1	4	inlen = *((unsigned int *)rawfile->buffer + 1);
+src/clientscript/cscr_vm.cpp	2189	char*	_DWORD*	stackValue	2	8	*((_DWORD *)stackValue + 2) = localId;
+src/clientscript/cscr_vm.cpp	2190	char*	_WORD*	stackValue	2	4	*((_WORD *)stackValue + 2) = size;
+src/clientscript/cscr_vm.cpp	2191	char*	_WORD*	stackValue	3	6	*((_WORD *)stackValue + 3) = bufLen;
+src/client_mp/cl_input_mp.cpp	351	unsigned char*	unsigned int*	v4	1	4	*((unsigned int *)v4 + 1) = *((unsigned int *)v3 + 1);
+src/client_mp/cl_input_mp.cpp	351	unsigned char*	unsigned int*	v3	1	4	*((unsigned int *)v4 + 1) = *((unsigned int *)v3 + 1);
+src/client_mp/cl_main_pc_mp.cpp	573	?	_BYTE*	v18	276	276	servers->maxClients = *((_BYTE *)v18 + 276);
+src/client_mp/cl_main_pc_mp.cpp	576	?	_OWORD*	v18	18	None	servers->xnkey = (bdSecurityKey)*((_OWORD *)v18 + 18);
+src/client_mp/cl_main_pc_mp.cpp	583	?	_BYTE*	v18	280	280	servers->clients = *((_BYTE *)v18 + 280);
+src/client_mp/cl_main_pc_mp.cpp	940	?	unsigned int*	serversecurityID	1	4	*(unsigned int *)&secId.ab[4] = *((unsigned int *)serversecurityID + 1);
+src/client_mp/cl_main_pc_mp.cpp	1014	?	unsigned int*	serversecurityID	1	4	*(unsigned int *)&secId.ab[4] = *((unsigned int *)serversecurityID + 1);
+src/client_mp/sv_client_mp.cpp	2504	long long unsigned int*	float*	&newXuid	1	4	svs.mapCenter[2 * v7 - 63] = *((float *)&newXuid + 1);
+src/database/db_file_load.cpp	397	unsigned char*	unsigned int*	g_load.stream.next_in	1	4	*(unsigned int *)&magic[4] = *((unsigned int *)g_load.stream.next_in + 1);
+src/database/db_load.cpp	2273	MaterialVertexDeclaration**	unsigned __int8*	varMaterialPass	14	14	*((unsigned __int8 *)varMaterialPass + 14)
+src/database/db_load.cpp	2274	MaterialVertexDeclaration**	unsigned __int8*	varMaterialPass	13	13	+ *((unsigned __int8 *)varMaterialPass + 13)
+src/database/db_load.cpp	2275	MaterialVertexDeclaration**	unsigned __int8*	varMaterialPass	12	12	+ *((unsigned __int8 *)varMaterialPass + 12));
+src/demo/demo_playback.cpp	4022	unsigned char*	unsigned int*	buffer	1	4	*((unsigned int *)buffer + 1) = msg.cursize;
+src/DynEntity/DynEntity_client.cpp	457	long long int*	float*	&rotatedBounds	1	4	*((float *)&rotatedBounds + 1) = (float)(COERCE_FLOAT(bounds_24 & v4 | bounds_8 & ~v4) * axis[2][1])
+src/DynEntity/DynEntity_gamestate.cpp	69	float*	unsigned int*	origin	1	4	MSG_WriteBits(msg, *((unsigned int *)origin + 1), 0x20u);
+src/DynEntity/DynEntity_gamestate.cpp	70	float*	unsigned int*	origin	2	8	MSG_WriteBits(msg, *((unsigned int *)origin + 2), 0x20u);
+src/DynEntity/DynEntity_gamestate.cpp	140	float*	unsigned int*	origin	1	4	*((unsigned int *)origin + 1) = MSG_ReadBits(msg, 0x20u);
+src/DynEntity/DynEntity_gamestate.cpp	141	float*	unsigned int*	origin	2	8	*((unsigned int *)origin + 2) = MSG_ReadBits(msg, 0x20u);
+src/DynEntity/DynEntity_load_obj.cpp	485	char*	unsigned int*	v58	8	32	if ( *((unsigned int *)v58 + 8) )
+src/DynEntity/DynEntity_load_obj.cpp	488	char*	unsigned int*	v58	18	72	*((unsigned int *)v58 + 18) |= 0x200u;
+src/DynEntity/DynEntity_load_obj.cpp	492	char*	_WORD*	v58	20	40	if ( !*((_WORD *)v58 + 20)
+src/DynEntity/DynEntity_load_obj.cpp	503	char*	unsigned int*	v58	18	72	*((unsigned int *)v58 + 18) |= 0x400u;
+src/DynEntity/DynEntity_load_obj.cpp	1738	unsigned int*	unsigned __int16*	arg0	20	40	return *((unsigned __int16 *)arg0 + 20) - *((unsigned __int16 *)arg1 + 20);
+src/DynEntity/DynEntity_load_obj.cpp	1738	unsigned int*	unsigned __int16*	arg1	20	40	return *((unsigned __int16 *)arg0 + 20) - *((unsigned __int16 *)arg1 + 20);
+src/DynEntity/DynEntity_server.cpp	299	long long int*	float*	&rotatedBounds	1	4	*((float *)&rotatedBounds + 1) = (float)(COERCE_FLOAT(bounds[1].u[2] & v2 | bounds[0].u[2] & ~v2) * axis[2][1])
+src/DynEntity/DynEntity_server.cpp	309	long long int*	float*	&rotatedBounds_16	1	4	*((float *)&rotatedBounds_16 + 1) = (float)(COERCE_FLOAT(bounds[0].u[2] & v2 | bounds[1].u[2] & ~v2) * axis[2][1])
+src/EffectsCore/FxCurve_load_obj.cpp	78	unsigned char*	unsigned int*	newCurve	2	8	*((unsigned int *)newCurve + 2) = 0;
+src/EffectsCore/FxCurve_load_obj.cpp	103	unsigned char*	float*	newCurve	2	8	if ( *((float *)newCurve + 2) != 0.0
+src/EffectsCore/FxCurve_load_obj.cpp	110	unsigned char*	float*	newCurve	2	8	*((float *)newCurve + 2)) )
+src/EffectsCore/FxCurve_load_obj.cpp	125	unsigned char*	unsigned int*	newCurve	1	4	*((unsigned int *)newCurve + 1) = keyCount;
+src/EffectsCore/fx_beam.cpp	1340	long long int*	float*	&clipped	1	4	*((float *)&clipped + 1) = (float)((float)(dist0_12 * v6) * (float)(pt1->v[1] - pt0->v[1])) + pt0->v[1];
+src/EffectsCore/fx_beam.cpp	1342	long long int*	float*	&clipped_8	1	4	*((float *)&clipped_8 + 1) = (float)((float)(dist0_12 * v4) * (float)(pt1->v[3] - pt0->v[3])) + pt0->v[3];
+src/EffectsCore/fx_convert.cpp	72	const void*	unsigned int*	elemVisual->anonymous	59	236	if ( !*((unsigned int *)elemVisual->anonymous + 59) )
+src/EffectsCore/fx_convert.cpp	75	const void*	unsigned int*	elemVisual->anonymous	59	236	*((unsigned int *)elemVisual->anonymous + 59) = (unsigned int)v2;
+src/EffectsCore/fx_convert.cpp	480	FxSampleChannel*	unsigned int*	routing	1	4	*((unsigned int *)routing + 1) = 1;
+src/EffectsCore/fx_convert.cpp	485	FxSampleChannel*	unsigned int*	routing	2	8	*((unsigned int *)routing + 2) = v2;
+src/EffectsCore/fx_convert.cpp	486	FxSampleChannel*	unsigned int*	routing	4	16	*((unsigned int *)routing + 4) = 4;
+src/EffectsCore/fx_convert.cpp	487	FxSampleChannel*	unsigned int*	routing	3	12	*((unsigned int *)routing + 3) = 6;
+src/EffectsCore/fx_convert.cpp	491	FxSampleChannel*	unsigned int*	routing	1	4	*((unsigned int *)routing + 1) = 1;
+src/EffectsCore/fx_convert.cpp	492	FxSampleChannel*	unsigned int*	routing	2	8	*((unsigned int *)routing + 2) = 2;
+src/EffectsCore/fx_convert.cpp	493	FxSampleChannel*	unsigned int*	routing	4	16	*((unsigned int *)routing + 4) = 6;
+src/EffectsCore/fx_convert.cpp	494	FxSampleChannel*	unsigned int*	routing	3	12	*((unsigned int *)routing + 3) = 3;
+src/EffectsCore/fx_convert.cpp	499	FxSampleChannel*	unsigned int*	routing	1	4	*((unsigned int *)routing + 1) = 6;
+src/EffectsCore/fx_convert.cpp	500	FxSampleChannel*	unsigned int*	routing	2	8	*((unsigned int *)routing + 2) = 6;
+src/EffectsCore/fx_convert.cpp	501	FxSampleChannel*	unsigned int*	routing	4	16	*((unsigned int *)routing + 4) = 6;
+src/EffectsCore/fx_convert.cpp	502	FxSampleChannel*	unsigned int*	routing	3	12	*((unsigned int *)routing + 3) = 3;
+src/EffectsCore/fx_convert.cpp	506	FxSampleChannel*	unsigned int*	routing	1	4	*((unsigned int *)routing + 1) = 1;
+src/EffectsCore/fx_convert.cpp	507	FxSampleChannel*	unsigned int*	routing	2	8	*((unsigned int *)routing + 2) = 6;
+src/EffectsCore/fx_convert.cpp	508	FxSampleChannel*	unsigned int*	routing	4	16	*((unsigned int *)routing + 4) = 6;
+src/EffectsCore/fx_convert.cpp	509	FxSampleChannel*	unsigned int*	routing	3	12	*((unsigned int *)routing + 3) = 6;
+src/EffectsCore/fx_convert.cpp	514	FxSampleChannel*	unsigned int*	routing	1	4	*((unsigned int *)routing + 1) = 1;
+src/EffectsCore/fx_convert.cpp	515	FxSampleChannel*	unsigned int*	routing	2	8	*((unsigned int *)routing + 2) = 6;
+src/EffectsCore/fx_convert.cpp	516	FxSampleChannel*	unsigned int*	routing	4	16	*((unsigned int *)routing + 4) = 4;
+src/EffectsCore/fx_convert.cpp	517	FxSampleChannel*	unsigned int*	routing	3	12	*((unsigned int *)routing + 3) = 6;
+src/EffectsCore/fx_convert.cpp	521	FxSampleChannel*	unsigned int*	routing	1	4	*((unsigned int *)routing + 1) = 6;
+src/EffectsCore/fx_convert.cpp	522	FxSampleChannel*	unsigned int*	routing	2	8	*((unsigned int *)routing + 2) = 6;
+src/EffectsCore/fx_convert.cpp	523	FxSampleChannel*	unsigned int*	routing	4	16	*((unsigned int *)routing + 4) = 6;
+src/EffectsCore/fx_convert.cpp	524	FxSampleChannel*	unsigned int*	routing	3	12	*((unsigned int *)routing + 3) = 6;
+src/EffectsCore/fx_convert.cpp	1582	const float*	_QWORD*	from	1	8	*(_QWORD *)&v35.unitVec[2].packed = *((_QWORD *)from + 1);
+src/EffectsCore/fx_load_obj.cpp	1491	unsigned char*	unsigned int*	effectDef	7	28	*((unsigned int *)effectDef + 7) += effectDef - (unsigned __int8 *)fx_load.defaultEffect;
+src/EffectsCore/fx_load_obj.cpp	1492	unsigned char*	unsigned int*	effectDef	5	20	for ( elemIndex = 0; elemIndex < *((unsigned int *)effectDef + 5) + *((unsigned int *)effectDef + 4); ++elemIndex )
+src/EffectsCore/fx_load_obj.cpp	1492	unsigned char*	unsigned int*	effectDef	4	16	for ( elemIndex = 0; elemIndex < *((unsigned int *)effectDef + 5) + *((unsigned int *)effectDef + 4); ++elemIndex )
+src/EffectsCore/fx_load_obj.cpp	1494	unsigned char*	unsigned int*	effectDef	7	28	v7 = (unsigned int *)(*((unsigned int *)effectDef + 7) + 292 * elemIndex + 188);
+src/EffectsCore/fx_load_obj.cpp	1496	unsigned char*	unsigned int*	effectDef	7	28	v6 = (unsigned int *)(*((unsigned int *)effectDef + 7) + 292 * elemIndex + 192);
+src/EffectsCore/fx_marks.cpp	786	void*	Material**	context	1	4	*((Material **)context + 1),
+src/EffectsCore/fx_marks.cpp	791	void*	float*	context	2	8	*((float *)context + 2),
+src/EffectsCore/fx_marks.cpp	793	void*	unsigned __int8**	context	3	12	*((const unsigned __int8 **)context + 3),
+src/EffectsCore/fx_marks.cpp	794	void*	FxMarkAlphaFade**	context	4	16	*((const FxMarkAlphaFade **)context + 4),
+src/EffectsCore/fx_marks.cpp	2235	const float*	_DWORD*	texCoord	1	4	v5 = *((_DWORD *)texCoord + 1);
+src/EffectsCore/fx_system.cpp	3253	const void*	_DWORD*	v11.anonymous	59	236	if (!*((_DWORD *)v11.anonymous + 59)
+src/EffectsCore/fx_system.cpp	3291	const void*	PhysPreset**	visuals.anonymous	59	236	*((const PhysPreset **)visuals.anonymous + 59),
+src/EffectsCore/fx_update.cpp	1462	double*	float*	&v10	1	4	*((float *)&v10 + 1) = floor(startPoint);
+src/EffectsCore/fx_update.cpp	1463	double*	float*	&v10	1	4	startIndex = (int)*((float *)&v10 + 1);
+src/EffectsCore/fx_update_util.cpp	442	double*	float*	&v11	1	4	*((float *)&v11 + 1) = fx_randomTable[randomSeed + 2];
+src/EffectsCore/fx_update_util.cpp	443	double*	float*	&v11	1	4	rangeLerp[2] = *((float *)&v11 + 1);
+src/flame/flame_class_chunk.cpp	151	flameGeneric_s*	unsigned int*	&trav->gen	23	92	if ( ((*((unsigned int *)&trav->gen + 23) >> 3) & 1) != 0
+src/flame/flame_class_chunk.cpp	209	flameGeneric_s*	unsigned int*	&chunk->gen	23	92	*((unsigned int *)&chunk->gen + 23) = *((unsigned int *)&chunk->gen + 23) & 0xFFFFFFF8 | 1;
+src/flame/flame_class_chunk.cpp	209	flameGeneric_s*	unsigned int*	&chunk->gen	23	92	*((unsigned int *)&chunk->gen + 23) = *((unsigned int *)&chunk->gen + 23) & 0xFFFFFFF8 | 1;
+src/flame/flame_class_chunk.cpp	210	flameGeneric_s*	unsigned int*	&chunk->gen	23	92	*((unsigned int *)&chunk->gen + 23) = (16 * flame_spawn_id++) | *((unsigned int *)&chunk->gen + 23) & 0xF;
+src/flame/flame_class_chunk.cpp	210	flameGeneric_s*	unsigned int*	&chunk->gen	23	92	*((unsigned int *)&chunk->gen + 23) = (16 * flame_spawn_id++) | *((unsigned int *)&chunk->gen + 23) & 0xF;
+src/flame/flame_class_chunk.cpp	211	flameGeneric_s*	unsigned int*	&chunk->gen	23	92	*((unsigned int *)&chunk->gen + 23) &= ~8u;
+src/flame/flame_class_drips.cpp	149	flameGeneric_s*	unsigned int*	&fire->gen	23	92	*((unsigned int *)&fire->gen + 23) = *((unsigned int *)&fire->gen + 23) & 0xFFFFFFF8 | 4;
+src/flame/flame_class_drips.cpp	149	flameGeneric_s*	unsigned int*	&fire->gen	23	92	*((unsigned int *)&fire->gen + 23) = *((unsigned int *)&fire->gen + 23) & 0xFFFFFFF8 | 4;
+src/flame/flame_class_fire.cpp	59	flameGeneric_s*	unsigned int*	&trav->gen	23	92	if ( ((*((unsigned int *)&trav->gen + 23) >> 4) & 0xFFFFFFFu) < flame_freeze_id )
+src/flame/flame_class_fire.cpp	106	flameGeneric_s*	unsigned int*	&fire->gen	23	92	*((unsigned int *)&fire->gen + 23) = *((unsigned int *)&fire->gen + 23) & 0xFFFFFFF8 | 2;
+src/flame/flame_class_fire.cpp	106	flameGeneric_s*	unsigned int*	&fire->gen	23	92	*((unsigned int *)&fire->gen + 23) = *((unsigned int *)&fire->gen + 23) & 0xFFFFFFF8 | 2;
+src/flame/flame_class_fire.cpp	108	flameGeneric_s*	unsigned int*	&fire->gen	23	92	*((unsigned int *)&fire->gen + 23) = (16 * (*((unsigned int *)&fromChunk->gen + 23) >> 4)) | *((unsigned int *)&fire->gen + 23) & 0xF;
+src/flame/flame_class_fire.cpp	108	flameGeneric_s*	unsigned int*	&fromChunk->gen	23	92	*((unsigned int *)&fire->gen + 23) = (16 * (*((unsigned int *)&fromChunk->gen + 23) >> 4)) | *((unsigned int *)&fire->gen + 23) & 0xF;
+src/flame/flame_class_fire.cpp	108	flameGeneric_s*	unsigned int*	&fire->gen	23	92	*((unsigned int *)&fire->gen + 23) = (16 * (*((unsigned int *)&fromChunk->gen + 23) >> 4)) | *((unsigned int *)&fire->gen + 23) & 0xF;
+src/flame/flame_class_smoke.cpp	60	flameGeneric_s*	unsigned int*	&trav->gen	23	92	if ( ((*((unsigned int *)&trav->gen + 23) >> 4) & 0xFFFFFFFu) < flame_freeze_id )
+src/flame/flame_class_smoke.cpp	88	flameGeneric_s*	unsigned int*	&smoke->gen	23	92	*((unsigned int *)&smoke->gen + 23) = *((unsigned int *)&smoke->gen + 23) & 0xFFFFFFF8 | 3;
+src/flame/flame_class_smoke.cpp	88	flameGeneric_s*	unsigned int*	&smoke->gen	23	92	*((unsigned int *)&smoke->gen + 23) = *((unsigned int *)&smoke->gen + 23) & 0xFFFFFFF8 | 3;
+src/flame/flame_class_smoke.cpp	90	flameGeneric_s*	unsigned int*	&smoke->gen	23	92	*((unsigned int *)&smoke->gen + 23) = (16 * (*((unsigned int *)&fromChunk->gen + 23) >> 4)) | *((unsigned int *)&smoke->gen + 23) & 0xF;
+src/flame/flame_class_smoke.cpp	90	flameGeneric_s*	unsigned int*	&fromChunk->gen	23	92	*((unsigned int *)&smoke->gen + 23) = (16 * (*((unsigned int *)&fromChunk->gen + 23) >> 4)) | *((unsigned int *)&smoke->gen + 23) & 0xF;
+src/flame/flame_class_smoke.cpp	90	flameGeneric_s*	unsigned int*	&smoke->gen	23	92	*((unsigned int *)&smoke->gen + 23) = (16 * (*((unsigned int *)&fromChunk->gen + 23) >> 4)) | *((unsigned int *)&smoke->gen + 23) & 0xF;
+src/flame/flame_class_stream.cpp	220	flameGeneric_s*	unsigned int*	&stream->gen	23	92	*((unsigned int *)&stream->gen + 23) &= 0xFFFFFFF8;
+src/flame/flame_physics.cpp	636	flameGeneric_s*	unsigned int*	gen	23	92	if ( ((*((unsigned int *)gen + 23) >> 4) & 0xFFFFFFFu) > flame_freeze_id )
+src/flame/flame_physics.cpp	637	flameGeneric_s*	unsigned int*	gen	23	92	flame_freeze_id = (*((unsigned int *)gen + 23) >> 4) & 0xFFFFFFF;
+src/flame/flame_physics.cpp	639	flameGeneric_s*	unsigned int*	gen	23	92	*((unsigned int *)gen + 23) |= 8u;
+src/game/g_items.cpp	819	XModel**	unsigned int*	weapDef->worldModel	1	4	&& *((unsigned int *)weapDef->worldModel + 1)
+src/game/g_items.cpp	1503	XModel**	unsigned int*	weapDef->worldModel	1	4	if ( *((unsigned int *)weapDef->worldModel + 1) )
+src/game/g_items.cpp	1505	XModel**	XModel**	weapDef->worldModel	1	4	v3 = (char *)XModelGetName(*((const XModel **)weapDef->worldModel + 1));
+src/game/g_items.cpp	1574	spawner_ent_t*	unsigned __int16*	&ent->spawner	4	8	ent->s.un3.item = *((unsigned __int16 *)&ent->spawner + 4);
+src/game/g_missile.cpp	4233	float*	unsigned int*	steer	2	8	integer = *((unsigned int *)steer + 2);
+src/game/g_missile.cpp	4245	float*	unsigned int*	steer	2	8	*((unsigned int *)steer + 2) = v4;
+src/game/pathnode.cpp	1114	void*	_DWORD*	j	5	20	for (j = m_tree_root->m_data; j; j = (void *)*((_DWORD *)j + 5))
+src/game/pathnode.cpp	1115	void*	pathnode_t**	j	4	16	Path_NodesInCylinder_process(*((pathnode_t **)j + 4));
+src/game/pathnode_load_obj.cpp	695	const unsigned char*	unsigned __int16*	buf	2	4	if ( gameWorldCurrent->path.nodeCount != *((unsigned __int16 *)buf + 2) )
+src/game/turret.cpp	2747	long double*	float*	&v8	1	4	*((float *)&v8 + 1) = v11;
+src/game/turret.cpp	2749	long double*	float*	&v8	1	4	*((float *)&v8 + 1) = 90.0f;
+src/game/turret.cpp	2750	long double*	float*	&v8	1	4	turretInfo->forwardAngleDot = *((float *)&v8 + 1);
+src/game_mp/g_scr_main_mp.cpp	1525	XModel**	unsigned int*	weapDef->worldModel	1	4	if ( *((unsigned int *)weapDef->worldModel + 1)
+src/game_mp/g_scr_main_mp.cpp	6707	?	float*	&v1	1	4	*((float *)&v1 + 1) = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+src/game_mp/g_scr_main_mp.cpp	6709	?	float*	&v1	1	4	value = *((float *)&v1 + 1);
+src/game_mp/g_scr_main_mp.cpp	6727	?	float*	&v1	1	4	*((float *)&v1 + 1) = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER) * 0.017453292;
+src/game_mp/g_scr_main_mp.cpp	6729	?	float*	&v1	1	4	value = *((float *)&v1 + 1);
+src/game_mp/g_scr_main_mp.cpp	6747	?	float*	&v1	1	4	*((float *)&v1 + 1) = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER) * 0.017453292;
+src/game_mp/g_scr_main_mp.cpp	6749	?	float*	&v1	1	4	value = *((float *)&v1 + 1);
+src/game_mp/g_scr_main_mp.cpp	6782	?	float*	&v2	1	4	*((float *)&v2 + 1) = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+src/game_mp/g_scr_main_mp.cpp	6783	?	float*	&v2	1	4	if ( *((float *)&v2 + 1) < -1.0 || *((float *)&v2 + 1) > 1.0 )
+src/game_mp/g_scr_main_mp.cpp	6783	?	float*	&v2	1	4	if ( *((float *)&v2 + 1) < -1.0 || *((float *)&v2 + 1) > 1.0 )
+src/game_mp/g_scr_main_mp.cpp	6785	?	float*	&v2	1	4	v0 = va("%g out of range", *((float *)&v2 + 1));
+src/game_mp/g_scr_main_mp.cpp	6789	?	float*	&v2	1	4	v1 = *((float *)&v2 + 1);
+src/game_mp/g_scr_main_mp.cpp	6808	?	float*	&v2	1	4	*((float *)&v2 + 1) = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+src/game_mp/g_scr_main_mp.cpp	6809	?	float*	&v2	1	4	if ( *((float *)&v2 + 1) < -1.0 || *((float *)&v2 + 1) > 1.0 )
+src/game_mp/g_scr_main_mp.cpp	6809	?	float*	&v2	1	4	if ( *((float *)&v2 + 1) < -1.0 || *((float *)&v2 + 1) > 1.0 )
+src/game_mp/g_scr_main_mp.cpp	6811	?	float*	&v2	1	4	v0 = va("%g out of range", *((float *)&v2 + 1));
+src/game_mp/g_scr_main_mp.cpp	6815	?	float*	&v2	1	4	v1 = *((float *)&v2 + 1);
+src/game_mp/g_scr_main_mp.cpp	6832	?	float*	&v1	1	4	*((float *)&v1 + 1) = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+src/game_mp/g_scr_main_mp.cpp	6834	?	float*	&v1	1	4	v0 = *((float *)&v1 + 1);
+src/game_mp/g_scr_main_mp.cpp	17043	char*	unsigned int*	dest	32	128	*((unsigned int *)dest + 32) = s0 && !I_stricmp(s0, "team");
+src/game_mp/g_scr_main_mp.cpp	17058	char*	unsigned int*	dest	32	128	*((unsigned int *)dest + 32) = 0;
+src/game_mp/g_utils_mp.cpp	825	char*	_WORD*	tagInfo	4	8	*((_WORD *)tagInfo + 4) = 0;
+src/game_mp/g_utils_mp.cpp	842	char*	unsigned int*	tagInfo	1	4	*((unsigned int *)tagInfo + 1) = (unsigned int)parent->tagChildren;
+src/game_mp/g_utils_mp.cpp	843	char*	unsigned int*	tagInfo	3	12	*((unsigned int *)tagInfo + 3) = index;
+src/gfx_d3d/rb_backend.cpp	959	const void*	unsigned int**	execState->cmd	1	4	if ( **((unsigned int **)execState->cmd + 1) )
+src/gfx_d3d/rb_backend.cpp	1340	const void*	Material**	execState->cmd	1	4	*((const Material **)execState->cmd + 1),
+src/gfx_d3d/rb_backend.cpp	1341	const void*	float*	execState->cmd	2	8	*((float *)execState->cmd + 2),
+src/gfx_d3d/rb_backend.cpp	1342	const void*	float*	execState->cmd	3	12	*((float *)execState->cmd + 3),
+src/gfx_d3d/rb_backend.cpp	1343	const void*	float*	execState->cmd	4	16	*((float *)execState->cmd + 4),
+src/gfx_d3d/rb_backend.cpp	1344	const void*	float*	execState->cmd	5	20	*((float *)execState->cmd + 5),
+src/gfx_d3d/rb_backend.cpp	1345	const void*	unsigned int*	execState->cmd	6	24	*((unsigned int *)execState->cmd + 6));
+src/gfx_d3d/rb_backend.cpp	1352	const void*	unsigned int*	execState->cmd	1	4	*((unsigned int *)execState->cmd + 1),
+src/gfx_d3d/rb_backend.cpp	1353	const void*	unsigned int*	execState->cmd	2	8	*((unsigned int *)execState->cmd + 2),
+src/gfx_d3d/rb_backend.cpp	1354	const void*	unsigned int*	execState->cmd	3	12	*((unsigned int *)execState->cmd + 3),
+src/gfx_d3d/rb_backend.cpp	1355	const void*	unsigned int*	execState->cmd	4	16	*((unsigned int *)execState->cmd + 4),
+src/gfx_d3d/rb_backend.cpp	1356	const void*	unsigned int*	execState->cmd	5	20	*((unsigned int *)execState->cmd + 5),
+src/gfx_d3d/rb_backend.cpp	1357	const void*	unsigned int*	execState->cmd	6	24	*((unsigned int *)execState->cmd + 6),
+src/gfx_d3d/rb_backend.cpp	1358	const void*	unsigned __int8**	execState->cmd	7	28	*((const unsigned __int8 **)execState->cmd + 7));
+src/gfx_d3d/rb_backend.cpp	1786	const void*	_BYTE*	execState->cmd	4	4	*((_BYTE *)execState->cmd + 4),
+src/gfx_d3d/rb_backend.cpp	1788	const void*	float*	execState->cmd	2	8	*((float *)execState->cmd + 2),
+src/gfx_d3d/rb_backend.cpp	1789	const void*	_BYTE*	execState->cmd	5	5	*((_BYTE *)execState->cmd + 5),
+src/gfx_d3d/rb_backend.cpp	1848	const void*	_BYTE*	execState->cmd	7	7	if ( *((_BYTE *)execState->cmd + 7) == 2 )
+src/gfx_d3d/rb_backend.cpp	2226	const void*	_BYTE*	execState->cmd	7	7	if ( *((_BYTE *)execState->cmd + 7) == 2 )
+src/gfx_d3d/rb_backend.cpp	2254	const void*	__int16*	execState->cmd	6	12	normalOffset = 16 * *((__int16 *)execState->cmd + 6) + 16;
+src/gfx_d3d/rb_backend.cpp	2255	const void*	__int16*	execState->cmd	6	12	normalSize = 12 * *((__int16 *)execState->cmd + 6);
+src/gfx_d3d/rb_backend.cpp	2256	const void*	__int16*	execState->cmd	6	12	stOffset = 4 * *((__int16 *)execState->cmd + 6) + normalSize + normalOffset;
+src/gfx_d3d/rb_backend.cpp	2258	const void*	Material**	execState->cmd	1	4	*((const Material **)execState->cmd + 1),
+src/gfx_d3d/rb_backend.cpp	2259	const void*	_BYTE*	execState->cmd	8	8	*((_BYTE *)execState->cmd + 8),
+src/gfx_d3d/rb_backend.cpp	2260	const void*	_WORD*	execState->cmd	5	10	*((_WORD *)execState->cmd + 5),
+src/gfx_d3d/rb_backend.cpp	2261	const void*	__int16*	execState->cmd	6	12	(const unsigned __int16 *)((char *)execState->cmd + 8 * *((__int16 *)execState->cmd + 6) + stOffset),
+src/gfx_d3d/rb_backend.cpp	2262	const void*	_WORD*	execState->cmd	6	12	*((_WORD *)execState->cmd + 6),
+src/gfx_d3d/rb_backend.cpp	2373	const void*	unsigned int*	execState->cmd	1	4	if ( *((unsigned int *)execState->cmd + 1) )
+src/gfx_d3d/rb_backend.cpp	4507	const void*	float*	execState->cmd	4	16	v1 = *((float *)execState->cmd + 4) * 0.017453292;
+src/gfx_d3d/rb_backend.cpp	4544	const void*	Font_s**	execState->cmd	4	16	*((Font_s **)execState->cmd + 4),
+src/gfx_d3d/rb_backend.cpp	4548	const void*	unsigned int*	execState->cmd	11	44	*((unsigned int *)execState->cmd + 11));
+src/gfx_d3d/rb_backend.cpp	4556	const void*	unsigned int*	execState->cmd	1	4	v1 = *((unsigned int *)execState->cmd + 1);
+src/gfx_d3d/rb_backend.cpp	4907	const void*	_BYTE*	execState.cmd	2	2	if (!*((_BYTE *)execState.cmd + 2))
+src/gfx_d3d/rb_backend.cpp	4909	const void*	_BYTE*	execState.cmd	3	3	if ((*((_BYTE *)execState.cmd + 3) & 0x80) != 0)
+src/gfx_d3d/rb_backend.cpp	4911	const void*	_BYTE*	execState.cmd	3	3	v2 = v3 >= 0 && (*((_BYTE *)execState.cmd + 3) & 0x7F) == v3;
+src/gfx_d3d/rb_backend.cpp	4920	const void*	unsigned __int8*	execState.cmd	2	2	if (*((unsigned __int8 *)execState.cmd + 2) >= 0x1Du
+src/gfx_d3d/rb_backend.cpp	4928	const void*	unsigned __int8*	execState.cmd	2	2	*((unsigned __int8 *)execState.cmd + 2)))
+src/gfx_d3d/rb_debug.cpp	373	float*	unsigned int*	v18	2	8	*((unsigned int *)v18 + 2) = v20;
+src/gfx_d3d/rb_debug.cpp	408	unsigned char*	unsigned int*	v14	1	4	*((unsigned int *)v14 + 1) = 0;
+src/gfx_d3d/rb_debug.cpp	409	unsigned char*	float*	v14	2	8	*((float *)v14 + 2) = 1.0f;
+src/gfx_d3d/rb_debug.cpp	432	unsigned char*	unsigned int*	v10	1	4	*((unsigned int *)v10 + 1) = 0;
+src/gfx_d3d/rb_debug.cpp	433	unsigned char*	float*	v10	2	8	*((float *)v10 + 2) = -1.0f;
+src/gfx_d3d/rb_light.cpp	760	const unsigned int*	_WORD*	pos	2	4	*((_WORD *)pos + 2) + ((yBit & cornerIndex) != 0),
+src/gfx_d3d/rb_light.cpp	761	const unsigned int*	_WORD*	pos	4	8	*((_WORD *)pos + 4) + ((cornerIndex & 1) != 0),
+src/gfx_d3d/rb_postfx.cpp	1961	float*	unsigned int*	v94	1	4	*((unsigned int *)v94 + 1) = v96;
+src/gfx_d3d/rb_postfx.cpp	1962	float*	unsigned int*	v94	2	8	*((unsigned int *)v94 + 2) = v95;
+src/gfx_d3d/rb_postfx.cpp	1970	float*	unsigned int*	v90	1	4	*((unsigned int *)v90 + 1) = v92;
+src/gfx_d3d/rb_postfx.cpp	1971	float*	unsigned int*	v90	2	8	*((unsigned int *)v90 + 2) = v91;
+src/gfx_d3d/rb_postfx.cpp	1979	float*	unsigned int*	v86	1	4	*((unsigned int *)v86 + 1) = v88;
+src/gfx_d3d/rb_postfx.cpp	1980	float*	unsigned int*	v86	2	8	*((unsigned int *)v86 + 2) = v87;
+src/gfx_d3d/rb_postfx.cpp	1998	float*	unsigned int*	v77	1	4	*((unsigned int *)v77 + 1) = v80;
+src/gfx_d3d/rb_postfx.cpp	1999	float*	unsigned int*	v77	2	8	*((unsigned int *)v77 + 2) = v79;
+src/gfx_d3d/rb_postfx.cpp	2000	float*	unsigned int*	v77	3	12	*((unsigned int *)v77 + 3) = v78;
+src/gfx_d3d/rb_postfx.cpp	2008	float*	unsigned int*	v72	1	4	*((unsigned int *)v72 + 1) = v75;
+src/gfx_d3d/rb_postfx.cpp	2009	float*	unsigned int*	v72	2	8	*((unsigned int *)v72 + 2) = v74;
+src/gfx_d3d/rb_postfx.cpp	2010	float*	unsigned int*	v72	3	12	*((unsigned int *)v72 + 3) = v73;
+src/gfx_d3d/rb_postfx.cpp	2018	float*	unsigned int*	v67	1	4	*((unsigned int *)v67 + 1) = v70;
+src/gfx_d3d/rb_postfx.cpp	2019	float*	unsigned int*	v67	2	8	*((unsigned int *)v67 + 2) = v69;
+src/gfx_d3d/rb_postfx.cpp	2020	float*	unsigned int*	v67	3	12	*((unsigned int *)v67 + 3) = v68;
+src/gfx_d3d/rb_postfx.cpp	2028	float*	unsigned int*	v62	1	4	*((unsigned int *)v62 + 1) = v65;
+src/gfx_d3d/rb_postfx.cpp	2029	float*	unsigned int*	v62	2	8	*((unsigned int *)v62 + 2) = v64;
+src/gfx_d3d/rb_postfx.cpp	2030	float*	unsigned int*	v62	3	12	*((unsigned int *)v62 + 3) = v63;
+src/gfx_d3d/rb_postfx.cpp	2038	float*	unsigned int*	v57	1	4	*((unsigned int *)v57 + 1) = v60;
+src/gfx_d3d/rb_postfx.cpp	2039	float*	unsigned int*	v57	2	8	*((unsigned int *)v57 + 2) = v59;
+src/gfx_d3d/rb_postfx.cpp	2040	float*	unsigned int*	v57	3	12	*((unsigned int *)v57 + 3) = v58;
+src/gfx_d3d/rb_postfx.cpp	2048	float*	unsigned int*	v52	1	4	*((unsigned int *)v52 + 1) = v55;
+src/gfx_d3d/rb_postfx.cpp	2049	float*	unsigned int*	v52	2	8	*((unsigned int *)v52 + 2) = v54;
+src/gfx_d3d/rb_postfx.cpp	2050	float*	unsigned int*	v52	3	12	*((unsigned int *)v52 + 3) = v53;
+src/gfx_d3d/rb_postfx.cpp	2058	float*	unsigned int*	v47	1	4	*((unsigned int *)v47 + 1) = v50;
+src/gfx_d3d/rb_postfx.cpp	2059	float*	unsigned int*	v47	2	8	*((unsigned int *)v47 + 2) = v49;
+src/gfx_d3d/rb_postfx.cpp	2060	float*	unsigned int*	v47	3	12	*((unsigned int *)v47 + 3) = v48;
+src/gfx_d3d/rb_postfx.cpp	2068	float*	unsigned int*	v42	1	4	*((unsigned int *)v42 + 1) = v45;
+src/gfx_d3d/rb_postfx.cpp	2069	float*	unsigned int*	v42	2	8	*((unsigned int *)v42 + 2) = v44;
+src/gfx_d3d/rb_postfx.cpp	2070	float*	unsigned int*	v42	3	12	*((unsigned int *)v42 + 3) = v43;
+src/gfx_d3d/rb_postfx.cpp	2078	float*	unsigned int*	v37	1	4	*((unsigned int *)v37 + 1) = v40;
+src/gfx_d3d/rb_postfx.cpp	2079	float*	unsigned int*	v37	2	8	*((unsigned int *)v37 + 2) = v39;
+src/gfx_d3d/rb_postfx.cpp	2080	float*	unsigned int*	v37	3	12	*((unsigned int *)v37 + 3) = v38;
+src/gfx_d3d/rb_postfx.cpp	2088	float*	unsigned int*	v32	1	4	*((unsigned int *)v32 + 1) = v35;
+src/gfx_d3d/rb_postfx.cpp	2089	float*	unsigned int*	v32	2	8	*((unsigned int *)v32 + 2) = v34;
+src/gfx_d3d/rb_postfx.cpp	2090	float*	unsigned int*	v32	3	12	*((unsigned int *)v32 + 3) = v33;
+src/gfx_d3d/rb_postfx.cpp	2098	float*	unsigned int*	v27	1	4	*((unsigned int *)v27 + 1) = v30;
+src/gfx_d3d/rb_postfx.cpp	2099	float*	unsigned int*	v27	2	8	*((unsigned int *)v27 + 2) = v29;
+src/gfx_d3d/rb_postfx.cpp	2100	float*	unsigned int*	v27	3	12	*((unsigned int *)v27 + 3) = v28;
+src/gfx_d3d/rb_postfx.cpp	2108	float*	unsigned int*	v22	1	4	*((unsigned int *)v22 + 1) = v25;
+src/gfx_d3d/rb_postfx.cpp	2109	float*	unsigned int*	v22	2	8	*((unsigned int *)v22 + 2) = v24;
+src/gfx_d3d/rb_postfx.cpp	2110	float*	unsigned int*	v22	3	12	*((unsigned int *)v22 + 3) = v23;
+src/gfx_d3d/r_bsp_load_obj.cpp	1798	char*	unsigned int*	header	3	12	rowCount = *(unsigned __int16 *)&header[2 * *((unsigned int *)header + 3) + 6]
+src/gfx_d3d/r_bsp_load_obj.cpp	1799	char*	unsigned int*	header	3	12	- *(unsigned __int16 *)&header[2 * *((unsigned int *)header + 3)]
+src/gfx_d3d/r_bsp_load_obj.cpp	1805	char*	_WORD*	header	1	2	s_world.lightGrid.mins[1] = *((_WORD *)header + 1);
+src/gfx_d3d/r_bsp_load_obj.cpp	1806	char*	_WORD*	header	2	4	s_world.lightGrid.mins[2] = *((_WORD *)header + 2);
+src/gfx_d3d/r_bsp_load_obj.cpp	1807	char*	_WORD*	header	3	6	s_world.lightGrid.maxs[0] = *((_WORD *)header + 3);
+src/gfx_d3d/r_bsp_load_obj.cpp	1808	char*	_WORD*	header	4	8	s_world.lightGrid.maxs[1] = *((_WORD *)header + 4);
+src/gfx_d3d/r_bsp_load_obj.cpp	1809	char*	_WORD*	header	5	10	s_world.lightGrid.maxs[2] = *((_WORD *)header + 5);
+src/gfx_d3d/r_bsp_load_obj.cpp	1810	char*	unsigned int*	header	3	12	s_world.lightGrid.rowAxis = *((unsigned int *)header + 3);
+src/gfx_d3d/r_bsp_load_obj.cpp	1811	char*	unsigned int*	header	4	16	s_world.lightGrid.colAxis = *((unsigned int *)header + 4);
+src/gfx_d3d/r_bsp_load_obj.cpp	2092	char*	float*	v1	1	4	v2->origin[1] = *((float *)v1 + 1);
+src/gfx_d3d/r_bsp_load_obj.cpp	2093	char*	float*	v1	2	8	v2->origin[2] = *((float *)v1 + 2);
+src/gfx_d3d/r_bsp_load_obj.cpp	2515	char*	float*	v2	1	4	v1->origin[1] = *((float *)v2 + 1);
+src/gfx_d3d/r_bsp_load_obj.cpp	2516	char*	float*	v2	2	8	v1->origin[2] = *((float *)v2 + 2);
+src/gfx_d3d/r_bsp_load_obj.cpp	2517	char*	float*	v2	3	12	s_world.worldLodChains[i].lastDist = *((float *)v2 + 3);
+src/gfx_d3d/r_bsp_load_obj.cpp	2518	char*	unsigned int*	v2	4	16	s_world.worldLodChains[i].firstLodInfo = *((unsigned int *)v2 + 4);
+src/gfx_d3d/r_bsp_load_obj.cpp	2519	char*	_WORD*	v2	10	20	s_world.worldLodChains[i].lodInfoCount = *((_WORD *)v2 + 10);
+src/gfx_d3d/r_bsp_load_obj.cpp	2900	unsigned int*	_WORD*	v2	4	8	*((_WORD *)v2 + 4) = 0;
+src/gfx_d3d/r_bsp_load_obj.cpp	4810	char*	float*	in	1	4	out->mins[1] = *((float *)in + 1);
+src/gfx_d3d/r_bsp_load_obj.cpp	4811	char*	float*	in	2	8	out->mins[2] = *((float *)in + 2);
+src/gfx_d3d/r_bsp_load_obj.cpp	4812	char*	float*	in	3	12	out->maxs[0] = *((float *)in + 3);
+src/gfx_d3d/r_bsp_load_obj.cpp	4813	char*	float*	in	4	16	out->maxs[1] = *((float *)in + 4);
+src/gfx_d3d/r_bsp_load_obj.cpp	4814	char*	float*	in	5	20	out->maxs[2] = *((float *)in + 5);
+src/gfx_d3d/r_bsp_load_obj.cpp	4815	char*	unsigned __int16*	in	12	24	out->aabbTree = &rgl.aabbTrees[*((unsigned __int16 *)in + 12)];
+src/gfx_d3d/r_bsp_load_obj.cpp	4816	char*	unsigned int*	in	7	28	out->portals = (GfxPortal *)(68 * *((unsigned int *)in + 7));
+src/gfx_d3d/r_bsp_load_obj.cpp	4817	char*	unsigned int*	in	8	32	out->portalCount = *((unsigned int *)in + 8);
+src/gfx_d3d/r_bsp_load_obj.cpp	4818	char*	unsigned int*	in	10	40	cullGroupCount = *((unsigned int *)in + 10);
+src/gfx_d3d/r_bsp_load_obj.cpp	4820	char*	unsigned int*	in	9	36	v1 = &rgl.cullGroupIndices[*((unsigned int *)in + 9)];
+src/gfx_d3d/r_bsp_load_obj.cpp	5077	char*	__int16*	inLeaf_v14	12	24	out->cellIndex = *((__int16 *)inLeaf_v14 + 12);
+src/gfx_d3d/r_bsp_load_obj.cpp	5078	char*	unsigned int*	inLeaf_v14	6	24	if ( out->cellIndex != *((unsigned int *)inLeaf_v14 + 6)
+src/gfx_d3d/r_dpvs.cpp	2678	DpvsPlane**	unsigned __int16*	data	4	8	oldViewIndex = R_SetVisData(*((unsigned __int16 *)data + 4));
+src/gfx_d3d/r_dpvs.cpp	2680	DpvsPlane**	unsigned __int8*	data	10	10	R_CullDynBrushInCell((unsigned int)data[1], *data, *((unsigned __int8 *)data + 10));
+src/gfx_d3d/r_dpvs_dynmodel.cpp	33	const DpvsPlane**	unsigned __int8*	data	10	10	planeCount = *((unsigned __int8 *)data + 10);
+src/gfx_d3d/r_dpvs_dynmodel.cpp	35	const DpvsPlane**	unsigned __int16*	data	4	8	dynEntVisData = worldDpvsDyn->dynEntVisData[0][*((unsigned __int16 *)data + 4)];
+src/gfx_d3d/r_dpvs_entity.cpp	33	short unsigned int*	unsigned int*	data	1	4	planes = (const DpvsPlane *)*((unsigned int *)data + 1);
+src/gfx_d3d/r_dpvs_entity.cpp	69	short unsigned int*	unsigned int*	data	3	12	*(_BYTE *)(localSceneEnt->entnum + *((unsigned int *)data + 3)) = 1;
+src/gfx_d3d/r_dpvs_sceneent.cpp	119	?	unsigned int*	sceneXModelIndex	3	12	wordIndex = *((unsigned int *)sceneXModelIndex + 3) + 4 * (unsigned int)entCellBitsa;
+src/gfx_d3d/r_dpvs_sceneent.cpp	209	?	unsigned int*	sceneXModelIndex	3	12	wordIndexa = *((unsigned int *)sceneXModelIndex + 3) + 4 * (unsigned int)entCellBitsa + (*(unsigned int *)sceneXModelIndex << 10);
+src/gfx_d3d/r_dpvs_static.cpp	93	long long int*	float*	&p5	1	4	if ( *((float *)&p5 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	102	long long int*	float*	&p5_8	1	4	if ( *((float *)&p5_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	111	long long int*	float*	&p4	1	4	if ( *((float *)&p4 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	120	long long int*	float*	&p4_8	1	4	if ( *((float *)&p4_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	125	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	128	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v33 | HIDWORD(min_8) & ~v33)))
+src/gfx_d3d/r_dpvs_static.cpp	129	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	132	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	135	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	137	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	139	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	142	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v37 | HIDWORD(min_8) & ~v37)))
+src/gfx_d3d/r_dpvs_static.cpp	143	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	146	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	149	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v33 | HIDWORD(min_8) & ~v33)))
+src/gfx_d3d/r_dpvs_static.cpp	150	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	153	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	156	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	158	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	160	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	163	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v37 | HIDWORD(min_8) & ~v37)))
+src/gfx_d3d/r_dpvs_static.cpp	164	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	167	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	170	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v33 | HIDWORD(min_8) & ~v33)))
+src/gfx_d3d/r_dpvs_static.cpp	171	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	173	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	176	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	178	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	180	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	183	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	185	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	187	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	190	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v37 | HIDWORD(min_8) & ~v37)))
+src/gfx_d3d/r_dpvs_static.cpp	191	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	194	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	197	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v33 | HIDWORD(min_8) & ~v33)))
+src/gfx_d3d/r_dpvs_static.cpp	198	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	200	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	203	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	205	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	207	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	210	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	212	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	214	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	217	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v37 | HIDWORD(min_8) & ~v37)))
+src/gfx_d3d/r_dpvs_static.cpp	218	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	221	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	224	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v33 | HIDWORD(min_8) & ~v33)))
+src/gfx_d3d/r_dpvs_static.cpp	225	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	231	long long int*	float*	&p3	1	4	if ( *((float *)&p3 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	240	long long int*	float*	&p3_8	1	4	if ( *((float *)&p3_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	245	long long int*	float*	&p3	1	4	+ (float)(*((float *)&p3 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	248	long long int*	float*	&p3_8	1	4	+ (float)(*((float *)&p3_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v25 | HIDWORD(min_8) & ~v25)))
+src/gfx_d3d/r_dpvs_static.cpp	249	long long int*	float*	&p3_8	1	4	- *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	254	long long int*	float*	&p3	1	4	+ (float)(*((float *)&p3 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	257	long long int*	float*	&p3_8	1	4	+ (float)(*((float *)&p3_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v25 | HIDWORD(min_8) & ~v25)))
+src/gfx_d3d/r_dpvs_static.cpp	258	long long int*	float*	&p3_8	1	4	- *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	263	long long int*	float*	&p3	1	4	+ (float)(*((float *)&p3 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	266	long long int*	float*	&p3_8	1	4	+ (float)(*((float *)&p3_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v25 | HIDWORD(min_8) & ~v25)))
+src/gfx_d3d/r_dpvs_static.cpp	267	long long int*	float*	&p3_8	1	4	- *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	269	long long int*	float*	&p3	1	4	+ (float)(*((float *)&p3 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	272	long long int*	float*	&p3_8	1	4	+ (float)(*((float *)&p3_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	274	long long int*	float*	&p3_8	1	4	- *((float *)&p3_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	279	long long int*	float*	&p3	1	4	+ (float)(*((float *)&p3 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	282	long long int*	float*	&p3_8	1	4	+ (float)(*((float *)&p3_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v25 | HIDWORD(min_8) & ~v25)))
+src/gfx_d3d/r_dpvs_static.cpp	283	long long int*	float*	&p3_8	1	4	- *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	285	long long int*	float*	&p3	1	4	+ (float)(*((float *)&p3 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	288	long long int*	float*	&p3_8	1	4	+ (float)(*((float *)&p3_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	290	long long int*	float*	&p3_8	1	4	- *((float *)&p3_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	295	long long int*	float*	&p3	1	4	+ (float)(*((float *)&p3 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	298	long long int*	float*	&p3_8	1	4	+ (float)(*((float *)&p3_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v25 | HIDWORD(min_8) & ~v25)))
+src/gfx_d3d/r_dpvs_static.cpp	299	long long int*	float*	&p3_8	1	4	- *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	305	long long int*	float*	&p2	1	4	if ( *((float *)&p2 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	314	long long int*	float*	&p2_8	1	4	if ( *((float *)&p2_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	319	long long int*	float*	&p2	1	4	+ (float)(*((float *)&p2 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	322	long long int*	float*	&p2_8	1	4	+ (float)(*((float *)&p2_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v17 | HIDWORD(min_8) & ~v17)))
+src/gfx_d3d/r_dpvs_static.cpp	323	long long int*	float*	&p2_8	1	4	- *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	328	long long int*	float*	&p2	1	4	+ (float)(*((float *)&p2 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	331	long long int*	float*	&p2_8	1	4	+ (float)(*((float *)&p2_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v17 | HIDWORD(min_8) & ~v17)))
+src/gfx_d3d/r_dpvs_static.cpp	332	long long int*	float*	&p2_8	1	4	- *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	337	long long int*	float*	&p2	1	4	+ (float)(*((float *)&p2 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	340	long long int*	float*	&p2_8	1	4	+ (float)(*((float *)&p2_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v17 | HIDWORD(min_8) & ~v17)))
+src/gfx_d3d/r_dpvs_static.cpp	341	long long int*	float*	&p2_8	1	4	- *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	343	long long int*	float*	&p2	1	4	+ (float)(*((float *)&p2 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	346	long long int*	float*	&p2_8	1	4	+ (float)(*((float *)&p2_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	348	long long int*	float*	&p2_8	1	4	- *((float *)&p2_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	353	long long int*	float*	&p2	1	4	+ (float)(*((float *)&p2 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	356	long long int*	float*	&p2_8	1	4	+ (float)(*((float *)&p2_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v17 | HIDWORD(min_8) & ~v17)))
+src/gfx_d3d/r_dpvs_static.cpp	357	long long int*	float*	&p2_8	1	4	- *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	359	long long int*	float*	&p2	1	4	+ (float)(*((float *)&p2 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	362	long long int*	float*	&p2_8	1	4	+ (float)(*((float *)&p2_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	364	long long int*	float*	&p2_8	1	4	- *((float *)&p2_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	369	long long int*	float*	&p2	1	4	+ (float)(*((float *)&p2 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	372	long long int*	float*	&p2_8	1	4	+ (float)(*((float *)&p2_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v17 | HIDWORD(min_8) & ~v17)))
+src/gfx_d3d/r_dpvs_static.cpp	373	long long int*	float*	&p2_8	1	4	- *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	379	long long int*	float*	&p1	1	4	if ( *((float *)&p1 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	388	long long int*	float*	&p1_8	1	4	if ( *((float *)&p1_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	393	long long int*	float*	&p1	1	4	+ (float)(*((float *)&p1 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	396	long long int*	float*	&p1_8	1	4	+ (float)(*((float *)&p1_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v9 | HIDWORD(min_8) & ~v9)))
+src/gfx_d3d/r_dpvs_static.cpp	397	long long int*	float*	&p1_8	1	4	- *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	402	long long int*	float*	&p1	1	4	+ (float)(*((float *)&p1 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	405	long long int*	float*	&p1_8	1	4	+ (float)(*((float *)&p1_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v9 | HIDWORD(min_8) & ~v9)))
+src/gfx_d3d/r_dpvs_static.cpp	406	long long int*	float*	&p1_8	1	4	- *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	411	long long int*	float*	&p1	1	4	+ (float)(*((float *)&p1 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	414	long long int*	float*	&p1_8	1	4	+ (float)(*((float *)&p1_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v9 | HIDWORD(min_8) & ~v9)))
+src/gfx_d3d/r_dpvs_static.cpp	415	long long int*	float*	&p1_8	1	4	- *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	417	long long int*	float*	&p1	1	4	+ (float)(*((float *)&p1 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	420	long long int*	float*	&p1_8	1	4	+ (float)(*((float *)&p1_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v9 | HIDWORD(min_8) & ~v9)))
+src/gfx_d3d/r_dpvs_static.cpp	421	long long int*	float*	&p1_8	1	4	- *((float *)&p1_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	426	long long int*	float*	&p1	1	4	+ (float)(*((float *)&p1 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	429	long long int*	float*	&p1_8	1	4	+ (float)(*((float *)&p1_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v9 | HIDWORD(min_8) & ~v9)))
+src/gfx_d3d/r_dpvs_static.cpp	430	long long int*	float*	&p1_8	1	4	- *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	432	long long int*	float*	&p1	1	4	+ (float)(*((float *)&p1 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	435	long long int*	float*	&p1_8	1	4	+ (float)(*((float *)&p1_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v9 | HIDWORD(min_8) & ~v9)))
+src/gfx_d3d/r_dpvs_static.cpp	436	long long int*	float*	&p1_8	1	4	- *((float *)&p1_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	441	long long int*	float*	&p1	1	4	+ (float)(*((float *)&p1 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	444	long long int*	float*	&p1_8	1	4	+ (float)(*((float *)&p1_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v9 | HIDWORD(min_8) & ~v9)))
+src/gfx_d3d/r_dpvs_static.cpp	445	long long int*	float*	&p1_8	1	4	- *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	604	long long int*	float*	&p1	1	4	if ( *((float *)&p1 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	613	long long int*	float*	&p1_8	1	4	if ( *((float *)&p1_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	622	long long int*	float*	&p2	1	4	if ( *((float *)&p2 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	631	long long int*	float*	&p2_8	1	4	if ( *((float *)&p2_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	640	long long int*	float*	&p3	1	4	if ( *((float *)&p3 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	649	long long int*	float*	&p3_8	1	4	if ( *((float *)&p3_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	658	long long int*	float*	&p4	1	4	if ( *((float *)&p4 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	667	long long int*	float*	&p4_8	1	4	if ( *((float *)&p4_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	676	long long int*	float*	&p5	1	4	if ( *((float *)&p5 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	685	long long int*	float*	&p5_8	1	4	if ( *((float *)&p5_8 + 1) <= 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	690	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	693	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v58 | HIDWORD(min_8) & ~v58)))
+src/gfx_d3d/r_dpvs_static.cpp	694	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	696	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	699	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	701	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	704	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	707	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v58 | HIDWORD(min_8) & ~v58)))
+src/gfx_d3d/r_dpvs_static.cpp	708	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	711	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	714	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	716	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	719	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	722	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v58 | HIDWORD(min_8) & ~v58)))
+src/gfx_d3d/r_dpvs_static.cpp	723	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	726	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	729	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	731	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	733	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	736	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	738	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	740	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	743	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	745	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	747	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	750	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v58 | HIDWORD(min_8) & ~v58)))
+src/gfx_d3d/r_dpvs_static.cpp	751	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	754	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	757	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	759	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	761	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	764	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	766	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1))
+src/gfx_d3d/r_dpvs_static.cpp	768	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	771	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	773	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	775	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	778	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1) * COERCE_FLOAT(HIDWORD(max_8) & v58 | HIDWORD(min_8) & ~v58)))
+src/gfx_d3d/r_dpvs_static.cpp	779	long long int*	float*	&p5_8	1	4	- *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	782	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	785	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	787	long long int*	float*	&p4_8	1	4	- *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	789	long long int*	float*	&p3	1	4	+ (float)(*((float *)&p3 + 1) * COERCE_FLOAT((max & v88 | min & (unsigned __int64)~v88) >> 32)))
+src/gfx_d3d/r_dpvs_static.cpp	791	long long int*	float*	&p3_8	1	4	+ (float)(*((float *)&p3_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	793	long long int*	float*	&p3_8	1	4	if ( (float)((float)(v85 - *((float *)&p3_8 + 1)) - v57) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	796	long long int*	float*	&p3_8	1	4	v53 = v85 - *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	797	long long int*	float*	&p3_8	1	4	if ( (float)((float)(v85 - *((float *)&p3_8 + 1)) - v56) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	800	long long int*	float*	&p3_8	1	4	v52 = v85 - *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	801	long long int*	float*	&p3_8	1	4	if ( (float)((float)(v85 - *((float *)&p3_8 + 1)) - v55) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	804	long long int*	float*	&p3_8	1	4	v51 = v85 - *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	805	long long int*	float*	&p3_8	1	4	if ( (float)((float)(v85 - *((float *)&p3_8 + 1)) - v54) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	808	long long int*	float*	&p3_8	1	4	v50 = v85 - *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	810	long long int*	float*	&p2	1	4	+ (float)(*((float *)&p2 + 1) * COERCE_FLOAT((max & v89 | min & (unsigned __int64)~v89) >> 32)))
+src/gfx_d3d/r_dpvs_static.cpp	812	long long int*	float*	&p2_8	1	4	+ (float)(*((float *)&p2_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	814	long long int*	float*	&p2_8	1	4	if ( (float)((float)(v84 - *((float *)&p2_8 + 1)) - v53) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	817	long long int*	float*	&p2_8	1	4	v49 = v84 - *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	818	long long int*	float*	&p2_8	1	4	if ( (float)((float)(v84 - *((float *)&p2_8 + 1)) - v52) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	821	long long int*	float*	&p2_8	1	4	v48 = v84 - *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	822	long long int*	float*	&p2_8	1	4	if ( (float)((float)(v84 - *((float *)&p2_8 + 1)) - v51) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	825	long long int*	float*	&p2_8	1	4	v47 = v84 - *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	826	long long int*	float*	&p2_8	1	4	if ( (float)((float)(v84 - *((float *)&p2_8 + 1)) - v50) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	829	long long int*	float*	&p2_8	1	4	v46 = v84 - *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	831	long long int*	float*	&p1	1	4	+ (float)(*((float *)&p1 + 1) * COERCE_FLOAT((max & v90 | min & (unsigned __int64)~v90) >> 32)))
+src/gfx_d3d/r_dpvs_static.cpp	833	long long int*	float*	&p1_8	1	4	+ (float)(*((float *)&p1_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	835	long long int*	float*	&p1_8	1	4	if ( (float)((float)(v83 - *((float *)&p1_8 + 1)) - v49) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	838	long long int*	float*	&p1_8	1	4	v45 = v83 - *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	839	long long int*	float*	&p1_8	1	4	if ( (float)((float)(v83 - *((float *)&p1_8 + 1)) - v48) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	842	long long int*	float*	&p1_8	1	4	v44 = v83 - *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	843	long long int*	float*	&p1_8	1	4	if ( (float)((float)(v83 - *((float *)&p1_8 + 1)) - v47) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	846	long long int*	float*	&p1_8	1	4	v43 = v83 - *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	847	long long int*	float*	&p1_8	1	4	if ( (float)((float)(v83 - *((float *)&p1_8 + 1)) - v46) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	850	long long int*	float*	&p1_8	1	4	v42 = v83 - *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	857	long long int*	float*	&p5	1	4	+ (float)(*((float *)&p5 + 1) * COERCE_FLOAT((min & v86 | max & (unsigned __int64)~v86) >> 32)))
+src/gfx_d3d/r_dpvs_static.cpp	859	long long int*	float*	&p5_8	1	4	+ (float)(*((float *)&p5_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	862	long long int*	float*	&p4	1	4	+ (float)(*((float *)&p4 + 1) * COERCE_FLOAT((min & v87 | max & (unsigned __int64)~v87) >> 32)))
+src/gfx_d3d/r_dpvs_static.cpp	864	long long int*	float*	&p4_8	1	4	+ (float)(*((float *)&p4_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	866	long long int*	float*	&p4_8	1	4	if ( (float)((float)(v81 - *((float *)&p4_8 + 1)) - (float)(v82 - *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	866	long long int*	float*	&p5_8	1	4	if ( (float)((float)(v81 - *((float *)&p4_8 + 1)) - (float)(v82 - *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	867	long long int*	float*	&p5_8	1	4	v40 = v82 - *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	869	long long int*	float*	&p4_8	1	4	v40 = v81 - *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	870	long long int*	float*	&p4_8	1	4	if ( (float)((float)(v81 - *((float *)&p4_8 + 1)) - (float)(v82 - *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	870	long long int*	float*	&p5_8	1	4	if ( (float)((float)(v81 - *((float *)&p4_8 + 1)) - (float)(v82 - *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	871	long long int*	float*	&p5_8	1	4	v39 = v82 - *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	873	long long int*	float*	&p4_8	1	4	v39 = v81 - *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	874	long long int*	float*	&p4_8	1	4	if ( (float)((float)(v81 - *((float *)&p4_8 + 1)) - (float)(v82 - *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	874	long long int*	float*	&p5_8	1	4	if ( (float)((float)(v81 - *((float *)&p4_8 + 1)) - (float)(v82 - *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	875	long long int*	float*	&p5_8	1	4	v38 = v82 - *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	877	long long int*	float*	&p4_8	1	4	v38 = v81 - *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	878	long long int*	float*	&p4_8	1	4	if ( (float)((float)(v81 - *((float *)&p4_8 + 1)) - (float)(v82 - *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	878	long long int*	float*	&p5_8	1	4	if ( (float)((float)(v81 - *((float *)&p4_8 + 1)) - (float)(v82 - *((float *)&p5_8 + 1))) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	879	long long int*	float*	&p5_8	1	4	v37 = v82 - *((float *)&p5_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	881	long long int*	float*	&p4_8	1	4	v37 = v81 - *((float *)&p4_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	883	long long int*	float*	&p3	1	4	+ (float)(*((float *)&p3 + 1) * COERCE_FLOAT((min & v88 | max & (unsigned __int64)~v88) >> 32)))
+src/gfx_d3d/r_dpvs_static.cpp	885	long long int*	float*	&p3_8	1	4	+ (float)(*((float *)&p3_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	887	long long int*	float*	&p3_8	1	4	if ( (float)((float)(v80 - *((float *)&p3_8 + 1)) - v40) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	890	long long int*	float*	&p3_8	1	4	v36 = v80 - *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	891	long long int*	float*	&p3_8	1	4	if ( (float)((float)(v80 - *((float *)&p3_8 + 1)) - v39) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	894	long long int*	float*	&p3_8	1	4	v35 = v80 - *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	895	long long int*	float*	&p3_8	1	4	if ( (float)((float)(v80 - *((float *)&p3_8 + 1)) - v38) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	898	long long int*	float*	&p3_8	1	4	v34 = v80 - *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	899	long long int*	float*	&p3_8	1	4	if ( (float)((float)(v80 - *((float *)&p3_8 + 1)) - v37) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	902	long long int*	float*	&p3_8	1	4	v33 = v80 - *((float *)&p3_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	904	long long int*	float*	&p2	1	4	+ (float)(*((float *)&p2 + 1) * COERCE_FLOAT((min & v89 | max & (unsigned __int64)~v89) >> 32)))
+src/gfx_d3d/r_dpvs_static.cpp	906	long long int*	float*	&p2_8	1	4	+ (float)(*((float *)&p2_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	908	long long int*	float*	&p2_8	1	4	if ( (float)((float)(v79 - *((float *)&p2_8 + 1)) - v36) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	911	long long int*	float*	&p2_8	1	4	v32 = v79 - *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	912	long long int*	float*	&p2_8	1	4	if ( (float)((float)(v79 - *((float *)&p2_8 + 1)) - v35) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	915	long long int*	float*	&p2_8	1	4	v31 = v79 - *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	916	long long int*	float*	&p2_8	1	4	if ( (float)((float)(v79 - *((float *)&p2_8 + 1)) - v34) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	919	long long int*	float*	&p2_8	1	4	v30 = v79 - *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	920	long long int*	float*	&p2_8	1	4	if ( (float)((float)(v79 - *((float *)&p2_8 + 1)) - v33) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	923	long long int*	float*	&p2_8	1	4	v29 = v79 - *((float *)&p2_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	925	long long int*	float*	&p1	1	4	+ (float)(*((float *)&p1 + 1) * COERCE_FLOAT((min & v90 | max & (unsigned __int64)~v90) >> 32)))
+src/gfx_d3d/r_dpvs_static.cpp	927	long long int*	float*	&p1_8	1	4	+ (float)(*((float *)&p1_8 + 1)
+src/gfx_d3d/r_dpvs_static.cpp	929	long long int*	float*	&p1_8	1	4	if ( (float)((float)(v78 - *((float *)&p1_8 + 1)) - v32) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	932	long long int*	float*	&p1_8	1	4	v28 = v78 - *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	933	long long int*	float*	&p1_8	1	4	if ( (float)((float)(v78 - *((float *)&p1_8 + 1)) - v31) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	936	long long int*	float*	&p1_8	1	4	v27 = v78 - *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	937	long long int*	float*	&p1_8	1	4	if ( (float)((float)(v78 - *((float *)&p1_8 + 1)) - v30) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	940	long long int*	float*	&p1_8	1	4	v26 = v78 - *((float *)&p1_8 + 1);
+src/gfx_d3d/r_dpvs_static.cpp	941	long long int*	float*	&p1_8	1	4	if ( (float)((float)(v78 - *((float *)&p1_8 + 1)) - v29) < 0.0 )
+src/gfx_d3d/r_dpvs_static.cpp	944	long long int*	float*	&p1_8	1	4	v25 = v78 - *((float *)&p1_8 + 1);
+src/gfx_d3d/r_draw_shadowablelight.cpp	246	float*	_DWORD*	y	2	8	*((_DWORD *)y + 2) = (DWORD)updateLight;
+src/gfx_d3d/r_draw_staticmodel.cpp	26	GfxStaticModelDrawStream*	unsigned int*	&drawStream	10	40	*((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+src/gfx_d3d/r_draw_staticmodel.cpp	92	GfxStaticModelDrawStream*	unsigned int*	&drawStream	10	40	*((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+src/gfx_d3d/r_draw_staticmodel.cpp	293	GfxStaticModelDrawStream*	unsigned int*	&drawStream	10	40	*((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+src/gfx_d3d/r_draw_staticmodel.cpp	400	GfxStaticModelDrawStream*	unsigned int*	&drawStream	10	40	*((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+src/gfx_d3d/r_draw_staticmodel.cpp	491	GfxStaticModelDrawStream*	unsigned int*	&drawStream	10	40	*((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+src/gfx_d3d/r_draw_staticmodel.cpp	639	GfxStaticModelDrawStream*	unsigned int*	&drawStream	10	40	*((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+src/gfx_d3d/r_image_wavelet.cpp	12493	const unsigned char*	unsigned __int8*	decode->data	3	3	decode->value |= ((*((unsigned __int8 *)decode->data + 3) << 24)
+src/gfx_d3d/r_image_wavelet.cpp	12494	const unsigned char*	unsigned __int8*	decode->data	2	2	| (*((unsigned __int8 *)decode->data + 2) << 16)
+src/gfx_d3d/r_light_load_obj.cpp	48	unsigned char*	unsigned int*	def	3	12	*((unsigned int *)def + 3) = 0;
+src/gfx_d3d/r_marks.cpp	750	?	unsigned int*	v4	1	4	*((unsigned int *)v4 + 1) = *((unsigned int *)v6 + 1) ^ _mask__NegFloat_;
+src/gfx_d3d/r_marks.cpp	750	?	unsigned int*	v6	1	4	*((unsigned int *)v4 + 1) = *((unsigned int *)v6 + 1) ^ _mask__NegFloat_;
+src/gfx_d3d/r_marks.cpp	751	?	unsigned int*	v4	2	8	*((unsigned int *)v4 + 2) = *((unsigned int *)v6 + 2) ^ _mask__NegFloat_;
+src/gfx_d3d/r_marks.cpp	751	?	unsigned int*	v6	2	8	*((unsigned int *)v4 + 2) = *((unsigned int *)v6 + 2) ^ _mask__NegFloat_;
+src/gfx_d3d/r_marks.cpp	752	?	float*	v4	3	12	*((float *)v4 + 3) = (float)((float)((float)(*(float *)v4 * *origin) + (float)(*((float *)v4 + 1) * origin[1]))
+src/gfx_d3d/r_marks.cpp	752	?	float*	v4	1	4	*((float *)v4 + 3) = (float)((float)((float)(*(float *)v4 * *origin) + (float)(*((float *)v4 + 1) * origin[1]))
+src/gfx_d3d/r_marks.cpp	753	?	float*	v4	2	8	+ (float)(*((float *)v4 + 2) * origin[2]))
+src/gfx_d3d/r_material.cpp	999	unsigned char*	unsigned int*	mtlNew	47	188	*((unsigned int *)mtlNew + 47) = (unsigned int)Material_Alloc(stateBitsTableSize);
+src/gfx_d3d/r_material.cpp	1000	unsigned char*	unsigned __int8**	mtlNew	47	188	memcpy(*((unsigned __int8 **)mtlNew + 47), (unsigned __int8 *)mtlCopy->stateBitsTable, stateBitsTableSize);
+src/gfx_d3d/r_material.cpp	1004	unsigned char*	unsigned int*	mtlNew	45	180	*((unsigned int *)mtlNew + 45) = (unsigned int)Material_Alloc(textureTableSize);
+src/gfx_d3d/r_material.cpp	1005	unsigned char*	unsigned __int8**	mtlNew	45	180	memcpy(*((unsigned __int8 **)mtlNew + 45), (unsigned __int8 *)mtlCopy->textureTable, textureTableSize);
+src/gfx_d3d/r_material.cpp	1010	unsigned char*	unsigned int*	mtlNew	46	184	*((unsigned int *)mtlNew + 46) = (unsigned int)Material_Alloc(constantTableSize);
+src/gfx_d3d/r_material.cpp	1011	unsigned char*	unsigned __int8**	mtlNew	46	184	memcpy(*((unsigned __int8 **)mtlNew + 46), (unsigned __int8 *)mtlCopy->localConstantTable, constantTableSize);
+src/gfx_d3d/r_material_load_obj.cpp	1399	unsigned char*	_WORD*	technique	2	4	*((_WORD *)technique + 2) = techFlags;
+src/gfx_d3d/r_material_load_obj.cpp	1404	unsigned char*	_WORD*	technique	2	4	*((_WORD *)technique + 2) |= 4u;
+src/gfx_d3d/r_material_load_obj.cpp	1421	unsigned char*	_WORD*	technique	2	4	*((_WORD *)technique + 2) |= 8u;
+src/gfx_d3d/r_material_load_obj.cpp	1425	unsigned char*	_WORD*	technique	3	6	*((_WORD *)technique + 3) = passCount;
+src/gfx_d3d/r_material_load_obj.cpp	3585	char*	_WORD*	typeInfo	1	2	switch ( *((_WORD *)typeInfo + 1) )
+src/gfx_d3d/r_material_load_obj.cpp	3618	char*	unsigned __int16*	typeInfo	1	2	Com_ScriptError("Unknown constant type '%i'", *((unsigned __int16 *)typeInfo + 1));
+src/gfx_d3d/r_material_load_obj.cpp	5944	unsigned char*	_WORD*	v4	64	128	*((_WORD *)v4 + 64) = *(_WORD *)&stateBitsEntry[128];
+src/gfx_d3d/r_model.cpp	397	unsigned char*	unsigned int*	v17	1	4	*((unsigned int *)v17 + 1) = (unsigned int)v15;
+src/gfx_d3d/r_model.cpp	398	unsigned char*	_WORD*	v17	7	14	*((_WORD *)v17 + 7) = gfxEntIndex;
+src/gfx_d3d/r_model.cpp	399	unsigned char*	_WORD*	v17	8	16	*((_WORD *)v17 + 8) = 0;
+src/gfx_d3d/r_model.cpp	401	unsigned char*	float*	v17	13	52	*((float *)v17 + 13) = scale;
+src/gfx_d3d/r_model_lighting.cpp	487	const void*	float*	userData	4	16	*((float *)userData + 4));
+src/gfx_d3d/r_scene.cpp	4275	?	float*	&POISON_BLUR_SLOW	1	4	*((float *)&POISON_BLUR_SLOW + 1) = (float)((float)((float)(-2.0 * blend) + 3.0) * blend) * blend;
+src/gfx_d3d/r_screenshot.cpp	614	unsigned char*	unsigned int*	buffer	1	4	*((unsigned int *)buffer + 1) = 0;
+src/gfx_d3d/r_screenshot.cpp	615	unsigned char*	unsigned int*	buffer	2	8	*((unsigned int *)buffer + 2) = 0;
+src/gfx_d3d/r_screenshot.cpp	616	unsigned char*	unsigned int*	buffer	3	12	*((unsigned int *)buffer + 3) = 0;
+src/gfx_d3d/r_screenshot.cpp	617	unsigned char*	_WORD*	buffer	8	16	*((_WORD *)buffer + 8) = 0;
+src/gfx_d3d/r_screenshot.cpp	1030	unsigned char*	unsigned int*	fileBuffer	1	4	*((unsigned int *)fileBuffer + 1) = 0;
+src/gfx_d3d/r_screenshot.cpp	1031	unsigned char*	unsigned int*	fileBuffer	2	8	*((unsigned int *)fileBuffer + 2) = 0;
+src/gfx_d3d/r_screenshot.cpp	1032	unsigned char*	unsigned int*	fileBuffer	3	12	*((unsigned int *)fileBuffer + 3) = 0;
+src/gfx_d3d/r_screenshot.cpp	1033	unsigned char*	_WORD*	fileBuffer	8	16	*((_WORD *)fileBuffer + 8) = 0;
+src/gfx_d3d/r_screenshot.cpp	1035	unsigned char*	_WORD*	fileBuffer	6	12	*((_WORD *)fileBuffer + 6) = res;
+src/gfx_d3d/r_screenshot.cpp	1445	float*	unsigned int*	srcpixel	1	4	tmp1 = *((unsigned int *)srcpixel + 1);
+src/gfx_d3d/r_screenshot.cpp	1446	float*	unsigned int*	srcpixel	2	8	tmp2 = *((unsigned int *)srcpixel + 2);
+src/gfx_d3d/r_screenshot.cpp	1447	float*	unsigned int*	srcpixel	3	12	tmp3 = *((unsigned int *)srcpixel + 3);
+src/gfx_d3d/r_screenshot.cpp	1453	float*	unsigned int*	dstpixel	1	4	*((unsigned int *)dstpixel + 1) = tmp1;
+src/gfx_d3d/r_screenshot.cpp	1454	float*	unsigned int*	dstpixel	2	8	*((unsigned int *)dstpixel + 2) = tmp2;
+src/gfx_d3d/r_screenshot.cpp	1455	float*	unsigned int*	dstpixel	3	12	*((unsigned int *)dstpixel + 3) = tmp3;
+src/gfx_d3d/r_screenshot.cpp	1478	float*	unsigned int*	srcpixel	1	4	tmp1 = *((unsigned int *)srcpixel + 1);
+src/gfx_d3d/r_screenshot.cpp	1479	float*	unsigned int*	srcpixel	2	8	tmp2 = *((unsigned int *)srcpixel + 2);
+src/gfx_d3d/r_screenshot.cpp	1480	float*	unsigned int*	srcpixel	3	12	tmp3 = *((unsigned int *)srcpixel + 3);
+src/gfx_d3d/r_screenshot.cpp	1486	float*	unsigned int*	dstpixel	1	4	*((unsigned int *)dstpixel + 1) = tmp1;
+src/gfx_d3d/r_screenshot.cpp	1487	float*	unsigned int*	dstpixel	2	8	*((unsigned int *)dstpixel + 2) = tmp2;
+src/gfx_d3d/r_screenshot.cpp	1488	float*	unsigned int*	dstpixel	3	12	*((unsigned int *)dstpixel + 3) = tmp3;
+src/gfx_d3d/r_sprite.cpp	87	const float*	int*	left	1	4	v29.array[1] = (int)(float)((float)((-*((int *)left + 1)) * 127.0) + 127.5);
+src/gfx_d3d/r_sprite.cpp	88	const float*	int*	left	2	8	v29.array[2] = (int)(float)((float)((-*((int *)left + 2)) * 127.0) + 127.5);
+src/gfx_d3d/r_sprite.cpp	405	long long int*	float*	&vcenter	1	4	pos0.v[1] = (float)(*((float *)&vcenter + 1) + vleft.v[1]) + vup.v[1];
+src/gfx_d3d/r_sprite.cpp	407	long long int*	float*	&vcenter_8	1	4	pos0.v[3] = (float)(*((float *)&vcenter_8 + 1) + vleft.v[3]) + vup.v[3];
+src/gfx_d3d/r_sprite.cpp	409	long long int*	float*	&vcenter	1	4	pos1.v[1] = (float)(*((float *)&vcenter + 1) - vleft.v[1]) + vup.v[1];
+src/gfx_d3d/r_sprite.cpp	411	long long int*	float*	&vcenter_8	1	4	pos1.v[3] = (float)(*((float *)&vcenter_8 + 1) - vleft.v[3]) + vup.v[3];
+src/gfx_d3d/r_sprite.cpp	413	long long int*	float*	&vcenter	1	4	pos2.v[1] = (float)(*((float *)&vcenter + 1) - vleft.v[1]) - vup.v[1];
+src/gfx_d3d/r_sprite.cpp	415	long long int*	float*	&vcenter_8	1	4	pos2.v[3] = (float)(*((float *)&vcenter_8 + 1) - vleft.v[3]) - vup.v[3];
+src/gfx_d3d/r_sprite.cpp	417	long long int*	float*	&vcenter	1	4	pos3.v[1] = (float)(*((float *)&vcenter + 1) + vleft.v[1]) - vup.v[1];
+src/gfx_d3d/r_sprite.cpp	419	long long int*	float*	&vcenter_8	1	4	pos3.v[3] = (float)(*((float *)&vcenter_8 + 1) + vleft.v[3]) - vup.v[3];
+src/gfx_d3d/r_stream.cpp	2225	const float*	_QWORD*	mip0maxs	1	8	*(_QWORD *)&v7.unitVec[2].packed = *((_QWORD *)mip0maxs + 1);
+src/gfx_d3d/r_stream.cpp	2227	const float*	_QWORD*	mip0mins	1	8	*(_QWORD *)&v6.unitVec[2].packed = *((_QWORD *)mip0mins + 1);
+src/gfx_d3d/r_water_sim.cpp	896	?	float*	&v2	1	4	*((float *)&v2 + 1) = data.localEyeHeight * 7.0 / 8.0;
+src/gfx_d3d/r_water_sim.cpp	897	?	float*	&v2	1	4	data.localEyeHeight = R_WaterSimulationGetBaseHeight(eyePos) * 1.0 / 8.0 + *((float *)&v2 + 1);
+src/gfx_d3d/r_water_sim.cpp	902	?	float*	&v3	1	4	*((float *)&v3 + 1) = d / (float)((float)(16.0 * config.gridScale) / 16.0);
+src/gfx_d3d/r_water_sim.cpp	904	?	float*	&v3	1	4	*((float *)&v3 + 1) = 1.0f;
+src/gfx_d3d/r_water_sim.cpp	1361	char*	float*	modelSurf	5	20	*((float *)modelSurf + 5) = interpolate;
+src/gfx_d3d/r_water_sim.cpp	1362	char*	unsigned int*	modelSurf	1	4	*((unsigned int *)modelSurf + 1) = (unsigned int)data.vertexBuffer;
+src/gfx_d3d/r_water_sim.cpp	1363	char*	unsigned int*	modelSurf	2	8	*((unsigned int *)modelSurf + 2) = (unsigned int)data.vertexBuffer;
+src/gfx_d3d/r_water_sim.cpp	1364	char*	unsigned int*	modelSurf	3	12	*((unsigned int *)modelSurf + 3) = mesh0->baseVertex;
+src/gfx_d3d/r_water_sim.cpp	1365	char*	unsigned int*	modelSurf	4	16	*((unsigned int *)modelSurf + 4) = mesh1->baseVertex;
+src/gfx_d3d/r_water_sim.cpp	1368	char*	float*	modelSurf	8	32	*((float *)modelSurf + 8) = (float)tile->worldX * config.gridScale;
+src/gfx_d3d/r_water_sim.cpp	1369	char*	float*	modelSurf	9	36	*((float *)modelSurf + 9) = v1;
+src/gfx_d3d/r_water_sim.cpp	1370	char*	float*	modelSurf	10	40	*((float *)modelSurf + 10) = v2;
+src/gfx_d3d/r_water_sim.cpp	1374	char*	unsigned int*	modelSurf	6	24	*((unsigned int *)modelSurf + 6) = 289;
+src/gfx_d3d/r_water_sim.cpp	1375	char*	unsigned int*	modelSurf	7	28	*((unsigned int *)modelSurf + 7) = data.tileTriCount[lod];
+src/gfx_d3d/r_water_sim.cpp	1720	?	_QWORD*	p_flooroffset	510	4080	*(_QWORD *)&old1.unitVec[2].packed = *((_QWORD *)p_flooroffset + 510);
+src/gfx_d3d/r_water_sim.cpp	1721	?	float*	p_flooroffset	1022	4088	v91 = *((float *)p_flooroffset + 1022);
+src/gfx_d3d/r_water_sim.cpp	1722	?	unsigned int*	p_flooroffset	1023	4092	old0.u[0] = *((unsigned int *)p_flooroffset + 1023);
+src/gfx_d3d/r_water_sim.cpp	1724	?	_QWORD*	p_flooroffset	514	4112	*(_QWORD *)&old2.unitVec[2].packed = *((_QWORD *)p_flooroffset + 514);
+src/gfx_d3d/r_water_sim.cpp	1725	?	float*	p_flooroffset	1030	4120	v89 = *((float *)p_flooroffset + 1030);
+src/gfx_d3d/r_water_sim.cpp	1726	?	unsigned int*	p_flooroffset	1031	4124	old1.u[0] = *((unsigned int *)p_flooroffset + 1031);
+src/gfx_d3d/r_water_sim.cpp	1728	?	_QWORD*	p_waterheight	512	4096	*(_QWORD *)&old3.unitVec[2].packed = *((_QWORD *)p_waterheight + 512);
+src/gfx_d3d/r_water_sim.cpp	1729	?	float*	p_waterheight	1026	4104	v87 = *((float *)p_waterheight + 1026);
+src/gfx_d3d/r_water_sim.cpp	1730	?	unsigned int*	p_waterheight	1027	4108	old2.u[0] = *((unsigned int *)p_waterheight + 1027);
+src/gfx_d3d/r_water_sim.cpp	1732	?	_QWORD*	p_shoredist	512	4096	*(_QWORD *)&oldc.unitVec[2].packed = *((_QWORD *)p_shoredist + 512);
+src/gfx_d3d/r_water_sim.cpp	1733	?	float*	p_shoredist	1026	4104	v85 = *((float *)p_shoredist + 1026);
+src/gfx_d3d/r_water_sim.cpp	1734	?	unsigned int*	p_shoredist	1027	4108	old3.u[0] = *((unsigned int *)p_shoredist + 1027);
+src/gfx_d3d/r_water_sim.cpp	1736	?	_QWORD*	p_flooroffset	512	4096	*(_QWORD *)&veryoldc.unitVec[2].packed = *((_QWORD *)p_flooroffset + 512);
+src/gfx_d3d/r_water_sim.cpp	1737	?	float*	p_flooroffset	1026	4104	v83 = *((float *)p_flooroffset + 1026);
+src/gfx_d3d/r_water_sim.cpp	1738	?	unsigned int*	p_flooroffset	1027	4108	oldc.u[0] = *((unsigned int *)p_flooroffset + 1027);
+src/gfx_d3d/r_water_sim.cpp	1882	?	float*	&v50	1	4	*((float *)&v50 + 1) = *(float *)&endv * windadd.v[1];
+src/gfx_d3d/r_water_sim.cpp	1894	?	float*	&v50	1	4	d0.v[2] = d0.v[2] - *((float *)&v50 + 1);
+src/gfx_d3d/r_water_sim.cpp	2959	long long int*	float*	&v129	1	4	foam.v[2] = *((float *)&v129 + 1) + (float)(*((float *)&v141 + 1) + *((float *)&v137 + 1));
+src/gfx_d3d/r_water_sim.cpp	2959	long long int*	float*	&v141	1	4	foam.v[2] = *((float *)&v129 + 1) + (float)(*((float *)&v141 + 1) + *((float *)&v137 + 1));
+src/gfx_d3d/r_water_sim.cpp	2959	long long int*	float*	&v137	1	4	foam.v[2] = *((float *)&v129 + 1) + (float)(*((float *)&v141 + 1) + *((float *)&v137 + 1));
+src/gfx_d3d/r_water_sim.cpp	2992	long long int*	float*	&u	1	4	v118 = *((float *)&u + 1) + foam.v[2];
+src/gfx_d3d/r_water_sim.cpp	3055	long long int*	float*	&v149	1	4	binormal.v[2] = (float)(*((float *)&v149 + 1) + *(float *)&avgpos[16]) - *((float *)&v157 + 1);
+src/gfx_d3d/r_water_sim.cpp	3055	long long int*	float*	&v157	1	4	binormal.v[2] = (float)(*((float *)&v149 + 1) + *(float *)&avgpos[16]) - *((float *)&v157 + 1);
+src/gfx_d3d/r_water_sim.cpp	3059	long long int*	float*	&v133	1	4	binormal.v[2] = binormal.v[2] - *((float *)&v133 + 1);
+src/gfx_d3d/r_water_sim.cpp	3067	long long int*	float*	&v137	1	4	binormal.v[2] = binormal.v[2] + *((float *)&v137 + 1);
+src/gfx_d3d/r_water_sim.cpp	3071	long long int*	float*	&v145	1	4	binormal.v[2] = binormal.v[2] - *((float *)&v145 + 1);
+src/gfx_d3d/r_water_sim.cpp	3075	long long int*	float*	&v133	1	4	zOffset.v[2] = (float)(*(float *)&avgpos[16] + *((float *)&v133 + 1)) - *((float *)&v157 + 1);
+src/gfx_d3d/r_water_sim.cpp	3075	long long int*	float*	&v157	1	4	zOffset.v[2] = (float)(*(float *)&avgpos[16] + *((float *)&v133 + 1)) - *((float *)&v157 + 1);
+src/gfx_d3d/r_water_sim.cpp	3079	long long int*	float*	&v149	1	4	zOffset.v[2] = zOffset.v[2] - *((float *)&v149 + 1);
+src/gfx_d3d/r_water_sim.cpp	3087	long long int*	float*	&v129	1	4	zOffset.v[2] = zOffset.v[2] + *((float *)&v129 + 1);
+src/gfx_d3d/r_water_sim.cpp	3091	long long int*	float*	&v153	1	4	zOffset.v[2] = zOffset.v[2] - *((float *)&v153 + 1);
+src/glass/glass_shard.cpp	1504	long long int*	float*	&np	1	4	*((float *)&np + 1) = (float)(v8 * v9->edge.dir[1]) + v9->edge.origin[1];
+src/glass/glass_shard.cpp	1506	long long int*	float*	&np	1	4	+ (float)((float)(p[1] - *((float *)&np + 1)) * (float)(p[1] - *((float *)&np + 1)));
+src/glass/glass_shard.cpp	1506	long long int*	float*	&np	1	4	+ (float)((float)(p[1] - *((float *)&np + 1)) * (float)(p[1] - *((float *)&np + 1)));
+src/ik/ik_import.cpp	489	unsigned char*	unsigned int*	obj	21	84	matArray = (DObjAnimMat *)*((unsigned int *)obj + 21);
+src/ik/ik_import.cpp	507	unsigned char*	unsigned int**	obj	30	120	for ( objBoneIndex = 0; objBoneIndex < *(unsigned __int8 *)(**((unsigned int **)obj + 30) + 4); ++objBoneIndex )
+src/ik/ik_import.cpp	560	unsigned char*	unsigned int**	obj	30	120	*(const unsigned __int8 **)(**((unsigned int **)obj + 30) + 12),
+src/ik/ik_import.cpp	561	unsigned char*	unsigned int**	obj	30	120	*(unsigned __int8 *)(**((unsigned int **)obj + 30) + 5),
+src/ik/ik_import.cpp	562	unsigned char*	unsigned int**	obj	30	120	*(float **)(**((unsigned int **)obj + 30) + 20),
+src/ik/ik_import.cpp	723	unsigned char*	unsigned __int16*	model	3	6	entityNum = *((unsigned __int16 *)model + 3) - 1;
+src/ik/ik_import.cpp	746	unsigned char*	unsigned int*	model	30	120	if ( !*((unsigned int *)model + 30) || !model[9] || !**((unsigned int **)model + 30) )
+src/ik/ik_import.cpp	746	unsigned char*	unsigned int**	model	30	120	if ( !*((unsigned int *)model + 30) || !model[9] || !**((unsigned int **)model + 30) )
+src/ik/ik_import.cpp	823	unsigned char*	unsigned __int16*	obj	3	6	entityNum = *((unsigned __int16 *)obj + 3) - 1;
+src/ik/ik_import.cpp	850	unsigned char*	unsigned __int16*	obj	3	6	entityNum = *((unsigned __int16 *)obj + 3) - 1;
+src/ik/ik_import.cpp	910	unsigned char*	unsigned __int16*	obj	3	6	entityNum = *((unsigned __int16 *)obj + 3) - 1;
+src/ik/ik_import.cpp	1152	long long int*	float*	&v15	1	4	*(float *)&v7 = (float)((float)((float)(legsMat[0][0] * *((float *)&v15 + 1))
+src/ik/ik_import.cpp	1153	long long int*	float*	&v17	1	4	+ (float)(legsMat[0][1] * *((float *)&v17 + 1)))
+src/ik/ik_import.cpp	1154	long long int*	float*	&v19	1	4	+ (float)(legsMat[0][2] * *((float *)&v19 + 1)))
+src/ik/ik_import.cpp	1155	long long int*	float*	&v21	1	4	+ (float)(legsMat[0][3] * *((float *)&v21 + 1));
+src/ik/ik_import.cpp	1156	long long int*	float*	&v7	1	4	*((float *)&v7 + 1) = (float)((float)((float)(legsMat[0][0] * *(float *)&v16)
+src/ik/ik_import.cpp	1160	long long int*	float*	&v16	1	4	v8 = (float)((float)((float)(legsMat[0][0] * *((float *)&v16 + 1)) + (float)(legsMat[0][1] * *((float *)&v18 + 1)))
+src/ik/ik_import.cpp	1160	long long int*	float*	&v18	1	4	v8 = (float)((float)((float)(legsMat[0][0] * *((float *)&v16 + 1)) + (float)(legsMat[0][1] * *((float *)&v18 + 1)))
+src/ik/ik_import.cpp	1161	long long int*	float*	&v20	1	4	+ (float)(legsMat[0][2] * *((float *)&v20 + 1)))
+src/ik/ik_import.cpp	1162	long long int*	float*	&v22	1	4	+ (float)(legsMat[0][3] * *((float *)&v22 + 1));
+src/ik/ik_import.cpp	1166	long long int*	float*	&v9	1	4	*((float *)&v9 + 1) = (float)((float)((float)(legsMat[1][0] * *((float *)&v15 + 1))
+src/ik/ik_import.cpp	1166	long long int*	float*	&v15	1	4	*((float *)&v9 + 1) = (float)((float)((float)(legsMat[1][0] * *((float *)&v15 + 1))
+src/ik/ik_import.cpp	1167	long long int*	float*	&v17	1	4	+ (float)(legsMat[1][1] * *((float *)&v17 + 1)))
+src/ik/ik_import.cpp	1168	long long int*	float*	&v19	1	4	+ (float)(legsMat[1][2] * *((float *)&v19 + 1)))
+src/ik/ik_import.cpp	1169	long long int*	float*	&v21	1	4	+ (float)(legsMat[1][3] * *((float *)&v21 + 1));
+src/ik/ik_import.cpp	1173	long long int*	float*	&v10	1	4	*((float *)&v10 + 1) = (float)((float)((float)(legsMat[1][0] * *((float *)&v16 + 1))
+src/ik/ik_import.cpp	1173	long long int*	float*	&v16	1	4	*((float *)&v10 + 1) = (float)((float)((float)(legsMat[1][0] * *((float *)&v16 + 1))
+src/ik/ik_import.cpp	1174	long long int*	float*	&v18	1	4	+ (float)(legsMat[1][1] * *((float *)&v18 + 1)))
+src/ik/ik_import.cpp	1175	long long int*	float*	&v20	1	4	+ (float)(legsMat[1][2] * *((float *)&v20 + 1)))
+src/ik/ik_import.cpp	1176	long long int*	float*	&v22	1	4	+ (float)(legsMat[1][3] * *((float *)&v22 + 1));
+src/ik/ik_import.cpp	1180	long long int*	float*	&v11	1	4	*((float *)&v11 + 1) = (float)((float)((float)(legsMat[2][0] * *((float *)&v15 + 1))
+src/ik/ik_import.cpp	1180	long long int*	float*	&v15	1	4	*((float *)&v11 + 1) = (float)((float)((float)(legsMat[2][0] * *((float *)&v15 + 1))
+src/ik/ik_import.cpp	1181	long long int*	float*	&v17	1	4	+ (float)(legsMat[2][1] * *((float *)&v17 + 1)))
+src/ik/ik_import.cpp	1182	long long int*	float*	&v19	1	4	+ (float)(legsMat[2][2] * *((float *)&v19 + 1)))
+src/ik/ik_import.cpp	1183	long long int*	float*	&v21	1	4	+ (float)(legsMat[2][3] * *((float *)&v21 + 1));
+src/ik/ik_import.cpp	1187	long long int*	float*	&v12	1	4	*((float *)&v12 + 1) = (float)((float)((float)(legsMat[2][0] * *((float *)&v16 + 1))
+src/ik/ik_import.cpp	1187	long long int*	float*	&v16	1	4	*((float *)&v12 + 1) = (float)((float)((float)(legsMat[2][0] * *((float *)&v16 + 1))
+src/ik/ik_import.cpp	1188	long long int*	float*	&v18	1	4	+ (float)(legsMat[2][1] * *((float *)&v18 + 1)))
+src/ik/ik_import.cpp	1189	long long int*	float*	&v20	1	4	+ (float)(legsMat[2][2] * *((float *)&v20 + 1)))
+src/ik/ik_import.cpp	1190	long long int*	float*	&v22	1	4	+ (float)(legsMat[2][3] * *((float *)&v22 + 1));
+src/ik/ik_import.cpp	1194	long long int*	float*	&v13	1	4	*((float *)&v13 + 1) = (float)((float)((float)(legsMat[3][0] * *((float *)&v15 + 1))
+src/ik/ik_import.cpp	1194	long long int*	float*	&v15	1	4	*((float *)&v13 + 1) = (float)((float)((float)(legsMat[3][0] * *((float *)&v15 + 1))
+src/ik/ik_import.cpp	1195	long long int*	float*	&v17	1	4	+ (float)(legsMat[3][1] * *((float *)&v17 + 1)))
+src/ik/ik_import.cpp	1196	long long int*	float*	&v19	1	4	+ (float)(legsMat[3][2] * *((float *)&v19 + 1)))
+src/ik/ik_import.cpp	1197	long long int*	float*	&v21	1	4	+ (float)(legsMat[3][3] * *((float *)&v21 + 1));
+src/ik/ik_import.cpp	1201	long long int*	float*	&v14	1	4	*((float *)&v14 + 1) = (float)((float)((float)(legsMat[3][0] * *((float *)&v16 + 1))
+src/ik/ik_import.cpp	1201	long long int*	float*	&v16	1	4	*((float *)&v14 + 1) = (float)((float)((float)(legsMat[3][0] * *((float *)&v16 + 1))
+src/ik/ik_import.cpp	1202	long long int*	float*	&v18	1	4	+ (float)(legsMat[3][1] * *((float *)&v18 + 1)))
+src/ik/ik_import.cpp	1203	long long int*	float*	&v20	1	4	+ (float)(legsMat[3][2] * *((float *)&v20 + 1)))
+src/ik/ik_import.cpp	1204	long long int*	float*	&v22	1	4	+ (float)(legsMat[3][3] * *((float *)&v22 + 1));
+src/ik/ik_import.cpp	2466	unsigned char*	unsigned __int16*	model	3	6	entityNum = *((unsigned __int16 *)model + 3) - 1;
+src/ik/ik_import.cpp	2520	const unsigned char*	unsigned __int16*	model	3	6	entityNum = *((unsigned __int16 *)model + 3) - 1;
+src/live/live_combatrecord.cpp	757	float*	unsigned int*	arg0	2	8	if ( *((unsigned int *)arg0 + 2) == *((unsigned int *)arg1 + 2) )
+src/live/live_combatrecord.cpp	757	float*	unsigned int*	arg1	2	8	if ( *((unsigned int *)arg0 + 2) == *((unsigned int *)arg1 + 2) )
+src/live/live_combatrecord.cpp	760	float*	unsigned int*	arg1	2	8	return *((unsigned int *)arg1 + 2) - *((unsigned int *)arg0 + 2);
+src/live/live_combatrecord.cpp	760	float*	unsigned int*	arg0	2	8	return *((unsigned int *)arg1 + 2) - *((unsigned int *)arg0 + 2);
+src/live/live_combatrecord.cpp	779	float*	unsigned int*	arg0	3	12	else if ( *((unsigned int *)arg0 + 3) || *((unsigned int *)arg1 + 3) )
+src/live/live_combatrecord.cpp	779	float*	unsigned int*	arg1	3	12	else if ( *((unsigned int *)arg0 + 3) || *((unsigned int *)arg1 + 3) )
+src/live/live_combatrecord.cpp	781	float*	unsigned int*	arg1	3	12	return *((unsigned int *)arg1 + 3) - *((unsigned int *)arg0 + 3);
+src/live/live_combatrecord.cpp	781	float*	unsigned int*	arg0	3	12	return *((unsigned int *)arg1 + 3) - *((unsigned int *)arg0 + 3);
+src/live/live_combatrecord.cpp	817	float*	unsigned int*	arg0	2	8	if ( *((unsigned int *)arg0 + 2) == *((unsigned int *)arg1 + 2) )
+src/live/live_combatrecord.cpp	817	float*	unsigned int*	arg1	2	8	if ( *((unsigned int *)arg0 + 2) == *((unsigned int *)arg1 + 2) )
+src/live/live_combatrecord.cpp	820	float*	unsigned int*	arg1	2	8	return *((unsigned int *)arg1 + 2) - *((unsigned int *)arg0 + 2);
+src/live/live_combatrecord.cpp	820	float*	unsigned int*	arg0	2	8	return *((unsigned int *)arg1 + 2) - *((unsigned int *)arg0 + 2);
+src/live/live_combatrecord.cpp	829	float*	unsigned int*	arg0	3	12	else if ( *((unsigned int *)arg0 + 3) || *((unsigned int *)arg1 + 3) )
+src/live/live_combatrecord.cpp	829	float*	unsigned int*	arg1	3	12	else if ( *((unsigned int *)arg0 + 3) || *((unsigned int *)arg1 + 3) )
+src/live/live_combatrecord.cpp	831	float*	unsigned int*	arg1	3	12	return *((unsigned int *)arg1 + 3) - *((unsigned int *)arg0 + 3);
+src/live/live_combatrecord.cpp	831	float*	unsigned int*	arg0	3	12	return *((unsigned int *)arg1 + 3) - *((unsigned int *)arg0 + 3);
+src/live/live_leaderboard.cpp	1723	?	unsigned int*	g_lbGlob.tasks[slot].data	3878	15512	*((unsigned int *)g_lbGlob.tasks[slot].data + 3878) = *((unsigned int *)g_lbGlob.tasks[slot].data + 3868);
+src/live/live_leaderboard.cpp	1723	?	unsigned int*	g_lbGlob.tasks[slot].data	3868	15472	*((unsigned int *)g_lbGlob.tasks[slot].data + 3878) = *((unsigned int *)g_lbGlob.tasks[slot].data + 3868);
+src/live/live_pcache_profile.cpp	136	void*	unsigned int*	task->payload	6	24	*((unsigned int *)task->payload + 6) &= ~1u;
+src/live/live_pcache_profile.cpp	143	void*	unsigned int*	task->payload	4	16	*((unsigned int *)task->payload + 4) = PCache_Time() + 300;
+src/live/live_stats.cpp	4490	?	unsigned int*	nemesisXuid	1	4	*((unsigned int *)nemesisXuid + 1) = v3;
+src/live/live_storage.cpp	1288	const char**	_BYTE*	data	242	242	if ( !*((_BYTE *)data + 242)
+src/live/live_storage.cpp	1298	const char**	_BYTE*	data	242	242	if ( *((_BYTE *)data + 242) )
+src/live/live_storage.cpp	1548	const char**	_BYTE*	data	242	242	if ( !*((_BYTE *)data + 242)
+src/live/live_storage.cpp	1558	const char**	_BYTE*	data	242	242	if ( data && *((_BYTE *)data + 242) )
+src/live/live_storage.cpp	1598	const char**	_BYTE*	data	242	242	if ( !*((_BYTE *)data + 242)
+src/live/live_storage.cpp	1608	const char**	_BYTE*	data	242	242	if ( *((_BYTE *)data + 242) )
+src/live/live_storage.cpp	1768	const char**	_BYTE*	data	242	242	if ( !*((_BYTE *)data + 242)
+src/live/live_storage.cpp	1778	const char**	_BYTE*	data	242	242	if ( *((_BYTE *)data + 242) )
+src/live/live_storage.cpp	3143	void*	_BYTE*	task->payload	36	36	if ( *((_BYTE *)task->payload + 36) )
+src/live/live_storage.cpp	3274	void*	bdFileMetaData**	task->payload	4	16	LiveStorage_FileShare_PublicMetaToTags(*((bdFileMetaData **)task->payload + 4), *((unsigned int *)task->payload + 1));
+src/live/live_storage.cpp	3274	void*	unsigned int*	task->payload	1	4	LiveStorage_FileShare_PublicMetaToTags(*((bdFileMetaData **)task->payload + 4), *((unsigned int *)task->payload + 1));
+src/live/live_storage.cpp	3586	?	fileShareLocation*	task->payload	2	None	httpError = dwFileShareGetLastHTTPError(task->controllerIndex, *((fileShareLocation *)task->payload + 2));
+src/live/live_storage.cpp	3916	void*	_QWORD*	task->payload	2	16	Com_PrintError(16, "Could not set tags for entity %llu\n", *((_QWORD *)task->payload + 2));
+src/live/live_storage.cpp	3926	void*	_QWORD*	task->payload	2	16	Com_Printf(16, "Successfully set tags for entity %llu\n", *((_QWORD *)task->payload + 2));
+src/live/live_storage_win.cpp	1204	?	unsigned int*	&i[1].m_writeType	1	4	*((unsigned int *)&i[1].m_writeType + 1) = 0;
+src/live/live_storage_win.cpp	1647	unsigned char*	unsigned int*	purchasedItems	1	4	*((unsigned int *)purchasedItems + 1) = 0;
+src/live/live_storage_win.cpp	1648	unsigned char*	unsigned int*	purchasedItems	2	8	*((unsigned int *)purchasedItems + 2) = 0;
+src/live/live_storage_win.cpp	1649	unsigned char*	unsigned int*	purchasedItems	3	12	*((unsigned int *)purchasedItems + 3) = 0;
+src/live/live_storage_win.cpp	1650	unsigned char*	unsigned int*	purchasedItems	4	16	*((unsigned int *)purchasedItems + 4) = 0;
+src/live/live_storage_win.cpp	1651	unsigned char*	unsigned int*	purchasedItems	5	20	*((unsigned int *)purchasedItems + 5) = 0;
+src/live/live_storage_win.cpp	1652	unsigned char*	unsigned int*	purchasedItems	6	24	*((unsigned int *)purchasedItems + 6) = 0;
+src/live/live_storage_win.cpp	1653	unsigned char*	unsigned int*	purchasedItems	7	28	*((unsigned int *)purchasedItems + 7) = 0;
+src/live/live_storage_win.cpp	2565	?	_QWORD*	data	34	272	*((_QWORD *)data + 34),
+src/live/live_storage_win.cpp	2566	?	unsigned __int8**	data	62	248	*((unsigned __int8 **)data + 62),
+src/live/live_storage_win.cpp	2633	?	_QWORD*	data	34	272	*((_QWORD *)data + 34),
+src/live/live_storage_win.cpp	2634	?	unsigned __int8**	data	62	248	*((unsigned __int8 **)data + 62),
+src/live/live_storage_win.cpp	2694	?	unsigned int*	data	9	36	if ( !*((unsigned int *)data + 9)
+src/live/live_storage_win.cpp	2704	?	unsigned int*	data	9	36	g_oldCACBlobSize = *((unsigned int *)data + 9);
+src/live/live_storage_win.cpp	2709	?	unsigned int*	data	9	36	*((unsigned int *)data + 9),
+src/live/live_storage_win.cpp	2714	?	_QWORD*	data	34	272	*((_QWORD *)data + 34)) )
+src/live/live_storage_win.cpp	2716	?	_QWORD*	data	34	272	SV_CACValidateWriteCAC(*((_QWORD *)data + 34), g_newCacBlob, *((unsigned int *)data + 9));
+src/live/live_storage_win.cpp	2716	?	unsigned int*	data	9	36	SV_CACValidateWriteCAC(*((_QWORD *)data + 34), g_newCacBlob, *((unsigned int *)data + 9));
+src/live/live_storage_win.cpp	2717	?	_QWORD*	data	34	272	SV_CACValidateWriteGlobal(*((_QWORD *)data + 34), g_cac_globalBlob, g_globalBlobSize);
+src/live/live_storage_win.cpp	2722	?	_QWORD*	data	34	272	SV_CACValidateSendClientMsg(*((_QWORD *)data + 34), 6u);
+src/live/live_storage_win.cpp	2734	?	unsigned int*	data	9	36	if ( !*((unsigned int *)data + 9)
+src/live/live_storage_win.cpp	2754	?	_QWORD*	data	34	272	*((_QWORD *)data + 34)) )
+src/live/live_storage_win.cpp	2756	?	_QWORD*	data	34	272	SV_CACValidateWriteCAC(*((_QWORD *)data + 34), g_newCacBlob, *((unsigned int *)data + 9));
+src/live/live_storage_win.cpp	2756	?	unsigned int*	data	9	36	SV_CACValidateWriteCAC(*((_QWORD *)data + 34), g_newCacBlob, *((unsigned int *)data + 9));
+src/live/live_storage_win.cpp	2757	?	_QWORD*	data	34	272	SV_CACValidateWriteGlobal(*((_QWORD *)data + 34), g_cac_globalBlob, g_globalBlobSize);
+src/live/live_storage_win.cpp	2762	?	_QWORD*	data	34	272	SV_CACValidateSendClientMsg(*((_QWORD *)data + 34), 6u);
+src/live/live_storage_win.cpp	2819	?	unsigned int*	data	9	36	if ( !*((unsigned int *)data + 9)
+src/live/live_storage_win.cpp	2829	?	unsigned int*	data	9	36	g_globalBlobSize = *((unsigned int *)data + 9);
+src/live/live_storage_win.cpp	2837	?	unsigned __int8**	data	54	216	*((unsigned __int8 **)data + 54),
+src/live/live_storage_win.cpp	2838	?	unsigned int*	data	9	36	*((unsigned int *)data + 9),
+src/live/live_storage_win.cpp	2839	?	_QWORD*	data	34	272	*((_QWORD *)data + 34)) )
+src/live/live_storage_win.cpp	2841	?	_QWORD*	data	34	272	SV_CACValidateWriteCAC(*((_QWORD *)data + 34), g_newCacBlob, g_newCACBlobSize);
+src/live/live_storage_win.cpp	2842	?	_QWORD*	data	34	272	SV_CACValidateWriteGlobal(*((_QWORD *)data + 34), g_cac_globalBlob, g_globalBlobSize);
+src/live/live_storage_win.cpp	2847	?	_QWORD*	data	34	272	SV_CACValidateSendClientMsg(*((_QWORD *)data + 34), 6u);
+src/live/live_storage_win.cpp	3348	void*	unsigned __int8**	data	62	248	Live_PopulateRecentServers(*((unsigned __int8 **)data + 62), *((unsigned int *)data + 63));
+src/live/live_storage_win.cpp	3348	void*	unsigned int*	data	63	252	Live_PopulateRecentServers(*((unsigned __int8 **)data + 62), *((unsigned int *)data + 63));
+src/live/live_win.cpp	1671	unsigned char*	unsigned int*	ptr	1	4	*((unsigned int *)ptr + 1) = HIDWORD(s_recentServers[i].serverID);
+src/live/live_win.cpp	1696	unsigned char*	unsigned int*	ptr	1	4	*(unsigned int *)(v2 * 16 + 174315068) = *((unsigned int *)ptr + 1);
+src/live/live_win.cpp	1697	unsigned char*	unsigned int*	ptr	2	8	s_recentServers[i].joinTime = *((unsigned int *)ptr + 2);
+src/live/live_win.cpp	1855	unsigned char*	_WORD*	addrblob	2	4	*(_WORD *)&v2->addressblob[4] = *((_WORD *)addrblob + 2);
+src/live/live_win.cpp	1858	unsigned char*	unsigned int*	uidblob	1	4	*(unsigned int *)(v3 * 16 + 174313908) = *((unsigned int *)uidblob + 1);
+src/live/live_win.cpp	1877	unsigned char*	_WORD*	addrblob	2	4	*((_WORD *)addrblob + 2) = *(_WORD *)&v2->addressblob[4];
+src/live/live_win.cpp	1880	unsigned char*	unsigned int*	uidblob	1	4	*((unsigned int *)uidblob + 1) = HIDWORD(s_favourites[i].uid);
+src/physics/destructible.cpp	1523	LerpEntityStateCreateDynEnt*	_QWORD*	&ent->nextState.lerp.u.createDynEnt	2	16	*((_QWORD *)&ent->nextState.lerp.u.createDynEnt + 2) = 0;
+src/physics/destructible.cpp	2459	const centity_s**	float*	point	1	4	dir[1] = hitp[1] - *((float *)point + 1);
+src/physics/destructible.cpp	2460	const centity_s**	float*	point	2	8	dir[2] = hitp[2] - *((float *)point + 2);
+src/physics/destructible.cpp	2842	const LerpEntityStateCreateDynEnt*	_QWORD*	&es->lerp.u.createDynEnt	2	16	*(_QWORD *)&newState.state.modelState3 = *((_QWORD *)&es->lerp.u.createDynEnt + 2);
+src/physics/destructibledef_load_obj.cpp	692	unsigned char*	unsigned int*	pStruct	4	16	if ( *((unsigned int *)pStruct + 4) )
+src/physics/destructibledef_load_obj.cpp	720	unsigned char*	unsigned int*	pStruct	3	12	if ( iFieldType >= 431 && iFieldType <= 462 && iFieldType - 431 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	721	unsigned char*	unsigned int*	pStruct	4	16	*(_WORD *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 431) + 288) = SL_GetLowercaseString(pValue, 0, SCRIPTINSTANCE_SERVER);
+src/physics/destructibledef_load_obj.cpp	723	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 399 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	725	unsigned char*	unsigned int*	pStruct	4	16	*(float *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 399) + 264) = (float)atoi(pValue) * 0.0099999998;
+src/physics/destructibledef_load_obj.cpp	728	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 367 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	731	unsigned char*	unsigned int*	pStruct	4	16	(unsigned __int8 *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 367) + 284),
+src/physics/destructibledef_load_obj.cpp	735	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 335 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	737	unsigned char*	unsigned int*	pStruct	4	16	*(unsigned int *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 335) + 280) = (unsigned int)FX_Register(pValue);
+src/physics/destructibledef_load_obj.cpp	740	unsigned char*	unsigned int*	pStruct	3	12	else if ( !G_ExitAfterToolComplete() && iFieldType - 303 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	743	unsigned char*	unsigned int*	pStruct	4	16	(unsigned __int8 *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 303) + 276),
+src/physics/destructibledef_load_obj.cpp	747	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 271 < *((unsigned int *)pStruct + 3) && pValue && *pValue )
+src/physics/destructibledef_load_obj.cpp	749	unsigned char*	unsigned int*	pStruct	4	16	*(unsigned int *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 271) + 268) = (unsigned int)XModel_PhysConstraintsPrecache(pValue, 0);
+src/physics/destructibledef_load_obj.cpp	752	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 239 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	755	unsigned char*	unsigned int*	pStruct	4	16	*(float *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 239) + 260) = v4;
+src/physics/destructibledef_load_obj.cpp	758	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 207 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	761	unsigned char*	unsigned int*	pStruct	4	16	*(float *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 207) + 256) = v5;
+src/physics/destructibledef_load_obj.cpp	764	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 175 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	767	unsigned char*	unsigned int*	pStruct	4	16	*(float *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 175) + 252) = v6;
+src/physics/destructibledef_load_obj.cpp	770	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 143 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	773	unsigned char*	unsigned int*	pStruct	4	16	*(float *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 143) + 248) = v7;
+src/physics/destructibledef_load_obj.cpp	776	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 111 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	778	unsigned char*	unsigned int*	pStruct	4	16	*(float *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 111) + 244) = (float)atoi(pValue) / 100.0;
+src/physics/destructibledef_load_obj.cpp	784	unsigned char*	unsigned int*	pStruct	3	12	if ( iFieldType - 79 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	786	unsigned char*	unsigned int*	pStruct	4	16	*(_BYTE *)(*((unsigned int *)pStruct + 4) + 312 * v8 + 240) = atoi(pValue);
+src/physics/destructibledef_load_obj.cpp	787	unsigned char*	unsigned int*	pStruct	4	16	if ( *(unsigned __int8 *)(*((unsigned int *)pStruct + 4) + 312 * v8 + 240) != 255
+src/physics/destructibledef_load_obj.cpp	788	unsigned char*	unsigned int*	pStruct	4	16	&& *(unsigned __int8 *)(*((unsigned int *)pStruct + 4) + 312 * v8 + 240) >= *((int *)pStruct + 3)
+src/physics/destructibledef_load_obj.cpp	788	unsigned char*	int*	pStruct	3	12	&& *(unsigned __int8 *)(*((unsigned int *)pStruct + 4) + 312 * v8 + 240) >= *((int *)pStruct + 3)
+src/physics/destructibledef_load_obj.cpp	801	unsigned char*	unsigned int*	pStruct	3	12	else if ( iFieldType - 47 < *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	803	unsigned char*	unsigned int*	pStruct	4	16	*(unsigned int *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 47) + 272) = atoi(pValue);
+src/physics/destructibledef_load_obj.cpp	808	unsigned char*	unsigned int*	pStruct	4	16	DestructiblePieceLoadFile(pValue, (DestructiblePiece *)(*((unsigned int *)pStruct + 4) + 312 * (iFieldType - 15)));
+src/physics/destructibledef_load_obj.cpp	814	unsigned char*	unsigned int*	pStruct	3	12	if ( iFieldType >= 15 && iFieldType <= 46 && iFieldType - 15 + 1 > *((unsigned int *)pStruct + 3) )
+src/physics/destructibledef_load_obj.cpp	815	unsigned char*	unsigned int*	pStruct	3	12	*((unsigned int *)pStruct + 3) = iFieldType - 15 + 1;
+src/physics/destructibledef_load_obj.cpp	880	unsigned char*	unsigned int*	v3	1	4	*((unsigned int *)v3 + 1) = 0;
+src/physics/destructibledef_load_obj.cpp	881	unsigned char*	unsigned int*	v3	2	8	*((unsigned int *)v3 + 2) = 0;
+src/physics/destructibledef_load_obj.cpp	882	unsigned char*	unsigned int*	v3	3	12	*((unsigned int *)v3 + 3) = 0;
+src/physics/destructibledef_load_obj.cpp	883	unsigned char*	unsigned int*	v3	4	16	*((unsigned int *)v3 + 4) = 0;
+src/physics/destructibledef_load_obj.cpp	884	unsigned char*	unsigned int*	v3	5	20	*((unsigned int *)v3 + 5) = 0;
+src/physics/destructibledef_load_obj.cpp	894	unsigned char*	unsigned int*	pStruct	3	12	count = 312 * *((unsigned int *)pStruct + 3);
+src/physics/destructibledef_load_obj.cpp	896	unsigned char*	unsigned int*	pStruct	4	16	*((unsigned int *)pStruct + 4) = (unsigned int)v4;
+src/physics/destructibledef_load_obj.cpp	897	unsigned char*	unsigned __int8**	pStruct	4	16	memset(*((unsigned __int8 **)pStruct + 4), 0, count);
+src/physics/destructibledef_load_obj.cpp	907	unsigned char*	unsigned int*	pStruct	1	4	model = (XModel *)*((unsigned int *)pStruct + 1);
+src/physics/destructibledef_load_obj.cpp	910	unsigned char*	unsigned int*	pStruct	3	12	for ( i = 0; i < *((unsigned int *)pStruct + 3); ++i )
+src/physics/destructibledef_load_obj.cpp	914	unsigned char*	unsigned int*	pStruct	4	16	*(float *)(*((unsigned int *)pStruct + 4) + 312 * i + 48 * j + 4) = *(float *)(312 * i
+src/physics/destructibledef_load_obj.cpp	915	unsigned char*	unsigned int*	pStruct	4	16	+ *((unsigned int *)pStruct + 4)
+src/physics/destructibledef_load_obj.cpp	919	unsigned char*	unsigned int*	pStruct	4	16	namea = *(unsigned __int16 *)(312 * i + *((unsigned int *)pStruct + 4) + 48 * j);
+src/physics/destructibledef_load_obj.cpp	925	unsigned char*	unsigned int*	pStruct	4	16	if ( *(unsigned int *)(*((unsigned int *)pStruct + 4) + 312 * i + 48 * j + 44) )
+src/physics/destructibledef_load_obj.cpp	932	unsigned char*	unsigned int*	pStruct	4	16	v7 = **(const char ***)(*((unsigned int *)pStruct + 4) + 312 * i + 48 * j + 44);
+src/physics/destructibledef_load_obj.cpp	946	unsigned char*	unsigned int*	pStruct	4	16	*(unsigned int *)(*((unsigned int *)pStruct + 4) + 312 * i + 4 * ((int)index >> 5) + 292) = *(unsigned int *)(312 * i + *((unsigned int *)pStruct + 4) + 4 * ((i
+src/physics/destructibledef_load_obj.cpp	946	unsigned char*	unsigned int*	pStruct	4	16	*(unsigned int *)(*((unsigned int *)pStruct + 4) + 312 * i + 4 * ((int)index >> 5) + 292) = *(unsigned int *)(312 * i + *((unsigned int *)pStruct + 4) + 4 * ((i
+src/physics/physconstraints_load_obj.cpp	219	unsigned char*	unsigned int*	pStruct	1	4	constraint = (PhysConstraint *)&pStruct[168 * *((unsigned int *)pStruct + 1) + 8];
+src/physics/physconstraints_load_obj.cpp	229	unsigned char*	unsigned int*	pStruct	1	4	if ( *((unsigned int *)pStruct + 1) >= 0x10u )
+src/physics/physconstraints_load_obj.cpp	231	unsigned char*	unsigned int*	pStruct	1	4	++*((unsigned int *)pStruct + 1);
+src/physics/physpreset_load_obj.cpp	121	char*	unsigned int*	v8	1	4	*((unsigned int *)v8 + 1) = *(unsigned int *)&dst[44];
+src/physics/physpreset_load_obj.cpp	122	char*	unsigned int*	v8	2	8	*((unsigned int *)v8 + 2) = *(unsigned int *)&dst[48];
+src/physics/physpreset_load_obj.cpp	125	char*	unsigned int*	v7	1	4	*((unsigned int *)v7 + 1) = *(unsigned int *)&dst[56];
+src/physics/physpreset_load_obj.cpp	126	char*	unsigned int*	v7	2	8	*((unsigned int *)v7 + 2) = *(unsigned int *)&dst[60];
+src/physics/physpreset_load_obj.cpp	129	char*	unsigned int*	v6	1	4	*((unsigned int *)v6 + 1) = *(unsigned int *)&dst[68];
+src/physics/physpreset_load_obj.cpp	130	char*	unsigned int*	v6	2	8	*((unsigned int *)v6 + 2) = *(unsigned int *)&dst[72];
+src/physics/phys_broad_phase.cpp	1918	char*	unsigned int*	p_m_gjk_geom	1	4	v5 = (unsigned int *)*((unsigned int *)p_m_gjk_geom + 1);
+src/physics/phys_broad_phase.cpp	2234	?	float*	&p_z[-1].m_hit_bpi	1	4	v12.x = *((float *)&p_z[-1].m_hit_bpi + 1) - m_bpb->m_trace_translation.x;
+src/physics/phys_broad_phase.cpp	2235	?	float*	&p_z[-1].m_hit_bpi	2	8	v12.y = *((float *)&p_z[-1].m_hit_bpi + 2) - m_bpb->m_trace_translation.y;
+src/physics/phys_contact_manifold.cpp	625	contact_manifold_mesh_point**	unsigned int*	this->m_list_isect_point	1	4	v23 = *((unsigned int *)this->m_list_isect_point + 1);
+src/physics/phys_contact_manifold.cpp	948	contact_manifold_mesh_point**	unsigned int*	this->m_list_sorted_mesh_point	1	4	v20 = (float *)*((unsigned int *)this->m_list_sorted_mesh_point + 1);
+src/physics/phys_gjk_collision_detection.cpp	826	void*	unsigned int*	ent_info->m_data	16	64	if ( *((unsigned int *)ent_info->m_data + 16) != 1
+src/physics/phys_mem_new.cpp	509	?	unsigned int*	v3	1	4	if ( *((unsigned int *)v3 + 1) != -19088744 )
+src/physics/phys_transient_allocator.cpp	63	char*	unsigned int*	v3	1	4	*((unsigned int *)v3 + 1) = 4;
+src/physics/phys_transient_allocator.cpp	64	char*	unsigned int*	v3	2	8	*((unsigned int *)v3 + 2) = (unsigned int)this->m_first_block;
+src/physics/phys_util.cpp	250	rigid_body* const*	unsigned int*	v10	1	4	v14 = (float *)*((unsigned int *)v10 + 1);
+src/physics/phys_util.cpp	491	rigid_body* const*	_DWORD*	v23	1	4	v26 = *((_DWORD *)v23 + 1);
+src/qcommon/cm_load_obj.cpp	56	char*	float*	in	3	12	out->dist = *((float *)in + 3);
+src/qcommon/cm_load_obj.cpp	376	char*	unsigned int*	in	1	4	out->firstTri = *((unsigned int *)in + 1);
+src/qcommon/cm_load_obj.cpp	377	char*	unsigned int*	in	2	8	out->borders = &cm.borders[*((unsigned int *)in + 2)];
+src/qcommon/cm_load_obj.cpp	378	char*	unsigned int*	in	3	12	out->nuinds = *((unsigned int *)in + 3);
+src/qcommon/cm_load_obj.cpp	379	char*	unsigned int*	in	4	16	out->fuind = *((unsigned int *)in + 4);
+src/qcommon/cm_load_obj.cpp	525	char*	unsigned int*	in	8	32	collAabbCount = *((unsigned int *)in + 8);
+src/qcommon/cm_load_obj.cpp	529	char*	unsigned int*	in	7	28	firstCollAabbIndex = *((unsigned int *)in + 7);
+src/qcommon/cm_load_obj.cpp	1052	char*	unsigned int*	in	1	4	firstCollAabbIndex = *((unsigned int *)in + 1);
+src/qcommon/cm_load_obj.cpp	1056	char*	unsigned int*	in	2	8	collAabbCount = *((unsigned int *)in + 2);
+src/qcommon/cm_load_obj.cpp	1093	char*	unsigned int*	in	2	8	firstCollAabbIndex = *((unsigned int *)in + 2);
+src/qcommon/cm_load_obj.cpp	1097	char*	unsigned int*	in	3	12	collAabbCount = *((unsigned int *)in + 3);
+src/qcommon/cm_load_obj.cpp	1137	char*	unsigned int*	in	4	16	numLeafBrushes = *((unsigned int *)in + 4);
+src/qcommon/cm_load_obj.cpp	1138	char*	unsigned int*	in	3	12	indexFirstLeafBrush = *((unsigned int *)in + 3);
+src/qcommon/cm_load_obj.cpp	1263	char*	float*	in	1	4	out->origin[1] = *((float *)in + 1);
+src/qcommon/cm_load_obj.cpp	1264	char*	float*	in	2	8	out->origin[2] = *((float *)in + 2);
+src/qcommon/cm_load_obj.cpp	1265	char*	float*	in	3	12	out->halfSize[0] = *((float *)in + 3);
+src/qcommon/cm_load_obj.cpp	1266	char*	float*	in	4	16	out->halfSize[1] = *((float *)in + 4);
+src/qcommon/cm_load_obj.cpp	1267	char*	float*	in	5	20	out->halfSize[2] = *((float *)in + 5);
+src/qcommon/cm_load_obj.cpp	1268	char*	_WORD*	in	12	24	out->materialIndex = *((_WORD *)in + 12);
+src/qcommon/cm_load_obj.cpp	1269	char*	_WORD*	in	13	26	out->childCount = *((_WORD *)in + 13);
+src/qcommon/cm_load_obj.cpp	1270	char*	unsigned int*	in	7	28	out->u.firstChildIndex = *((unsigned int *)in + 7);
+src/qcommon/cm_mesh.cpp	1125	long long int*	float*	&v65	1	4	if ( fabs(v67) <= (float)((float)(sum[1] * *((float *)&v65 + 1))
+src/qcommon/cm_mesh.cpp	1141	long long int*	float*	&v54	1	4	v48 = fabs(v56) > (float)((float)(sum[0] * *((float *)&v54 + 1))
+src/qcommon/cm_mesh.cpp	1227	long long int*	float*	&v23	1	4	if ( fabs(v25) <= (float)((float)(v43 * *((float *)&v23 + 1))
+src/qcommon/cm_mesh.cpp	1243	long long int*	float*	&v12	1	4	v3 = fabs(v14) > (float)((float)(v42 * *((float *)&v12 + 1))
+src/qcommon/cm_mesh.cpp	1529	long long int*	float*	&v23	1	4	if ( fabs(v25) <= (float)((float)(v43 * *((float *)&v23 + 1))
+src/qcommon/cm_mesh.cpp	1545	long long int*	float*	&v12	1	4	v3 = fabs(v14) > (float)((float)(v42 * *((float *)&v12 + 1))
+src/qcommon/cm_trace.cpp	730	long long int*	float*	&top	1	4	tmp[1] = offset[1] - *((float *)&top + 1);
+src/qcommon/cm_trace.cpp	733	long long int*	float*	&top	1	4	+ (float)((float)(offset[1] - *((float *)&top + 1)) * (float)(offset[1] - *((float *)&top + 1))))
+src/qcommon/cm_trace.cpp	733	long long int*	float*	&top	1	4	+ (float)((float)(offset[1] - *((float *)&top + 1)) * (float)(offset[1] - *((float *)&top + 1))))
+src/qcommon/cm_trace.cpp	747	long long int*	float*	&top	1	4	tmp[1] = offset[1] - *((float *)&top + 1);
+src/qcommon/cm_trace.cpp	750	long long int*	float*	&top	1	4	+ (float)((float)(offset[1] - *((float *)&top + 1))
+src/qcommon/cm_trace.cpp	751	long long int*	float*	&top	1	4	* (float)(offset[1] - *((float *)&top + 1))))
+src/qcommon/cm_trace.cpp	783	long long int*	float*	&top	1	4	tmp[1] = *((float *)&top + 1) - p1_4;
+src/qcommon/cm_trace.cpp	786	long long int*	float*	&top	1	4	+ (float)((float)(*((float *)&top + 1) - p1_4) * (float)(*((float *)&top + 1) - p1_4)))
+src/qcommon/cm_trace.cpp	786	long long int*	float*	&top	1	4	+ (float)((float)(*((float *)&top + 1) - p1_4) * (float)(*((float *)&top + 1) - p1_4)))
+src/qcommon/cm_trace.cpp	2042	long long int*	float*	&v25	1	4	if ( fabs(v27) <= (float)((float)(v45 * *((float *)&v25 + 1))
+src/qcommon/cm_trace.cpp	2058	long long int*	float*	&v14	1	4	v5 = fabs(v16) > (float)((float)(v44 * *((float *)&v14 + 1))
+src/qcommon/com_bsp_load_obj.cpp	766	char*	unsigned int*	in	1	4	out->y = *((unsigned int *)in + 1);
+src/qcommon/com_bsp_load_obj.cpp	767	char*	int*	in	3	12	if ( (*((int *)in + 3) < 0 || *((unsigned int *)in + 3) >= (signed int)blockCount)
+src/qcommon/com_bsp_load_obj.cpp	767	char*	unsigned int*	in	3	12	if ( (*((int *)in + 3) < 0 || *((unsigned int *)in + 3) >= (signed int)blockCount)
+src/qcommon/com_bsp_load_obj.cpp	777	char*	unsigned int*	in	3	12	block = &blocks[*((unsigned int *)in + 3)];
+src/qcommon/dvar_cmds.cpp	621	void*	unsigned int*	userData	2	8	if ( !*((unsigned int *)userData + 2) || Com_Filter(*((const char **)userData + 2), (char *)dvar->name, 0) )
+src/qcommon/dvar_cmds.cpp	621	void*	char**	userData	2	8	if ( !*((unsigned int *)userData + 2) || Com_Filter(*((const char **)userData + 2), (char *)dvar->name, 0) )
+src/qcommon/dvar_cmds.cpp	634	void*	unsigned int*	userData	1	4	Com_PrintMessage(*((unsigned int *)userData + 1), message, 0);
+src/qcommon/graph.cpp	185	void*	float*	devGuiGraph->data	81	324	sprintf(text, "Fraction: %.3f, Value: %.3f", inputX, (float)(inputY * *((float *)devGuiGraph->data + 81)));
+src/qcommon/mem_track.cpp	1227	const char*	unsigned __int8*	elem1	144	144	if ( *((unsigned __int8 *)elem1 + 144) < (int)*((unsigned __int8 *)elem2 + 144) )
+src/qcommon/mem_track.cpp	1227	const char*	unsigned __int8*	elem2	144	144	if ( *((unsigned __int8 *)elem1 + 144) < (int)*((unsigned __int8 *)elem2 + 144) )
+src/qcommon/mem_track.cpp	1229	const char*	unsigned __int8*	elem1	144	144	if ( *((unsigned __int8 *)elem1 + 144) > (int)*((unsigned __int8 *)elem2 + 144) )
+src/qcommon/mem_track.cpp	1229	const char*	unsigned __int8*	elem2	144	144	if ( *((unsigned __int8 *)elem1 + 144) > (int)*((unsigned __int8 *)elem2 + 144) )
+src/qcommon/mem_track.cpp	1231	const char*	unsigned __int8*	elem1	145	145	if ( *((unsigned __int8 *)elem1 + 145) < (int)*((unsigned __int8 *)elem2 + 145) )
+src/qcommon/mem_track.cpp	1231	const char*	unsigned __int8*	elem2	145	145	if ( *((unsigned __int8 *)elem1 + 145) < (int)*((unsigned __int8 *)elem2 + 145) )
+src/qcommon/mem_track.cpp	1233	const char*	unsigned __int8*	elem1	145	145	if ( *((unsigned __int8 *)elem1 + 145) > (int)*((unsigned __int8 *)elem2 + 145) )
+src/qcommon/mem_track.cpp	1233	const char*	unsigned __int8*	elem2	145	145	if ( *((unsigned __int8 *)elem1 + 145) > (int)*((unsigned __int8 *)elem2 + 145) )
+src/qcommon/sv_msg_write.cpp	495	const int*	unsigned __int8*	fromF	1	1	&& *((unsigned __int8 *)fromF + 1) == *((unsigned __int8 *)toF + 1)
+src/qcommon/sv_msg_write.cpp	495	const int*	unsigned __int8*	toF	1	1	&& *((unsigned __int8 *)fromF + 1) == *((unsigned __int8 *)toF + 1)
+src/qcommon/sv_msg_write.cpp	496	const int*	unsigned __int8*	fromF	2	2	&& *((unsigned __int8 *)fromF + 2) == *((unsigned __int8 *)toF + 2)
+src/qcommon/sv_msg_write.cpp	496	const int*	unsigned __int8*	toF	2	2	&& *((unsigned __int8 *)fromF + 2) == *((unsigned __int8 *)toF + 2)
+src/qcommon/sv_msg_write.cpp	497	const int*	unsigned __int8*	fromF	3	3	&& (int)*((unsigned __int8 *)fromF + 3) >> 3 == (int)*((unsigned __int8 *)toF + 3) >> 3;
+src/qcommon/sv_msg_write.cpp	497	const int*	unsigned __int8*	toF	3	3	&& (int)*((unsigned __int8 *)fromF + 3) >> 3 == (int)*((unsigned __int8 *)toF + 3) >> 3;
+src/qcommon/sv_msg_write.cpp	1082	const int*	unsigned __int8*	fromF	3	3	if ( (*((unsigned __int8 *)fromF + 3) == 255 && !*((_BYTE *)toF + 3)
+src/qcommon/sv_msg_write.cpp	1082	const int*	_BYTE*	toF	3	3	if ( (*((unsigned __int8 *)fromF + 3) == 255 && !*((_BYTE *)toF + 3)
+src/qcommon/sv_msg_write.cpp	1083	const int*	_BYTE*	fromF	3	3	|| !*((_BYTE *)fromF + 3) && *((unsigned __int8 *)toF + 3) == 255)
+src/qcommon/sv_msg_write.cpp	1083	const int*	unsigned __int8*	toF	3	3	|| !*((_BYTE *)fromF + 3) && *((unsigned __int8 *)toF + 3) == 255)
+src/qcommon/sv_msg_write.cpp	1090	const int*	unsigned __int8*	fromF	1	1	&& *((unsigned __int8 *)fromF + 1) == *((unsigned __int8 *)toF + 1)
+src/qcommon/sv_msg_write.cpp	1090	const int*	unsigned __int8*	toF	1	1	&& *((unsigned __int8 *)fromF + 1) == *((unsigned __int8 *)toF + 1)
+src/qcommon/sv_msg_write.cpp	1091	const int*	unsigned __int8*	fromF	2	2	&& *((unsigned __int8 *)fromF + 2) == *((unsigned __int8 *)toF + 2) )
+src/qcommon/sv_msg_write.cpp	1091	const int*	unsigned __int8*	toF	2	2	&& *((unsigned __int8 *)fromF + 2) == *((unsigned __int8 *)toF + 2) )
+src/qcommon/sv_msg_write.cpp	1099	const int*	_BYTE*	toF	1	1	MSG_WriteByte(msg, *((_BYTE *)toF + 1));
+src/qcommon/sv_msg_write.cpp	1100	const int*	_BYTE*	toF	2	2	MSG_WriteByte(msg, *((_BYTE *)toF + 2));
+src/qcommon/sv_msg_write.cpp	1102	const int*	unsigned __int8*	toF	3	3	MSG_WriteBits(msg, (int)*((unsigned __int8 *)toF + 3) >> 3, 5u);
+src/server/sv_world.cpp	143	float*	_DWORD*	currentAngles	1	4	|| (v55 = *((_DWORD *)currentAngles + 1), (v55 & 0x7F800000) == 0x7F800000)
+src/server/sv_world.cpp	144	float*	_DWORD*	currentAngles	2	8	|| (v54 = *((_DWORD *)currentAngles + 2), (v54 & 0x7F800000) == 0x7F800000))
+src/server/sv_world.cpp	156	float*	_DWORD*	currentOrigin	1	4	|| (v52 = *((_DWORD *)currentOrigin + 1), (v52 & 0x7F800000) == 0x7F800000)
+src/server/sv_world.cpp	157	float*	_DWORD*	currentOrigin	2	8	|| (v51 = *((_DWORD *)currentOrigin + 2), (v51 & 0x7F800000) == 0x7F800000))
+src/server_mp/sv_archive_mp.cpp	238	float*	__int16*	p_number	95	190	*((__int16 *)p_number + 95),
+src/server_mp/sv_archive_mp.cpp	251	float*	unsigned int*	p_number	59	236	if ( *((unsigned int *)p_number + 59)
+src/server_mp/sv_archive_mp.cpp	252	float*	_BYTE*	p_number	221	221	|| (*((_BYTE *)p_number + 221) & 1) != 0
+src/server_mp/sv_archive_mp.cpp	253	float*	_BYTE*	p_number	226	226	|| (*((_BYTE *)p_number + 226) & 1) == 0
+src/server_mp/sv_archive_mp.cpp	254	float*	_BYTE*	p_number	226	226	&& ((*((_BYTE *)p_number + 226) & 0x18) != 0 || svsHeader.svEntities[*(unsigned int *)p_number].numClusters)
+src/server_mp/sv_archive_mp.cpp	255	float*	_BYTE*	p_number	226	226	&& (*((_BYTE *)p_number + 226) & 0x80) == 0 )
+src/server_mp/sv_archive_mp.cpp	270	float*	unsigned __int8*	p_number	226	226	to.r.svFlags = *((unsigned __int8 *)p_number + 226);
+src/server_mp/sv_archive_mp.cpp	271	float*	unsigned int*	p_number	59	236	if ( *((unsigned int *)p_number + 59) )
+src/server_mp/sv_archive_mp.cpp	369	float*	__int16*	p_number	95	190	*((__int16 *)p_number + 95),
+src/server_mp/sv_archive_mp.cpp	382	float*	unsigned int*	p_number	59	236	if ( *((unsigned int *)p_number + 59)
+src/server_mp/sv_archive_mp.cpp	383	float*	_BYTE*	p_number	221	221	|| (*((_BYTE *)p_number + 221) & 1) != 0
+src/server_mp/sv_archive_mp.cpp	384	float*	_BYTE*	p_number	226	226	|| (*((_BYTE *)p_number + 226) & 1) == 0
+src/server_mp/sv_archive_mp.cpp	385	float*	_BYTE*	p_number	226	226	&& ((*((_BYTE *)p_number + 226) & 0x18) != 0 || svsHeader.svEntities[*(unsigned int *)p_number].numClusters)
+src/server_mp/sv_archive_mp.cpp	386	float*	_BYTE*	p_number	226	226	&& (*((_BYTE *)p_number + 226) & 0x80) == 0 )
+src/server_mp/sv_archive_mp.cpp	403	float*	unsigned __int8*	p_number	226	226	v21->r.svFlags = *((unsigned __int8 *)p_number + 226);
+src/server_mp/sv_archive_mp.cpp	404	float*	unsigned int*	p_number	59	236	if ( *((unsigned int *)p_number + 59) )
+src/server_mp/sv_snapshot_mp.cpp	2156	unsigned char*	float*	dst	9	36	position[0] = *((float *)dst + 9);
+src/server_mp/sv_snapshot_mp.cpp	2157	unsigned char*	float*	dst	10	40	position[1] = *((float *)dst + 10);
+src/server_mp/sv_snapshot_mp.cpp	2158	unsigned char*	float*	dst	11	44	position[2] = *((float *)dst + 11);
+src/server_mp/sv_snapshot_mp.cpp	2159	unsigned char*	float*	dst	100	400	position[2] = position[2] + *((float *)dst + 100);
+src/server_mp/sv_snapshot_mp.cpp	2160	unsigned char*	float*	dst	97	388	AddLeanToPosition(position, *((float *)dst + 97), *((float *)dst + 31), 16.0, 20.0);
+src/server_mp/sv_snapshot_mp.cpp	2160	unsigned char*	float*	dst	31	124	AddLeanToPosition(position, *((float *)dst + 97), *((float *)dst + 31), 16.0, 20.0);
+src/sound/snd_radverb.cpp	406	float*	unsigned int*	v14	16	64	- *((unsigned int *)v14 + 16)
+src/sound/snd_radverb.cpp	407	float*	unsigned int*	v14	16	64	+ ((int)(delayIndex - *((unsigned int *)v14 + 16)) < 0 ? 0x8000 : 0)]
+src/sound/snd_radverb.cpp	411	float*	unsigned int*	v14	48	192	- *((unsigned int *)v14 + 48)
+src/sound/snd_radverb.cpp	412	float*	unsigned int*	v14	48	192	+ ((int)(delayIndex - *((unsigned int *)v14 + 48)) < 0 ? 0x8000 : 0)]
+src/sound/snd_radverb.cpp	416	float*	unsigned int*	v14	17	68	- *((unsigned int *)v14 + 17)
+src/sound/snd_radverb.cpp	418	float*	unsigned int*	v14	17	68	+ ((int)(delayIndex - *((unsigned int *)v14 + 17)) < 0 ? 0x8000 : 0)]
+src/sound/snd_radverb.cpp	422	float*	unsigned int*	v14	49	196	- *((unsigned int *)v14 + 49)
+src/sound/snd_radverb.cpp	424	float*	unsigned int*	v14	49	196	+ ((int)(delayIndex - *((unsigned int *)v14 + 49)) < 0 ? 0x8000 : 0)]
+src/ui/ui_screenshot.cpp	80	?	_WORD*	data	2	4	Image_Create2DTexture_PC(s_image, *((_WORD *)data + 2), *((_WORD *)data + 4), 1u, 0, *((_D3DFORMAT *)data + 3));
+src/ui/ui_screenshot.cpp	80	?	_WORD*	data	4	8	Image_Create2DTexture_PC(s_image, *((_WORD *)data + 2), *((_WORD *)data + 4), 1u, 0, *((_D3DFORMAT *)data + 3));
+src/ui/ui_screenshot.cpp	80	?	_D3DFORMAT*	data	3	None	Image_Create2DTexture_PC(s_image, *((_WORD *)data + 2), *((_WORD *)data + 4), 1u, 0, *((_D3DFORMAT *)data + 3));
+src/ui/ui_screenshot.cpp	100	?	unsigned int*	data	2	8	memcpy((unsigned __int8 *)rect.pBits, *(unsigned __int8 **)data, 4 * *((unsigned int *)data + 2) * *((unsigned int *)data + 1));
+src/ui/ui_screenshot.cpp	100	?	unsigned int*	data	1	4	memcpy((unsigned __int8 *)rect.pBits, *(unsigned __int8 **)data, 4 * *((unsigned int *)data + 2) * *((unsigned int *)data + 1));
+src/ui/ui_shared.cpp	6211	void*	itemDef_s**	p	6	24	Item_ListBox_HandleKey(0, dc, *((itemDef_s **)p + 6), *((unsigned int *)p + 3), 1, 0);
+src/ui/ui_shared.cpp	6211	void*	unsigned int*	p	3	12	Item_ListBox_HandleKey(0, dc, *((itemDef_s **)p + 6), *((unsigned int *)p + 3), 1, 0);
+src/ui/ui_shared.cpp	6212	void*	unsigned int*	p	2	8	*(unsigned int *)p = *((unsigned int *)p + 2) + dc->realTime;
+src/ui/ui_shared.cpp	6214	void*	unsigned int*	p	1	4	if ( dc->realTime > *((unsigned int *)p + 1) )
+src/ui/ui_shared.cpp	6216	void*	unsigned int*	p	1	4	*((unsigned int *)p + 1) = dc->realTime + 150;
+src/ui/ui_shared.cpp	6217	void*	int*	p	2	8	if ( *((int *)p + 2) > 20 )
+src/ui/ui_shared.cpp	6218	void*	unsigned int*	p	2	8	*((unsigned int *)p + 2) -= 40;
+src/ui/ui_shared.cpp	10583	char*	unsigned int*	stringBegin	1	4	*((unsigned int *)stringBegin + 1) = *(unsigned int *)&VISIBLE_LIST_PREFIX[4];
+src/ui/ui_shared.cpp	10584	char*	unsigned int*	stringBegin	2	8	*((unsigned int *)stringBegin + 2) = *(unsigned int *)&VISIBLE_LIST_PREFIX[8];
+src/ui/ui_shared.cpp	10585	char*	_WORD*	stringBegin	6	12	*((_WORD *)stringBegin + 6) = *(_WORD *)&VISIBLE_LIST_PREFIX[12];
+src/ui_mp/ui_gametype_custom_mp.cpp	372	float*	unsigned int*	value	1	4	*((unsigned int *)value + 1) = v3;
+src/ui_mp/ui_gametype_custom_mp.cpp	374	float*	unsigned int*	value	2	8	*((unsigned int *)value + 2) = v2;
+src/universal/com_math.cpp	3488	const float*	unsigned int*	b	1	4	v4 = *((unsigned int *)b + 1);
+src/universal/com_math.cpp	3490	const float*	unsigned int*	a	1	4	v4 = *((unsigned int *)a + 1);
+src/universal/com_math.cpp	3491	float*	unsigned int*	result	1	4	*((unsigned int *)result + 1) = v4;
+src/universal/com_math.cpp	3493	const float*	unsigned int*	b	2	8	v3 = *((unsigned int *)b + 2);
+src/universal/com_math.cpp	3495	const float*	unsigned int*	a	2	8	v3 = *((unsigned int *)a + 2);
+src/universal/com_math.cpp	3496	float*	unsigned int*	result	2	8	*((unsigned int *)result + 2) = v3;
+src/universal/com_math.cpp	3511	const float*	unsigned int*	b	1	4	v4 = *((unsigned int *)b + 1);
+src/universal/com_math.cpp	3513	const float*	unsigned int*	a	1	4	v4 = *((unsigned int *)a + 1);
+src/universal/com_math.cpp	3514	float*	unsigned int*	result	1	4	*((unsigned int *)result + 1) = v4;
+src/universal/com_math.cpp	3516	const float*	unsigned int*	b	2	8	v3 = *((unsigned int *)b + 2);
+src/universal/com_math.cpp	3518	const float*	unsigned int*	a	2	8	v3 = *((unsigned int *)a + 2);
+src/universal/com_math.cpp	3519	float*	unsigned int*	result	2	8	*((unsigned int *)result + 2) = v3;
+src/universal/com_math_anglevectors.cpp	213	?	float*	&v6	1	4	*((float *)&v6 + 1) = *vec;
+src/universal/com_math_anglevectors.cpp	274	?	unsigned int*	vec	2	8	if ( COERCE_FLOAT(*((unsigned int *)vec + 2) ^ _mask__NegFloat_) < 0.0 )
+src/universal/com_math_anglevectors.cpp	281	?	float*	&v4	1	4	*((float *)&v4 + 1) = vec[2];
+src/universal/com_math_anglevectors.cpp	282	?	float*	&v4	1	4	v1 = *((float *)&v4 + 1);
+src/universal/com_pack.cpp	156	const float*	unsigned int*	in	1	4	v5 = *((unsigned int *)in + 1);
+src/universal/com_pack.cpp	184	float*	unsigned int*	out	1	4	*((unsigned int *)out + 1) = v2;
+src/universal/com_shared.cpp	304	?	unsigned int*	v4	1	4	*((unsigned int *)v4 + 1) = *((unsigned int *)v5 + 1);
+src/universal/com_shared.cpp	304	?	unsigned int*	v5	1	4	*((unsigned int *)v4 + 1) = *((unsigned int *)v5 + 1);
+src/universal/com_shared.cpp	305	?	unsigned int*	v4	2	8	*((unsigned int *)v4 + 2) = *((unsigned int *)v5 + 2);
+src/universal/com_shared.cpp	305	?	unsigned int*	v5	2	8	*((unsigned int *)v4 + 2) = *((unsigned int *)v5 + 2);
+src/universal/com_shared.cpp	306	?	unsigned int*	v4	3	12	*((unsigned int *)v4 + 3) = *((unsigned int *)v5 + 3);
+src/universal/com_shared.cpp	306	?	unsigned int*	v5	3	12	*((unsigned int *)v4 + 3) = *((unsigned int *)v5 + 3);
+src/universal/com_shared.cpp	315	?	unsigned int*	v4	1	4	*((unsigned int *)v4 + 1) = *((unsigned int *)v5 + 1);
+src/universal/com_shared.cpp	315	?	unsigned int*	v5	1	4	*((unsigned int *)v4 + 1) = *((unsigned int *)v5 + 1);
+src/universal/eval.cpp	298	EvalValueType*	EvalOperatorType*	&v6->type	1	None	v7[1] = *((EvalOperatorType *)&v6->type + 1);
+src/universal/eval.cpp	300	char**	EvalOperatorType*	&v6->u.s	1	None	v7[3] = *((EvalOperatorType *)&v6->u.s + 1);
+src/win32/win_configure.cpp	221	?	unsigned int*	name	1	4	*((unsigned int *)name + 1) = 544110447;
+src/win32/win_configure.cpp	222	?	unsigned int*	name	2	8	*((unsigned int *)name + 2) = (char *)&loc_55503F + 4;
+src/win32/win_configure.cpp	227	?	unsigned int*	name	1	4	*((unsigned int *)name + 1) = 544110447;
+src/win32/win_configure.cpp	228	?	unsigned int*	name	2	8	*((unsigned int *)name + 2) = 541347137;
+src/win32/win_configure.cpp	229	?	unsigned int*	name	3	12	*((unsigned int *)name + 3) = (char *)&loc_55503F + 4;
+src/xanim/dobj.cpp	280	unsigned char*	_WORD*	buf	2	4	*((_WORD *)buf + 2) = 0;
+src/xanim/dobj.cpp	281	unsigned char*	unsigned int*	buf	3	12	*((unsigned int *)buf + 3) = 0;
+src/xanim/dobj.cpp	282	unsigned char*	unsigned int*	buf	4	16	*((unsigned int *)buf + 4) = 0;
+src/xanim/dobj.cpp	283	unsigned char*	_WORD*	buf	3	6	*((_WORD *)buf + 3) = entnum;
+src/xanim/dobj.cpp	284	unsigned char*	unsigned int*	buf	23	92	*((unsigned int *)buf + 23) = 0;
+src/xanim/dobj.cpp	285	unsigned char*	unsigned int*	buf	24	96	*((unsigned int *)buf + 24) = 0;
+src/xanim/dobj.cpp	286	unsigned char*	unsigned int*	buf	25	100	*((unsigned int *)buf + 25) = 0;
+src/xanim/dobj.cpp	287	unsigned char*	unsigned int*	buf	26	104	*((unsigned int *)buf + 26) = 0;
+src/xanim/dobj.cpp	288	unsigned char*	unsigned int*	buf	27	108	*((unsigned int *)buf + 27) = 0;
+src/xanim/dobj.cpp	293	unsigned char*	unsigned int*	buf	29	116	*((unsigned int *)buf + 29) = 0;
+src/xanim/dobj.cpp	567	unsigned char*	unsigned int*	buf	29	116	*((unsigned int *)buf + 29) = 0;
+src/xanim/xanim.cpp	726	long long int*	float*	&pos	1	4	rotPos->pos[1] = rotPos->pos[1] + *((float *)&pos + 1);
+src/xanim/xanim_calc.cpp	2031	long long int*	float*	&posVec	1	4	*((float *)&posVec + 1) = (float)(weightScale
+src/xanim/xanim_calc.cpp	2032	long long int*	float*	&sizeVec	1	4	* (float)((float)(*((float *)&sizeVec + 1)
+src/xanim/xanim_calc.cpp	2034	int*	float*	dataInt	1	4	+ *((float *)dataInt + 1)))
+src/xanim/xanim_calc.cpp	2035	long long int*	float*	&posVec	1	4	+ *((float *)&posVec + 1);
+src/xanim/xanim_calc.cpp	2037	int*	float*	dataInt	5	20	* (float)((float)(*((float *)dataInt + 5) * (float)randomDataByte[3 * tableSize + 2])
+src/xanim/xanim_calc.cpp	2038	int*	float*	dataInt	2	8	+ *((float *)dataInt + 2)))
+src/xanim/xanim_calc.cpp	2042	float*	unsigned int*	trans	2	8	*((unsigned int *)trans + 2) = posVec_8;
+src/xanim/xanim_calc.cpp	2043	long long int*	float*	&posVec_8	1	4	trans[3] = (float)(weightScale * (float)((float)(0.0 * 0.0) + 0.0)) + *((float *)&posVec_8 + 1);
+src/xanim/xanim_calc.cpp	2082	int*	float*	dataInt	4	16	* (float)((float)(*((float *)dataInt + 4) * (float)(unsigned __int16)randomDataShort[3 * tableSize + 1])
+src/xanim/xanim_calc.cpp	2083	int*	float*	dataInt	1	4	+ *((float *)dataInt + 1)))
+src/xanim/xanim_calc.cpp	2086	int*	float*	dataInt	5	20	* (float)((float)(*((float *)dataInt + 5) * (float)(unsigned __int16)randomDataShort[3 * tableSize + 2])
+src/xanim/xanim_calc.cpp	2087	int*	float*	dataInt	2	8	+ *((float *)dataInt + 2)))
+src/xanim/xanim_calc.cpp	2092	int*	float*	dataInt	3	12	* (float)((float)(*((float *)dataInt + 3)
+src/xanim/xanim_calc.cpp	2123	int*	float*	dataInt	1	4	v15 = (float)(weightScale * *((float *)dataInt + 1)) + totalRotTrans->trans[1];
+src/xanim/xanim_calc.cpp	2124	int*	float*	dataInt	2	8	v16 = (float)(weightScale * *((float *)dataInt + 2)) + totalRotTrans->trans[2];
+src/xanim/xanim_calc.cpp	2540	unsigned char*	unsigned __int16*	v5	1	2	fromVec.v[1] = (float)*((unsigned __int16 *)v5 + 1);
+src/xanim/xanim_calc.cpp	2541	unsigned char*	unsigned __int16*	v5	2	4	fromVec.v[2] = (float)*((unsigned __int16 *)v5 + 2);
+src/xanim/xanim_calc.cpp	2545	unsigned char*	unsigned __int16*	v4	1	2	toVec.v[1] = (float)*((unsigned __int16 *)v4 + 1);
+src/xanim/xanim_calc.cpp	2546	unsigned char*	unsigned __int16*	v4	2	4	toVec.v[2] = (float)*((unsigned __int16 *)v4 + 2);
+src/xanim/xanim_calc.cpp	2643	unsigned char*	unsigned __int16*	v5	1	2	fromVec.v[1] = (float)*((unsigned __int16 *)v5 + 1);
+src/xanim/xanim_calc.cpp	2644	unsigned char*	unsigned __int16*	v5	2	4	fromVec.v[2] = (float)*((unsigned __int16 *)v5 + 2);
+src/xanim/xanim_calc.cpp	2648	unsigned char*	unsigned __int16*	v4	1	2	toVec.v[1] = (float)*((unsigned __int16 *)v4 + 1);
+src/xanim/xanim_calc.cpp	2649	unsigned char*	unsigned __int16*	v4	2	4	toVec.v[2] = (float)*((unsigned __int16 *)v4 + 2);
+src/xanim/xanim_calc.cpp	2778	long long int*	float*	&sizeVec	1	4	posDelta->v[1] = (float)(*((float *)&sizeVec + 1) * lerp[1]) + minsVec[0];
+src/xanim/xanim_calc.cpp	2829	int*	float*	dataInt	4	16	frameVec_4 = (float)(*((float *)dataInt + 4) * lerp[1]) + *((float *)dataInt + 1);
+src/xanim/xanim_calc.cpp	2829	int*	float*	dataInt	1	4	frameVec_4 = (float)(*((float *)dataInt + 4) * lerp[1]) + *((float *)dataInt + 1);
+src/xanim/xanim_calc.cpp	2830	int*	float*	dataInt	5	20	frameVec_8 = (float)(*((float *)dataInt + 5) * lerp[2]) + *((float *)dataInt + 2);
+src/xanim/xanim_calc.cpp	2830	int*	float*	dataInt	2	8	frameVec_8 = (float)(*((float *)dataInt + 5) * lerp[2]) + *((float *)dataInt + 2);
+src/xanim/xanim_calc.cpp	2831	int*	float*	dataInt	3	12	totalRotTrans->trans[0] = (float)(weightScale * (float)((float)(*((float *)dataInt + 3) * lerp[0]) + *(float *)dataInt))
+src/xanim/xanim_load_obj.cpp	975	short int*	unsigned int*	v19	1	4	*((unsigned int *)v19 + 1) = *(unsigned int *)(v18 + 8);
+src/xanim/xanim_load_obj.cpp	1036	unsigned char*	_WORD*	v75	1	2	*((_WORD *)v75 + 1) = *(_WORD *)(*(unsigned int *)(*(unsigned int *)&dest[8 * animPartIndex + 128] + 28)
+src/xanim/xanim_load_obj.cpp	1039	unsigned char*	_WORD*	v75	2	4	*((_WORD *)v75 + 2) = *(_WORD *)(*(unsigned int *)(*(unsigned int *)&dest[8 * animPartIndex + 128] + 28)
+src/xanim/xmodel_load_obj.cpp	268	float*	unsigned int*	v36	1	4	*((unsigned int *)v36 + 1) = v17;
+src/xanim/xmodel_load_obj.cpp	271	float*	unsigned int*	v36	2	8	*((unsigned int *)v36 + 2) = v16;
+src/xanim/xmodel_load_obj.cpp	278	float*	unsigned int*	v44	1	4	*((unsigned int *)v44 + 1) = v14;
+src/xanim/xmodel_load_obj.cpp	281	float*	unsigned int*	v44	2	8	*((unsigned int *)v44 + 2) = v13;
+src/xanim/xmodel_load_obj.cpp	735	float*	unsigned int*	svec	1	4	*((unsigned int *)svec + 1) = v21;
+src/xanim/xmodel_load_obj.cpp	736	float*	unsigned int*	svec	2	8	*((unsigned int *)svec + 2) = v20;
+src/xanim/xmodel_load_obj.cpp	737	float*	unsigned int*	svec	3	12	*((unsigned int *)svec + 3) = v19;
+src/xanim/xmodel_load_obj.cpp	977	float*	unsigned int*	trans	1	4	*((unsigned int *)trans + 1) = v9;
+src/xanim/xmodel_load_obj.cpp	980	float*	unsigned int*	trans	2	8	*((unsigned int *)trans + 2) = v8;

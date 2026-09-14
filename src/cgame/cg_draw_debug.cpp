@@ -377,7 +377,7 @@ double __cdecl DrawEntityCounts(const ScreenPlacement *scrPlace, float posY)
                 {
                     ++destructibles;
                 }
-                else if (((*((_DWORD *)&cent->cent + 201) >> 15) & 1) != 0)
+                else if (((cent->cent.clientFlags >> 15) & 1) != 0)
                 {
                     ++triggers;
                 }

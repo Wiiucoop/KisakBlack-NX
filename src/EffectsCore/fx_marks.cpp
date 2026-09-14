@@ -619,7 +619,7 @@ void __cdecl FX_ImpactMark_Generate_AddEntityBrush(
         markMaxs[1] = origin[1] + radius;
         markMaxs[2] = origin[2] + radius;
         ent = CG_GetEntity(localClientNum, entityIndex);
-        if (((*((_DWORD *)ent + 201) >> 1) & 1) != 0 && ent->nextState.solid == 0xFFFFFF)
+        if (((ent->clientFlags >> 1) & 1) != 0 && ent->nextState.solid == 0xFFFFFF)
         {
             brushModel = R_GetBrushModel(ent->nextState.index.brushmodel);
             AnglesToAxis(ent->pose.angles, entAxis);
@@ -741,7 +741,7 @@ void __cdecl FX_ImpactMark_Generate_AddEntityModel(
     if ( entityIndex != 1023 )
     {
         ent = CG_GetEntity(localClientNum, entityIndex);
-        if ( ((*((unsigned int *)ent + 201) >> 1) & 1) != 0 )
+        if ( ((ent->clientFlags >> 1) & 1) != 0 )
         {
             dObj = Com_GetClientDObj(ent->nextState.number, localClientNum);
             if ( dObj )

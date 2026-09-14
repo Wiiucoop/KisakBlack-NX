@@ -7427,7 +7427,7 @@ void __cdecl GetFlagCarrierForTeam(int localClientNum, itemDef_s *item, OperandS
             if ( clientInfo->team == team )
             {
                 cent = CG_GetEntity(localClientNum, i);
-                if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 && (cent->nextState.lerp.eFlags2 & 1) != 0 )
+                if ( ((cent->clientFlags >> 1) & 1) != 0 && (cent->nextState.lerp.eFlags2 & 1) != 0 )
                 {
                     CL_GetClientName(localClientNum, i, clientName, 38, 0);
                     result.internals.intVal = (int)CopyTempString(clientName);

@@ -920,7 +920,7 @@ double __cdecl CG_GetViewFov(int localClientNum)
         vehicle = CG_GetEntity(localClientNum, cgameGlob->predictedPlayerState.viewlocked_entNum);
         if ( vehicle )
         {
-            if ( ((*((unsigned int *)vehicle + 201) >> 1) & 1) != 0 )
+            if ( ((vehicle->clientFlags >> 1) & 1) != 0 )
             {
                 info = CG_GetVehicleInfo(vehicle->nextState.vehicleState.vehicleInfoIndex);
                 if ( info->cameraFOV <= cg_fovMin->current.value )
@@ -2138,7 +2138,7 @@ void __cdecl CG_Calc3rdPersonVehicleViewValues(int localClientNum)
     ps = &cgameGlob->predictedPlayerState;
     vehicle = CG_GetEntity(localClientNum, cgameGlob->predictedPlayerState.viewlocked_entNum);
     info = CG_GetVehicleInfo(vehicle->nextState.vehicleState.vehicleInfoIndex);
-    if ( ((*((unsigned int *)vehicle + 201) >> 1) & 1) != 0 && (vehicle->nitrousVeh || ps->vehicleType == 6) )
+    if ( ((vehicle->clientFlags >> 1) & 1) != 0 && (vehicle->nitrousVeh || ps->vehicleType == 6) )
     {
         if ( cgameGlob->vehicleInitView )
         {

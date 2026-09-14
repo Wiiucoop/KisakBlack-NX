@@ -13,7 +13,7 @@ void __cdecl CG_GetTagMatrix(int localClientNum, int linkEntNum, unsigned __int1
     DObj *objLink; // [esp+18h] [ebp-4h]
 
     centLink = CG_GetEntity(localClientNum, linkEntNum);
-    if ( ((*((unsigned int *)centLink + 201) >> 1) & 1) != 0 )
+    if ( ((centLink->clientFlags >> 1) & 1) != 0 )
     {
         objLink = GetLinkEntDObj(localClientNum, centLink);
         if ( !objLink || !CG_DObjGetWorldTagMatrix(&centLink->pose, objLink, tagName, resultTagMat, &(*resultTagMat)[9]) )
@@ -36,7 +36,7 @@ void __cdecl CG_GetTagMatrix(int localClientNum, int linkEntNum, unsigned __int1
 
 DObj *__cdecl GetLinkEntDObj(int localClientNum, centity_s *centLink)
 {
-    if ( ((*((unsigned int *)centLink + 201) >> 1) & 1) == 0
+    if ( ((centLink->clientFlags >> 1) & 1) == 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\cgame_mp\\cg_animscripted_mp.cpp",
                     12,
@@ -349,7 +349,7 @@ centity_s *__cdecl CG_EntGetLinkToParent(int localClientNum, centity_s *cent)
     {
         __debugbreak();
     }
-    if ( ((*((unsigned int *)centParent + 201) >> 1) & 1) != 0 )
+    if ( ((centParent->clientFlags >> 1) & 1) != 0 )
         return centParent;
     Com_PrintWarning(
         14,

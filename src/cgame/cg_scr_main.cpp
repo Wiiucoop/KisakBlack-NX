@@ -941,7 +941,7 @@ unsigned int __cdecl CScr_GetFakeEntity(unsigned int localClientNum)
             CG_SetFakeEntInUse(localClientNum, cent);
             cent->cent.nextState.number = i + 1024;
             cent->cent.pose.localClientNum = localClientNum;
-            *((unsigned int *)&cent->cent + 201) |= 2u;
+            cent->cent.clientFlags |= 2u;
             return i;
         }
     }
@@ -3777,7 +3777,7 @@ void CScr_SpawnPlane()
                     __debugbreak();
                 }
                 ent->nextState.index.brushmodel = modelIndexa;
-                *((unsigned int *)ent + 201) |= 2u;
+                ent->clientFlags |= 2u;
             }
         }
         if ( !strcmp(team, "free") )
@@ -3793,7 +3793,7 @@ void CScr_SpawnPlane()
             teamEnum = TEAM_ALLIES;
         }
         AssignToSmallerType<unsigned char>(&ent->nextState.faction.iHeadIconTeam, teamEnum | (4 * owner));
-        *((unsigned int *)ent + 201) |= 0x40000u;
+        ent->clientFlags |= 0x40000u;
         v0 = Material_Register((char *)compassMaterialName, 7);
         ent->compassMaterial = v0;
         CScr_AddEntity(ent, localClientNum);
@@ -5337,7 +5337,7 @@ void __cdecl CScr_GetGenericEnt(int localClientNum, unsigned int offset, const c
     for ( i = 0; i < 1536; ++i )
     {
         ent = CG_GetEntity(localClientNum, i);
-        if ( ((*((unsigned int *)ent + 201) >> 1) & 1) != 0 )
+        if ( ((ent->clientFlags >> 1) & 1) != 0 )
         {
             ofs = cent_fields[offset].ofs;
             if ( *(unsigned __int16 *)((char *)&ent->pose.lightingHandle + ofs) )
@@ -5419,7 +5419,7 @@ void __cdecl CScr_GetEntNum()
     localClientNum = CScr_GetLocalClientNum(0);
     centNum.intValue = Scr_GetInt(1u, SCRIPTINSTANCE_CLIENT);
     cent = CG_GetEntity(localClientNum, centNum.intValue);
-    if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+    if ( ((cent->clientFlags >> 1) & 1) == 0 )
         Scr_Error(SCRIPTINSTANCE_CLIENT, "GetEntNum used on nonexistant ent.", 0);
     CScr_AddEntity(cent, localClientNum);
 }
@@ -5446,7 +5446,7 @@ void __cdecl CScr_GetEntArray()
         for ( i = 0; i < 1536; ++i )
         {
             cent = CG_GetEntity(localClientNum, i);
-            if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 )
+            if ( ((cent->clientFlags >> 1) & 1) != 0 )
             {
                 CScr_AddEntity(cent, localClientNum);
                 Scr_AddArray(SCRIPTINSTANCE_CLIENT);
@@ -5478,7 +5478,7 @@ void __cdecl CScr_GetEntArray()
                 for ( ia = 0; ia < 1536; ++ia )
                 {
                     centa = CG_GetEntity(localClientNum, ia);
-                    if ( ((*((unsigned int *)centa + 201) >> 1) & 1) != 0 )
+                    if ( ((centa->clientFlags >> 1) & 1) != 0 )
                     {
                         ofs = cent_fields[offset].ofs;
                         if ( *(unsigned __int16 *)((char *)&centa->pose.lightingHandle + ofs) )
@@ -5510,7 +5510,7 @@ void __cdecl CScr_GetLocalPlayers()
             cGameGlob = CG_GetLocalClientGlobals(i);
             if ( cGameGlob->nextSnap )
             {
-                if ( ((*((unsigned int *)&cGameGlob->predictedPlayerEntity + 201) >> 1) & 1) != 0 )
+                if ( ((cGameGlob->predictedPlayerEntity.clientFlags >> 1) & 1) != 0 )
                 {
                     CScr_AddEntity(&cGameGlob->predictedPlayerEntity, i);
                     Scr_AddArray(SCRIPTINSTANCE_CLIENT);
@@ -6076,11 +6076,11 @@ void __cdecl CScrCmd_Delete(scr_entref_t entref)
     CScr_NotifyNum(entref.client, entref.entnum, 0, cscr_const.death, 0);
     CScr_Notify(entref.client, &fcent->cent, cscr_const.entityshutdown, 0);
     if ( CL_LocalClient_IsFirstActive(entref.client) )
-        v1 = fcent != (fake_centity_s *)-4 && ((*((unsigned int *)&fcent->cent + 201) >> 8) & 1) != 0;
+        v1 = fcent != (fake_centity_s *)-4 && ((fcent->cent.clientFlags >> 8) & 1) != 0;
     else
         v1 = 0;
     if ( v1 )
-        *((unsigned int *)&fcent->cent + 201) &= ~0x100u;
+        fcent->cent.clientFlags &= ~0x100u;
     CScr_FreeEntity(&fcent->cent, entref.client);
     fcent->flags |= 4u;
 }
@@ -6120,11 +6120,11 @@ void __cdecl CScrCmd_ForceDelete(scr_entref_t entref)
     CScr_NotifyNum(entref.client, entref.entnum, 0, cscr_const.death, 0);
     CScr_Notify(entref.client, &fcent->cent, cscr_const.entityshutdown, 0);
     if ( CL_LocalClient_IsFirstActive(entref.client) )
-        v1 = fcent != (fake_centity_s *)-4 && ((*((unsigned int *)&fcent->cent + 201) >> 8) & 1) != 0;
+        v1 = fcent != (fake_centity_s *)-4 && ((fcent->cent.clientFlags >> 8) & 1) != 0;
     else
         v1 = 0;
     if ( v1 )
-        *((unsigned int *)&fcent->cent + 201) &= ~0x100u;
+        fcent->cent.clientFlags &= ~0x100u;
     CG_Free(entref.client, entref.entnum);
 }
 
@@ -6185,7 +6185,7 @@ void __cdecl CScrCmd_SetModel(scr_entref_t entref)
                 __debugbreak();
             }
             cent->nextState.index.brushmodel = modelIndexa;
-            *((unsigned int *)cent + 201) |= 2u;
+            cent->clientFlags |= 2u;
         }
         CG_ScriptMover_GetDObj(entref.client, cent);
     }
@@ -9255,7 +9255,7 @@ void __cdecl CScr_SetCompassIcon(scr_entref_t entref)
             CG_GetFakeEntity(entref.client, entref.entnum);
     }
     String = Scr_GetString(0, SCRIPTINSTANCE_CLIENT);
-    *((unsigned int *)pSelf + 201) |= 0x40000u;
+    pSelf->clientFlags |= 0x40000u;
     pSelf->compassMaterial = Material_Register(String, 7);
 }
 
@@ -9317,7 +9317,7 @@ void __cdecl CScrCmd_IsTouching(scr_entref_t entref)
 
     ent = CG_GetEntity(entref.client, entref.entnum);
     if (ent->nextState.solid == 0xFFFFFF
-        || ((*((unsigned int *)ent + 201) >> 15) & 1) != 0 && (*((unsigned int *)ent + 201) & 0x10000) != 0 )
+        || ((ent->clientFlags >> 15) & 1) != 0 && (ent->clientFlags & 0x10000) != 0 )
     {
         pTemp = ent;
         tempEntref.client = entref.client;
@@ -9328,7 +9328,7 @@ void __cdecl CScrCmd_IsTouching(scr_entref_t entref)
         otherEntref = v7;
         ent = CG_GetEntity(v7.client, v7.entnum);
         if (ent->nextState.solid == 0xFFFFFF
-            || ((*((unsigned int *)ent + 201) >> 15) & 1) != 0 && (*((unsigned int *)ent + 201) & 0x10000) != 0 )
+            || ((ent->clientFlags >> 15) & 1) != 0 && (ent->clientFlags & 0x10000) != 0 )
         {
             Scr_Error(SCRIPTINSTANCE_CLIENT, "istouching cannot be called on 2 brush/cylinder entities", 0);
         }
@@ -10372,9 +10372,9 @@ bool __cdecl CG_EntityContact(const float *mins, const float *maxs, const centit
     trace_t trace; // [esp+1Ch] [ebp-44h] BYREF
     float center[2]; // [esp+58h] [ebp-8h]
 
-    if ( ((*((unsigned int *)cent + 201) >> 15) & 1) == 0 )
+    if ( ((cent->clientFlags >> 15) & 1) == 0 )
         return 0;
-    if ( (*((unsigned int *)cent + 201) & 0x10000) != 0 )
+    if ( (cent->clientFlags & 0x10000) != 0 )
     {
         if ( cent->pose.actor.height != 0.0
             && !Assert_MyHandler(
@@ -10520,7 +10520,7 @@ void __cdecl CG_DoTouchTriggers(centity_s *ent, int localClientNum)
         for ( i = 0; i < v23; ++i )
         {
             other = CG_GetEntity(localClientNum, entityList[i]);
-            if ( ((*((unsigned int *)other + 201) >> 15) & 1) != 0
+            if ( ((other->clientFlags >> 15) & 1) != 0
                 && (contentMask & other->pose.fx.triggerTime) != 0
                 && CG_EntityContact(areaMins, areaMaxs, other) )
             {
@@ -10554,11 +10554,11 @@ void __cdecl CScr_GetEntityField(unsigned int entnum, int clientNum, unsigned in
     {
         __debugbreak();
     }
-    if ( ((*((unsigned int *)&cgArray[clientNum].predictedPlayerEntity + 201) >> 1) & 1) != 0
+    if ( ((cgArray[clientNum].predictedPlayerEntity.clientFlags >> 1) & 1) != 0
         && cgArray[clientNum].predictedPlayerEntity.nextState.number == entnum )
     {
         ent = &cgArray[clientNum].predictedPlayerEntity;
-        if ( ((*((unsigned int *)&cgArray[clientNum].predictedPlayerEntity + 201) >> 1) & 1) == 0 )
+        if ( ((cgArray[clientNum].predictedPlayerEntity.clientFlags >> 1) & 1) == 0 )
         {
             error = SEH_SafeTranslateString("EXE_ENTITY_BEFORE_SNAPSHOT");
             Scr_Error(SCRIPTINSTANCE_CLIENT, error, 1);

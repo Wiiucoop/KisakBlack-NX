@@ -1,0 +1,449 @@
+== src/DynEntity/DynEntity_client.cpp
+  [  1] long long int*     (float*)&rotatedBounds +[1]  e.g. :457 *((float *)&rotatedBounds + 1) = (float)(COERCE_FLOAT(bounds_24 & v4 | bounds_8 & ~v4) * axis[2][1])
+== src/DynEntity/DynEntity_gamestate.cpp
+  [  4] float*             (unsigned int*)origin +[1, 2]  e.g. :69 MSG_WriteBits(msg, *((unsigned int *)origin + 1), 0x20u);
+== src/DynEntity/DynEntity_load_obj.cpp
+  [  3] char*              (unsigned int*)v58 +[8, 18]  e.g. :485 if ( *((unsigned int *)v58 + 8) )
+  [  1] char*              (_WORD*)v58 +[20]  e.g. :492 if ( !*((_WORD *)v58 + 20)
+  [  1] unsigned int*      (unsigned __int16*)arg0 +[20]  e.g. :1738 return *((unsigned __int16 *)arg0 + 20) - *((unsigned __int16 *)arg1 + 20);
+  [  1] unsigned int*      (unsigned __int16*)arg1 +[20]  e.g. :1738 return *((unsigned __int16 *)arg0 + 20) - *((unsigned __int16 *)arg1 + 20);
+== src/DynEntity/DynEntity_server.cpp
+  [  1] long long int*     (float*)&rotatedBounds +[1]  e.g. :299 *((float *)&rotatedBounds + 1) = (float)(COERCE_FLOAT(bounds[1].u[2] & v2 | bounds[0].u[2] & ~v2) * axis[2][1])
+  [  1] long long int*     (float*)&rotatedBounds_16 +[1]  e.g. :309 *((float *)&rotatedBounds_16 + 1) = (float)(COERCE_FLOAT(bounds[0].u[2] & v2 | bounds[1].u[2] & ~v2) * axis[2][1])
+== src/EffectsCore/FxCurve_load_obj.cpp
+  [  2] unsigned char*     (unsigned int*)newCurve +[1, 2]  e.g. :78 *((unsigned int *)newCurve + 2) = 0;
+  [  2] unsigned char*     (float*)newCurve +[2]  e.g. :103 if ( *((float *)newCurve + 2) != 0.0
+== src/EffectsCore/fx_beam.cpp
+  [  1] long long int*     (float*)&clipped +[1]  e.g. :1340 *((float *)&clipped + 1) = (float)((float)(dist0_12 * v6) * (float)(pt1->v[1] - pt0->v[1])) + pt0->v[1];
+  [  1] long long int*     (float*)&clipped_8 +[1]  e.g. :1342 *((float *)&clipped_8 + 1) = (float)((float)(dist0_12 * v4) * (float)(pt1->v[3] - pt0->v[3])) + pt0->v[3];
+== src/EffectsCore/fx_convert.cpp
+  [ 24] FxSampleChannel*   (unsigned int*)routing +[1, 2, 3, 4]  e.g. :480 *((unsigned int *)routing + 1) = 1;
+  [  2] const void*        (unsigned int*)elemVisual->anonymous +[59]  e.g. :72 if ( !*((unsigned int *)elemVisual->anonymous + 59) )
+  [  1] const float*       (_QWORD*)from +[1]  e.g. :1582 *(_QWORD *)&v35.unitVec[2].packed = *((_QWORD *)from + 1);
+== src/EffectsCore/fx_load_obj.cpp
+  [  5] unsigned char*     (unsigned int*)effectDef +[4, 5, 7]  e.g. :1491 *((unsigned int *)effectDef + 7) += effectDef - (unsigned __int8 *)fx_load.defaultEffect;
+== src/EffectsCore/fx_marks.cpp
+  [  1] void*              (Material**)context +[1]  e.g. :786 *((Material **)context + 1),
+  [  1] void*              (float*)context +[2]  e.g. :791 *((float *)context + 2),
+  [  1] void*              (unsigned __int8**)context +[3]  e.g. :793 *((const unsigned __int8 **)context + 3),
+  [  1] void*              (FxMarkAlphaFade**)context +[4]  e.g. :794 *((const FxMarkAlphaFade **)context + 4),
+  [  1] const float*       (_DWORD*)texCoord +[1]  e.g. :2235 v5 = *((_DWORD *)texCoord + 1);
+== src/EffectsCore/fx_system.cpp
+  [  1] const void*        (_DWORD*)v11.anonymous +[59]  e.g. :3253 if (!*((_DWORD *)v11.anonymous + 59)
+  [  1] const void*        (PhysPreset**)visuals.anonymous +[59]  e.g. :3291 *((const PhysPreset **)visuals.anonymous + 59),
+== src/EffectsCore/fx_update.cpp
+  [  2] double*            (float*)&v10 +[1]  e.g. :1462 *((float *)&v10 + 1) = floor(startPoint);
+== src/EffectsCore/fx_update_util.cpp
+  [  2] double*            (float*)&v11 +[1]  e.g. :442 *((float *)&v11 + 1) = fx_randomTable[randomSeed + 2];
+== src/bgame/bg_misctables.cpp
+  [  3] unsigned char*     (_WORD*)pStruct +[32, 54, 176]  e.g. :392 *((_WORD *)pStruct + 54) = ia;
+  [  3] unsigned char*     (unsigned int*)pStruct +[1797, 1863]  e.g. :428 *((unsigned int *)pStruct + 1863) = ic;
+== src/bgame/bg_weapons.cpp
+  [  1] const char**       (_BYTE**)weapVariantDef->szXAnims +[7]  e.g. :3790 if ( **((_BYTE **)weapVariantDef->szXAnims + 7) )
+== src/cgame/cg_compass.cpp
+  [  2] ?                  (float*)&v13 +[1]  e.g. :3020 *((float *)&v13 + 1) = v14 - (float)(tapeAngleStretch * 0.5);
+  [  1] ?                  (unsigned int*)color +[2]  e.g. :2929 v47 = *((unsigned int *)color + 2);
+== src/cgame/cg_draw_indicators.cpp
+  [  3] long double*       (float*)&v2 +[1]  e.g. :454 *((float *)&v2 + 1) = v5;
+== src/cgame/cg_drawtools.cpp
+  [  2] float*             (unsigned int*)color +[3]  e.g. :680 savedAlpha = *((unsigned int *)color + 3);
+== src/cgame/cg_event.cpp
+  [  2] const char**       (_BYTE**)weaponVariantDef->szXAnims +[40, 41]  e.g. :1528 if (isPlayerView && ((ps->eFlags & 0x300) != 0 || !**((_BYTE **)weaponVariantDef->szXAnims + 40)))
+== src/cgame/cg_spawn.cpp
+  [  1] LerpEntityStateCreateDynEnt* (_QWORD*)&cent->nextState.lerp.u.createDynEnt +[2]  e.g. :333 *((_QWORD *)&cent->nextState.lerp.u.createDynEnt + 2) = 0;
+== src/cgame/cg_weapons.cpp
+  [ 36] const char**       (_BYTE**)weapVariantDef->szXAnims +[1, 25, 27, 28, 30, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 64, 65]  e.g. :978 if (**((_BYTE **)weapVariantDef->szXAnims + 65))
+  [  3] const char**       (unsigned int*)weapVariantDef->szXAnims +[1, 64, 65]  e.g. :1086 Com_Error(ERR_DROP, "CG_RegisterWeapon: ADS anim [%s] cannot be looping", *((unsigned int *)weapVariantDef->szXAnims + 64));
+== src/cgame_mp/cg_ents_mp.cpp
+  [  4] ?                  (float*)&v5 +[1]  e.g. :487 *((float *)&v5 + 1) = *((float *)&v5 + 1) + g_entMoveTolVec[1];
+  [  3] ?                  (float*)&v67 +[1]  e.g. :391 if ( *((float *)&v67 + 1) >= 0.0 )
+  [  3] ?                  (float*)&v63 +[1]  e.g. :426 if ( *((float *)&v63 + 1) >= 0.0 )
+  [  3] XModel**           (unsigned int*)weapDef->worldModel +[1, 2]  e.g. :3885 && *((unsigned int *)weapDef->worldModel + 1)
+  [  2] const char**       (char**)weapVariantDef->szXAnims +[1, 3]  e.g. :3512 BG_CreateXAnim(pAnims, 1u, *((char **)weapVariantDef->szXAnims + 1));
+  [  1] ?                  (float*)&v14 +[1]  e.g. :449 v10 = (float)(*((float *)&v14 + 1) * *((float *)&v63 + 1))
+  [  1] ?                  (float*)&v28 +[1]  e.g. :450 + (float)((float)(*((float *)&v28 + 1) * *((float *)&v67 + 1)) + (float)((float)(*((float *)&v42 + 1) * v72) + v60));
+  [  1] ?                  (float*)&v42 +[1]  e.g. :450 + (float)((float)(*((float *)&v28 + 1) * *((float *)&v67 + 1)) + (float)((float)(*((float *)&v42 + 1) * v72) + v60));
+  [  1] ?                  (float*)&v39 +[1]  e.g. :457 rotatedBounds[0].v[2] = (float)(*((float *)&v39 + 1) * v72) + v60;
+  [  1] ?                  (float*)&v25 +[1]  e.g. :463 rotatedBounds[0].v[2] = (float)(*((float *)&v25 + 1) * *((float *)&v67 + 1)) + rotatedBounds[0].v[2];
+== src/cgame_mp/cg_newDraw_mp.cpp
+  [  2] float*             (float*)color +[3]  e.g. :4923 *((float *)color + 3) = CG_FadeAlpha(cgameGlob->time, cgameGlob->cursorHintTime, cgameGlob->cursorHintFade, 100)
+  [  1] const float*       (unsigned int*)color +[2]  e.g. :4625 proneStr = (const char *)*((unsigned int *)color + 2);
+== src/cgame_mp/cg_view_mp.cpp
+  [  2] ?                  (float*)&v7 +[1]  e.g. :2615 *((float *)&v7 + 1) = (float)(focusDist * focusPoint[2]) + *((float *)&v7 + 1);
+  [  2] ?                  (float*)&v5 +[1]  e.g. :2628 *((float *)&v5 + 1) = (float)(view[1] * view[1]) + (float)(view[2] * view[2]);
+  [  1] ?                  (float*)&v4 +[1]  e.g. :2632 *((float *)&v4 + 1) = v10;
+== src/client/cl_console.cpp
+  [  1] char*              (_WORD*)v9 +[2]  e.g. :1119 *((_WORD *)v9 + 2) = *((_WORD *)v10 + 2);
+  [  1] const char*        (_WORD*)v10 +[2]  e.g. :1119 *((_WORD *)v9 + 2) = *((_WORD *)v10 + 2);
+== src/client_mp/cl_input_mp.cpp
+  [  1] unsigned char*     (unsigned int*)v4 +[1]  e.g. :351 *((unsigned int *)v4 + 1) = *((unsigned int *)v3 + 1);
+  [  1] unsigned char*     (unsigned int*)v3 +[1]  e.g. :351 *((unsigned int *)v4 + 1) = *((unsigned int *)v3 + 1);
+== src/client_mp/cl_main_pc_mp.cpp
+  [  2] ?                  (_BYTE*)v18 +[276, 280]  e.g. :573 servers->maxClients = *((_BYTE *)v18 + 276);
+  [  2] ?                  (unsigned int*)serversecurityID +[1]  e.g. :940 *(unsigned int *)&secId.ab[4] = *((unsigned int *)serversecurityID + 1);
+  [  1] ?                  (_OWORD*)v18 +[18]  e.g. :576 servers->xnkey = (bdSecurityKey)*((_OWORD *)v18 + 18);
+== src/client_mp/sv_client_mp.cpp
+  [  1] long long unsigned int* (float*)&newXuid +[1]  e.g. :2504 svs.mapCenter[2 * v7 - 63] = *((float *)&newXuid + 1);
+== src/clientscript/cscr_compiler.cpp
+  [  1] char*              (_DWORD*)pos3 +[2]  e.g. :5025 if (*(_DWORD *)pos3 == *((_DWORD *)pos3 + 2))
+== src/clientscript/cscr_parser.cpp
+  [  1] const char*        (unsigned int*)rawfile->buffer +[1]  e.g. :1186 inlen = *((unsigned int *)rawfile->buffer + 1);
+== src/clientscript/cscr_vm.cpp
+  [  2] char*              (_WORD*)stackValue +[2, 3]  e.g. :2190 *((_WORD *)stackValue + 2) = size;
+  [  1] char*              (_DWORD*)stackValue +[2]  e.g. :2189 *((_DWORD *)stackValue + 2) = localId;
+== src/database/db_file_load.cpp
+  [  1] unsigned char*     (unsigned int*)g_load.stream.next_in +[1]  e.g. :397 *(unsigned int *)&magic[4] = *((unsigned int *)g_load.stream.next_in + 1);
+== src/database/db_load.cpp
+  [  3] MaterialVertexDeclaration** (unsigned __int8*)varMaterialPass +[12, 13, 14]  e.g. :2273 *((unsigned __int8 *)varMaterialPass + 14)
+== src/demo/demo_playback.cpp
+  [  1] unsigned char*     (unsigned int*)buffer +[1]  e.g. :4022 *((unsigned int *)buffer + 1) = msg.cursize;
+== src/flame/flame_class_chunk.cpp
+  [  5] flameGeneric_s*    (unsigned int*)&chunk->gen +[23]  e.g. :209 *((unsigned int *)&chunk->gen + 23) = *((unsigned int *)&chunk->gen + 23) & 0xFFFFFFF8 | 1;
+  [  1] flameGeneric_s*    (unsigned int*)&trav->gen +[23]  e.g. :151 if ( ((*((unsigned int *)&trav->gen + 23) >> 3) & 1) != 0
+== src/flame/flame_class_drips.cpp
+  [  2] flameGeneric_s*    (unsigned int*)&fire->gen +[23]  e.g. :149 *((unsigned int *)&fire->gen + 23) = *((unsigned int *)&fire->gen + 23) & 0xFFFFFFF8 | 4;
+== src/flame/flame_class_fire.cpp
+  [  4] flameGeneric_s*    (unsigned int*)&fire->gen +[23]  e.g. :106 *((unsigned int *)&fire->gen + 23) = *((unsigned int *)&fire->gen + 23) & 0xFFFFFFF8 | 2;
+  [  1] flameGeneric_s*    (unsigned int*)&trav->gen +[23]  e.g. :59 if ( ((*((unsigned int *)&trav->gen + 23) >> 4) & 0xFFFFFFFu) < flame_freeze_id )
+  [  1] flameGeneric_s*    (unsigned int*)&fromChunk->gen +[23]  e.g. :108 *((unsigned int *)&fire->gen + 23) = (16 * (*((unsigned int *)&fromChunk->gen + 23) >> 4)) | *((unsigned int *)&fire->gen + 23) & 0xF;
+== src/flame/flame_class_smoke.cpp
+  [  4] flameGeneric_s*    (unsigned int*)&smoke->gen +[23]  e.g. :88 *((unsigned int *)&smoke->gen + 23) = *((unsigned int *)&smoke->gen + 23) & 0xFFFFFFF8 | 3;
+  [  1] flameGeneric_s*    (unsigned int*)&trav->gen +[23]  e.g. :60 if ( ((*((unsigned int *)&trav->gen + 23) >> 4) & 0xFFFFFFFu) < flame_freeze_id )
+  [  1] flameGeneric_s*    (unsigned int*)&fromChunk->gen +[23]  e.g. :90 *((unsigned int *)&smoke->gen + 23) = (16 * (*((unsigned int *)&fromChunk->gen + 23) >> 4)) | *((unsigned int *)&smoke->gen + 23) & 0xF;
+== src/flame/flame_class_stream.cpp
+  [  1] flameGeneric_s*    (unsigned int*)&stream->gen +[23]  e.g. :220 *((unsigned int *)&stream->gen + 23) &= 0xFFFFFFF8;
+== src/flame/flame_physics.cpp
+  [  3] flameGeneric_s*    (unsigned int*)gen +[23]  e.g. :636 if ( ((*((unsigned int *)gen + 23) >> 4) & 0xFFFFFFFu) > flame_freeze_id )
+== src/game/g_items.cpp
+  [  2] XModel**           (unsigned int*)weapDef->worldModel +[1]  e.g. :819 && *((unsigned int *)weapDef->worldModel + 1)
+  [  1] XModel**           (XModel**)weapDef->worldModel +[1]  e.g. :1505 v3 = (char *)XModelGetName(*((const XModel **)weapDef->worldModel + 1));
+  [  1] spawner_ent_t*     (unsigned __int16*)&ent->spawner +[4]  e.g. :1574 ent->s.un3.item = *((unsigned __int16 *)&ent->spawner + 4);
+== src/game/g_missile.cpp
+  [  2] float*             (unsigned int*)steer +[2]  e.g. :4233 integer = *((unsigned int *)steer + 2);
+== src/game/pathnode.cpp
+  [  1] void*              (_DWORD*)j +[5]  e.g. :1114 for (j = m_tree_root->m_data; j; j = (void *)*((_DWORD *)j + 5))
+  [  1] void*              (pathnode_t**)j +[4]  e.g. :1115 Path_NodesInCylinder_process(*((pathnode_t **)j + 4));
+== src/game/pathnode_load_obj.cpp
+  [  1] const unsigned char* (unsigned __int16*)buf +[2]  e.g. :695 if ( gameWorldCurrent->path.nodeCount != *((unsigned __int16 *)buf + 2) )
+== src/game/turret.cpp
+  [  3] long double*       (float*)&v8 +[1]  e.g. :2747 *((float *)&v8 + 1) = v11;
+== src/game_mp/g_scr_main_mp.cpp
+  [ 10] ?                  (float*)&v2 +[1]  e.g. :6782 *((float *)&v2 + 1) = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+  [  8] ?                  (float*)&v1 +[1]  e.g. :6707 *((float *)&v1 + 1) = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+  [  2] char*              (unsigned int*)dest +[32]  e.g. :17043 *((unsigned int *)dest + 32) = s0 && !I_stricmp(s0, "team");
+  [  1] XModel**           (unsigned int*)weapDef->worldModel +[1]  e.g. :1525 if ( *((unsigned int *)weapDef->worldModel + 1)
+== src/game_mp/g_utils_mp.cpp
+  [  2] char*              (unsigned int*)tagInfo +[1, 3]  e.g. :842 *((unsigned int *)tagInfo + 1) = (unsigned int)parent->tagChildren;
+  [  1] char*              (_WORD*)tagInfo +[4]  e.g. :825 *((_WORD *)tagInfo + 4) = 0;
+== src/gfx_d3d/r_bsp_load_obj.cpp
+  [  5] char*              (_WORD*)header +[1, 2, 3, 4, 5]  e.g. :1805 s_world.lightGrid.mins[1] = *((_WORD *)header + 1);
+  [  5] char*              (float*)in +[1, 2, 3, 4, 5]  e.g. :4810 out->mins[1] = *((float *)in + 1);
+  [  4] char*              (unsigned int*)header +[3, 4]  e.g. :1798 rowCount = *(unsigned __int16 *)&header[2 * *((unsigned int *)header + 3) + 6]
+  [  4] char*              (unsigned int*)in +[7, 8, 9, 10]  e.g. :4816 out->portals = (GfxPortal *)(68 * *((unsigned int *)in + 7));
+  [  3] char*              (float*)v2 +[1, 2, 3]  e.g. :2515 v1->origin[1] = *((float *)v2 + 1);
+  [  2] char*              (float*)v1 +[1, 2]  e.g. :2092 v2->origin[1] = *((float *)v1 + 1);
+  [  1] char*              (unsigned int*)v2 +[4]  e.g. :2518 s_world.worldLodChains[i].firstLodInfo = *((unsigned int *)v2 + 4);
+  [  1] char*              (_WORD*)v2 +[10]  e.g. :2519 s_world.worldLodChains[i].lodInfoCount = *((_WORD *)v2 + 10);
+  [  1] unsigned int*      (_WORD*)v2 +[4]  e.g. :2900 *((_WORD *)v2 + 4) = 0;
+  [  1] char*              (unsigned __int16*)in +[12]  e.g. :4815 out->aabbTree = &rgl.aabbTrees[*((unsigned __int16 *)in + 12)];
+  [  1] char*              (__int16*)inLeaf_v14 +[12]  e.g. :5077 out->cellIndex = *((__int16 *)inLeaf_v14 + 12);
+  [  1] char*              (unsigned int*)inLeaf_v14 +[6]  e.g. :5078 if ( out->cellIndex != *((unsigned int *)inLeaf_v14 + 6)
+== src/gfx_d3d/r_dpvs.cpp
+  [  1] DpvsPlane**        (unsigned __int16*)data +[4]  e.g. :2678 oldViewIndex = R_SetVisData(*((unsigned __int16 *)data + 4));
+  [  1] DpvsPlane**        (unsigned __int8*)data +[10]  e.g. :2680 R_CullDynBrushInCell((unsigned int)data[1], *data, *((unsigned __int8 *)data + 10));
+== src/gfx_d3d/r_dpvs_dynmodel.cpp
+  [  1] const DpvsPlane**  (unsigned __int8*)data +[10]  e.g. :33 planeCount = *((unsigned __int8 *)data + 10);
+  [  1] const DpvsPlane**  (unsigned __int16*)data +[4]  e.g. :35 dynEntVisData = worldDpvsDyn->dynEntVisData[0][*((unsigned __int16 *)data + 4)];
+== src/gfx_d3d/r_dpvs_entity.cpp
+  [  2] short unsigned int* (unsigned int*)data +[1, 3]  e.g. :33 planes = (const DpvsPlane *)*((unsigned int *)data + 1);
+== src/gfx_d3d/r_dpvs_sceneent.cpp
+  [  2] ?                  (unsigned int*)sceneXModelIndex +[3]  e.g. :119 wordIndex = *((unsigned int *)sceneXModelIndex + 3) + 4 * (unsigned int)entCellBitsa;
+== src/gfx_d3d/r_dpvs_static.cpp
+  [ 41] long long int*     (float*)&p5_8 +[1]  e.g. :102 if ( *((float *)&p5_8 + 1) <= 0.0 )
+  [ 39] long long int*     (float*)&p4_8 +[1]  e.g. :120 if ( *((float *)&p4_8 + 1) <= 0.0 )
+  [ 34] long long int*     (float*)&p3_8 +[1]  e.g. :240 if ( *((float *)&p3_8 + 1) <= 0.0 )
+  [ 34] long long int*     (float*)&p2_8 +[1]  e.g. :314 if ( *((float *)&p2_8 + 1) <= 0.0 )
+  [ 34] long long int*     (float*)&p1_8 +[1]  e.g. :388 if ( *((float *)&p1_8 + 1) <= 0.0 )
+  [ 18] long long int*     (float*)&p5 +[1]  e.g. :93 if ( *((float *)&p5 + 1) <= 0.0 )
+  [ 17] long long int*     (float*)&p4 +[1]  e.g. :111 if ( *((float *)&p4 + 1) <= 0.0 )
+  [ 11] long long int*     (float*)&p3 +[1]  e.g. :231 if ( *((float *)&p3 + 1) <= 0.0 )
+  [ 11] long long int*     (float*)&p2 +[1]  e.g. :305 if ( *((float *)&p2 + 1) <= 0.0 )
+  [ 11] long long int*     (float*)&p1 +[1]  e.g. :379 if ( *((float *)&p1 + 1) <= 0.0 )
+== src/gfx_d3d/r_draw_shadowablelight.cpp
+  [  1] float*             (_DWORD*)y +[2]  e.g. :246 *((_DWORD *)y + 2) = (DWORD)updateLight;
+== src/gfx_d3d/r_draw_staticmodel.cpp
+  [  6] GfxStaticModelDrawStream* (unsigned int*)&drawStream +[10]  e.g. :26 *((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+== src/gfx_d3d/r_image_wavelet.cpp
+  [  2] const unsigned char* (unsigned __int8*)decode->data +[2, 3]  e.g. :12493 decode->value |= ((*((unsigned __int8 *)decode->data + 3) << 24)
+== src/gfx_d3d/r_light_load_obj.cpp
+  [  1] unsigned char*     (unsigned int*)def +[3]  e.g. :48 *((unsigned int *)def + 3) = 0;
+== src/gfx_d3d/r_marks.cpp
+  [  3] ?                  (float*)v4 +[1, 2, 3]  e.g. :752 *((float *)v4 + 3) = (float)((float)((float)(*(float *)v4 * *origin) + (float)(*((float *)v4 + 1) * origin[1]))
+  [  2] ?                  (unsigned int*)v4 +[1, 2]  e.g. :750 *((unsigned int *)v4 + 1) = *((unsigned int *)v6 + 1) ^ _mask__NegFloat_;
+  [  2] ?                  (unsigned int*)v6 +[1, 2]  e.g. :750 *((unsigned int *)v4 + 1) = *((unsigned int *)v6 + 1) ^ _mask__NegFloat_;
+== src/gfx_d3d/r_material.cpp
+  [  3] unsigned char*     (unsigned int*)mtlNew +[45, 46, 47]  e.g. :999 *((unsigned int *)mtlNew + 47) = (unsigned int)Material_Alloc(stateBitsTableSize);
+  [  3] unsigned char*     (unsigned __int8**)mtlNew +[45, 46, 47]  e.g. :1000 memcpy(*((unsigned __int8 **)mtlNew + 47), (unsigned __int8 *)mtlCopy->stateBitsTable, stateBitsTableSize);
+== src/gfx_d3d/r_material_load_obj.cpp
+  [  4] unsigned char*     (_WORD*)technique +[2, 3]  e.g. :1399 *((_WORD *)technique + 2) = techFlags;
+  [  1] char*              (_WORD*)typeInfo +[1]  e.g. :3585 switch ( *((_WORD *)typeInfo + 1) )
+  [  1] char*              (unsigned __int16*)typeInfo +[1]  e.g. :3618 Com_ScriptError("Unknown constant type '%i'", *((unsigned __int16 *)typeInfo + 1));
+  [  1] unsigned char*     (_WORD*)v4 +[64]  e.g. :5944 *((_WORD *)v4 + 64) = *(_WORD *)&stateBitsEntry[128];
+== src/gfx_d3d/r_model.cpp
+  [  2] unsigned char*     (_WORD*)v17 +[7, 8]  e.g. :398 *((_WORD *)v17 + 7) = gfxEntIndex;
+  [  1] unsigned char*     (unsigned int*)v17 +[1]  e.g. :397 *((unsigned int *)v17 + 1) = (unsigned int)v15;
+  [  1] unsigned char*     (float*)v17 +[13]  e.g. :401 *((float *)v17 + 13) = scale;
+== src/gfx_d3d/r_model_lighting.cpp
+  [  1] const void*        (float*)userData +[4]  e.g. :487 *((float *)userData + 4));
+== src/gfx_d3d/r_scene.cpp
+  [  1] ?                  (float*)&POISON_BLUR_SLOW +[1]  e.g. :4275 *((float *)&POISON_BLUR_SLOW + 1) = (float)((float)((float)(-2.0 * blend) + 3.0) * blend) * blend;
+== src/gfx_d3d/r_screenshot.cpp
+  [  6] float*             (unsigned int*)srcpixel +[1, 2, 3]  e.g. :1445 tmp1 = *((unsigned int *)srcpixel + 1);
+  [  6] float*             (unsigned int*)dstpixel +[1, 2, 3]  e.g. :1453 *((unsigned int *)dstpixel + 1) = tmp1;
+  [  3] unsigned char*     (unsigned int*)buffer +[1, 2, 3]  e.g. :614 *((unsigned int *)buffer + 1) = 0;
+  [  3] unsigned char*     (unsigned int*)fileBuffer +[1, 2, 3]  e.g. :1030 *((unsigned int *)fileBuffer + 1) = 0;
+  [  2] unsigned char*     (_WORD*)fileBuffer +[6, 8]  e.g. :1033 *((_WORD *)fileBuffer + 8) = 0;
+  [  1] unsigned char*     (_WORD*)buffer +[8]  e.g. :617 *((_WORD *)buffer + 8) = 0;
+== src/gfx_d3d/r_sprite.cpp
+  [  4] long long int*     (float*)&vcenter +[1]  e.g. :405 pos0.v[1] = (float)(*((float *)&vcenter + 1) + vleft.v[1]) + vup.v[1];
+  [  4] long long int*     (float*)&vcenter_8 +[1]  e.g. :407 pos0.v[3] = (float)(*((float *)&vcenter_8 + 1) + vleft.v[3]) + vup.v[3];
+  [  2] const float*       (int*)left +[1, 2]  e.g. :87 v29.array[1] = (int)(float)((float)((-*((int *)left + 1)) * 127.0) + 127.5);
+== src/gfx_d3d/r_stream.cpp
+  [  1] const float*       (_QWORD*)mip0maxs +[1]  e.g. :2225 *(_QWORD *)&v7.unitVec[2].packed = *((_QWORD *)mip0maxs + 1);
+  [  1] const float*       (_QWORD*)mip0mins +[1]  e.g. :2227 *(_QWORD *)&v6.unitVec[2].packed = *((_QWORD *)mip0mins + 1);
+== src/gfx_d3d/r_water_sim.cpp
+  [  6] char*              (unsigned int*)modelSurf +[1, 2, 3, 4, 6, 7]  e.g. :1362 *((unsigned int *)modelSurf + 1) = (unsigned int)data.vertexBuffer;
+  [  4] char*              (float*)modelSurf +[5, 8, 9, 10]  e.g. :1361 *((float *)modelSurf + 5) = interpolate;
+  [  3] ?                  (_QWORD*)p_flooroffset +[510, 512, 514]  e.g. :1720 *(_QWORD *)&old1.unitVec[2].packed = *((_QWORD *)p_flooroffset + 510);
+  [  3] ?                  (float*)p_flooroffset +[1022, 1026, 1030]  e.g. :1721 v91 = *((float *)p_flooroffset + 1022);
+  [  3] ?                  (unsigned int*)p_flooroffset +[1023, 1027, 1031]  e.g. :1722 old0.u[0] = *((unsigned int *)p_flooroffset + 1023);
+  [  2] ?                  (float*)&v2 +[1]  e.g. :896 *((float *)&v2 + 1) = data.localEyeHeight * 7.0 / 8.0;
+  [  2] ?                  (float*)&v3 +[1]  e.g. :902 *((float *)&v3 + 1) = d / (float)((float)(16.0 * config.gridScale) / 16.0);
+  [  2] ?                  (float*)&v50 +[1]  e.g. :1882 *((float *)&v50 + 1) = *(float *)&endv * windadd.v[1];
+  [  2] long long int*     (float*)&v129 +[1]  e.g. :2959 foam.v[2] = *((float *)&v129 + 1) + (float)(*((float *)&v141 + 1) + *((float *)&v137 + 1));
+  [  2] long long int*     (float*)&v137 +[1]  e.g. :2959 foam.v[2] = *((float *)&v129 + 1) + (float)(*((float *)&v141 + 1) + *((float *)&v137 + 1));
+  [  2] long long int*     (float*)&v149 +[1]  e.g. :3055 binormal.v[2] = (float)(*((float *)&v149 + 1) + *(float *)&avgpos[16]) - *((float *)&v157 + 1);
+  [  2] long long int*     (float*)&v157 +[1]  e.g. :3055 binormal.v[2] = (float)(*((float *)&v149 + 1) + *(float *)&avgpos[16]) - *((float *)&v157 + 1);
+  [  2] long long int*     (float*)&v133 +[1]  e.g. :3059 binormal.v[2] = binormal.v[2] - *((float *)&v133 + 1);
+  [  1] ?                  (_QWORD*)p_waterheight +[512]  e.g. :1728 *(_QWORD *)&old3.unitVec[2].packed = *((_QWORD *)p_waterheight + 512);
+  [  1] ?                  (float*)p_waterheight +[1026]  e.g. :1729 v87 = *((float *)p_waterheight + 1026);
+  [  1] ?                  (unsigned int*)p_waterheight +[1027]  e.g. :1730 old2.u[0] = *((unsigned int *)p_waterheight + 1027);
+  [  1] ?                  (_QWORD*)p_shoredist +[512]  e.g. :1732 *(_QWORD *)&oldc.unitVec[2].packed = *((_QWORD *)p_shoredist + 512);
+  [  1] ?                  (float*)p_shoredist +[1026]  e.g. :1733 v85 = *((float *)p_shoredist + 1026);
+  [  1] ?                  (unsigned int*)p_shoredist +[1027]  e.g. :1734 old3.u[0] = *((unsigned int *)p_shoredist + 1027);
+  [  1] long long int*     (float*)&v141 +[1]  e.g. :2959 foam.v[2] = *((float *)&v129 + 1) + (float)(*((float *)&v141 + 1) + *((float *)&v137 + 1));
+  [  1] long long int*     (float*)&u +[1]  e.g. :2992 v118 = *((float *)&u + 1) + foam.v[2];
+  [  1] long long int*     (float*)&v145 +[1]  e.g. :3071 binormal.v[2] = binormal.v[2] - *((float *)&v145 + 1);
+  [  1] long long int*     (float*)&v153 +[1]  e.g. :3091 zOffset.v[2] = zOffset.v[2] - *((float *)&v153 + 1);
+== src/gfx_d3d/rb_backend.cpp
+  [ 10] const void*        (unsigned int*)execState->cmd +[1, 2, 3, 4, 5, 6, 11]  e.g. :1345 *((unsigned int *)execState->cmd + 6));
+  [  6] const void*        (float*)execState->cmd +[2, 3, 4, 5]  e.g. :1341 *((float *)execState->cmd + 2),
+  [  5] const void*        (_BYTE*)execState->cmd +[4, 5, 7, 8]  e.g. :1786 *((_BYTE *)execState->cmd + 4),
+  [  4] const void*        (__int16*)execState->cmd +[6]  e.g. :2254 normalOffset = 16 * *((__int16 *)execState->cmd + 6) + 16;
+  [  3] const void*        (_BYTE*)execState.cmd +[2, 3]  e.g. :4907 if (!*((_BYTE *)execState.cmd + 2))
+  [  2] const void*        (Material**)execState->cmd +[1]  e.g. :1340 *((const Material **)execState->cmd + 1),
+  [  2] const void*        (_WORD*)execState->cmd +[5, 6]  e.g. :2260 *((_WORD *)execState->cmd + 5),
+  [  2] const void*        (unsigned __int8*)execState.cmd +[2]  e.g. :4920 if (*((unsigned __int8 *)execState.cmd + 2) >= 0x1Du
+  [  1] const void*        (unsigned int**)execState->cmd +[1]  e.g. :959 if ( **((unsigned int **)execState->cmd + 1) )
+  [  1] const void*        (unsigned __int8**)execState->cmd +[7]  e.g. :1358 *((const unsigned __int8 **)execState->cmd + 7));
+  [  1] const void*        (Font_s**)execState->cmd +[4]  e.g. :4544 *((Font_s **)execState->cmd + 4),
+== src/gfx_d3d/rb_debug.cpp
+  [  1] float*             (unsigned int*)v18 +[2]  e.g. :373 *((unsigned int *)v18 + 2) = v20;
+  [  1] unsigned char*     (unsigned int*)v14 +[1]  e.g. :408 *((unsigned int *)v14 + 1) = 0;
+  [  1] unsigned char*     (float*)v14 +[2]  e.g. :409 *((float *)v14 + 2) = 1.0f;
+  [  1] unsigned char*     (unsigned int*)v10 +[1]  e.g. :432 *((unsigned int *)v10 + 1) = 0;
+  [  1] unsigned char*     (float*)v10 +[2]  e.g. :433 *((float *)v10 + 2) = -1.0f;
+== src/gfx_d3d/rb_light.cpp
+  [  2] const unsigned int* (_WORD*)pos +[2, 4]  e.g. :760 *((_WORD *)pos + 2) + ((yBit & cornerIndex) != 0),
+== src/gfx_d3d/rb_postfx.cpp
+  [  3] float*             (unsigned int*)v77 +[1, 2, 3]  e.g. :1998 *((unsigned int *)v77 + 1) = v80;
+  [  3] float*             (unsigned int*)v72 +[1, 2, 3]  e.g. :2008 *((unsigned int *)v72 + 1) = v75;
+  [  3] float*             (unsigned int*)v67 +[1, 2, 3]  e.g. :2018 *((unsigned int *)v67 + 1) = v70;
+  [  3] float*             (unsigned int*)v62 +[1, 2, 3]  e.g. :2028 *((unsigned int *)v62 + 1) = v65;
+  [  3] float*             (unsigned int*)v57 +[1, 2, 3]  e.g. :2038 *((unsigned int *)v57 + 1) = v60;
+  [  3] float*             (unsigned int*)v52 +[1, 2, 3]  e.g. :2048 *((unsigned int *)v52 + 1) = v55;
+  [  3] float*             (unsigned int*)v47 +[1, 2, 3]  e.g. :2058 *((unsigned int *)v47 + 1) = v50;
+  [  3] float*             (unsigned int*)v42 +[1, 2, 3]  e.g. :2068 *((unsigned int *)v42 + 1) = v45;
+  [  3] float*             (unsigned int*)v37 +[1, 2, 3]  e.g. :2078 *((unsigned int *)v37 + 1) = v40;
+  [  3] float*             (unsigned int*)v32 +[1, 2, 3]  e.g. :2088 *((unsigned int *)v32 + 1) = v35;
+  [  3] float*             (unsigned int*)v27 +[1, 2, 3]  e.g. :2098 *((unsigned int *)v27 + 1) = v30;
+  [  3] float*             (unsigned int*)v22 +[1, 2, 3]  e.g. :2108 *((unsigned int *)v22 + 1) = v25;
+  [  2] float*             (unsigned int*)v94 +[1, 2]  e.g. :1961 *((unsigned int *)v94 + 1) = v96;
+  [  2] float*             (unsigned int*)v90 +[1, 2]  e.g. :1970 *((unsigned int *)v90 + 1) = v92;
+  [  2] float*             (unsigned int*)v86 +[1, 2]  e.g. :1979 *((unsigned int *)v86 + 1) = v88;
+== src/glass/glass_shard.cpp
+  [  3] long long int*     (float*)&np +[1]  e.g. :1504 *((float *)&np + 1) = (float)(v8 * v9->edge.dir[1]) + v9->edge.origin[1];
+== src/ik/ik_import.cpp
+  [  4] unsigned char*     (unsigned int**)obj +[30]  e.g. :507 for ( objBoneIndex = 0; objBoneIndex < *(unsigned __int8 *)(**((unsigned int **)obj + 30) + 4); ++objBoneIndex )
+  [  4] long long int*     (float*)&v15 +[1]  e.g. :1152 *(float *)&v7 = (float)((float)((float)(legsMat[0][0] * *((float *)&v15 + 1))
+  [  4] long long int*     (float*)&v17 +[1]  e.g. :1153 + (float)(legsMat[0][1] * *((float *)&v17 + 1)))
+  [  4] long long int*     (float*)&v19 +[1]  e.g. :1154 + (float)(legsMat[0][2] * *((float *)&v19 + 1)))
+  [  4] long long int*     (float*)&v21 +[1]  e.g. :1155 + (float)(legsMat[0][3] * *((float *)&v21 + 1));
+  [  4] long long int*     (float*)&v16 +[1]  e.g. :1160 v8 = (float)((float)((float)(legsMat[0][0] * *((float *)&v16 + 1)) + (float)(legsMat[0][1] * *((float *)&v18 + 1)))
+  [  4] long long int*     (float*)&v18 +[1]  e.g. :1160 v8 = (float)((float)((float)(legsMat[0][0] * *((float *)&v16 + 1)) + (float)(legsMat[0][1] * *((float *)&v18 + 1)))
+  [  4] long long int*     (float*)&v20 +[1]  e.g. :1161 + (float)(legsMat[0][2] * *((float *)&v20 + 1)))
+  [  4] long long int*     (float*)&v22 +[1]  e.g. :1162 + (float)(legsMat[0][3] * *((float *)&v22 + 1));
+  [  3] unsigned char*     (unsigned __int16*)obj +[3]  e.g. :823 entityNum = *((unsigned __int16 *)obj + 3) - 1;
+  [  2] unsigned char*     (unsigned __int16*)model +[3]  e.g. :723 entityNum = *((unsigned __int16 *)model + 3) - 1;
+  [  1] unsigned char*     (unsigned int*)obj +[21]  e.g. :489 matArray = (DObjAnimMat *)*((unsigned int *)obj + 21);
+  [  1] unsigned char*     (unsigned int*)model +[30]  e.g. :746 if ( !*((unsigned int *)model + 30) || !model[9] || !**((unsigned int **)model + 30) )
+  [  1] unsigned char*     (unsigned int**)model +[30]  e.g. :746 if ( !*((unsigned int *)model + 30) || !model[9] || !**((unsigned int **)model + 30) )
+  [  1] long long int*     (float*)&v7 +[1]  e.g. :1156 *((float *)&v7 + 1) = (float)((float)((float)(legsMat[0][0] * *(float *)&v16)
+  [  1] long long int*     (float*)&v9 +[1]  e.g. :1166 *((float *)&v9 + 1) = (float)((float)((float)(legsMat[1][0] * *((float *)&v15 + 1))
+  [  1] long long int*     (float*)&v10 +[1]  e.g. :1173 *((float *)&v10 + 1) = (float)((float)((float)(legsMat[1][0] * *((float *)&v16 + 1))
+  [  1] long long int*     (float*)&v11 +[1]  e.g. :1180 *((float *)&v11 + 1) = (float)((float)((float)(legsMat[2][0] * *((float *)&v15 + 1))
+  [  1] long long int*     (float*)&v12 +[1]  e.g. :1187 *((float *)&v12 + 1) = (float)((float)((float)(legsMat[2][0] * *((float *)&v16 + 1))
+  [  1] long long int*     (float*)&v13 +[1]  e.g. :1194 *((float *)&v13 + 1) = (float)((float)((float)(legsMat[3][0] * *((float *)&v15 + 1))
+  [  1] long long int*     (float*)&v14 +[1]  e.g. :1201 *((float *)&v14 + 1) = (float)((float)((float)(legsMat[3][0] * *((float *)&v16 + 1))
+  [  1] const unsigned char* (unsigned __int16*)model +[3]  e.g. :2520 entityNum = *((unsigned __int16 *)model + 3) - 1;
+== src/live/live_combatrecord.cpp
+  [  8] float*             (unsigned int*)arg0 +[2, 3]  e.g. :757 if ( *((unsigned int *)arg0 + 2) == *((unsigned int *)arg1 + 2) )
+  [  8] float*             (unsigned int*)arg1 +[2, 3]  e.g. :757 if ( *((unsigned int *)arg0 + 2) == *((unsigned int *)arg1 + 2) )
+== src/live/live_leaderboard.cpp
+  [  2] ?                  (unsigned int*)g_lbGlob.tasks[slot].data +[3868, 3878]  e.g. :1723 *((unsigned int *)g_lbGlob.tasks[slot].data + 3878) = *((unsigned int *)g_lbGlob.tasks[slot].data + 3868);
+== src/live/live_pcache_profile.cpp
+  [  2] void*              (unsigned int*)task->payload +[4, 6]  e.g. :136 *((unsigned int *)task->payload + 6) &= ~1u;
+== src/live/live_stats.cpp
+  [  1] ?                  (unsigned int*)nemesisXuid +[1]  e.g. :4490 *((unsigned int *)nemesisXuid + 1) = v3;
+== src/live/live_storage.cpp
+  [  8] const char**       (_BYTE*)data +[242]  e.g. :1288 if ( !*((_BYTE *)data + 242)
+  [  2] void*              (_QWORD*)task->payload +[2]  e.g. :3916 Com_PrintError(16, "Could not set tags for entity %llu\n", *((_QWORD *)task->payload + 2));
+  [  1] void*              (_BYTE*)task->payload +[36]  e.g. :3143 if ( *((_BYTE *)task->payload + 36) )
+  [  1] void*              (bdFileMetaData**)task->payload +[4]  e.g. :3274 LiveStorage_FileShare_PublicMetaToTags(*((bdFileMetaData **)task->payload + 4), *((unsigned int *)task->payload + 1));
+  [  1] void*              (unsigned int*)task->payload +[1]  e.g. :3274 LiveStorage_FileShare_PublicMetaToTags(*((bdFileMetaData **)task->payload + 4), *((unsigned int *)task->payload + 1));
+  [  1] ?                  (fileShareLocation*)task->payload +[2]  e.g. :3586 httpError = dwFileShareGetLastHTTPError(task->controllerIndex, *((fileShareLocation *)task->payload + 2));
+== src/live/live_storage_win.cpp
+  [ 14] ?                  (_QWORD*)data +[34]  e.g. :2565 *((_QWORD *)data + 34),
+  [  9] ?                  (unsigned int*)data +[9]  e.g. :2694 if ( !*((unsigned int *)data + 9)
+  [  7] unsigned char*     (unsigned int*)purchasedItems +[1, 2, 3, 4, 5, 6, 7]  e.g. :1647 *((unsigned int *)purchasedItems + 1) = 0;
+  [  3] ?                  (unsigned __int8**)data +[54, 62]  e.g. :2566 *((unsigned __int8 **)data + 62),
+  [  1] ?                  (unsigned int*)&i[1].m_writeType +[1]  e.g. :1204 *((unsigned int *)&i[1].m_writeType + 1) = 0;
+  [  1] void*              (unsigned __int8**)data +[62]  e.g. :3348 Live_PopulateRecentServers(*((unsigned __int8 **)data + 62), *((unsigned int *)data + 63));
+  [  1] void*              (unsigned int*)data +[63]  e.g. :3348 Live_PopulateRecentServers(*((unsigned __int8 **)data + 62), *((unsigned int *)data + 63));
+== src/live/live_win.cpp
+  [  3] unsigned char*     (unsigned int*)ptr +[1, 2]  e.g. :1671 *((unsigned int *)ptr + 1) = HIDWORD(s_recentServers[i].serverID);
+  [  2] unsigned char*     (_WORD*)addrblob +[2]  e.g. :1855 *(_WORD *)&v2->addressblob[4] = *((_WORD *)addrblob + 2);
+  [  2] unsigned char*     (unsigned int*)uidblob +[1]  e.g. :1858 *(unsigned int *)(v3 * 16 + 174313908) = *((unsigned int *)uidblob + 1);
+== src/physics/destructible.cpp
+  [  2] const centity_s**  (float*)point +[1, 2]  e.g. :2459 dir[1] = hitp[1] - *((float *)point + 1);
+  [  1] LerpEntityStateCreateDynEnt* (_QWORD*)&ent->nextState.lerp.u.createDynEnt +[2]  e.g. :1523 *((_QWORD *)&ent->nextState.lerp.u.createDynEnt + 2) = 0;
+  [  1] const LerpEntityStateCreateDynEnt* (_QWORD*)&es->lerp.u.createDynEnt +[2]  e.g. :2842 *(_QWORD *)&newState.state.modelState3 = *((_QWORD *)&es->lerp.u.createDynEnt + 2);
+== src/physics/destructibledef_load_obj.cpp
+  [ 43] unsigned char*     (unsigned int*)pStruct +[1, 3, 4]  e.g. :692 if ( *((unsigned int *)pStruct + 4) )
+  [  5] unsigned char*     (unsigned int*)v3 +[1, 2, 3, 4, 5]  e.g. :880 *((unsigned int *)v3 + 1) = 0;
+  [  1] unsigned char*     (int*)pStruct +[3]  e.g. :788 && *(unsigned __int8 *)(*((unsigned int *)pStruct + 4) + 312 * v8 + 240) >= *((int *)pStruct + 3)
+  [  1] unsigned char*     (unsigned __int8**)pStruct +[4]  e.g. :897 memset(*((unsigned __int8 **)pStruct + 4), 0, count);
+== src/physics/phys_broad_phase.cpp
+  [  2] ?                  (float*)&p_z[-1].m_hit_bpi +[1, 2]  e.g. :2234 v12.x = *((float *)&p_z[-1].m_hit_bpi + 1) - m_bpb->m_trace_translation.x;
+  [  1] char*              (unsigned int*)p_m_gjk_geom +[1]  e.g. :1918 v5 = (unsigned int *)*((unsigned int *)p_m_gjk_geom + 1);
+== src/physics/phys_contact_manifold.cpp
+  [  1] contact_manifold_mesh_point** (unsigned int*)this->m_list_isect_point +[1]  e.g. :625 v23 = *((unsigned int *)this->m_list_isect_point + 1);
+  [  1] contact_manifold_mesh_point** (unsigned int*)this->m_list_sorted_mesh_point +[1]  e.g. :948 v20 = (float *)*((unsigned int *)this->m_list_sorted_mesh_point + 1);
+== src/physics/phys_gjk_collision_detection.cpp
+  [  1] void*              (unsigned int*)ent_info->m_data +[16]  e.g. :826 if ( *((unsigned int *)ent_info->m_data + 16) != 1
+== src/physics/phys_mem_new.cpp
+  [  1] ?                  (unsigned int*)v3 +[1]  e.g. :509 if ( *((unsigned int *)v3 + 1) != -19088744 )
+== src/physics/phys_transient_allocator.cpp
+  [  2] char*              (unsigned int*)v3 +[1, 2]  e.g. :63 *((unsigned int *)v3 + 1) = 4;
+== src/physics/phys_util.cpp
+  [  1] rigid_body* const* (unsigned int*)v10 +[1]  e.g. :250 v14 = (float *)*((unsigned int *)v10 + 1);
+  [  1] rigid_body* const* (_DWORD*)v23 +[1]  e.g. :491 v26 = *((_DWORD *)v23 + 1);
+== src/physics/physconstraints_load_obj.cpp
+  [  3] unsigned char*     (unsigned int*)pStruct +[1]  e.g. :219 constraint = (PhysConstraint *)&pStruct[168 * *((unsigned int *)pStruct + 1) + 8];
+== src/physics/physpreset_load_obj.cpp
+  [  2] char*              (unsigned int*)v8 +[1, 2]  e.g. :121 *((unsigned int *)v8 + 1) = *(unsigned int *)&dst[44];
+  [  2] char*              (unsigned int*)v7 +[1, 2]  e.g. :125 *((unsigned int *)v7 + 1) = *(unsigned int *)&dst[56];
+  [  2] char*              (unsigned int*)v6 +[1, 2]  e.g. :129 *((unsigned int *)v6 + 1) = *(unsigned int *)&dst[68];
+== src/qcommon/cm_load_obj.cpp
+  [ 13] char*              (unsigned int*)in +[1, 2, 3, 4, 7, 8]  e.g. :376 out->firstTri = *((unsigned int *)in + 1);
+  [  6] char*              (float*)in +[1, 2, 3, 4, 5]  e.g. :56 out->dist = *((float *)in + 3);
+  [  2] char*              (_WORD*)in +[12, 13]  e.g. :1268 out->materialIndex = *((_WORD *)in + 12);
+== src/qcommon/cm_mesh.cpp
+  [  2] long long int*     (float*)&v23 +[1]  e.g. :1227 if ( fabs(v25) <= (float)((float)(v43 * *((float *)&v23 + 1))
+  [  2] long long int*     (float*)&v12 +[1]  e.g. :1243 v3 = fabs(v14) > (float)((float)(v42 * *((float *)&v12 + 1))
+  [  1] long long int*     (float*)&v65 +[1]  e.g. :1125 if ( fabs(v67) <= (float)((float)(sum[1] * *((float *)&v65 + 1))
+  [  1] long long int*     (float*)&v54 +[1]  e.g. :1141 v48 = fabs(v56) > (float)((float)(sum[0] * *((float *)&v54 + 1))
+== src/qcommon/cm_trace.cpp
+  [  9] long long int*     (float*)&top +[1]  e.g. :730 tmp[1] = offset[1] - *((float *)&top + 1);
+  [  1] long long int*     (float*)&v25 +[1]  e.g. :2042 if ( fabs(v27) <= (float)((float)(v45 * *((float *)&v25 + 1))
+  [  1] long long int*     (float*)&v14 +[1]  e.g. :2058 v5 = fabs(v16) > (float)((float)(v44 * *((float *)&v14 + 1))
+== src/qcommon/com_bsp_load_obj.cpp
+  [  3] char*              (unsigned int*)in +[1, 3]  e.g. :766 out->y = *((unsigned int *)in + 1);
+  [  1] char*              (int*)in +[3]  e.g. :767 if ( (*((int *)in + 3) < 0 || *((unsigned int *)in + 3) >= (signed int)blockCount)
+== src/qcommon/dvar_cmds.cpp
+  [  2] void*              (unsigned int*)userData +[1, 2]  e.g. :621 if ( !*((unsigned int *)userData + 2) || Com_Filter(*((const char **)userData + 2), (char *)dvar->name, 0) )
+  [  1] void*              (char**)userData +[2]  e.g. :621 if ( !*((unsigned int *)userData + 2) || Com_Filter(*((const char **)userData + 2), (char *)dvar->name, 0) )
+== src/qcommon/graph.cpp
+  [  1] void*              (float*)devGuiGraph->data +[81]  e.g. :185 sprintf(text, "Fraction: %.3f, Value: %.3f", inputX, (float)(inputY * *((float *)devGuiGraph->data + 81)));
+== src/qcommon/mem_track.cpp
+  [  4] const char*        (unsigned __int8*)elem1 +[144, 145]  e.g. :1227 if ( *((unsigned __int8 *)elem1 + 144) < (int)*((unsigned __int8 *)elem2 + 144) )
+  [  4] const char*        (unsigned __int8*)elem2 +[144, 145]  e.g. :1227 if ( *((unsigned __int8 *)elem1 + 144) < (int)*((unsigned __int8 *)elem2 + 144) )
+== src/qcommon/sv_msg_write.cpp
+  [  7] const int*         (unsigned __int8*)toF +[1, 2, 3]  e.g. :495 && *((unsigned __int8 *)fromF + 1) == *((unsigned __int8 *)toF + 1)
+  [  6] const int*         (unsigned __int8*)fromF +[1, 2, 3]  e.g. :495 && *((unsigned __int8 *)fromF + 1) == *((unsigned __int8 *)toF + 1)
+  [  3] const int*         (_BYTE*)toF +[1, 2, 3]  e.g. :1082 if ( (*((unsigned __int8 *)fromF + 3) == 255 && !*((_BYTE *)toF + 3)
+  [  1] const int*         (_BYTE*)fromF +[3]  e.g. :1083 || !*((_BYTE *)fromF + 3) && *((unsigned __int8 *)toF + 3) == 255)
+== src/server/sv_world.cpp
+  [  2] float*             (_DWORD*)currentAngles +[1, 2]  e.g. :143 || (v55 = *((_DWORD *)currentAngles + 1), (v55 & 0x7F800000) == 0x7F800000)
+  [  2] float*             (_DWORD*)currentOrigin +[1, 2]  e.g. :156 || (v52 = *((_DWORD *)currentOrigin + 1), (v52 & 0x7F800000) == 0x7F800000)
+== src/server_mp/sv_archive_mp.cpp
+  [  8] float*             (_BYTE*)p_number +[221, 226]  e.g. :252 || (*((_BYTE *)p_number + 221) & 1) != 0
+  [  4] float*             (unsigned int*)p_number +[59]  e.g. :251 if ( *((unsigned int *)p_number + 59)
+  [  2] float*             (__int16*)p_number +[95]  e.g. :238 *((__int16 *)p_number + 95),
+  [  2] float*             (unsigned __int8*)p_number +[226]  e.g. :270 to.r.svFlags = *((unsigned __int8 *)p_number + 226);
+== src/server_mp/sv_snapshot_mp.cpp
+  [  6] unsigned char*     (float*)dst +[9, 10, 11, 31, 97, 100]  e.g. :2156 position[0] = *((float *)dst + 9);
+== src/sound/snd_radverb.cpp
+  [  8] float*             (unsigned int*)v14 +[16, 17, 48, 49]  e.g. :406 - *((unsigned int *)v14 + 16)
+== src/ui/ui_screenshot.cpp
+  [  2] ?                  (_WORD*)data +[2, 4]  e.g. :80 Image_Create2DTexture_PC(s_image, *((_WORD *)data + 2), *((_WORD *)data + 4), 1u, 0, *((_D3DFORMAT *)data + 3));
+  [  2] ?                  (unsigned int*)data +[1, 2]  e.g. :100 memcpy((unsigned __int8 *)rect.pBits, *(unsigned __int8 **)data, 4 * *((unsigned int *)data + 2) * *((unsigned int *)data + 1));
+  [  1] ?                  (_D3DFORMAT*)data +[3]  e.g. :80 Image_Create2DTexture_PC(s_image, *((_WORD *)data + 2), *((_WORD *)data + 4), 1u, 0, *((_D3DFORMAT *)data + 3));
+== src/ui/ui_shared.cpp
+  [  5] void*              (unsigned int*)p +[1, 2, 3]  e.g. :6211 Item_ListBox_HandleKey(0, dc, *((itemDef_s **)p + 6), *((unsigned int *)p + 3), 1, 0);
+  [  2] char*              (unsigned int*)stringBegin +[1, 2]  e.g. :10583 *((unsigned int *)stringBegin + 1) = *(unsigned int *)&VISIBLE_LIST_PREFIX[4];
+  [  1] void*              (itemDef_s**)p +[6]  e.g. :6211 Item_ListBox_HandleKey(0, dc, *((itemDef_s **)p + 6), *((unsigned int *)p + 3), 1, 0);
+  [  1] void*              (int*)p +[2]  e.g. :6217 if ( *((int *)p + 2) > 20 )
+  [  1] char*              (_WORD*)stringBegin +[6]  e.g. :10585 *((_WORD *)stringBegin + 6) = *(_WORD *)&VISIBLE_LIST_PREFIX[12];
+== src/ui_mp/ui_gametype_custom_mp.cpp
+  [  2] float*             (unsigned int*)value +[1, 2]  e.g. :372 *((unsigned int *)value + 1) = v3;
+== src/universal/com_math.cpp
+  [  4] const float*       (unsigned int*)b +[1, 2]  e.g. :3488 v4 = *((unsigned int *)b + 1);
+  [  4] const float*       (unsigned int*)a +[1, 2]  e.g. :3490 v4 = *((unsigned int *)a + 1);
+  [  4] float*             (unsigned int*)result +[1, 2]  e.g. :3491 *((unsigned int *)result + 1) = v4;
+== src/universal/com_math_anglevectors.cpp
+  [  2] ?                  (float*)&v4 +[1]  e.g. :281 *((float *)&v4 + 1) = vec[2];
+  [  1] ?                  (float*)&v6 +[1]  e.g. :213 *((float *)&v6 + 1) = *vec;
+  [  1] ?                  (unsigned int*)vec +[2]  e.g. :274 if ( COERCE_FLOAT(*((unsigned int *)vec + 2) ^ _mask__NegFloat_) < 0.0 )
+== src/universal/com_pack.cpp
+  [  1] const float*       (unsigned int*)in +[1]  e.g. :156 v5 = *((unsigned int *)in + 1);
+  [  1] float*             (unsigned int*)out +[1]  e.g. :184 *((unsigned int *)out + 1) = v2;
+== src/universal/com_shared.cpp
+  [  4] ?                  (unsigned int*)v4 +[1, 2, 3]  e.g. :304 *((unsigned int *)v4 + 1) = *((unsigned int *)v5 + 1);
+  [  4] ?                  (unsigned int*)v5 +[1, 2, 3]  e.g. :304 *((unsigned int *)v4 + 1) = *((unsigned int *)v5 + 1);
+== src/universal/eval.cpp
+  [  1] EvalValueType*     (EvalOperatorType*)&v6->type +[1]  e.g. :298 v7[1] = *((EvalOperatorType *)&v6->type + 1);
+  [  1] char**             (EvalOperatorType*)&v6->u.s +[1]  e.g. :300 v7[3] = *((EvalOperatorType *)&v6->u.s + 1);
+== src/win32/win_configure.cpp
+  [  5] ?                  (unsigned int*)name +[1, 2, 3]  e.g. :221 *((unsigned int *)name + 1) = 544110447;
+== src/xanim/dobj.cpp
+  [  9] unsigned char*     (unsigned int*)buf +[3, 4, 23, 24, 25, 26, 27, 29]  e.g. :281 *((unsigned int *)buf + 3) = 0;
+  [  2] unsigned char*     (_WORD*)buf +[2, 3]  e.g. :280 *((_WORD *)buf + 2) = 0;
+== src/xanim/xanim.cpp
+  [  1] long long int*     (float*)&pos +[1]  e.g. :726 rotPos->pos[1] = rotPos->pos[1] + *((float *)&pos + 1);
+== src/xanim/xanim_calc.cpp
+  [ 15] int*               (float*)dataInt +[1, 2, 3, 4, 5]  e.g. :2034 + *((float *)dataInt + 1)))
+  [  4] unsigned char*     (unsigned __int16*)v5 +[1, 2]  e.g. :2540 fromVec.v[1] = (float)*((unsigned __int16 *)v5 + 1);
+  [  4] unsigned char*     (unsigned __int16*)v4 +[1, 2]  e.g. :2545 toVec.v[1] = (float)*((unsigned __int16 *)v4 + 1);
+  [  2] long long int*     (float*)&posVec +[1]  e.g. :2031 *((float *)&posVec + 1) = (float)(weightScale
+  [  2] long long int*     (float*)&sizeVec +[1]  e.g. :2032 * (float)((float)(*((float *)&sizeVec + 1)
+  [  1] float*             (unsigned int*)trans +[2]  e.g. :2042 *((unsigned int *)trans + 2) = posVec_8;
+  [  1] long long int*     (float*)&posVec_8 +[1]  e.g. :2043 trans[3] = (float)(weightScale * (float)((float)(0.0 * 0.0) + 0.0)) + *((float *)&posVec_8 + 1);
+== src/xanim/xanim_load_obj.cpp
+  [  2] unsigned char*     (_WORD*)v75 +[1, 2]  e.g. :1036 *((_WORD *)v75 + 1) = *(_WORD *)(*(unsigned int *)(*(unsigned int *)&dest[8 * animPartIndex + 128] + 28)
+  [  1] short int*         (unsigned int*)v19 +[1]  e.g. :975 *((unsigned int *)v19 + 1) = *(unsigned int *)(v18 + 8);
+== src/xanim/xmodel_load_obj.cpp
+  [  3] float*             (unsigned int*)svec +[1, 2, 3]  e.g. :735 *((unsigned int *)svec + 1) = v21;
+  [  2] float*             (unsigned int*)v36 +[1, 2]  e.g. :268 *((unsigned int *)v36 + 1) = v17;
+  [  2] float*             (unsigned int*)v44 +[1, 2]  e.g. :278 *((unsigned int *)v44 + 1) = v14;
+  [  2] float*             (unsigned int*)trans +[1, 2]  e.g. :977 *((unsigned int *)trans + 1) = v9;

@@ -59,7 +59,7 @@ const char *__cdecl CG_GetEntityTypeName(centity_s *cent)
             {
                 result = "DESTRUCTABLE";
             }
-            else if ( ((*((unsigned int *)cent + 201) >> 15) & 1) != 0 )
+            else if ( ((cent->clientFlags >> 15) & 1) != 0 )
             {
                 result = "TRIGGER";
             }
@@ -161,7 +161,7 @@ centity_s *__cdecl CG_Spawn(unsigned int localClientNum)
         if ( !cg_fakeEntitiesInuseArray[512 * localClientNum + cent - &cg_fakeEntitiesArray[512 * localClientNum]] )
         {
             CG_SetFakeEntInUse(localClientNum, cent);
-            *((unsigned int *)&cent->cent + 201) |= 2u;
+            cent->cent.clientFlags |= 2u;
             cent->cent.nextState.lerp.useCount = 1;
             cent->cent.nextState.number = i + 1024;
             AssignToSmallerType<unsigned char>(&cent->cent.nextState.clientNum, localClientNum);
@@ -339,7 +339,7 @@ char __cdecl CG_SetTriggerBrushModel(int localClientNum, centity_s *ent)
 {
     _BYTE mins[24]; // [esp+8h] [ebp-18h] OVERLAPPED BYREF
 
-    if ( ((*((unsigned int *)ent + 201) >> 1) & 1) == 0
+    if ( ((ent->clientFlags >> 1) & 1) == 0
         && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\cgame\\cg_spawn.cpp", 520, 0, "%s", "ent->nextValid") )
     {
         __debugbreak();
@@ -395,7 +395,7 @@ void __cdecl CG_InitSentientTrigger(centity_s *self, char spawnflags)
     if ( (spawnflags & 0x10) != 0 )
         self->pose.fx.triggerTime |= 8u;
     if ( (spawnflags & 0x40) != 0 )
-        *((unsigned int *)self + 201) |= 0x20000u;
+        self->clientFlags |= 0x20000u;
 }
 
 void __cdecl CG_SP_trigger_multiple(int localClientNum, centity_s *ent, char spawnFlags)
@@ -412,7 +412,7 @@ void __cdecl CG_InitTriggerWait(int localClientNum, centity_s *ent, int *spawnfl
     if ( cg_level.spawnVar.spawnVarsValid && CG_SpawnFloat("wait", "", &wait) && wait <= 0.0 )
     {
         if ( (waitSpawnFlag & 0x40) != 0 )
-            *((unsigned int *)ent + 201) |= 0x20000u;
+            ent->clientFlags |= 0x20000u;
         else
             *spawnflags |= waitSpawnFlag;
     }
@@ -554,7 +554,7 @@ void __cdecl CG_CallSpawn(int localClientNum, SpawnVar *spawnVar)
             ent = CG_Spawn(localClientNum);
             CG_ParseEntityFields(localClientNum, ent, spawnVar, 0);
             CG_SP_trigger_multiple(localClientNum, ent, flags);
-            *((unsigned int *)ent + 201) |= 0x8000u;
+            ent->clientFlags |= 0x8000u;
             return;
         }
         if ( !strcmp("trigger_radius", classname) )
@@ -562,8 +562,8 @@ void __cdecl CG_CallSpawn(int localClientNum, SpawnVar *spawnVar)
             ent = CG_Spawn(localClientNum);
             CG_ParseEntityFields(localClientNum, ent, spawnVar, 0);
             CG_SP_trigger_radius(localClientNum, ent, flags);
-            *((unsigned int *)ent + 201) |= 0x8000u;
-            *((unsigned int *)ent + 201) |= 0x10000u;
+            ent->clientFlags |= 0x8000u;
+            ent->clientFlags |= 0x10000u;
             return;
         }
         if ( !strcmp("trigger_once", classname) )
@@ -571,7 +571,7 @@ void __cdecl CG_CallSpawn(int localClientNum, SpawnVar *spawnVar)
             ent = CG_Spawn(localClientNum);
             CG_ParseEntityFields(localClientNum, ent, spawnVar, 0);
             CG_SP_trigger_once(localClientNum, ent, flags);
-            *((unsigned int *)ent + 201) |= 0x8000u;
+            ent->clientFlags |= 0x8000u;
         }
         else
         {
@@ -797,7 +797,7 @@ void __cdecl CG_ParseEntityField(int localClientNum, const char *key, char *valu
                         __debugbreak();
                     }
                     ent->nextState.index.brushmodel = modelIndexa;
-                    *((unsigned int *)ent + 201) |= 2u;
+                    ent->clientFlags |= 2u;
                 }
             }
             break;

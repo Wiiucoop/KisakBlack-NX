@@ -598,9 +598,22 @@ void __cdecl R_BeginCompositingCmdList()
     frontEndDataOut->compositingCmds = &s_cmdList->cmds[s_cmdList->usedTotal];
 }
 
+// nx-port: every R_GetCommandBuffer call below passed its command's literal
+// *x86* sizeof() as the byte count. On LP64 each command that holds a pointer
+// is wider, so those literals under-reserve and the field writes that follow
+// run past the reservation into the next command in the list. Reserve the real
+// size instead, rounded up so the next command stays 8-aligned for its pointer
+// members. The back end walks the list by this same header->byteCount
+// (rb_backend.cpp: `execState->cmd += *(unsigned __int16 *)execState->cmd`),
+// so producer and walk stay in step on both ABIs.
+static int R_CmdBytes(size_t size)
+{
+    return (int)((size + 7) & ~(size_t)7);
+}
+
 void __cdecl R_AddCmdEndOfList()
 {
-    R_GetCommandBuffer(RC_END_OF_LIST, 4);
+    R_GetCommandBuffer(RC_END_OF_LIST, R_CmdBytes(sizeof(GfxCmdHeader)));
 }
 
 GfxCmdHeader *__cdecl R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes)
@@ -915,7 +928,7 @@ void __cdecl R_AddCmdDrawStretchComposite(
 {
     GfxCmdStretchComposite *cmd; // [esp+0h] [ebp-4h]
 
-    cmd = (GfxCmdStretchComposite *)R_GetCommandBuffer(RC_STRETCH_COMPOSITE, 44);
+    cmd = (GfxCmdStretchComposite *)R_GetCommandBuffer(RC_STRETCH_COMPOSITE, R_CmdBytes(sizeof(GfxCmdStretchComposite)));
     if ( cmd )
     {
         cmd->image = composite;
@@ -986,7 +999,7 @@ void __cdecl R_AddCmdDrawStretchPicW(
     {
         __debugbreak();
     }
-    cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, 48);
+    cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, R_CmdBytes(sizeof(GfxCmdStretchPic)));
     if ( cmd )
     {
         cmd->material = actualMaterial;
@@ -1040,7 +1053,7 @@ void __cdecl R_AddCmdDrawStretchPicRotateXYW(
     Material *defaultMaterial; // [esp+4h] [ebp-8h]
     GfxCmdStretchPicRotateXY *cmd; // [esp+8h] [ebp-4h]
 
-    cmd = (GfxCmdStretchPicRotateXY *)R_GetCommandBuffer(RC_STRETCH_PIC_ROTATE_XY, 52);
+    cmd = (GfxCmdStretchPicRotateXY *)R_GetCommandBuffer(RC_STRETCH_PIC_ROTATE_XY, R_CmdBytes(sizeof(GfxCmdStretchPicRotateXY)));
     if ( cmd )
     {
         if ( material )
@@ -1095,7 +1108,7 @@ void __cdecl R_AddCmdDrawStretchPicRotateST(
     Material *defaultMaterial; // [esp+4h] [ebp-8h]
     GfxCmdStretchPicRotateST *cmd; // [esp+8h] [ebp-4h]
 
-    cmd = (GfxCmdStretchPicRotateST *)R_GetCommandBuffer(RC_STRETCH_PIC_ROTATE_ST, 52);
+    cmd = (GfxCmdStretchPicRotateST *)R_GetCommandBuffer(RC_STRETCH_PIC_ROTATE_ST, R_CmdBytes(sizeof(GfxCmdStretchPicRotateST)));
     if ( cmd )
     {
         if ( material )
@@ -1163,7 +1176,7 @@ GfxCmdDrawText2D *__cdecl AddBaseDrawTextCmd(
     if ( !*text && cursorPos < 0 )
         return 0;
     len = strlen(text);
-    cmd = (GfxCmdDrawText2D *)R_GetCommandBuffer(RC_DRAW_TEXT_2D, (len + 96) & 0xFFFFFFFC);
+    cmd = (GfxCmdDrawText2D *)R_GetCommandBuffer(RC_DRAW_TEXT_2D, R_CmdBytes(sizeof(GfxCmdDrawText2D) + len));
     if ( !cmd )
         return 0;
     cmd->x = x;
@@ -1624,7 +1637,7 @@ GfxCmdDrawText2D *__cdecl AddBaseDrawConsoleTextCmd(
     }
     if ( !charCount )
         return 0;
-    cmd = (GfxCmdDrawText2D *)R_GetCommandBuffer(RC_DRAW_TEXT_2D, (charCount + 96) & 0xFFFFFFFC);
+    cmd = (GfxCmdDrawText2D *)R_GetCommandBuffer(RC_DRAW_TEXT_2D, R_CmdBytes(sizeof(GfxCmdDrawText2D) + charCount));
     if ( !cmd )
         return 0;
     cmd->x = x;
@@ -1796,7 +1809,7 @@ void __cdecl R_AddCmdDrawQuadPicW(const float (*verts)[2], float w, const float 
     int cornerIndex; // [esp+Ch] [ebp-8h]
     GfxCmdDrawQuadPic *cmd; // [esp+10h] [ebp-4h]
 
-    cmd = (GfxCmdDrawQuadPic *)R_GetCommandBuffer(RC_DRAW_QUAD_PIC, 48);
+    cmd = (GfxCmdDrawQuadPic *)R_GetCommandBuffer(RC_DRAW_QUAD_PIC, R_CmdBytes(sizeof(GfxCmdDrawQuadPic)));
     if ( cmd )
     {
         if ( material )
@@ -1823,7 +1836,7 @@ void __cdecl R_AddCmdSetCustomConstant(unsigned int type, const float *vec)
 {
     GfxCmdSetCustomConstant *cmd; // [esp+4h] [ebp-4h]
 
-    cmd = (GfxCmdSetCustomConstant *)R_GetCommandBuffer(RC_SET_CUSTOM_CONSTANT, 24);
+    cmd = (GfxCmdSetCustomConstant *)R_GetCommandBuffer(RC_SET_CUSTOM_CONSTANT, R_CmdBytes(sizeof(GfxCmdSetCustomConstant)));
 
     iassert(cmd);
 
@@ -1862,7 +1875,7 @@ void __cdecl R_AddCmdSetScissorValues(bool enabled, int x, int y, int width, int
     {
         __debugbreak();
     }
-    cmd = (GfxCmdSetScissor *)R_GetCommandBuffer(RC_SET_SCISSOR, 24);
+    cmd = (GfxCmdSetScissor *)R_GetCommandBuffer(RC_SET_SCISSOR, R_CmdBytes(sizeof(GfxCmdSetScissor)));
     if ( !cmd && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_rendercmds.cpp", 2472, 0, "%s", "cmd") )
         __debugbreak();
     cmd->enabled = enabled;
@@ -1876,7 +1889,7 @@ void __cdecl R_AddCmdResolveComposite(void (__cdecl *callback)(GfxImage *))
 {
     GfxCmdResolveComposite *cmd; // [esp+0h] [ebp-4h]
 
-    cmd = (GfxCmdResolveComposite *)R_GetCommandBuffer(RC_RESOLVE_COMPOSITE, 8);
+    cmd = (GfxCmdResolveComposite *)R_GetCommandBuffer(RC_RESOLVE_COMPOSITE, R_CmdBytes(sizeof(GfxCmdResolveComposite)));
     if ( !cmd && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_rendercmds.cpp", 2489, 0, "%s", "cmd") )
         __debugbreak();
     cmd->callback = callback;
@@ -1886,7 +1899,7 @@ void __cdecl R_AddCmdPCCopyImageGenMIP(void (__cdecl *callback)(void *), GfxImag
 {
     GfxCmdPCCopyImageGenMIP *cmd; // [esp+0h] [ebp-4h]
 
-    cmd = (GfxCmdPCCopyImageGenMIP *)R_GetCommandBuffer(RC_PC_COPY_IMAGE_GEN_MIP, 16);
+    cmd = (GfxCmdPCCopyImageGenMIP *)R_GetCommandBuffer(RC_PC_COPY_IMAGE_GEN_MIP, R_CmdBytes(sizeof(GfxCmdPCCopyImageGenMIP)));
     if ( !cmd && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_rendercmds.cpp", 2500, 0, "%s", "cmd") )
         __debugbreak();
     cmd->callback = callback;
@@ -2240,7 +2253,7 @@ void __cdecl R_AddCmdClearScreen(int whichToClear, const float *color, float dep
     {
         __debugbreak();
     }
-    cmd = (GfxCmdClearScreen *)R_GetCommandBuffer(RC_CLEAR_SCREEN, 28);
+    cmd = (GfxCmdClearScreen *)R_GetCommandBuffer(RC_CLEAR_SCREEN, R_CmdBytes(sizeof(GfxCmdClearScreen)));
     if ( !cmd && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_rendercmds.cpp", 2926, 0, "%s", "cmd") )
         __debugbreak();
     cmd->whichToClear = whichToClear;
@@ -2276,7 +2289,9 @@ GfxCmdDrawQuadList2D *__cdecl R_AddCmdDrawQuadList2D(Material *materialHandle, i
     {
         __debugbreak();
     }
-    cmd = (GfxCmdDrawQuadList2D *)R_GetCommandBuffer(RC_DRAW_QUADLIST_2D, 80 * quadCount + 12);
+    cmd = (GfxCmdDrawQuadList2D *)R_GetCommandBuffer(
+                RC_DRAW_QUADLIST_2D,
+                R_CmdBytes(sizeof(GfxCmdDrawQuadList2D) + 4 * sizeof(GfxQuadVertex) * quadCount));
     if ( !cmd )
         return 0;
     cmd->material = defaultMaterial;
@@ -2304,7 +2319,7 @@ void __cdecl R_AddCmdDrawEmblemLayer(
     {
         __debugbreak();
     }
-    cmd = (GfxCmdDrawEmblemLayer *)R_GetCommandBuffer(RC_DRAW_EMBLEM_LAYER, 104);
+    cmd = (GfxCmdDrawEmblemLayer *)R_GetCommandBuffer(RC_DRAW_EMBLEM_LAYER, R_CmdBytes(sizeof(GfxCmdDrawEmblemLayer)));
     if ( cmd )
     {
         cmd->material = defaultMaterial;
@@ -2325,7 +2340,7 @@ void __cdecl R_AddCmdProjectionSet(GfxProjectionTypes projection)
 {
     GfxCmdProjectionSet *cmd; // [esp+0h] [ebp-4h]
 
-    cmd = (GfxCmdProjectionSet *)R_GetCommandBuffer(RC_PROJECTION_SET, 8);
+    cmd = (GfxCmdProjectionSet *)R_GetCommandBuffer(RC_PROJECTION_SET, R_CmdBytes(sizeof(GfxCmdProjectionSet)));
     if ( cmd )
         cmd->projection = projection;
 }
@@ -2345,7 +2360,7 @@ void __cdecl R_AddCmdDrawFramed(
     Material *defaultMaterial; // [esp+0h] [ebp-8h]
     GfxCmdDrawFramed2D *cmd; // [esp+4h] [ebp-4h]
 
-    cmd = (GfxCmdDrawFramed2D *)R_GetCommandBuffer(RC_DRAW_FRAMED, 44);
+    cmd = (GfxCmdDrawFramed2D *)R_GetCommandBuffer(RC_DRAW_FRAMED, R_CmdBytes(sizeof(GfxCmdDrawFramed2D)));
     if ( cmd )
     {
         if ( material )

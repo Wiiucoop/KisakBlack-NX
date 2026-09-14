@@ -830,7 +830,7 @@ void __cdecl Rope_ApplyConstraint(int rope_index, int constraint_index)
                 return;
             case ROPE_CENTITY_CONSTRAINT:
                 cent = CG_GetEntity(0, constraint->entity_index);
-                if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 )
+                if ( ((cent->clientFlags >> 1) & 1) != 0 )
                 {
                     if ( !constraint->bone_name_hash )
                     {

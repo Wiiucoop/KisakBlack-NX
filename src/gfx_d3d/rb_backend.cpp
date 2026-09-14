@@ -982,17 +982,26 @@ void __cdecl RB_StretchPicCmd(GfxRenderCommandExecState *execState)
 
 void __cdecl RB_StretchPicCmdFlipST(GfxRenderCommandExecState *execState)
 {
+    const GfxCmdStretchPic *cmd; // [esp+3Ch] [ebp-4h]
+
+    // nx-port: this read the command back through x86 word indices -- material
+    // at word 1, x at 2, ... color at 11 -- which on LP64 land one word early
+    // from `material` onwards (word 1 is its low half). Name the fields, the
+    // way RB_StretchPicCmd above already does. Word 4 was skipped because
+    // RB_DrawStretchPicFlipST takes `w` but not `w0`.
+    cmd = (const GfxCmdStretchPic *)execState->cmd;
+
     RB_DrawStretchPicFlipST(
-        *((const Material **)execState->cmd + 1),
-        *((float *)execState->cmd + 2),
-        *((float *)execState->cmd + 3),
-        *((float *)execState->cmd + 5),
-        *((float *)execState->cmd + 6),
-        *((float *)execState->cmd + 7),
-        *((float *)execState->cmd + 8),
-        *((float *)execState->cmd + 9),
-        *((float *)execState->cmd + 10),
-        *((unsigned int *)execState->cmd + 11),
+        cmd->material,
+        cmd->x,
+        cmd->y,
+        cmd->w,
+        cmd->h,
+        cmd->s0,
+        cmd->t0,
+        cmd->s1,
+        cmd->t1,
+        cmd->color.packed,
         GFX_PRIM_STATS_HUD);
     execState->cmd = (char *)execState->cmd + *(unsigned __int16 *)execState->cmd;
 }

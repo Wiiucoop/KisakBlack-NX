@@ -2088,7 +2088,7 @@ void    DrawOffscreenViewableWaypoint(int localClientNum, const hudelem_s *elem)
                     if (elem->targetEntNum == LocalClientGlobals->predictedPlayerEntity.nextState.number)
                         return;
                     cent = CG_GetEntity(localClientNum, elem->targetEntNum);
-                    if (((*((_DWORD *)cent + 201) >> 1) & 1) == 0)
+                    if (((cent->clientFlags >> 1) & 1) == 0)
                     {
                         Com_PrintWarning(
                             1,
@@ -2544,7 +2544,7 @@ void __cdecl RB_AddWaypoint(int localClientNum, const hudelem_s *elem)
                         if ( elem->targetEntNum == cgameGlob->predictedPlayerEntity.nextState.number )
                             return;
                         cent = CG_GetEntity(localClientNum, elem->targetEntNum);
-                        if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+                        if ( ((cent->clientFlags >> 1) & 1) == 0 )
                         {
                             Com_PrintWarning(
                                 1,

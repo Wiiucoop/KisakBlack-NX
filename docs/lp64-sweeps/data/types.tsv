@@ -1,0 +1,996 @@
+src/DynEntity/DynEntity_client.cpp	457	8	long long int*
+src/DynEntity/DynEntity_gamestate.cpp	69	27	float*
+src/DynEntity/DynEntity_gamestate.cpp	70	27	float*
+src/DynEntity/DynEntity_gamestate.cpp	140	8	float*
+src/DynEntity/DynEntity_gamestate.cpp	141	8	float*
+src/DynEntity/DynEntity_load_obj.cpp	485	17	char*
+src/DynEntity/DynEntity_load_obj.cpp	488	16	char*
+src/DynEntity/DynEntity_load_obj.cpp	492	22	char*
+src/DynEntity/DynEntity_load_obj.cpp	503	16	char*
+src/DynEntity/DynEntity_load_obj.cpp	1738	19	unsigned int*
+src/DynEntity/DynEntity_load_obj.cpp	1738	92	unsigned int*
+src/DynEntity/DynEntity_server.cpp	299	8	long long int*
+src/DynEntity/DynEntity_server.cpp	309	8	long long int*
+src/EffectsCore/FxCurve_load_obj.cpp	78	12	unsigned char*
+src/EffectsCore/FxCurve_load_obj.cpp	103	13	unsigned char*
+src/EffectsCore/FxCurve_load_obj.cpp	110	24	unsigned char*
+src/EffectsCore/FxCurve_load_obj.cpp	125	8	unsigned char*
+src/EffectsCore/fx_beam.cpp	1340	8	long long int*
+src/EffectsCore/fx_beam.cpp	1342	8	long long int*
+src/EffectsCore/fx_convert.cpp	72	30	const void*
+src/EffectsCore/fx_convert.cpp	75	28	const void*
+src/EffectsCore/fx_convert.cpp	480	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	485	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	486	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	487	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	491	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	492	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	493	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	494	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	499	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	500	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	501	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	502	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	506	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	507	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	508	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	509	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	514	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	515	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	516	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	517	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	521	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	522	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	523	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	524	16	FxSampleChannel*
+src/EffectsCore/fx_convert.cpp	1582	44	const float*
+src/EffectsCore/fx_load_obj.cpp	1491	8	unsigned char*
+src/EffectsCore/fx_load_obj.cpp	1492	41	unsigned char*
+src/EffectsCore/fx_load_obj.cpp	1492	119	unsigned char*
+src/EffectsCore/fx_load_obj.cpp	1494	34	unsigned char*
+src/EffectsCore/fx_load_obj.cpp	1496	34	unsigned char*
+src/EffectsCore/fx_marks.cpp	786	12	void*
+src/EffectsCore/fx_marks.cpp	791	12	void*
+src/EffectsCore/fx_marks.cpp	793	12	void*
+src/EffectsCore/fx_marks.cpp	794	12	void*
+src/EffectsCore/fx_marks.cpp	2235	13	const float*
+src/EffectsCore/fx_system.cpp	3253	13	const void*
+src/EffectsCore/fx_system.cpp	3291	12	const void*
+src/EffectsCore/fx_update.cpp	1462	12	double*
+src/EffectsCore/fx_update.cpp	1463	30	double*
+src/EffectsCore/fx_update_util.cpp	442	8	double*
+src/EffectsCore/fx_update_util.cpp	443	23	double*
+src/bgame/bg_misctables.cpp	392	24	unsigned char*
+src/bgame/bg_misctables.cpp	410	24	unsigned char*
+src/bgame/bg_misctables.cpp	428	24	unsigned char*
+src/bgame/bg_misctables.cpp	456	24	unsigned char*
+src/bgame/bg_misctables.cpp	461	20	unsigned char*
+src/bgame/bg_misctables.cpp	485	8	unsigned char*
+src/bgame/bg_weapons.cpp	3790	22	const char**
+src/cgame/cg_draw_indicators.cpp	454	24	long double*
+src/cgame/cg_draw_indicators.cpp	456	24	long double*
+src/cgame/cg_draw_indicators.cpp	457	31	long double*
+src/cgame/cg_drawtools.cpp	680	21	float*
+src/cgame/cg_drawtools.cpp	702	8	float*
+src/cgame/cg_event.cpp	1528	76	const char**
+src/cgame/cg_event.cpp	1536	76	const char**
+src/cgame/cg_spawn.cpp	333	8	LerpEntityStateCreateDynEnt*
+src/cgame/cg_weapons.cpp	978	29	const char**
+src/cgame/cg_weapons.cpp	1085	14	const char**
+src/cgame/cg_weapons.cpp	1086	86	const char**
+src/cgame/cg_weapons.cpp	1087	14	const char**
+src/cgame/cg_weapons.cpp	1088	86	const char**
+src/cgame/cg_weapons.cpp	1115	15	const char**
+src/cgame/cg_weapons.cpp	1115	125	const char**
+src/cgame/cg_weapons.cpp	2923	19	const char**
+src/cgame/cg_weapons.cpp	3122	26	const char**
+src/cgame/cg_weapons.cpp	3129	26	const char**
+src/cgame/cg_weapons.cpp	3138	26	const char**
+src/cgame/cg_weapons.cpp	3142	26	const char**
+src/cgame/cg_weapons.cpp	3147	26	const char**
+src/cgame/cg_weapons.cpp	3151	26	const char**
+src/cgame/cg_weapons.cpp	3156	31	const char**
+src/cgame/cg_weapons.cpp	3163	26	const char**
+src/cgame/cg_weapons.cpp	3168	31	const char**
+src/cgame/cg_weapons.cpp	3177	26	const char**
+src/cgame/cg_weapons.cpp	3181	26	const char**
+src/cgame/cg_weapons.cpp	3186	31	const char**
+src/cgame/cg_weapons.cpp	3191	26	const char**
+src/cgame/cg_weapons.cpp	3231	26	const char**
+src/cgame/cg_weapons.cpp	3240	26	const char**
+src/cgame/cg_weapons.cpp	3244	26	const char**
+src/cgame/cg_weapons.cpp	3253	26	const char**
+src/cgame/cg_weapons.cpp	3257	26	const char**
+src/cgame/cg_weapons.cpp	3266	26	const char**
+src/cgame/cg_weapons.cpp	3270	26	const char**
+src/cgame/cg_weapons.cpp	3275	31	const char**
+src/cgame/cg_weapons.cpp	3284	26	const char**
+src/cgame/cg_weapons.cpp	3288	26	const char**
+src/cgame/cg_weapons.cpp	3293	31	const char**
+src/cgame/cg_weapons.cpp	3302	26	const char**
+src/cgame/cg_weapons.cpp	3306	26	const char**
+src/cgame/cg_weapons.cpp	3311	31	const char**
+src/cgame/cg_weapons.cpp	3320	26	const char**
+src/cgame/cg_weapons.cpp	3324	26	const char**
+src/cgame/cg_weapons.cpp	3336	26	const char**
+src/cgame/cg_weapons.cpp	3345	26	const char**
+src/cgame_mp/cg_ents_mp.cpp	3512	35	const char**
+src/cgame_mp/cg_ents_mp.cpp	3513	35	const char**
+src/cgame_mp/cg_ents_mp.cpp	3885	23	XModel**
+src/cgame_mp/cg_ents_mp.cpp	4003	22	XModel**
+src/cgame_mp/cg_ents_mp.cpp	4260	14	XModel**
+src/cgame_mp/cg_newDraw_mp.cpp	4625	37	const float*
+src/cgame_mp/cg_newDraw_mp.cpp	4923	16	float*
+src/cgame_mp/cg_newDraw_mp.cpp	4940	20	float*
+src/client/cl_console.cpp	1119	24	char*
+src/client/cl_console.cpp	1119	81	const char*
+src/client_mp/cl_input_mp.cpp	351	8	unsigned char*
+src/client_mp/cl_input_mp.cpp	351	72	unsigned char*
+src/client_mp/sv_client_mp.cpp	2504	49	long long unsigned int*
+src/clientscript/cscr_compiler.cpp	5025	35	char*
+src/clientscript/cscr_parser.cpp	1186	24	const char*
+src/clientscript/cscr_vm.cpp	2189	8	char*
+src/clientscript/cscr_vm.cpp	2190	8	char*
+src/clientscript/cscr_vm.cpp	2191	8	char*
+src/database/db_file_load.cpp	397	37	unsigned char*
+src/database/db_load.cpp	2273	16	MaterialVertexDeclaration**
+src/database/db_load.cpp	2274	14	MaterialVertexDeclaration**
+src/database/db_load.cpp	2275	14	MaterialVertexDeclaration**
+src/demo/demo_playback.cpp	4022	8	unsigned char*
+src/flame/flame_class_chunk.cpp	151	19	flameGeneric_s*
+src/flame/flame_class_chunk.cpp	209	8	flameGeneric_s*
+src/flame/flame_class_chunk.cpp	209	91	flameGeneric_s*
+src/flame/flame_class_chunk.cpp	210	8	flameGeneric_s*
+src/flame/flame_class_chunk.cpp	210	117	flameGeneric_s*
+src/flame/flame_class_chunk.cpp	211	8	flameGeneric_s*
+src/flame/flame_class_drips.cpp	149	8	flameGeneric_s*
+src/flame/flame_class_drips.cpp	149	89	flameGeneric_s*
+src/flame/flame_class_fire.cpp	59	27	flameGeneric_s*
+src/flame/flame_class_fire.cpp	106	8	flameGeneric_s*
+src/flame/flame_class_fire.cpp	106	89	flameGeneric_s*
+src/flame/flame_class_fire.cpp	108	8	flameGeneric_s*
+src/flame/flame_class_fire.cpp	108	96	flameGeneric_s*
+src/flame/flame_class_fire.cpp	108	194	flameGeneric_s*
+src/flame/flame_class_smoke.cpp	60	27	flameGeneric_s*
+src/flame/flame_class_smoke.cpp	88	8	flameGeneric_s*
+src/flame/flame_class_smoke.cpp	88	91	flameGeneric_s*
+src/flame/flame_class_smoke.cpp	90	8	flameGeneric_s*
+src/flame/flame_class_smoke.cpp	90	98	flameGeneric_s*
+src/flame/flame_class_smoke.cpp	90	196	flameGeneric_s*
+src/flame/flame_class_stream.cpp	220	12	flameGeneric_s*
+src/flame/flame_physics.cpp	636	15	flameGeneric_s*
+src/flame/flame_physics.cpp	637	31	flameGeneric_s*
+src/flame/flame_physics.cpp	639	12	flameGeneric_s*
+src/game/g_items.cpp	819	15	XModel**
+src/game/g_items.cpp	1503	13	XModel**
+src/game/g_items.cpp	1505	39	XModel**
+src/game/g_items.cpp	1574	26	spawner_ent_t*
+src/game/g_missile.cpp	4233	42	float*
+src/game/g_missile.cpp	4245	28	float*
+src/game/pathnode.cpp	1114	65	void*
+src/game/pathnode.cpp	1115	53	void*
+src/game/pathnode_load_obj.cpp	695	53	const unsigned char*
+src/game/turret.cpp	2747	12	long double*
+src/game/turret.cpp	2749	12	long double*
+src/game/turret.cpp	2750	38	long double*
+src/game_mp/g_scr_main_mp.cpp	1525	17	XModel**
+src/game_mp/g_scr_main_mp.cpp	17043	20	char*
+src/game_mp/g_scr_main_mp.cpp	17058	20	char*
+src/game_mp/g_utils_mp.cpp	825	8	char*
+src/game_mp/g_utils_mp.cpp	842	8	char*
+src/game_mp/g_utils_mp.cpp	843	8	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	1798	52	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	1799	60	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	1805	36	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	1806	36	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	1807	36	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	1808	36	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	1809	36	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	1810	36	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	1811	36	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	2092	32	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	2093	32	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	2515	28	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	2516	28	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	2517	49	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	2518	53	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	2519	53	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	2900	8	unsigned int*
+src/gfx_d3d/r_bsp_load_obj.cpp	4810	27	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	4811	27	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	4812	27	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	4813	27	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	4814	27	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	4815	43	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	4816	46	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	4817	31	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	4818	29	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	4820	43	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	5077	33	char*
+src/gfx_d3d/r_bsp_load_obj.cpp	5078	39	char*
+src/gfx_d3d/r_dpvs.cpp	2678	36	DpvsPlane**
+src/gfx_d3d/r_dpvs.cpp	2680	63	DpvsPlane**
+src/gfx_d3d/r_dpvs_dynmodel.cpp	33	25	const DpvsPlane**
+src/gfx_d3d/r_dpvs_dynmodel.cpp	35	59	const DpvsPlane**
+src/gfx_d3d/r_dpvs_entity.cpp	33	40	short unsigned int*
+src/gfx_d3d/r_dpvs_entity.cpp	69	51	short unsigned int*
+src/gfx_d3d/r_dpvs_static.cpp	93	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	102	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	111	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	120	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	125	78	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	128	46	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	129	22	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	132	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	135	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	137	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	139	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	142	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	143	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	146	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	149	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	150	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	153	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	156	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	158	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	160	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	163	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	164	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	167	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	170	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	171	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	173	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	176	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	178	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	180	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	183	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	185	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	187	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	190	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	191	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	194	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	197	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	198	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	200	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	203	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	205	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	207	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	210	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	212	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	214	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	217	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	218	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	221	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	224	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	225	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	231	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	240	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	245	78	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	248	46	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	249	22	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	254	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	257	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	258	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	263	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	266	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	267	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	269	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	272	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	274	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	279	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	282	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	283	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	285	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	288	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	290	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	295	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	298	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	299	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	305	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	314	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	319	78	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	322	46	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	323	22	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	328	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	331	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	332	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	337	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	340	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	341	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	343	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	346	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	348	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	353	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	356	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	357	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	359	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	362	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	364	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	369	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	372	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	373	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	379	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	388	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	393	78	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	396	46	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	397	22	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	402	79	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	405	47	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	406	23	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	411	79	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	414	47	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	415	23	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	417	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	420	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	421	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	426	79	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	429	47	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	430	23	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	432	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	435	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	436	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	441	79	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	444	47	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	445	23	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	604	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	613	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	622	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	631	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	640	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	649	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	658	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	667	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	676	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	685	17	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	690	78	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	693	46	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	694	22	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	696	78	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	699	46	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	701	22	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	704	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	707	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	708	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	711	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	714	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	716	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	719	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	722	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	723	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	726	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	729	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	731	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	733	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	736	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	738	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	740	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	743	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	745	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	747	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	750	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	751	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	754	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	757	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	759	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	761	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	764	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	766	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	768	107	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	771	75	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	773	51	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	775	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	778	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	779	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	782	82	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	785	50	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	787	26	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	789	62	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	791	30	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	793	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	796	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	797	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	800	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	801	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	804	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	805	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	808	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	810	62	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	812	30	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	814	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	817	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	818	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	821	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	822	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	825	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	826	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	829	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	831	62	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	833	30	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	835	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	838	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	839	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	842	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	843	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	846	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	847	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	850	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	857	62	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	859	30	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	862	62	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	864	30	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	866	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	866	117	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	867	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	869	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	870	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	870	117	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	871	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	873	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	874	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	874	117	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	875	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	877	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	878	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	878	117	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	879	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	881	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	883	62	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	885	30	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	887	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	890	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	891	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	894	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	895	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	898	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	899	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	902	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	904	62	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	906	30	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	908	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	911	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	912	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	915	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	916	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	919	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	920	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	923	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	925	62	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	927	30	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	929	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	932	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	933	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	936	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	937	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	940	28	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	941	39	long long int*
+src/gfx_d3d/r_dpvs_static.cpp	944	28	long long int*
+src/gfx_d3d/r_draw_shadowablelight.cpp	246	12	float*
+src/gfx_d3d/r_draw_staticmodel.cpp	26	8	GfxStaticModelDrawStream*
+src/gfx_d3d/r_draw_staticmodel.cpp	92	8	GfxStaticModelDrawStream*
+src/gfx_d3d/r_draw_staticmodel.cpp	293	8	GfxStaticModelDrawStream*
+src/gfx_d3d/r_draw_staticmodel.cpp	400	8	GfxStaticModelDrawStream*
+src/gfx_d3d/r_draw_staticmodel.cpp	491	8	GfxStaticModelDrawStream*
+src/gfx_d3d/r_draw_staticmodel.cpp	639	8	GfxStaticModelDrawStream*
+src/gfx_d3d/r_image_wavelet.cpp	12493	27	const unsigned char*
+src/gfx_d3d/r_image_wavelet.cpp	12494	43	const unsigned char*
+src/gfx_d3d/r_light_load_obj.cpp	48	12	unsigned char*
+src/gfx_d3d/r_material.cpp	999	12	unsigned char*
+src/gfx_d3d/r_material.cpp	1000	19	unsigned char*
+src/gfx_d3d/r_material.cpp	1004	16	unsigned char*
+src/gfx_d3d/r_material.cpp	1005	23	unsigned char*
+src/gfx_d3d/r_material.cpp	1010	16	unsigned char*
+src/gfx_d3d/r_material.cpp	1011	23	unsigned char*
+src/gfx_d3d/r_material_load_obj.cpp	1399	16	unsigned char*
+src/gfx_d3d/r_material_load_obj.cpp	1404	20	unsigned char*
+src/gfx_d3d/r_material_load_obj.cpp	1421	24	unsigned char*
+src/gfx_d3d/r_material_load_obj.cpp	1425	16	unsigned char*
+src/gfx_d3d/r_material_load_obj.cpp	3585	17	char*
+src/gfx_d3d/r_material_load_obj.cpp	3618	62	char*
+src/gfx_d3d/r_material_load_obj.cpp	5944	8	unsigned char*
+src/gfx_d3d/r_model.cpp	397	16	unsigned char*
+src/gfx_d3d/r_model.cpp	398	16	unsigned char*
+src/gfx_d3d/r_model.cpp	399	16	unsigned char*
+src/gfx_d3d/r_model.cpp	401	16	unsigned char*
+src/gfx_d3d/r_model_lighting.cpp	487	25	const void*
+src/gfx_d3d/r_screenshot.cpp	614	12	unsigned char*
+src/gfx_d3d/r_screenshot.cpp	615	12	unsigned char*
+src/gfx_d3d/r_screenshot.cpp	616	12	unsigned char*
+src/gfx_d3d/r_screenshot.cpp	617	12	unsigned char*
+src/gfx_d3d/r_screenshot.cpp	1030	8	unsigned char*
+src/gfx_d3d/r_screenshot.cpp	1031	8	unsigned char*
+src/gfx_d3d/r_screenshot.cpp	1032	8	unsigned char*
+src/gfx_d3d/r_screenshot.cpp	1033	8	unsigned char*
+src/gfx_d3d/r_screenshot.cpp	1035	8	unsigned char*
+src/gfx_d3d/r_screenshot.cpp	1445	23	float*
+src/gfx_d3d/r_screenshot.cpp	1446	23	float*
+src/gfx_d3d/r_screenshot.cpp	1447	23	float*
+src/gfx_d3d/r_screenshot.cpp	1453	16	float*
+src/gfx_d3d/r_screenshot.cpp	1454	16	float*
+src/gfx_d3d/r_screenshot.cpp	1455	16	float*
+src/gfx_d3d/r_screenshot.cpp	1478	23	float*
+src/gfx_d3d/r_screenshot.cpp	1479	23	float*
+src/gfx_d3d/r_screenshot.cpp	1480	23	float*
+src/gfx_d3d/r_screenshot.cpp	1486	16	float*
+src/gfx_d3d/r_screenshot.cpp	1487	16	float*
+src/gfx_d3d/r_screenshot.cpp	1488	16	float*
+src/gfx_d3d/r_sprite.cpp	87	50	const float*
+src/gfx_d3d/r_sprite.cpp	88	50	const float*
+src/gfx_d3d/r_sprite.cpp	405	36	long long int*
+src/gfx_d3d/r_sprite.cpp	407	36	long long int*
+src/gfx_d3d/r_sprite.cpp	409	36	long long int*
+src/gfx_d3d/r_sprite.cpp	411	36	long long int*
+src/gfx_d3d/r_sprite.cpp	413	36	long long int*
+src/gfx_d3d/r_sprite.cpp	415	36	long long int*
+src/gfx_d3d/r_sprite.cpp	417	36	long long int*
+src/gfx_d3d/r_sprite.cpp	419	36	long long int*
+src/gfx_d3d/r_stream.cpp	2225	43	const float*
+src/gfx_d3d/r_stream.cpp	2227	43	const float*
+src/gfx_d3d/r_water_sim.cpp	1361	20	char*
+src/gfx_d3d/r_water_sim.cpp	1362	20	char*
+src/gfx_d3d/r_water_sim.cpp	1363	20	char*
+src/gfx_d3d/r_water_sim.cpp	1364	20	char*
+src/gfx_d3d/r_water_sim.cpp	1365	20	char*
+src/gfx_d3d/r_water_sim.cpp	1368	20	char*
+src/gfx_d3d/r_water_sim.cpp	1369	20	char*
+src/gfx_d3d/r_water_sim.cpp	1370	20	char*
+src/gfx_d3d/r_water_sim.cpp	1374	20	char*
+src/gfx_d3d/r_water_sim.cpp	1375	20	char*
+src/gfx_d3d/r_water_sim.cpp	2959	36	long long int*
+src/gfx_d3d/r_water_sim.cpp	2959	107	long long int*
+src/gfx_d3d/r_water_sim.cpp	2959	170	long long int*
+src/gfx_d3d/r_water_sim.cpp	2992	31	long long int*
+src/gfx_d3d/r_water_sim.cpp	3055	48	long long int*
+src/gfx_d3d/r_water_sim.cpp	3055	136	long long int*
+src/gfx_d3d/r_water_sim.cpp	3059	56	long long int*
+src/gfx_d3d/r_water_sim.cpp	3067	56	long long int*
+src/gfx_d3d/r_water_sim.cpp	3071	56	long long int*
+src/gfx_d3d/r_water_sim.cpp	3075	71	long long int*
+src/gfx_d3d/r_water_sim.cpp	3075	135	long long int*
+src/gfx_d3d/r_water_sim.cpp	3079	54	long long int*
+src/gfx_d3d/r_water_sim.cpp	3087	54	long long int*
+src/gfx_d3d/r_water_sim.cpp	3091	54	long long int*
+src/gfx_d3d/rb_backend.cpp	959	14	const void*
+src/gfx_d3d/rb_backend.cpp	1340	8	const void*
+src/gfx_d3d/rb_backend.cpp	1341	8	const void*
+src/gfx_d3d/rb_backend.cpp	1342	8	const void*
+src/gfx_d3d/rb_backend.cpp	1343	8	const void*
+src/gfx_d3d/rb_backend.cpp	1344	8	const void*
+src/gfx_d3d/rb_backend.cpp	1345	8	const void*
+src/gfx_d3d/rb_backend.cpp	1352	12	const void*
+src/gfx_d3d/rb_backend.cpp	1353	12	const void*
+src/gfx_d3d/rb_backend.cpp	1354	12	const void*
+src/gfx_d3d/rb_backend.cpp	1355	12	const void*
+src/gfx_d3d/rb_backend.cpp	1356	12	const void*
+src/gfx_d3d/rb_backend.cpp	1357	12	const void*
+src/gfx_d3d/rb_backend.cpp	1358	12	const void*
+src/gfx_d3d/rb_backend.cpp	1786	12	const void*
+src/gfx_d3d/rb_backend.cpp	1788	12	const void*
+src/gfx_d3d/rb_backend.cpp	1789	12	const void*
+src/gfx_d3d/rb_backend.cpp	1848	13	const void*
+src/gfx_d3d/rb_backend.cpp	2226	13	const void*
+src/gfx_d3d/rb_backend.cpp	2254	28	const void*
+src/gfx_d3d/rb_backend.cpp	2255	26	const void*
+src/gfx_d3d/rb_backend.cpp	2256	23	const void*
+src/gfx_d3d/rb_backend.cpp	2258	12	const void*
+src/gfx_d3d/rb_backend.cpp	2259	12	const void*
+src/gfx_d3d/rb_backend.cpp	2260	12	const void*
+src/gfx_d3d/rb_backend.cpp	2261	68	const void*
+src/gfx_d3d/rb_backend.cpp	2262	12	const void*
+src/gfx_d3d/rb_backend.cpp	2373	11	const void*
+src/gfx_d3d/rb_backend.cpp	4507	13	const void*
+src/gfx_d3d/rb_backend.cpp	4544	12	const void*
+src/gfx_d3d/rb_backend.cpp	4548	12	const void*
+src/gfx_d3d/rb_backend.cpp	4556	11	const void*
+src/gfx_d3d/rb_backend.cpp	4907	17	const void*
+src/gfx_d3d/rb_backend.cpp	4909	17	const void*
+src/gfx_d3d/rb_backend.cpp	4911	33	const void*
+src/gfx_d3d/rb_backend.cpp	4920	20	const void*
+src/gfx_d3d/rb_backend.cpp	4928	24	const void*
+src/gfx_d3d/rb_debug.cpp	373	20	float*
+src/gfx_d3d/rb_debug.cpp	408	12	unsigned char*
+src/gfx_d3d/rb_debug.cpp	409	12	unsigned char*
+src/gfx_d3d/rb_debug.cpp	432	12	unsigned char*
+src/gfx_d3d/rb_debug.cpp	433	12	unsigned char*
+src/gfx_d3d/rb_light.cpp	760	16	const unsigned int*
+src/gfx_d3d/rb_light.cpp	761	16	const unsigned int*
+src/gfx_d3d/rb_postfx.cpp	1961	18	float*
+src/gfx_d3d/rb_postfx.cpp	1962	18	float*
+src/gfx_d3d/rb_postfx.cpp	1970	18	float*
+src/gfx_d3d/rb_postfx.cpp	1971	18	float*
+src/gfx_d3d/rb_postfx.cpp	1979	18	float*
+src/gfx_d3d/rb_postfx.cpp	1980	18	float*
+src/gfx_d3d/rb_postfx.cpp	1998	18	float*
+src/gfx_d3d/rb_postfx.cpp	1999	18	float*
+src/gfx_d3d/rb_postfx.cpp	2000	18	float*
+src/gfx_d3d/rb_postfx.cpp	2008	18	float*
+src/gfx_d3d/rb_postfx.cpp	2009	18	float*
+src/gfx_d3d/rb_postfx.cpp	2010	18	float*
+src/gfx_d3d/rb_postfx.cpp	2018	18	float*
+src/gfx_d3d/rb_postfx.cpp	2019	18	float*
+src/gfx_d3d/rb_postfx.cpp	2020	18	float*
+src/gfx_d3d/rb_postfx.cpp	2028	18	float*
+src/gfx_d3d/rb_postfx.cpp	2029	18	float*
+src/gfx_d3d/rb_postfx.cpp	2030	18	float*
+src/gfx_d3d/rb_postfx.cpp	2038	18	float*
+src/gfx_d3d/rb_postfx.cpp	2039	18	float*
+src/gfx_d3d/rb_postfx.cpp	2040	18	float*
+src/gfx_d3d/rb_postfx.cpp	2048	18	float*
+src/gfx_d3d/rb_postfx.cpp	2049	18	float*
+src/gfx_d3d/rb_postfx.cpp	2050	18	float*
+src/gfx_d3d/rb_postfx.cpp	2058	18	float*
+src/gfx_d3d/rb_postfx.cpp	2059	18	float*
+src/gfx_d3d/rb_postfx.cpp	2060	18	float*
+src/gfx_d3d/rb_postfx.cpp	2068	18	float*
+src/gfx_d3d/rb_postfx.cpp	2069	18	float*
+src/gfx_d3d/rb_postfx.cpp	2070	18	float*
+src/gfx_d3d/rb_postfx.cpp	2078	18	float*
+src/gfx_d3d/rb_postfx.cpp	2079	18	float*
+src/gfx_d3d/rb_postfx.cpp	2080	18	float*
+src/gfx_d3d/rb_postfx.cpp	2088	18	float*
+src/gfx_d3d/rb_postfx.cpp	2089	18	float*
+src/gfx_d3d/rb_postfx.cpp	2090	18	float*
+src/gfx_d3d/rb_postfx.cpp	2098	18	float*
+src/gfx_d3d/rb_postfx.cpp	2099	18	float*
+src/gfx_d3d/rb_postfx.cpp	2100	18	float*
+src/gfx_d3d/rb_postfx.cpp	2108	18	float*
+src/gfx_d3d/rb_postfx.cpp	2109	18	float*
+src/gfx_d3d/rb_postfx.cpp	2110	18	float*
+src/glass/glass_shard.cpp	1504	12	long long int*
+src/glass/glass_shard.cpp	1506	42	long long int*
+src/glass/glass_shard.cpp	1506	117	long long int*
+src/ik/ik_import.cpp	489	34	unsigned char*
+src/ik/ik_import.cpp	507	69	unsigned char*
+src/ik/ik_import.cpp	560	49	unsigned char*
+src/ik/ik_import.cpp	561	42	unsigned char*
+src/ik/ik_import.cpp	562	33	unsigned char*
+src/ik/ik_import.cpp	723	20	unsigned char*
+src/ik/ik_import.cpp	746	14	unsigned char*
+src/ik/ik_import.cpp	746	101	unsigned char*
+src/ik/ik_import.cpp	823	20	unsigned char*
+src/ik/ik_import.cpp	850	20	unsigned char*
+src/ik/ik_import.cpp	910	20	unsigned char*
+src/ik/ik_import.cpp	1152	68	long long int*
+src/ik/ik_import.cpp	1153	42	long long int*
+src/ik/ik_import.cpp	1154	42	long long int*
+src/ik/ik_import.cpp	1155	42	long long int*
+src/ik/ik_import.cpp	1156	12	long long int*
+src/ik/ik_import.cpp	1160	57	long long int*
+src/ik/ik_import.cpp	1160	143	long long int*
+src/ik/ik_import.cpp	1161	42	long long int*
+src/ik/ik_import.cpp	1162	42	long long int*
+src/ik/ik_import.cpp	1166	12	long long int*
+src/ik/ik_import.cpp	1166	111	long long int*
+src/ik/ik_import.cpp	1167	42	long long int*
+src/ik/ik_import.cpp	1168	42	long long int*
+src/ik/ik_import.cpp	1169	42	long long int*
+src/ik/ik_import.cpp	1173	12	long long int*
+src/ik/ik_import.cpp	1173	113	long long int*
+src/ik/ik_import.cpp	1174	42	long long int*
+src/ik/ik_import.cpp	1175	42	long long int*
+src/ik/ik_import.cpp	1176	42	long long int*
+src/ik/ik_import.cpp	1180	12	long long int*
+src/ik/ik_import.cpp	1180	113	long long int*
+src/ik/ik_import.cpp	1181	42	long long int*
+src/ik/ik_import.cpp	1182	42	long long int*
+src/ik/ik_import.cpp	1183	42	long long int*
+src/ik/ik_import.cpp	1187	12	long long int*
+src/ik/ik_import.cpp	1187	113	long long int*
+src/ik/ik_import.cpp	1188	42	long long int*
+src/ik/ik_import.cpp	1189	42	long long int*
+src/ik/ik_import.cpp	1190	42	long long int*
+src/ik/ik_import.cpp	1194	12	long long int*
+src/ik/ik_import.cpp	1194	113	long long int*
+src/ik/ik_import.cpp	1195	42	long long int*
+src/ik/ik_import.cpp	1196	42	long long int*
+src/ik/ik_import.cpp	1197	42	long long int*
+src/ik/ik_import.cpp	1201	12	long long int*
+src/ik/ik_import.cpp	1201	113	long long int*
+src/ik/ik_import.cpp	1202	42	long long int*
+src/ik/ik_import.cpp	1203	42	long long int*
+src/ik/ik_import.cpp	1204	42	long long int*
+src/ik/ik_import.cpp	2466	20	unsigned char*
+src/ik/ik_import.cpp	2520	20	const unsigned char*
+src/live/live_combatrecord.cpp	757	17	float*
+src/live/live_combatrecord.cpp	757	86	float*
+src/live/live_combatrecord.cpp	760	23	float*
+src/live/live_combatrecord.cpp	760	91	float*
+src/live/live_combatrecord.cpp	779	22	float*
+src/live/live_combatrecord.cpp	779	91	float*
+src/live/live_combatrecord.cpp	781	23	float*
+src/live/live_combatrecord.cpp	781	91	float*
+src/live/live_combatrecord.cpp	817	17	float*
+src/live/live_combatrecord.cpp	817	86	float*
+src/live/live_combatrecord.cpp	820	23	float*
+src/live/live_combatrecord.cpp	820	91	float*
+src/live/live_combatrecord.cpp	829	18	float*
+src/live/live_combatrecord.cpp	829	87	float*
+src/live/live_combatrecord.cpp	831	19	float*
+src/live/live_combatrecord.cpp	831	87	float*
+src/live/live_pcache_profile.cpp	136	8	void*
+src/live/live_pcache_profile.cpp	143	8	void*
+src/live/live_storage.cpp	1288	14	const char**
+src/live/live_storage.cpp	1298	13	const char**
+src/live/live_storage.cpp	1548	14	const char**
+src/live/live_storage.cpp	1558	21	const char**
+src/live/live_storage.cpp	1598	14	const char**
+src/live/live_storage.cpp	1608	13	const char**
+src/live/live_storage.cpp	1768	14	const char**
+src/live/live_storage.cpp	1778	13	const char**
+src/live/live_storage.cpp	3143	13	void*
+src/live/live_storage.cpp	3274	47	void*
+src/live/live_storage.cpp	3274	135	void*
+src/live/live_storage.cpp	3916	67	void*
+src/live/live_storage.cpp	3926	66	void*
+src/live/live_storage_win.cpp	1647	20	unsigned char*
+src/live/live_storage_win.cpp	1648	20	unsigned char*
+src/live/live_storage_win.cpp	1649	20	unsigned char*
+src/live/live_storage_win.cpp	1650	20	unsigned char*
+src/live/live_storage_win.cpp	1651	20	unsigned char*
+src/live/live_storage_win.cpp	1652	20	unsigned char*
+src/live/live_storage_win.cpp	1653	20	unsigned char*
+src/live/live_storage_win.cpp	3348	35	void*
+src/live/live_storage_win.cpp	3348	107	void*
+src/live/live_win.cpp	1671	12	unsigned char*
+src/live/live_win.cpp	1696	53	unsigned char*
+src/live/live_win.cpp	1697	42	unsigned char*
+src/live/live_win.cpp	1855	44	unsigned char*
+src/live/live_win.cpp	1858	53	unsigned char*
+src/live/live_win.cpp	1877	16	unsigned char*
+src/live/live_win.cpp	1880	16	unsigned char*
+src/physics/destructible.cpp	1523	8	LerpEntityStateCreateDynEnt*
+src/physics/destructible.cpp	2459	39	const centity_s**
+src/physics/destructible.cpp	2460	39	const centity_s**
+src/physics/destructible.cpp	2842	61	const LerpEntityStateCreateDynEnt*
+src/physics/destructibledef_load_obj.cpp	692	13	unsigned char*
+src/physics/destructibledef_load_obj.cpp	720	130	unsigned char*
+src/physics/destructibledef_load_obj.cpp	721	79	unsigned char*
+src/physics/destructibledef_load_obj.cpp	723	89	unsigned char*
+src/physics/destructibledef_load_obj.cpp	725	75	unsigned char*
+src/physics/destructibledef_load_obj.cpp	728	85	unsigned char*
+src/physics/destructibledef_load_obj.cpp	731	84	unsigned char*
+src/physics/destructibledef_load_obj.cpp	735	81	unsigned char*
+src/physics/destructibledef_load_obj.cpp	737	74	unsigned char*
+src/physics/destructibledef_load_obj.cpp	740	107	unsigned char*
+src/physics/destructibledef_load_obj.cpp	743	76	unsigned char*
+src/physics/destructibledef_load_obj.cpp	747	73	unsigned char*
+src/physics/destructibledef_load_obj.cpp	749	66	unsigned char*
+src/physics/destructibledef_load_obj.cpp	752	69	unsigned char*
+src/physics/destructibledef_load_obj.cpp	755	55	unsigned char*
+src/physics/destructibledef_load_obj.cpp	758	65	unsigned char*
+src/physics/destructibledef_load_obj.cpp	761	51	unsigned char*
+src/physics/destructibledef_load_obj.cpp	764	61	unsigned char*
+src/physics/destructibledef_load_obj.cpp	767	47	unsigned char*
+src/physics/destructibledef_load_obj.cpp	770	57	unsigned char*
+src/physics/destructibledef_load_obj.cpp	773	43	unsigned char*
+src/physics/destructibledef_load_obj.cpp	776	53	unsigned char*
+src/physics/destructibledef_load_obj.cpp	778	39	unsigned char*
+src/physics/destructibledef_load_obj.cpp	784	47	unsigned char*
+src/physics/destructibledef_load_obj.cpp	786	39	unsigned char*
+src/physics/destructibledef_load_obj.cpp	787	54	unsigned char*
+src/physics/destructibledef_load_obj.cpp	788	56	unsigned char*
+src/physics/destructibledef_load_obj.cpp	788	149	unsigned char*
+src/physics/destructibledef_load_obj.cpp	801	44	unsigned char*
+src/physics/destructibledef_load_obj.cpp	803	38	unsigned char*
+src/physics/destructibledef_load_obj.cpp	808	72	unsigned char*
+src/physics/destructibledef_load_obj.cpp	814	79	unsigned char*
+src/physics/destructibledef_load_obj.cpp	815	16	unsigned char*
+src/physics/destructibledef_load_obj.cpp	880	28	unsigned char*
+src/physics/destructibledef_load_obj.cpp	881	28	unsigned char*
+src/physics/destructibledef_load_obj.cpp	882	28	unsigned char*
+src/physics/destructibledef_load_obj.cpp	883	28	unsigned char*
+src/physics/destructibledef_load_obj.cpp	884	28	unsigned char*
+src/physics/destructibledef_load_obj.cpp	894	46	unsigned char*
+src/physics/destructibledef_load_obj.cpp	896	32	unsigned char*
+src/physics/destructibledef_load_obj.cpp	897	39	unsigned char*
+src/physics/destructibledef_load_obj.cpp	907	54	unsigned char*
+src/physics/destructibledef_load_obj.cpp	910	57	unsigned char*
+src/physics/destructibledef_load_obj.cpp	914	59	unsigned char*
+src/physics/destructibledef_load_obj.cpp	915	191	unsigned char*
+src/physics/destructibledef_load_obj.cpp	919	88	unsigned char*
+src/physics/destructibledef_load_obj.cpp	925	79	unsigned char*
+src/physics/destructibledef_load_obj.cpp	932	88	unsigned char*
+src/physics/destructibledef_load_obj.cpp	946	74	unsigned char*
+src/physics/destructibledef_load_obj.cpp	946	217	unsigned char*
+src/physics/phys_broad_phase.cpp	1918	37	char*
+src/physics/phys_contact_manifold.cpp	625	14	contact_manifold_mesh_point**
+src/physics/phys_contact_manifold.cpp	948	27	contact_manifold_mesh_point**
+src/physics/phys_gjk_collision_detection.cpp	826	13	void*
+src/physics/phys_transient_allocator.cpp	63	12	char*
+src/physics/phys_transient_allocator.cpp	64	12	char*
+src/physics/phys_util.cpp	250	31	rigid_body* const*
+src/physics/phys_util.cpp	491	26	rigid_body* const*
+src/physics/physconstraints_load_obj.cpp	219	54	unsigned char*
+src/physics/physconstraints_load_obj.cpp	229	29	unsigned char*
+src/physics/physconstraints_load_obj.cpp	231	26	unsigned char*
+src/physics/physpreset_load_obj.cpp	121	32	char*
+src/physics/physpreset_load_obj.cpp	122	32	char*
+src/physics/physpreset_load_obj.cpp	125	32	char*
+src/physics/physpreset_load_obj.cpp	126	32	char*
+src/physics/physpreset_load_obj.cpp	129	32	char*
+src/physics/physpreset_load_obj.cpp	130	32	char*
+src/qcommon/cm_load_obj.cpp	56	24	char*
+src/qcommon/cm_load_obj.cpp	376	28	char*
+src/qcommon/cm_load_obj.cpp	377	39	char*
+src/qcommon/cm_load_obj.cpp	378	26	char*
+src/qcommon/cm_load_obj.cpp	379	25	char*
+src/qcommon/cm_load_obj.cpp	525	32	char*
+src/qcommon/cm_load_obj.cpp	529	37	char*
+src/qcommon/cm_load_obj.cpp	1052	33	char*
+src/qcommon/cm_load_obj.cpp	1056	28	char*
+src/qcommon/cm_load_obj.cpp	1093	33	char*
+src/qcommon/cm_load_obj.cpp	1097	28	char*
+src/qcommon/cm_load_obj.cpp	1137	29	char*
+src/qcommon/cm_load_obj.cpp	1138	34	char*
+src/qcommon/cm_load_obj.cpp	1263	29	char*
+src/qcommon/cm_load_obj.cpp	1264	29	char*
+src/qcommon/cm_load_obj.cpp	1265	31	char*
+src/qcommon/cm_load_obj.cpp	1266	31	char*
+src/qcommon/cm_load_obj.cpp	1267	31	char*
+src/qcommon/cm_load_obj.cpp	1268	33	char*
+src/qcommon/cm_load_obj.cpp	1269	30	char*
+src/qcommon/cm_load_obj.cpp	1270	37	char*
+src/qcommon/cm_mesh.cpp	1125	67	long long int*
+src/qcommon/cm_mesh.cpp	1141	75	long long int*
+src/qcommon/cm_mesh.cpp	1227	80	long long int*
+src/qcommon/cm_mesh.cpp	1243	87	long long int*
+src/qcommon/cm_mesh.cpp	1529	64	long long int*
+src/qcommon/cm_mesh.cpp	1545	71	long long int*
+src/qcommon/cm_trace.cpp	730	29	long long int*
+src/qcommon/cm_trace.cpp	733	83	long long int*
+src/qcommon/cm_trace.cpp	733	165	long long int*
+src/qcommon/cm_trace.cpp	747	33	long long int*
+src/qcommon/cm_trace.cpp	750	87	long long int*
+src/qcommon/cm_trace.cpp	751	95	long long int*
+src/qcommon/cm_trace.cpp	783	25	long long int*
+src/qcommon/cm_trace.cpp	786	79	long long int*
+src/qcommon/cm_trace.cpp	786	156	long long int*
+src/qcommon/cm_trace.cpp	2042	80	long long int*
+src/qcommon/cm_trace.cpp	2058	87	long long int*
+src/qcommon/com_bsp_load_obj.cpp	766	29	char*
+src/qcommon/com_bsp_load_obj.cpp	767	26	char*
+src/qcommon/com_bsp_load_obj.cpp	767	86	char*
+src/qcommon/com_bsp_load_obj.cpp	777	36	char*
+src/qcommon/dvar_cmds.cpp	621	14	void*
+src/qcommon/dvar_cmds.cpp	621	102	void*
+src/qcommon/dvar_cmds.cpp	634	29	void*
+src/qcommon/graph.cpp	185	78	void*
+src/qcommon/mem_track.cpp	1227	13	const char*
+src/qcommon/mem_track.cpp	1227	93	const char*
+src/qcommon/mem_track.cpp	1229	13	const char*
+src/qcommon/mem_track.cpp	1229	93	const char*
+src/qcommon/mem_track.cpp	1231	13	const char*
+src/qcommon/mem_track.cpp	1231	93	const char*
+src/qcommon/mem_track.cpp	1233	13	const char*
+src/qcommon/mem_track.cpp	1233	93	const char*
+src/qcommon/sv_msg_write.cpp	495	23	const int*
+src/qcommon/sv_msg_write.cpp	495	97	const int*
+src/qcommon/sv_msg_write.cpp	496	23	const int*
+src/qcommon/sv_msg_write.cpp	496	97	const int*
+src/qcommon/sv_msg_write.cpp	497	28	const int*
+src/qcommon/sv_msg_write.cpp	497	112	const int*
+src/qcommon/sv_msg_write.cpp	1082	22	const int*
+src/qcommon/sv_msg_write.cpp	1082	104	const int*
+src/qcommon/sv_msg_write.cpp	1083	25	const int*
+src/qcommon/sv_msg_write.cpp	1083	89	const int*
+src/qcommon/sv_msg_write.cpp	1090	23	const int*
+src/qcommon/sv_msg_write.cpp	1090	97	const int*
+src/qcommon/sv_msg_write.cpp	1091	23	const int*
+src/qcommon/sv_msg_write.cpp	1091	97	const int*
+src/qcommon/sv_msg_write.cpp	1099	39	const int*
+src/qcommon/sv_msg_write.cpp	1100	39	const int*
+src/qcommon/sv_msg_write.cpp	1102	40	const int*
+src/server/sv_world.cpp	143	22	float*
+src/server/sv_world.cpp	144	22	float*
+src/server/sv_world.cpp	156	22	float*
+src/server/sv_world.cpp	157	22	float*
+src/server_mp/sv_archive_mp.cpp	238	37	float*
+src/server_mp/sv_archive_mp.cpp	251	25	float*
+src/server_mp/sv_archive_mp.cpp	252	28	float*
+src/server_mp/sv_archive_mp.cpp	253	28	float*
+src/server_mp/sv_archive_mp.cpp	254	29	float*
+src/server_mp/sv_archive_mp.cpp	255	28	float*
+src/server_mp/sv_archive_mp.cpp	270	39	float*
+src/server_mp/sv_archive_mp.cpp	271	29	float*
+src/server_mp/sv_archive_mp.cpp	369	33	float*
+src/server_mp/sv_archive_mp.cpp	382	21	float*
+src/server_mp/sv_archive_mp.cpp	383	24	float*
+src/server_mp/sv_archive_mp.cpp	384	24	float*
+src/server_mp/sv_archive_mp.cpp	385	25	float*
+src/server_mp/sv_archive_mp.cpp	386	24	float*
+src/server_mp/sv_archive_mp.cpp	403	37	float*
+src/server_mp/sv_archive_mp.cpp	404	25	float*
+src/server_mp/sv_snapshot_mp.cpp	2156	34	unsigned char*
+src/server_mp/sv_snapshot_mp.cpp	2157	34	unsigned char*
+src/server_mp/sv_snapshot_mp.cpp	2158	34	unsigned char*
+src/server_mp/sv_snapshot_mp.cpp	2159	48	unsigned char*
+src/server_mp/sv_snapshot_mp.cpp	2160	48	unsigned char*
+src/server_mp/sv_snapshot_mp.cpp	2160	107	unsigned char*
+src/sound/snd_radverb.cpp	406	79	float*
+src/sound/snd_radverb.cpp	407	99	float*
+src/sound/snd_radverb.cpp	411	79	float*
+src/sound/snd_radverb.cpp	412	99	float*
+src/sound/snd_radverb.cpp	416	79	float*
+src/sound/snd_radverb.cpp	418	99	float*
+src/sound/snd_radverb.cpp	422	63	float*
+src/sound/snd_radverb.cpp	424	83	float*
+src/ui/ui_shared.cpp	6211	42	void*
+src/ui/ui_shared.cpp	6211	101	void*
+src/ui/ui_shared.cpp	6212	33	void*
+src/ui/ui_shared.cpp	6214	28	void*
+src/ui/ui_shared.cpp	6216	12	void*
+src/ui/ui_shared.cpp	6217	17	void*
+src/ui/ui_shared.cpp	6218	16	void*
+src/ui/ui_shared.cpp	10583	8	char*
+src/ui/ui_shared.cpp	10584	8	char*
+src/ui/ui_shared.cpp	10585	8	char*
+src/ui_mp/ui_gametype_custom_mp.cpp	372	8	float*
+src/ui_mp/ui_gametype_custom_mp.cpp	374	8	float*
+src/universal/com_math.cpp	3488	17	const float*
+src/universal/com_math.cpp	3490	17	const float*
+src/universal/com_math.cpp	3491	8	float*
+src/universal/com_math.cpp	3493	17	const float*
+src/universal/com_math.cpp	3495	17	const float*
+src/universal/com_math.cpp	3496	8	float*
+src/universal/com_math.cpp	3511	17	const float*
+src/universal/com_math.cpp	3513	17	const float*
+src/universal/com_math.cpp	3514	8	float*
+src/universal/com_math.cpp	3516	17	const float*
+src/universal/com_math.cpp	3518	17	const float*
+src/universal/com_math.cpp	3519	8	float*
+src/universal/com_pack.cpp	156	13	const float*
+src/universal/com_pack.cpp	184	8	float*
+src/universal/eval.cpp	298	20	EvalValueType*
+src/universal/eval.cpp	300	20	char**
+src/xanim/dobj.cpp	280	8	unsigned char*
+src/xanim/dobj.cpp	281	8	unsigned char*
+src/xanim/dobj.cpp	282	8	unsigned char*
+src/xanim/dobj.cpp	283	8	unsigned char*
+src/xanim/dobj.cpp	284	8	unsigned char*
+src/xanim/dobj.cpp	285	8	unsigned char*
+src/xanim/dobj.cpp	286	8	unsigned char*
+src/xanim/dobj.cpp	287	8	unsigned char*
+src/xanim/dobj.cpp	288	8	unsigned char*
+src/xanim/dobj.cpp	293	8	unsigned char*
+src/xanim/dobj.cpp	567	8	unsigned char*
+src/xanim/xanim.cpp	726	42	long long int*
+src/xanim/xanim_calc.cpp	2031	16	long long int*
+src/xanim/xanim_calc.cpp	2032	98	long long int*
+src/xanim/xanim_calc.cpp	2034	98	int*
+src/xanim/xanim_calc.cpp	2035	66	long long int*
+src/xanim/xanim_calc.cpp	2037	90	int*
+src/xanim/xanim_calc.cpp	2038	90	int*
+src/xanim/xanim_calc.cpp	2042	16	float*
+src/xanim/xanim_calc.cpp	2043	86	long long int*
+src/xanim/xanim_calc.cpp	2082	58	int*
+src/xanim/xanim_calc.cpp	2083	58	int*
+src/xanim/xanim_calc.cpp	2086	58	int*
+src/xanim/xanim_calc.cpp	2087	58	int*
+src/xanim/xanim_calc.cpp	2092	98	int*
+src/xanim/xanim_calc.cpp	2123	44	int*
+src/xanim/xanim_calc.cpp	2124	44	int*
+src/xanim/xanim_calc.cpp	2540	42	unsigned char*
+src/xanim/xanim_calc.cpp	2541	42	unsigned char*
+src/xanim/xanim_calc.cpp	2545	40	unsigned char*
+src/xanim/xanim_calc.cpp	2546	40	unsigned char*
+src/xanim/xanim_calc.cpp	2643	42	unsigned char*
+src/xanim/xanim_calc.cpp	2644	42	unsigned char*
+src/xanim/xanim_calc.cpp	2648	40	unsigned char*
+src/xanim/xanim_calc.cpp	2649	40	unsigned char*
+src/xanim/xanim_calc.cpp	2778	41	long long int*
+src/xanim/xanim_calc.cpp	2829	29	int*
+src/xanim/xanim_calc.cpp	2829	107	int*
+src/xanim/xanim_calc.cpp	2830	29	int*
+src/xanim/xanim_calc.cpp	2830	107	int*
+src/xanim/xanim_calc.cpp	2831	72	int*
+src/xanim/xanim_load_obj.cpp	975	36	short int*
+src/xanim/xanim_load_obj.cpp	1036	40	unsigned char*
+src/xanim/xanim_load_obj.cpp	1039	40	unsigned char*
+src/xanim/xmodel_load_obj.cpp	268	28	float*
+src/xanim/xmodel_load_obj.cpp	271	28	float*
+src/xanim/xmodel_load_obj.cpp	278	28	float*
+src/xanim/xmodel_load_obj.cpp	281	28	float*
+src/xanim/xmodel_load_obj.cpp	735	20	float*
+src/xanim/xmodel_load_obj.cpp	736	20	float*
+src/xanim/xmodel_load_obj.cpp	737	20	float*
+src/xanim/xmodel_load_obj.cpp	977	32	float*
+src/xanim/xmodel_load_obj.cpp	980	32	float*

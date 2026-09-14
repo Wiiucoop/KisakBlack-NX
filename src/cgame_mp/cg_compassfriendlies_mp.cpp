@@ -126,7 +126,7 @@ void __cdecl CG_CompassUpdateVehicleInfo(int localClientNum, int entityIndex)
     cent = CG_GetEntity(localClientNum, entityIndex);
     if ( cent->nextState.eType != 14
         && cent->nextState.eType != 13
-        && (cent->nextState.eType != 6 || ((*((unsigned int *)cent + 201) >> 18) & 1) == 0)
+        && (cent->nextState.eType != 6 || ((cent->clientFlags >> 18) & 1) == 0)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\cgame_mp\\cg_compassfriendlies_mp.cpp",
                     646,
@@ -974,7 +974,7 @@ void __cdecl CG_CompassRadarPingEnemyPlayers(
                     if ( actor->enemy )
                     {
                         cent = CG_GetEntity(localClientNum, actorIndex);
-                        if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0
+                        if ( ((cent->clientFlags >> 1) & 1) == 0
                             || cent->nextState.eType == 1 && (cent->nextState.lerp.eFlags & 0x40000) == 0 )
                         {
                             if ( DoLinesSurroundPoint(cgameGlob, radarLine1, radarLine2, actor->lastPos) )
@@ -3264,8 +3264,8 @@ void __cdecl CG_CompassDrawVehicles(
             fadedColor[2] = color[2];
             fadedColor[3] = color[3];
             cent = CG_GetEntity(localClientNum, veh->entityNum);
-            if ( (cent->nextState.eType == eType || ((*((unsigned int *)cent + 201) >> 18) & 1) != 0)
-                && (eType == 13 || ((*((unsigned int *)cent + 201) >> 18) & 1) != 0 || CG_VehGetHealthPercentageEntity(cent) != 0.0) )
+            if ( (cent->nextState.eType == eType || ((cent->clientFlags >> 18) & 1) != 0)
+                && (eType == 13 || ((cent->clientFlags >> 18) & 1) != 0 || CG_VehGetHealthPercentageEntity(cent) != 0.0) )
             {
                 if ( veh->lastUpdate > cgameGlob->time )
                     veh->lastUpdate = 0;
@@ -3280,7 +3280,7 @@ void __cdecl CG_CompassDrawVehicles(
                                             veh->lastPos,
                                             0,
                                             xy);
-                    if ( eType == 13 || ((*((unsigned int *)cent + 201) >> 18) & 1) != 0 || CG_IsVehicleMayhemGameType() )
+                    if ( eType == 13 || ((cent->clientFlags >> 18) & 1) != 0 || CG_IsVehicleMayhemGameType() )
                         clipped = 0;
                     if ( eType == 12 )
                     {
@@ -3304,7 +3304,7 @@ void __cdecl CG_CompassDrawVehicles(
                     friendly = 0;
                     enemy = 0;
                     isSelf = 0;
-                    if ( eType == 13 || ((*((unsigned int *)cent + 201) >> 18) & 1) != 0 )
+                    if ( eType == 13 || ((cent->clientFlags >> 18) & 1) != 0 )
                     {
                         if ( !cent->compassMaterial || !*cent->compassMaterial->info.name )
                             return;
@@ -3320,7 +3320,7 @@ LABEL_72:
                             fadedColor[3] = (1.0 - ScramblerEnemyAlpha) * fadedColor[3];
                             if ( cgameGlob->globalScramblerActive )
                                 fadedColor[3] = 0.0f;
-                            if ( eType == 13 && ((*((unsigned int *)cent + 201) >> 18) & 1) != 0 || !isSelf )
+                            if ( eType == 13 && ((cent->clientFlags >> 18) & 1) != 0 || !isSelf )
                             {
                                 if ( friendly )
                                 {

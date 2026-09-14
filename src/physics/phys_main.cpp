@@ -2424,7 +2424,7 @@ void    Phys_FindAndRenderEntityBrushes(const float *pos, int contentmask)
                 ClientDObj = Com_GetClientDObj(v43[j], v32);
                 if ( ClientDObj )
                 {
-                    if ( ((*((unsigned int *)Entity + 201) >> 15) & 1) != 0 )
+                    if ( ((Entity->clientFlags >> 15) & 1) != 0 )
                         v26 = (const float *)v44;
                     else
                         v26 = (const float *)v45;
@@ -2434,7 +2434,7 @@ void    Phys_FindAndRenderEntityBrushes(const float *pos, int contentmask)
                 }
                 else if (Entity->nextState.solid == 0xFFFFFF)
                 {
-                    if ( ((*((unsigned int *)Entity + 201) >> 15) & 1) != 0 )
+                    if ( ((Entity->clientFlags >> 15) & 1) != 0 )
                         v25 = (const float *)v44;
                     else
                         v25 = (const float *)v45;

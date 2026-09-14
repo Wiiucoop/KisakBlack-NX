@@ -1837,7 +1837,7 @@ void __cdecl CG_Flame_Update_Source(int localClientNum)
                     cent = CG_GetEntity(localClientNum, i);
                     centForFlags = cent;
                     usingVehicleTagFlash = 0;
-                    if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 )
+                    if ( ((cent->clientFlags >> 1) & 1) != 0 )
                     {
                         weapDef = BG_GetWeaponDef(cent->nextState.weapon);
                         if ( cent->nextState.eType == 14 )
@@ -1904,10 +1904,10 @@ LABEL_25:
                                                 && cgameGlob->predictedPlayerState.waterlevel < 3
                                                 || isFireEvent;
                                 if ( isFiring )
-                                    *((unsigned int *)cent + 201) |= 4u;
+                                    cent->clientFlags |= 4u;
                                 if ( isFiring && isFirstPerson && cent->lastMuzzleFlash < cgameGlob->time - weapDef->iRechamberBoltTime )
                                 {
-                                    *((unsigned int *)cent + 201) |= 4u;
+                                    cent->clientFlags |= 4u;
                                     cent->lastMuzzleFlash = cgameGlob->time;
                                 }
                                 if ( isFiring )

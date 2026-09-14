@@ -2536,7 +2536,7 @@ bool __cdecl CG_GetEntityOriginAngles(int localClientNum, int entityNum, float *
     cent = CG_GetEntity(localClientNum, entityNum);
     if ( !cent && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\cgame_mp\\cg_main_mp.cpp", 2544, 0, "%s", "cent") )
         __debugbreak();
-    if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+    if ( ((cent->clientFlags >> 1) & 1) == 0 )
         return 0;
     *origin = cent->pose.origin[0];
     origin[1] = cent->pose.origin[1];
@@ -2577,7 +2577,7 @@ unsigned __int16 __cdecl CG_GetVehicleTypeString(int clientNum, int entityNum)
     cent = CG_GetEntity(localClientNum, entityNum);
     if ( !cent && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\cgame_mp\\cg_main_mp.cpp", 2576, 0, "%s", "cent") )
         __debugbreak();
-    if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+    if ( ((cent->clientFlags >> 1) & 1) == 0 )
         return 0;
     info = CG_GetVehicleInfo(cent->nextState.vehicleState.vehicleInfoIndex);
     if ( !info )
@@ -3899,7 +3899,7 @@ int __cdecl CG_NotifyTriggers()
         {
             other = (unsigned int *)CG_GetEntity(0, trigger_info->otherEntnum);
             if ( other[151] == trigger_info->otherUseCount
-                && ((*((unsigned int *)ent + 201) >> 1) & 1) != 0
+                && ((ent->clientFlags >> 1) & 1) != 0
                 && ((other[201] >> 1) & 1) != 0 )
             {
                 if ( cg_level.entTriggerIndex[entnum] == cg_level.triggerIndex )
@@ -3926,7 +3926,7 @@ void __cdecl CG_Trigger(centity_s *self, centity_s *other)
 {
     trigger_info_t *trigger_info; // [esp+4h] [ebp-4h]
 
-    if ( ((*((unsigned int *)other + 201) >> 1) & 1) == 0
+    if ( ((other->clientFlags >> 1) & 1) == 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\cgame_mp\\cg_main_mp.cpp",
                     3630,
@@ -3957,13 +3957,13 @@ void __cdecl CG_Trigger(centity_s *self, centity_s *other)
 
 void __cdecl CG_multi_trigger(centity_s *ent)
 {
-    if ( ((*((unsigned int *)ent + 201) >> 17) & 1) != 0 )
+    if ( ((ent->clientFlags >> 17) & 1) != 0 )
         CG_FreeEntityDelay(ent);
 }
 
 void __cdecl CG_Touch_Multi(centity_s *self, centity_s *other)
 {
-    if ( ((*((unsigned int *)other + 201) >> 1) & 1) != 0 )
+    if ( ((other->clientFlags >> 1) & 1) != 0 )
     {
         CG_Trigger(self, other);
         CG_multi_trigger(other);

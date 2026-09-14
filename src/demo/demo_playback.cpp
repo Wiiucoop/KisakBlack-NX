@@ -394,7 +394,7 @@ void __cdecl Demo_TagPlayers(int localClientNum, demoTagPlayers *players)
         for ( i = 0; i < demo.header.maxClients; ++i )
         {
             cent = CG_GetEntity(localClientNum, i);
-            if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 && i != cgameGlob->clientNum )
+            if ( ((cent->clientFlags >> 1) & 1) != 0 && i != cgameGlob->clientNum )
             {
                 if ( CG_CanSeeFriendlyHead(localClientNum, cent) )
                 {

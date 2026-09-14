@@ -865,7 +865,7 @@ bool __cdecl FX_GetBoneOrientation_IsDObjEntityValid(int localClientNum, int dob
     if ( dobjHandle >= 1536 )
         return 1;
     cent = CG_GetEntity(localClientNum, dobjHandle);
-    if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+    if ( ((cent->clientFlags >> 1) & 1) == 0 )
         return 0;
     return (cent->nextState.lerp.eFlags & 2) == 0 || (cent->nextState.lerp.eFlags & 0x20) == 0;
 }

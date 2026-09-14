@@ -549,7 +549,7 @@ void __cdecl AimAssist_UpdateScreenTargets(
         {
             target = &targetList[targetIndex];
             cent = CG_GetEntity(localClientNum, target->entIndex);
-            if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0
+            if ( ((cent->clientFlags >> 1) & 1) != 0
                 && target->worldDistSqr <= (float)(aim_assist_min_target_distance->current.value
                                                                                  * aim_assist_min_target_distance->current.value) )
             {
@@ -2045,7 +2045,7 @@ char __cdecl AimAssist_UpdateAutoMeleeTarget(AimAssistGlobals *aaGlob, int local
     else
     {
         cent = CG_GetEntity(localClientNum, aaGlob->autoMeleeTargetEnt);
-        if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+        if ( ((cent->clientFlags >> 1) & 1) == 0 )
             return 0;
         if ( !AimAssist_CalcAimPos(localClientNum, cent, 0, aimPos) )
             return 0;

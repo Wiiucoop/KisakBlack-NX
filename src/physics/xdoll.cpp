@@ -159,7 +159,7 @@ void __cdecl XDoll_Update(int msec)
             {
                 cent = CG_GetEntity(body->client_index, body->entity_index);
                 obj = Com_GetClientDObj(body->entity_index, body->client_index);
-                if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 && cent->destructible && obj )
+                if ( ((cent->clientFlags >> 1) & 1) != 0 && cent->destructible && obj )
                 {
                     if ( body->userBodyBoneHash )
                     {

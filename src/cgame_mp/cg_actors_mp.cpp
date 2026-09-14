@@ -26,7 +26,7 @@ void __cdecl CG_ActorProcessSnapshot(int localClientNum, centity_s *cent)
     if ( CL_LocalClient_IsFirstActive(localClientNum) )
     {
         if ( cent )
-            v2 = ((*((unsigned int *)cent + 201) >> 8) & 1) != 0;
+            v2 = ((cent->clientFlags >> 8) & 1) != 0;
         else
             v2 = 0;
     }
@@ -54,7 +54,7 @@ void __cdecl CG_UpdateActorDObj(int localClientNum, centity_s *cent, actorInfo_t
     XAnimTree_s *pAnimTree; // [esp+12Ch] [ebp-104h]
     DObjModel_s dobjModels[32]; // [esp+130h] [ebp-100h] BYREF
 
-    if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 )
+    if ( ((cent->clientFlags >> 1) & 1) != 0 )
     {
         p_nextState = &cent->nextState;
         cgameGlob = CG_GetLocalClientGlobals(localClientNum);
@@ -200,7 +200,7 @@ void __cdecl CG_Actor(int localClientNum, centity_s *cent)
         {
             if ( CG_EntityNeedsScriptThread(localClientNum, cent) )
             {
-                *((unsigned int *)cent + 201) |= 0x100u;
+                cent->clientFlags |= 0x100u;
                 Scr_AddInt(localClientNum, SCRIPTINSTANCE_CLIENT);
                 t = CScr_ExecEntThread(cent, cg_scr_data.entityspawned, 1u);
                 Scr_FreeThread(t, SCRIPTINSTANCE_CLIENT);
@@ -256,7 +256,7 @@ bool __cdecl CG_EntityNeedsScriptThread(int localClientNum, centity_s *cent)
     if ( !CL_LocalClient_IsFirstActive(localClientNum) )
         return 0;
     if ( cent )
-        return ((*((unsigned int *)cent + 201) >> 8) & 1) == 0;
+        return ((cent->clientFlags >> 8) & 1) == 0;
     return 0;
 }
 

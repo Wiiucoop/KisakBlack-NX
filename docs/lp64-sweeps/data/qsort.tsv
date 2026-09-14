@@ -1,0 +1,100 @@
+src/bgame/bg_emblems.cpp	230	best->ids	best->count	2u	(int (__cdecl *)(const void *, const void *))ResultSort
+src/bgame/bg_unlockable_items.cpp	687	killStreakItems	defaultGlobalItemNum	sizeof((killStreakItems)[0])	BG_UnlockablesCompareItemsBySortKey
+src/bgame/bg_unlockable_items.cpp	3037	s_unlockableItems.itemsInSlot	s_unlockableItems.numItemsInSlot	sizeof((s_unlockableItems.itemsInSlot)[0])	BG_UnlockablesCompareItemsBySortKey
+src/bgame/bg_unlockable_items.cpp	3067	s_unlockableItems.itemsInSlot	s_unlockableItems.numItemsInSlot	sizeof((s_unlockableItems.itemsInSlot)[0])	BG_UnlockablesCompareItemsBySortKey
+src/bgame/bg_unlockable_items.cpp	4948	s_unlockableItems.itemsInSlot	s_unlockableItems.numItemsInSlot	sizeof((s_unlockableItems.itemsInSlot)[0])	BG_UnlockablesCompareItemsBySortKey
+src/bgame/bg_unlockable_items.cpp	5028	s_unlockableItems.itemsInSlot	s_unlockableItems.numItemsInSlot	sizeof((s_unlockableItems.itemsInSlot)[0])	BG_UnlockablesCompareItemsBySortKey
+src/bgame/bg_unlockable_items.cpp	5116	s_unlockableItems.itemsInSlot	s_unlockableItems.numItemsInSlot	sizeof((s_unlockableItems.itemsInSlot)[0])	BG_UnlockablesCompareItemsBySortKey
+src/bgame/bg_unlockable_items.cpp	5209	s_unlockableItems.itemsInSlot	s_unlockableItems.numItemsInSlot	sizeof((s_unlockableItems.itemsInSlot)[0])	BG_UnlockablesCompareItemsBySortKey
+src/bgame/bg_weapons_def.cpp	217	bg_weaponVariantNameHashTable	bg_lastParsedWeaponIndex + 1	8u	(int (__cdecl *)(const void *, const void *))BG_WeaponVariantNameHashCompare
+src/cgame/cg_draw_debug.cpp	879	info	num	0xF0u	CG_SoundCompares[snd_drawSort->current.integer]
+src/cgame/cg_draw_names.cpp	670	drawNameEntities	numDrawNameEntities	0x10u	(int (__cdecl *)(const void *, const void *))compareEntityDist
+src/cgame/cg_effects_load_obj.cpp	243	base	num	sizeof((base)[0])	(int (__cdecl *)(const void *, const void *))compare_impact_files
+src/cgame/cg_hudelem.cpp	850	elems	elemCount	sizeof((elems)[0])	compare_hudelems
+src/cgame/cg_hudelem.cpp	879	elems	elemCount	sizeof((elems)[0])	compare_hudelems
+src/cgame/cg_world.cpp	1778	intervals	nintervals	8u	(int (__cdecl *)(const void *, const void *))cmpr
+src/client/cl_console.cpp	3440	matches	matchCount	sizeof((matches)[0])	(int (__cdecl *)(const void *, const void *))ConDrawInput_CompareStrings
+src/clientscript/cscr_compiler.cpp	5022	pos3	num	8u	(int(__cdecl *)(const void *, const void *))CompareCaseInfo
+src/clientscript/cscr_debugger.cpp	951	&scriptWindowsNames[1]	this->numLines - 1	sizeof((&scriptWindowsNames[1])[0])	(int (__cdecl *)(const void *, const void *))ConDrawInput_CompareStrings
+src/clientscript/cscr_debugger.cpp	1647	&names[hardcodedCount]	count - hardcodedCount	sizeof((&names[hardcodedCount])[0])	compare
+src/clientscript/cscr_debugger.cpp	2337	elementList	count	sizeof((elementList)[0])	(int (__cdecl *)(const void *, const void *))CompareThreadElements
+src/clientscript/cscr_evaluate.cpp	110	gScrEvaluateGlob[inst].archivedCanonicalStrings	gScrVarPub[inst].canonicalStrCount	8u	(int(__cdecl *)(const void *, const void *))CompareCanonicalStrings
+src/clientscript/cscr_variable.cpp	116	infoArray	num	0x8Cu	(int (__cdecl *)(const void *, const void *))ThreadInfoCompare
+src/clientscript/cscr_variable.cpp	274	infoArray	num	0x10u	(int(__cdecl *)(const void *, const void *))VariableInfoFileNameCompare
+src/clientscript/cscr_variable.cpp	279	infoArray	num	0x10u	(int(__cdecl *)(const void *, const void *))VariableInfoFunctionCompare
+src/clientscript/cscr_variable.cpp	284	infoArray	num	0x10u	(int(__cdecl *)(const void *, const void *))CompareThreadIndices
+src/clientscript/cscr_variable.cpp	297	infoArray	num	0x10u	(int(__cdecl *)(const void *, const void *))VariableInfoFileLineCompare
+src/clientscript/cscr_variable.cpp	299	infoArray	num	0x10u	(int(__cdecl *)(const void *, const void *))VariableInfoCountCompare
+src/client_mp/cl_main_pc_mp.cpp	2230	s_quickmatchCandidates	s_numPingResponses	0x178u	(int (__cdecl *)(const void *, const void *))CL_QuickMatch_CompareServers
+src/DynEntity/DynEntity_load_obj.cpp	481	base	num	0x54u	(int (__cdecl *)(const void *, const void *))DynEnt_CompareEntities
+src/EffectsCore/fx_profile.cpp	38	entryPool	entryCount	0x1Cu	(int (__cdecl *)(const void *, const void *))FX_CompareProfileEntries
+src/EffectsCore/fx_profile.cpp	276	base	num	8u	(int (__cdecl *)(const void *, const void *))FX_ComparePriorityDebugEntries
+src/game/actor_senses.cpp	466	check	iCheckCount	8u	(int (__cdecl *)(const void *, const void *))compare_sentient_sort
+src/game/pathnode_load_obj.cpp	411	gameWorldCurrent->path.nodeForChainNode	gameWorldCurrent->path.nodeCount	2u	(int (__cdecl *)(const void *, const void *))compare_pathnodes
+src/game_mp/g_main_mp.cpp	2359	level.sortedClients	level.numConnectedClients	sizeof((level.sortedClients)[0])	(int (__cdecl *)(const void *, const void *))SortRanks
+src/game_mp/g_scr_main_mp.cpp	15055	scored_spawn_points	element_count	0xCu	(int (__cdecl *)(const void *, const void *))sort_scored_spawn_point_vectors_ascending
+src/gfx_d3d/rb_imagetouch.cpp	39	imageList.image	imageList.count	sizeof((imageList.image)[0])	(_CoreCrtNonSecureSearchSortCompareFunction)RB_CompareTouchImages
+src/gfx_d3d/r_bsp_load_obj.cpp	2231	&s_world.heroLights[firstLight]	lightCount	0x38u	(int (__cdecl *)(const void *, const void *))R_HeroLightSorter
+src/gfx_d3d/r_init.cpp	1151	dx.displayModes	dx.displayModeCount	0x10u	(int (__cdecl *)(const void *, const void *))R_CompareDisplayModes
+src/gfx_d3d/r_init.cpp	1188	availableRefreshRates	refreshRateCount	sizeof((availableRefreshRates)[0])	(int (__cdecl *)(const void *, const void *))R_CompareRefreshRates
+src/gfx_d3d/r_material_load_obj.cpp	1481	args	argCount	8u	(int (__cdecl *)(const void *, const void *))Material_CompareShaderArgumentsForRuntime
+src/gfx_d3d/r_material_load_obj.cpp	4616	localArgs	usedCount	8u	(int (__cdecl *)(const void *, const void *))Material_CompareShaderArgumentsForCombining
+src/gfx_d3d/r_material_load_obj.cpp	6032	newMtl->textureTable	newMtl->textureCount	0x10u	(int (__cdecl *)(const void *, const void *))CompareHashedMaterialTextures
+src/gfx_d3d/r_material_load_obj.cpp	6037	newMtl->localConstantTable	newMtl->constantCount	0x20u	(int (__cdecl *)(const void *, const void *))CompareHashedMaterialTextures
+src/gfx_d3d/r_material_load_obj.cpp	7296	textureTable	mtlRaw->textureCount	0xCu	(int (__cdecl *)(const void *, const void *))CompareRawMaterialTextures
+src/gfx_d3d/r_material_load_obj.cpp	7309	constantTable	mtlRaw->constantCount	0x14u	(int (__cdecl *)(const void *, const void *))CompareRawMaterialTextures
+src/gfx_d3d/r_staticmodel_load_obj.cpp	51	tree->smodelIndexes	tree->smodelIndexCount	2u	(int (__cdecl *)(const void *, const void *))CompareStaticModels
+src/glass/glass_client.cpp	420	outlineEdges	this->glass->numOutlineVerts	0x18u	(int (__cdecl *)(const void *, const void *))compareOutlineEdges
+src/glass/glass_shard.cpp	2099	newShards	numNewShards	sizeof((newShards)[0])	compareShards
+src/glass/glass_shard.cpp	2798	newShards	numNewShards	sizeof((newShards)[0])	(int (__cdecl *)(const void *, const void *))compareShards
+src/live/live_combatrecord.cpp	546	sortedItemList	index	0x14u	(int (__cdecl *)(const void *, const void *))LiveCombatRecord_CompareItemsByStats
+src/live/live_combatrecord.cpp	619	s_sortedItemList	index	0x14u	(int (__cdecl *)(const void *, const void *))LiveCombatRecord_CompareItemsByStats
+src/live/live_combatrecord.cpp	624	s_otherPlayerSortedItemList	sharedUiInfo.clanTagFeature	0x14u	(int (__cdecl *)(const void *, const void *))LiveCombatRecord_CompareItemsByStats
+src/live/live_combatrecord.cpp	651	sortedItemList	index	0x14u	(int (__cdecl *)(const void *, const void *))LiveCombatRecord_CompareMatchCount
+src/live/live_combatrecord.cpp	677	sortedItemList	index	0x14u	(int (__cdecl *)(const void *, const void *))LiveCombatRecord_CompareMatchCount
+src/live/live_contracts.cpp	1940	s_contractFilteredList	s_contractFilteredListCount	sizeof((s_contractFilteredList)[0])	(int (__cdecl *)(const void *, const void *))FilteredContractListSort
+src/live/live_leaderboard.cpp	1230	lb->userStats.m_leaderBoardEntries	lb->numResults	0x98u	(int (__cdecl *)(const void *, const void *))LB_CompareXUserStatsRowRanks
+src/live/live_meetplayer.cpp	119	metPlayersXuidinfo[localControllerIndex].playersXuidInfo	noOfPlayers	0x30u	(int (__cdecl *)(const void *, const void *))LiveMeetPlayer_MetPlayerCompare
+src/live/live_stats.cpp	2445	s_personalBests[controllerIndex]	s_currentPersonalBest[controllerIndex]	0x14u	(int (__cdecl *)(const void *, const void *))LiveStats_ComparePersonalBests
+src/live/live_stats.cpp	2517	s_sortedChallengeList	s_totalNumberOfUnlockedItems	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeComparePercentageCompleted
+src/live/live_stats.cpp	2524	s_sortedAttachmentsList	s_numSortedAttachments	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeComparePercentageCompleted
+src/live/live_stats.cpp	2531	s_sortedWeaponGroupList	s_numSortedWeaponGroup	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeComparePercentageCompleted
+src/live/live_stats.cpp	2541	s_sortedChallengeList	s_numSortedChallenges	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeComparePercentageCompleted
+src/live/live_stats.cpp	2549	s_sortedGlobalChallengeList	s_numSortedGlobalChallenges	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeComparePercentageCompleted
+src/live/live_stats.cpp	2597	s_sortedChallengeList	s_totalNumberOfUnlockedItems	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareNumToTargetValue
+src/live/live_stats.cpp	2604	s_sortedAttachmentsList	s_numSortedAttachments	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareNumToTargetValue
+src/live/live_stats.cpp	2611	s_sortedWeaponGroupList	s_numSortedWeaponGroup	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareNumToTargetValue
+src/live/live_stats.cpp	2621	s_sortedChallengeList	s_numSortedChallenges	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareNumToTargetValue
+src/live/live_stats.cpp	2629	s_sortedGlobalChallengeList	s_numSortedGlobalChallenges	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareNumToTargetValue
+src/live/live_stats.cpp	2650	s_sortedChallengeList	s_totalNumberOfUnlockedItems	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareReward
+src/live/live_stats.cpp	2657	s_sortedAttachmentsList	s_numSortedAttachments	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareReward
+src/live/live_stats.cpp	2664	s_sortedWeaponGroupList	s_numSortedWeaponGroup	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareReward
+src/live/live_stats.cpp	2674	s_sortedChallengeList	s_numSortedChallenges	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareReward
+src/live/live_stats.cpp	2682	s_sortedGlobalChallengeList	s_numSortedGlobalChallenges	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareReward
+src/live/live_stats.cpp	2706	s_sortedChallengeList	s_totalNumberOfUnlockedItems	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareDefault
+src/live/live_stats.cpp	2713	s_sortedAttachmentsList	s_numSortedAttachments	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareDefault
+src/live/live_stats.cpp	2720	s_sortedWeaponGroupList	s_numSortedWeaponGroup	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareDefault
+src/live/live_stats.cpp	2730	s_sortedChallengeList	s_numSortedChallenges	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareDefault
+src/live/live_stats.cpp	2738	s_sortedGlobalChallengeList	s_numSortedGlobalChallenges	0x24u	(int (__cdecl *)(const void *, const void *))LiveStats_ChallengeCompareDefault
+src/live/live_storage.cpp	2392	fsTask->descriptors	*fsTask->descriptorCount	0x838u	(int (__cdecl *)(const void *, const void *))LiveStorage_FileShareSortComparator_MostRecent
+src/live/live_storage.cpp	2398	fsTask->descriptors	*fsTask->descriptorCount	0x838u	(int (__cdecl *)(const void *, const void *))LiveStorage_FileShareSortComparator_MostPopular
+src/live/live_storage.cpp	3784	ratingTask->outStatsInfo	*ratingTask->outNumRatingsReceived	0xC8u	(int (__cdecl *)(const void *, const void *))LiveStorage_FileShare_VoteRankComparator
+src/live/live_win.cpp	1729	s_recentServers	0x1Eu	0x10u	(int (__cdecl *)(const void *, const void *))compareRecentServers
+src/physics/phys_main.cpp	2460	v17	v42	8u	(int (__cdecl *)(const void *, const void *))SortSModelsByDist
+src/physics/phys_main.cpp	2913	base	num	sizeof((base)[0])	SortModelsFunc
+src/physics/phys_main.cpp	2984	smodel_debug_infos	nmodels	8u	(int(__cdecl *)(const void *, const void *))SortSModelsByDist
+src/qcommon/com_bsp_load_obj.cpp	783	comWorld.burnableCells	comWorld.numBurnableCells	0xCu	(int (__cdecl *)(const void *, const void *))Com_BurnableCellSort
+src/qcommon/huffman.cpp	114	heap	0x100u	sizeof((heap)[0])	nodeCmp
+src/qcommon/huffman.cpp	124	&heap[heapHead]	256 - heapHead	sizeof((&heap[heapHead])[0])	nodeCmp
+src/qcommon/mem_track.cpp	1139	sorted_mem_track	len	0x98u	(int (__cdecl *)(const void *, const void *))mem_track_compare
+src/server/sv_autoplaylist.cpp	210	playlists	0x40u	8u	(int (__cdecl *)(const void *, const void *))comparePlaylists
+src/ui/ui_main_pc.cpp	647	info->lines[1]	info->numLines - 1	0x20u	(int (__cdecl *)(const void *, const void *))ScoreBar_CompareScores
+src/ui/ui_server.cpp	645	&sharedUiInfo.serverStatusInfo.lines[31][1]	sharedUiInfo.serverStatus.numDisplayServers	sizeof((&sharedUiInfo.serverStatusInfo.lines[31][1])[0])	(int(__cdecl *)(const void *, const void *))UI_ServersQsortCompare
+src/universal/aabbtree.cpp	308	sortedMins	minMaxCount	sizeof((sortedMins)[0])	(int (__cdecl *)(const void *, const void *))compare_floats
+src/universal/aabbtree.cpp	309	sortedMaxs	minMaxCount	sizeof((sortedMaxs)[0])	(int (__cdecl *)(const void *, const void *))compare_floats
+src/universal/aabbtree.cpp	310	sortedCoplanar	coplanarCount	sizeof((sortedCoplanar)[0])	(int (__cdecl *)(const void *, const void *))compare_floats
+src/universal/com_files.cpp	2045	s0	numfiles	sizeof((s0)[0])	(int(__cdecl *)(const void *, const void *))iwdsort
+src/universal/com_stringtable_obj.cpp	200	table->cellIndex	valueCount	2u	(int (__cdecl *)(const void *, const void *))CellCompare
+src/universal/curve.cpp	349	this	this->mNumNodes	0x24u	(int (__cdecl *)(const void *, const void *))cCurve::CurveSortCompare
+src/xanim/xanim_load_obj.cpp	610	base	numBones	2u	(int (__cdecl *)(const void *, const void *))XAnimCompareQuatParts
+src/xanim/xanim_load_obj.cpp	655	v86	numBones	2u	(int (__cdecl *)(const void *, const void *))XAnimCompareTransParts

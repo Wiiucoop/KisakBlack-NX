@@ -1023,9 +1023,9 @@ char __cdecl Ragdoll_CreatePhysObj(RagdollBody *body, BoneDef *boneDef, Bone *bo
     if ( bone->rigidBody )
     {
         userData = (PhysObjUserData *)bone->rigidBody;
-        if ( ((*((unsigned int *)cent + 201) >> 19) & 1) != 0 )
+        if ( ((cent->clientFlags >> 19) & 1) != 0 )
             userData->m_flags |= 4u;
-        if ( ((*((unsigned int *)cent + 201) >> 20) & 1) != 0 )
+        if ( ((cent->clientFlags >> 20) & 1) != 0 )
             userData->m_flags |= 0x10u;
         userData->m_flags |= 0x20u;
         return 1;

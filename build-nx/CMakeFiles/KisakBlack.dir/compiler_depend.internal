@@ -145459,34 +145459,65 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/_ansi.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/_newlib_version.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/alloca.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/c++allocator.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/c++config.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/cpu_defines.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/os_defines.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/algorithm
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/backward/binders.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bit
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/algorithmfwd.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/alloc_traits.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/allocator.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/concept_check.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/cpp_type_traits.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/erase_if.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/exception.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/exception_defines.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/functional_hash.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/hash_bytes.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/intcmp.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/invoke.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/iterator_concepts.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/max_size_type.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/memory_resource.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/memoryfwd.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/move.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/new_allocator.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/new_except.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/new_throw.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/predefined_ops.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ptr_traits.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/range_access.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ranges_algo.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ranges_algobase.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ranges_base.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ranges_cmp.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/ranges_util.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/requires_hosted.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/specfun.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/std_abs.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stdexcept_throw.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stdexcept_throwfwd.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_algo.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_algobase.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_bvector.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_construct.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_function.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_heap.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_iterator.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_iterator_base_funcs.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_iterator_base_types.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_pair.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_relops.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_tempbuf.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_uninitialized.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_vector.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/uniform_int_dist.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/uses_allocator.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/uses_allocator_args.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/utility.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/vector.tcc
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/version.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/cmath
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/compare
@@ -145498,11 +145529,16 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/cstring
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/debug/assertions.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/debug/debug.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/ext/alloc_traits.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/ext/numeric_traits.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/ext/type_traits.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/initializer_list
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/limits
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/math.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/new
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/numbers
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/pstl/execution_defs.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/pstl/glue_algorithm_defs.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/pstl/pstl_config.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/stdlib.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/tr1/bessel_function.tcc
@@ -145517,7 +145553,10 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/tr1/poly_laguerre.tcc
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/tr1/riemann_zeta.tcc
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/tr1/special_function_util.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/tuple
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/type_traits
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/utility
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/vector
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/ctype.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/errno.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/machine/_default_types.h

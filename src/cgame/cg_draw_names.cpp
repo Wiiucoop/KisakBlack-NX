@@ -652,7 +652,7 @@ bool __cdecl CG_CheckIfDrivingRemoteControlVehicle(int localClientNum, unsigned 
         if ( ParentID < com_maxclients->current.integer )
         {
             ParentEnt = CG_GetEntity(localClientNum, ParentID);
-            if ( ((*((unsigned int *)ParentEnt + 201) >> 1) & 1) != 0 && (ParentEnt->nextState.lerp.eFlags2 & 0x10000000) != 0 )
+            if ( ((ParentEnt->clientFlags >> 1) & 1) != 0 && (ParentEnt->nextState.lerp.eFlags2 & 0x10000000) != 0 )
                 return 1;
         }
     }
@@ -830,7 +830,7 @@ char __cdecl CG_IsValidCrosshairEntity(int localClientNum, const cg_s *cgameGlob
     centity_s *vehCent; // [esp+Ch] [ebp-Ch]
     bool allowOccupant; // [esp+17h] [ebp-1h]
 
-    if ( ((*((unsigned int *)cent + 201) >> 1) & 1) == 0 )
+    if ( ((cent->clientFlags >> 1) & 1) == 0 )
         return 0;
     if ( cent->nextState.eType != 1 && cent->nextState.eType != 14 )
         return 0;

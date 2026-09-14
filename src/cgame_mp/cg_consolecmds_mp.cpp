@@ -308,7 +308,7 @@ void __cdecl CG_FollowCamera_f()
                 {
                     cgameGlob->followCameraClient = clientNum;
                     centTarget = CG_GetEntity(0, cgameGlob->followCameraClient);
-                    if ( ((*((unsigned int *)centTarget + 201) >> 1) & 1) != 0 )
+                    if ( ((centTarget->clientFlags >> 1) & 1) != 0 )
                     {
                         cgameGlob->movieCameraOrigin[0] = centTarget->pose.origin[0];
                         cgameGlob->movieCameraOrigin[1] = centTarget->pose.origin[1];

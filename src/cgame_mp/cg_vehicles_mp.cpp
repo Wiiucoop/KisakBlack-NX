@@ -10,7 +10,7 @@ DObj *__cdecl GetVehicleEntDObj(int localClientNum, centity_s *centVeh)
 {
     const cgs_t *cgs; // [esp+4h] [ebp-8h]
 
-    if ( ((*((unsigned int *)centVeh + 201) >> 1) & 1) == 0
+    if ( ((centVeh->clientFlags >> 1) & 1) == 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\cgame_mp\\cg_vehicles_mp.cpp",
                     60,
@@ -214,7 +214,7 @@ void __cdecl GetTagMatrix(
     }
     if ( centVeh->nextState.eType == 14 )
     {
-        if ( ((*((unsigned int *)centVeh + 201) >> 1) & 1) != 0 )
+        if ( ((centVeh->clientFlags >> 1) & 1) != 0 )
         {
             objVeh = GetVehicleEntDObj(localClientNum, centVeh);
             if ( objVeh )

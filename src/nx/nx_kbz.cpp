@@ -302,13 +302,24 @@ public:
             return;
         auto it = std::lower_bound(m_slots.begin(), m_slots.end(),
                                    std::make_pair(given, (uint8_t *)nullptr));
-        for (; it != m_slots.end() && it->first == given; ++it)
+        uint32_t n = 0;
+        for (; it != m_slots.end() && it->first == given; ++it, ++n)
             memcpy(it->second, &added, sizeof(void *));
+        // Probe: a registered menu no relocation points at keeps whatever
+        // reference reaches it pointing at the block copy.
+        if (!n) {
+            ++m_unreferenced;
+            const menuDef_t *m = (const menuDef_t *)given;
+            printf("[nx-kbz] menu '%s' block=%p pool=%p has no relocated slot\n",
+                   m->window.name ? m->window.name : "(null)", given, added);
+        }
     }
 
     uint32_t slotCount() const { return (uint32_t)m_slots.size(); }
+    uint32_t unreferenced() const { return m_unreferenced; }
 
 private:
+    uint32_t m_unreferenced = 0;
     std::vector<std::pair<const void *, uint8_t *>> m_slots; // menu header -> slot
 };
 
@@ -384,9 +395,10 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
         if (type == ASSET_TYPE_MENU)
             menuSlots.redirect(h.data, added.data);
     }
-    if (menuSlots.slotCount())
-        Com_Printf(16, "NX_KBZ: '%s' redirected %u menu slots to their pool entries\n",
-                   path, menuSlots.slotCount());
+    if (menuSlots.slotCount() || menuSlots.unreferenced())
+        Com_Printf(16, "NX_KBZ: '%s' redirected %u menu slots to their pool entries"
+                       " (%u menus with no slot)\n",
+                   path, menuSlots.slotCount(), menuSlots.unreferenced());
 
     // 4. build the runtime objects db_load.cpp would have built. This runs
     // after registration so a builder may look assets up by name if it needs to.

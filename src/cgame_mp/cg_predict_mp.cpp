@@ -375,7 +375,7 @@ void __cdecl CG_PredictPlayerState(int localClientNum)
     }
     cgameGlob->predictedPlayerEntity.nextState.number = ps->clientNum;
     BG_PlayerStateToEntityState(ps, &cgameGlob->predictedPlayerEntity.nextState, 0, 0);
-    *((unsigned int *)&cgameGlob->predictedPlayerEntity + 201) |= 2u;
+    cgameGlob->predictedPlayerEntity.clientFlags |= 2u;
     memcpy(
         &cgameGlob->predictedPlayerEntity.currentState,
         &cgameGlob->predictedPlayerEntity.nextState.lerp,
@@ -494,7 +494,7 @@ void __cdecl CG_PredictPlayerState_Internal(int localClientNum)
     {
         CG_InterpolatePlayerState(localClientNum, 0);
         centTarget = CG_GetEntity(localClientNum, cgameGlob->followCameraClient);
-        if ( ((*((unsigned int *)centTarget + 201) >> 1) & 1) != 0 )
+        if ( ((centTarget->clientFlags >> 1) & 1) != 0 )
         {
             CL_GetUserCmd(localClientNum, current, &latestCmd);
             FollowCameraMove(cgameGlob, centTarget, &latestCmd);
@@ -941,7 +941,7 @@ char __cdecl CG_ShouldInterpolatePlayerStateViewClamp(int localClientNum, const 
         cent = CG_GetEntity(localClientNum, prevSnap->ps.viewlocked_entNum);
         if ( cent )
         {
-            if ( ((*((unsigned int *)cent + 201) >> 1) & 1) != 0 )
+            if ( ((cent->clientFlags >> 1) & 1) != 0 )
             {
                 vehInfo = CG_GetVehicleInfo(cent->nextState.vehicleState.vehicleInfoIndex);
                 if ( !vehInfo

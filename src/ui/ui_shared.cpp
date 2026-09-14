@@ -10631,7 +10631,7 @@ void __cdecl Menu_PaintAll_AppendToVisibleList(char *stringBegin, unsigned int s
 
     if (!lastNewline)
     {
-        // No newline in string — treat start as line beginning
+        // No newline in string ï¿½ treat start as line beginning
         lastNewline = stringBegin - 1;
     }
 
@@ -11072,10 +11072,43 @@ void __cdecl UI_AddMenu(int localClientNum, UiContext *dc, menuDef_t *menu, int 
         if ( dc->Menus[i] == menu )
             return;
     }
+#ifdef KISAK_NX
+    // Probe: which of the three asserts below fires, and on what. Prints only;
+    // the one DB_FindXAssetHeader call is reused by the touchMenu assert so the
+    // lookup still happens exactly once.
+    printf("[nx-ui] UI_AddMenu: count=%d menu=%p name='%s'\n", dc->menuCount, (void *)menu,
+           menu && menu->window.name ? menu->window.name : "(null)");
+    if ( dc->menuCount >= 600 )
+        printf("[nx-ui] UI_AddMenu: LIMIT count=%d reached adding '%s'\n", dc->menuCount,
+               menu && menu->window.name ? menu->window.name : "(null)");
+#endif
     if ( dc->menuCount >= 600 )
         Com_Error(ERR_DROP, "UI_AddMenu: EXE_ERR_OUT_OF_MEMORY");
+#ifdef KISAK_NX
+    if ( !menu )
+        printf("[nx-ui] UI_AddMenu: NULL menu at count=%d\n", dc->menuCount);
+#endif
     if ( !menu && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ui\\ui_shared.cpp", 11051, 0, "%s", "menu") )
         __debugbreak();
+#ifdef KISAK_NX
+    if ( dc->menuCount >= 0x258u )
+        printf("[nx-ui] UI_AddMenu: INDEX count=%d out of [0, 600)\n", dc->menuCount);
+    menuDef_t *touchMenu = 0;
+    if ( useFastFile->current.enabled && menu )
+    {
+        touchMenu = DB_FindXAssetHeader(ASSET_TYPE_MENU, (char *)menu->window.name, 1, -1).menu;
+        if ( touchMenu != menu )
+        {
+            // zoneIndex 0 is a default entry: the name was never registered.
+            XAssetEntryPoolEntry *e = DB_FindXAssetEntry(ASSET_TYPE_MENU, menu->window.name);
+            printf("[nx-ui] UI_AddMenu: TOUCHMENU '%s' count=%d list=%p pool=%p pool.name='%s'"
+                   " entry.zone=%d entry.nextOverride=%d\n",
+                   menu->window.name, dc->menuCount, (void *)menu, (void *)touchMenu,
+                   touchMenu && touchMenu->window.name ? touchMenu->window.name : "(null)",
+                   e ? (int)e->entry.zoneIndex : -1, e ? (int)e->entry.nextOverride : -1);
+        }
+    }
+#endif
     if ( dc->menuCount >= 0x258u
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\ui\\ui_shared.cpp",
@@ -11088,7 +11121,11 @@ void __cdecl UI_AddMenu(int localClientNum, UiContext *dc, menuDef_t *menu, int 
         __debugbreak();
     }
     if ( useFastFile->current.enabled
+#ifdef KISAK_NX
+        && touchMenu != menu
+#else
         && DB_FindXAssetHeader(ASSET_TYPE_MENU, (char*)menu->window.name, 1, -1).menu != menu
+#endif
         && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ui\\ui_shared.cpp", 11058, 0, "%s", "touchMenu == menu") )
     {
         __debugbreak();

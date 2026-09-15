@@ -42,9 +42,9 @@ void __cdecl Demo_DrawVerticalLine(
                 const float *color,
                 Material *material);
 int __cdecl Demo_GetSegmentCount();
-clipSegment *__cdecl Demo_GetSegmentName(int index);
+const char *__cdecl Demo_GetSegmentName(int index);
 char *__cdecl Demo_GetSegmentTransition(int index);
-clipSegment *__cdecl Demo_GetSegmentInformation(int index, const char *s);
+const char *__cdecl Demo_GetSegmentInformation(int index, const char *s);
 char __cdecl Demo_IsPauseMenuOpen(int localClientNum);
 void __cdecl Demo_OpenSavePopUp(int localClientNum, int type);
 bool __cdecl Demo_IsSaveDialogOpen(int localClientNum);

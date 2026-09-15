@@ -15532,15 +15532,15 @@ CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o: CMakeFiles/Kisak
 CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o: /c/dev/CBO1-NX/src/universal/com_expressions_eval.cpp
 CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o: CMakeFiles/KisakBlack.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/c/dev/CBO1-NX/build-nx/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1105) "Building CXX object CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -MD -MT CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o -MF CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o.d -o CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o -c /c/dev/CBO1-NX/src/universal/com_expressions_eval.cpp
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o -MF CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o.d -o CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o -c /c/dev/CBO1-NX/src/universal/com_expressions_eval.cpp
 
 CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.i"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -E /c/dev/CBO1-NX/src/universal/com_expressions_eval.cpp > CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.i
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /c/dev/CBO1-NX/src/universal/com_expressions_eval.cpp > CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.i
 
 CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.s"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -S /c/dev/CBO1-NX/src/universal/com_expressions_eval.cpp -o CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.s
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /c/dev/CBO1-NX/src/universal/com_expressions_eval.cpp -o CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.s
 
 CMakeFiles/KisakBlack.dir/src/universal/com_fileaccess.o: CMakeFiles/KisakBlack.dir/flags.make
 CMakeFiles/KisakBlack.dir/src/universal/com_fileaccess.o: /c/dev/CBO1-NX/src/universal/com_fileaccess.cpp

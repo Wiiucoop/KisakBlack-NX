@@ -104,6 +104,11 @@ target_compile_options(${BIN_NAME} PRIVATE
 set(NX_SANITIZED_SOURCES ${NX_SOURCES})
 list(FILTER NX_SANITIZED_SOURCES INCLUDE REGEX "\.(c|cpp)$")
 
+# Graduated decompiled sources, newest last.
+list(APPEND NX_SANITIZED_SOURCES
+    "${SRC_DIR}/universal/com_expressions_eval.cpp"  # menu expression evaluator
+)
+
 get_target_property(NX_UNSANITIZED_SOURCES ${BIN_NAME} SOURCES)
 list(REMOVE_ITEM NX_UNSANITIZED_SOURCES ${NX_SANITIZED_SOURCES})
 

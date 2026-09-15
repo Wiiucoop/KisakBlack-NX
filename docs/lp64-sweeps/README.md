@@ -217,8 +217,8 @@ files with at least one pointer<->int truncation: 460
 sites:                                          3654
 ```
 
-Worst offenders: `cscr_compiler.cpp` 453, `com_expressions_eval.cpp` 308,
-`cscr_evaluate.cpp` 169, `physics_system_internal.cpp` 79.
+Worst offenders: `cscr_compiler.cpp` 453, `com_expressions_eval.cpp` 308
+(graduated), `cscr_evaluate.cpp` 169, `physics_system_internal.cpp` 79.
 
 So the plan is not another census. It is a ratchet: **a per-file allowlist of
 sources that build with warnings on**, extended one subsystem at a time. Each
@@ -249,7 +249,7 @@ the real toolchain:
 CMake prints the state at configure time:
 
 ```
--- LP64 warning policy: 10 sanitised sources build with warnings on, 2006 still build with -w
+-- LP64 warning policy: 11 sanitised sources build with warnings on, 2005 still build with -w
 ```
 
 ### Graduating a file
@@ -273,14 +273,54 @@ surfaced four real problems, which is the point:
   `std::rand()` call inside `std::random_shuffle` — latent, because nothing
   instantiates that template yet.
 
+### Graduated so far
+
+| file | diagnostics | what they were |
+| --- | ---: | --- |
+| `src/nx/**` | 4 | see above |
+| `src/universal/com_expressions_eval.cpp` | 305 | 297 pointer stores through `operandInternalDataUnion::intVal`, plus the reads and guards around them |
+
+`com_expressions_eval.cpp` was the first decompiled file through the ratchet, and
+it behaved as advertised: 298 errors and 7 warnings on the first build, 297 of
+them the single store shape
+
+```c
+result.internals.intVal = (int)CopyTempString(...);   // -> .string = ...
+```
+
+which is mechanical. The residue is what makes the exercise worth writing down:
+
+- **The crash was a read, not a store.** `GetSourceString` returned
+  `(char *)operand.internals.intVal`, so every string operand came back with its
+  top half gone — that is the null `strlen` in `LocalizeString`. The compiler
+  reported it as a *warning* (`-Wint-to-pointer-cast`), not an error, because
+  widening an `int` to a pointer is legal. **On a graduated file, read the
+  warnings too**; only the store direction is fatal on its own.
+- **The two guards had to be fixed by hand.** Both tested
+  `!data->internals.intVal` while their own assert message names
+  `internals.string`. Testing half a pointer is perfectly well-typed, so nothing
+  diagnosed it — same blind spot as a wrong struct offset.
+- **It reached outside the file.** A sanitised TU compiles its headers with
+  warnings on too, so `bdArray<T>`'s `return (int)this;` (x86 thiscall residue,
+  never read by any caller) became an error, and
+  `Demo_GetSegmentInformation` turned out to be declared `clipSegment *` for a
+  function that only ever returns strings — the decompiler's guess, valid on x86
+  because `clipSegment::name` is at offset 0. Both were retyped rather than cast
+  away.
+- **What it left behind.** `cscr_animtree.h:36,48` still warn: the `scr_anim_s`
+  and `scr_animtree_t` `int` constructors reconstitute a pointer from
+  `Scr_Value::u.intValue`. That is the clientscript VM's truncation, not this
+  file's, and it closes when that subsystem graduates.
+
 ### Why this beats a census
 
 A sweep tells you how many defects exist today. The allowlist makes each one
 *stay* fixed, and it costs nothing to maintain: the build is the check. The
 sweeps in this directory remain useful for the classes the compiler cannot see —
 a wrong struct offset is perfectly well-typed — but for this class they are the
-wrong tool, and `com_expressions_eval.cpp` is the next subsystem to go through
-the ratchet.
+wrong tool. `com_expressions_eval.cpp` has been through it; the clientscript
+group — `cscr_compiler.cpp`, `cscr_evaluate.cpp`, `cscr_vm.cpp` — is the next
+subsystem, and `cscr_animtree.h` is already pointing at it.
 
 ## Running it
 

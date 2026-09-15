@@ -360,12 +360,12 @@ int __cdecl Demo_GetSegmentCount()
         return 0;
 }
 
-clipSegment *__cdecl Demo_GetSegmentName(int index)
+const char *__cdecl Demo_GetSegmentName(int index)
 {
     if ( Demo_IsPlaybackInited() )
-        return &demo.playback->segments[index];
+        return demo.playback->segments[index].name;
     else
-        return (clipSegment *)"";
+        return "";
 }
 
 char *__cdecl Demo_GetSegmentTransition(int index)
@@ -381,7 +381,7 @@ char *__cdecl Demo_GetSegmentTransition(int index)
     return va("%s", s);
 }
 
-clipSegment *__cdecl Demo_GetSegmentInformation(int index, const char *s)
+const char *__cdecl Demo_GetSegmentInformation(int index, const char *s)
 {
     int i; // [esp+0h] [ebp-1Ch]
     int total; // [esp+4h] [ebp-18h]
@@ -392,7 +392,7 @@ clipSegment *__cdecl Demo_GetSegmentInformation(int index, const char *s)
     outputStr = "";
     total = 0;
     if ( !Demo_IsPlaybackInited() )
-        return (clipSegment *)"";
+        return "";
     if ( !I_stricmp(s, "name") )
         return Demo_GetSegmentName(index);
     if ( I_stricmp(s, "duration") )
@@ -403,7 +403,7 @@ clipSegment *__cdecl Demo_GetSegmentInformation(int index, const char *s)
             {
                 if ( I_stricmp(s, "totalClipDurationLocString") )
                 {
-                    return (clipSegment *)"";
+                    return "";
                 }
                 else
                 {
@@ -412,12 +412,12 @@ clipSegment *__cdecl Demo_GetSegmentInformation(int index, const char *s)
                     outputStr = UI_SafeTranslateString("MENU_TOTAL_CLIP_DURATION");
                     Demo_GetDuration(output, total);
                     outputStr = UI_ReplaceConversionString((char *)outputStr, output);
-                    return (clipSegment *)va("%s", outputStr);
+                    return va("%s", outputStr);
                 }
             }
             else
             {
-                return (clipSegment *)Demo_GetSegmentTransition(index);
+                return Demo_GetSegmentTransition(index);
             }
         }
         else
@@ -425,13 +425,13 @@ clipSegment *__cdecl Demo_GetSegmentInformation(int index, const char *s)
             outputStr = UI_SafeTranslateString("MENU_DEMO_DURATION");
             Demo_GetDuration(output, demo.playback->segments[index].duration);
             outputStr = UI_ReplaceConversionString((char *)outputStr, output);
-            return (clipSegment *)va("%s", outputStr);
+            return va("%s", outputStr);
         }
     }
     else
     {
         Demo_GetDuration(output, demo.playback->segments[index].duration);
-        return (clipSegment *)va("%s", output);
+        return va("%s", output);
     }
 }
 

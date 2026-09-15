@@ -2223,8 +2223,6 @@ CXX_FLAGS = -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ftls-model=lo
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_expressions.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
-# Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_expressions_eval.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
-
 # Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_fileaccess.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/universal/com_files.o_OPTIONS = -w;-fpermissive;-Wno-narrowing

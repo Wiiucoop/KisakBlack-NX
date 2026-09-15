@@ -61,7 +61,7 @@ Fixed by reading the argument as what it is:
     return lnode->weight - rnode->weight;
 ```
 
-### The expression operand stack — `com_expressions_eval.cpp` (3 of 300 fixed)
+### The expression operand stack — `com_expressions_eval.cpp` (closed)
 
 A menu expression reading a dvar returned garbage, and the dvar lookup that
 followed found nothing. The cause was not the lookup and not the transcoded
@@ -92,15 +92,29 @@ dvar name never reached `Dvar_FindVar` intact. Fixed by copying the union whole.
 
 Two details worth keeping:
 
-- The guards did not help. Both assert on `!data->internals.intVal`, i.e. the low
-  half only, so a pointer truncated to garbage passes and a pointer whose low
-  half is zero would falsely trip. Their own message says
-  `internals.string`. Still to correct.
-- The three copies are the crash; they are not the file. 297 further sites store
-  a pointer with `result.internals.intVal = (int)CopyTempString(...)`,
-  `(int)Dvar_DisplayableValue(...)`, `(int)""`, and `GetSourceString:1695` reads
-  one back with `return (char *)operand.internals.intVal;`. That whole file goes
-  through the warning ratchet rather than by hand.
+- The guards did not help. Both asserted on `!data->internals.intVal`, i.e. the
+  low half only, so a pointer truncated to garbage passed and a pointer whose low
+  half is zero would falsely trip — while their own message says
+  `internals.string`. Testing half a pointer is well-typed, so the ratchet never
+  saw them; corrected by hand.
+- The three copies were the crash; they were not the file. The remaining 297
+  stores (`result.internals.intVal = (int)CopyTempString(...)`,
+  `(int)Dvar_DisplayableValue(...)`, `(int)""`) and the read back in
+  `GetSourceString` went through the warning ratchet instead — see
+  "Closing the class one subsystem at a time" in [../README.md](../README.md).
+
+The read is worth singling out. `GetSourceString` returned
+
+```c
+    if ( operand.dataType == VAL_STRING )
+        return (char *)operand.internals.intVal;   // top half gone
+```
+
+which is how a menu that draws at all ends up in
+`LocalizeString` → `strlen(NULL)`: the operand goes onto the stack whole and
+comes back off as its low 32 bits. The compiler rates that a **warning**
+(`-Wint-to-pointer-cast`), not an error — widening `int` to a pointer is legal —
+so on a graduated file the warnings matter as much as the errors.
 
 ### `BG_UnlockablesCompareItemsBySortKey` (fixed in `c12c1b9`)
 

@@ -8,7 +8,7 @@
 
 /*
 ===============================================================================
-  bdArray<T> — binary-faithful implementation
+  bdArray<T> ï¿½ binary-faithful implementation
 ===============================================================================
 */
 
@@ -39,7 +39,7 @@ struct bdArray
     // clear (destroys elements + frees buffer)
     // ---------------------------------------------------------------------
 
-    inline int clear()
+    inline void clear()
     {
         unsigned int count = m_size;
         T *data = m_data;
@@ -55,17 +55,16 @@ struct bdArray
         m_data = nullptr;
         m_capacity = 0;
         m_size = 0;
-        return (int)this;
     }
 
     // ---------------------------------------------------------------------
     // capacity decrease (matches shrink heuristic exactly)
     // ---------------------------------------------------------------------
 
-    inline int decreaseCapacity(unsigned int a2)
+    inline void decreaseCapacity(unsigned int a2)
     {
         if (m_capacity <= 4 * m_size)
-            return (int)this;
+            return;
 
         unsigned int reduce;
         if (a2 <= m_capacity - m_size)
@@ -94,14 +93,13 @@ struct bdArray
 
         bdMemory::deallocate(m_data);
         m_data = newData;
-        return (int)this;
     }
 
     // ---------------------------------------------------------------------
     // capacity increase
     // ---------------------------------------------------------------------
 
-    inline int increaseCapacity(unsigned int a2)
+    inline void increaseCapacity(unsigned int a2)
     {
         unsigned int grow = (a2 <= m_capacity) ? m_capacity : a2;
         unsigned int newCap = grow + m_capacity;
@@ -121,17 +119,16 @@ struct bdArray
 
         m_data = newData;
         m_capacity = newCap;
-        return (int)this;
     }
 
     // ---------------------------------------------------------------------
     // assignment operator
     // ---------------------------------------------------------------------
 
-    inline int operator=(const bdArray &rhs)
+    inline bdArray &operator=(const bdArray &rhs)
     {
         if (this == &rhs)
-            return (int)this;
+            return *this;
 
         unsigned int rhsSize = rhs.m_size;
 
@@ -146,7 +143,8 @@ struct bdArray
                     m_data[i].m_address.~bdInetAddr();
 
                 m_size = rhsSize;
-                return decreaseCapacity(0);
+                decreaseCapacity(0);
+                return *this;
             }
             else
             {
@@ -158,7 +156,7 @@ struct bdArray
                     new (&m_data[i]) T(&rhs.m_data[i]);
 
                 m_size = rhsSize;
-                return rhsSize;
+                return *this;
             }
         }
 
@@ -166,7 +164,7 @@ struct bdArray
         m_data = uninitializedCopy(rhs);
         m_capacity = rhs.m_capacity;
         m_size = rhsSize;
-        return rhsSize;
+        return *this;
     }
 
     // ---------------------------------------------------------------------

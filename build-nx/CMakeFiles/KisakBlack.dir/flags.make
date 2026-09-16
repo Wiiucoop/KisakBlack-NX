@@ -683,8 +683,6 @@ CXX_FLAGS = -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ftls-model=lo
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_marks.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
-# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
-
 # Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material_consts.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing

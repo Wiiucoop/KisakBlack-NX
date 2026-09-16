@@ -107,6 +107,7 @@ list(FILTER NX_SANITIZED_SOURCES INCLUDE REGEX "\.(c|cpp)$")
 # Graduated decompiled sources, newest last.
 list(APPEND NX_SANITIZED_SOURCES
     "${SRC_DIR}/universal/com_expressions_eval.cpp"  # menu expression evaluator
+    "${SRC_DIR}/gfx_d3d/r_material.cpp"              # material registry / duplication
 )
 
 get_target_property(NX_UNSANITIZED_SOURCES ${BIN_NAME} SOURCES)

@@ -421,6 +421,15 @@ struct MaterialMemory // sizeof=0x8
         int memory;                                                 // XREF: std::_Sort_heap<MaterialMemory *,bool (*)(MaterialMemory const &,MaterialMemory const &)>(MaterialMemory *,MaterialMemory *,bool (*)(MaterialMemory const &,MaterialMemory const &))+51/w
 };
 
+// nx-port: la struct che l'assert di R_GetMaterialList nomina
+// ("materialList->count < ARRAY_COUNT( materialList->sorted )") e che il
+// decompile aveva appiattito in un char* piu' aritmetica a mano.
+struct MaterialList
+{
+        unsigned int count;
+        MaterialMemory sorted[4096];
+};
+
 struct PerMapMaterialTable // sizeof=0x8
 {                                                                             // XREF: .rdata:s_permapMaterials/r
         const char *name;
@@ -478,7 +487,7 @@ inline Material *Material_RegisterHandle(const char *name, int imgTrack)
     return Material_RegisterHandle((char *)name, imgTrack);
 }
 void __cdecl R_MaterialList_f();
-void __cdecl R_GetMaterialList(XAssetHeader header, char *data);
+void __cdecl R_GetMaterialList(XAssetHeader header, MaterialList *materialList);
 int __cdecl R_GetMaterialMemory(Material *material);
 bool __cdecl R_MaterialCompare(const MaterialMemory &material0, const MaterialMemory &material1);
 void __cdecl R_MaterialEdit_f();

@@ -990,28 +990,45 @@ Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
     }
     else
     {
+        // nx-port: il decompile portava la sizeof(Material) x86 -- 192 -- in
+        // quattro punti (la allocazione, la memcpy, l'offset a cui scrive il
+        // nome) e gli indici di parola +45/+46/+47 per le tre tabelle. Su LP64
+        // la struct e' 208 e le tabelle stanno a 184/192/200, quindi ogni
+        // scrittura a 32 bit finiva dentro il puntatore PRECEDENTE:
+        //
+        //   +45 -> byte 180 = meta' alta di techniqueSet   (176..183)
+        //   +46 -> byte 184 = meta' bassa di textureTable  (184..191)
+        //   +47 -> byte 188 = meta' alta di textureTable
+        //
+        // Il nome, scritto a mtlNew + 192, cadeva sopra constantTable e
+        // stateBitsTable invece che dopo la struct. Material_MakeDefault e'
+        // l'unico chiamante che conta: ogni material non trovato -- e quindi
+        // duplicato da $default -- usciva di qui con un techniqueSet non nullo
+        // ma con i 32 bit alti sovrascritti, cioe' un puntatore selvaggio che
+        // il renderer dereferenzia al primo draw.
         v3 = strlen(name);
-        mtlNew = Material_Alloc(v3 + 193);
-        memcpy(mtlNew, mtlCopy, 0xC0u);
-        *(unsigned int *)mtlNew = (unsigned int)(mtlNew + 192);
-        memcpy(*(unsigned __int8 **)mtlNew, (unsigned __int8 *)name, v3 + 1);
-        stateBitsTableSize = 8 * mtlCopy->stateBitsCount;
-        *((unsigned int *)mtlNew + 47) = (unsigned int)Material_Alloc(stateBitsTableSize);
-        memcpy(*((unsigned __int8 **)mtlNew + 47), (unsigned __int8 *)mtlCopy->stateBitsTable, stateBitsTableSize);
+        mtlNew = Material_Alloc(v3 + 1 + sizeof(Material));
+        Material *mtlDup = (Material *)mtlNew;
+        memcpy(mtlDup, mtlCopy, sizeof(Material));
+        mtlDup->info.name = (const char *)(mtlNew + sizeof(Material));
+        memcpy((unsigned __int8 *)mtlDup->info.name, (unsigned __int8 *)name, v3 + 1);
+        stateBitsTableSize = sizeof(GfxStateBits) * mtlCopy->stateBitsCount;
+        mtlDup->stateBitsTable = (GfxStateBits *)Material_Alloc(stateBitsTableSize);
+        memcpy(mtlDup->stateBitsTable, (unsigned __int8 *)mtlCopy->stateBitsTable, stateBitsTableSize);
         if ( mtlCopy->textureTable )
         {
-            textureTableSize = 16 * mtlCopy->textureCount;
-            *((unsigned int *)mtlNew + 45) = (unsigned int)Material_Alloc(textureTableSize);
-            memcpy(*((unsigned __int8 **)mtlNew + 45), (unsigned __int8 *)mtlCopy->textureTable, textureTableSize);
+            textureTableSize = sizeof(MaterialTextureDef) * mtlCopy->textureCount;
+            mtlDup->textureTable = (MaterialTextureDef *)Material_Alloc(textureTableSize);
+            memcpy(mtlDup->textureTable, (unsigned __int8 *)mtlCopy->textureTable, textureTableSize);
         }
         if ( mtlCopy->localConstantTable )
         {
-            constantTableSize = 32 * mtlCopy->constantCount;
-            *((unsigned int *)mtlNew + 46) = (unsigned int)Material_Alloc(constantTableSize);
-            memcpy(*((unsigned __int8 **)mtlNew + 46), (unsigned __int8 *)mtlCopy->localConstantTable, constantTableSize);
+            constantTableSize = sizeof(MaterialConstantDef) * mtlCopy->constantCount;
+            mtlDup->localConstantTable = (MaterialConstantDef *)Material_Alloc(constantTableSize);
+            memcpy(mtlDup->localConstantTable, (unsigned __int8 *)mtlCopy->localConstantTable, constantTableSize);
         }
-        Material_Add((Material *)mtlNew, hashIndex[0]);
-        return (Material *)mtlNew;
+        Material_Add(mtlDup, hashIndex[0]);
+        return mtlDup;
     }
 }
 
@@ -1212,14 +1229,22 @@ void __cdecl R_MaterialList_f()
     const char **p_name; // [esp+13Ch] [ebp-801Ch]
     int v3; // [esp+140h] [ebp-8018h]
     MaterialMemory *v4; // [esp+144h] [ebp-8014h]
-    unsigned int inData; // [esp+148h] [ebp-8010h] BYREF
-    MaterialMemory v6[4097]; // [esp+14Ch] [ebp-800Ch] BYREF
     float v7; // [esp+8154h] [ebp-4h]
+
+    // nx-port: erano `unsigned int inData` seguita da `MaterialMemory v6[4097]`
+    // sullo stack, e R_GetMaterialList scriveva oltre inData contando sul fatto
+    // che v6 la seguisse. Ora sono un MaterialList solo; static perche' su LP64
+    // sono 64 KB e CreateThread (nx_wincompat.cpp:357) ha un pavimento di stack
+    // di 128 KB.
+    static MaterialList s_materialList;
+    MaterialList *const materialList = &s_materialList;
+    MaterialMemory *const v6 = materialList->sorted;
+    unsigned int &inData = materialList->count;
 
     v3 = 0;
     Com_Printf(8, "-----------------------\n");
     inData = 0;
-    DB_EnumXAssets(ASSET_TYPE_MATERIAL, (void (__cdecl *)(XAssetHeader, void *))R_GetMaterialList, &inData, 0);
+    DB_EnumXAssets(ASSET_TYPE_MATERIAL, (void (__cdecl *)(XAssetHeader, void *))R_GetMaterialList, materialList, 0);
 
     //std::_Sort<RagdollSortStruct *,int,bool (__cdecl *)(RagdollSortStruct const &,RagdollSortStruct const &)>(
     //    v6,
@@ -1254,15 +1279,19 @@ void __cdecl R_MaterialList_f()
     Com_Printf(8, "Related commands: meminfo, imagelist, gfx_world, gfx_model, cg_drawfps, com_statmon, tempmeminfo\n");
 }
 
-void __cdecl R_GetMaterialList(XAssetHeader header, char *data)
+void __cdecl R_GetMaterialList(XAssetHeader header, MaterialList *materialList)
 {
     int memory; // [esp+0h] [ebp-Ch]
-    XAssetHeader *materialMemory; // [esp+4h] [ebp-8h]
+    MaterialMemory *materialMemory; // [esp+4h] [ebp-8h]
 
     memory = R_GetMaterialMemory(header.material);
     if ( memory )
     {
-        if ( *(unsigned int *)data >= 0x1000u
+        // nx-port: il decompile indirizzava la lista come &data[8 * count + 4],
+        // cioe' con MaterialMemory a 8 byte e il contatore a 4 -- vero solo su
+        // x86. Su LP64 MaterialMemory e' 16 e il primo elemento sta a 8, quindi
+        // ogni scrittura cadeva a meta' della voce precedente.
+        if ( materialList->count >= ARRAY_COUNT(materialList->sorted)
             && !Assert_MyHandler(
                         "C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_material.cpp",
                         1697,
@@ -1272,10 +1301,10 @@ void __cdecl R_GetMaterialList(XAssetHeader header, char *data)
         {
             __debugbreak();
         }
-        materialMemory = (XAssetHeader *)&data[8 * *(unsigned int *)data + 4];
-        materialMemory->xmodelPieces = header.xmodelPieces;
-        materialMemory[1].xmodelPieces = (XModelPieces *)memory;
-        ++*(unsigned int *)data;
+        materialMemory = &materialList->sorted[materialList->count];
+        materialMemory->material = header.material;
+        materialMemory->memory = memory;
+        ++materialList->count;
     }
 }
 
@@ -1778,8 +1807,11 @@ void __cdecl Material_UpdatePicmipSingle(XAssetHeader header)
 {
     int textureIndex; // [esp+4h] [ebp-4h]
 
-    for ( textureIndex = 0; textureIndex < BYTE2(header.xmodelPieces[14].name); ++textureIndex )
-        Material_UpdatePicmipForTexdef((const MaterialTextureDef *)&header.xmodelPieces[15].name[16 * textureIndex]);
+    // nx-port: xmodelPieces[14].name / [15].name erano Material::textureCount
+    // (byte 170) e Material::textureTable (byte 180) solo con XModelPieces a 12
+    // byte e MaterialTextureDef a 16. Su LP64 valgono 24 e 24.
+    for ( textureIndex = 0; textureIndex < header.material->textureCount; ++textureIndex )
+        Material_UpdatePicmipForTexdef(&header.material->textureTable[textureIndex]);
 }
 
 void __cdecl Material_UpdatePicmipForTexdef(const MaterialTextureDef *texdef)
@@ -1889,7 +1921,9 @@ unsigned int __cdecl Material_LoadFile(const char *filename, int *file)
 
 bool __cdecl IsValidMaterialHandle(Material *const handle)
 {
-    if ( ((unsigned __int8)handle & 3) != 0
+    // nx-port: reinterpret_cast<int> sul puntatore; i due bit bassi sono gli
+    // stessi, ma la conversione e' mal formata su LP64.
+    if ( (reinterpret_cast<uintptr_t>(handle) & 3) != 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_material.cpp",
                     2407,

@@ -141,6 +141,71 @@ One cosmetic leftover in `RB_StretchPicCmd:959`,
 low half of the name pointer for null. It picks the profiler's zone label, nothing
 more.
 
+### `r_material.cpp` — `Material_Duplicate` — 6 sites
+
+The fallback every missing material goes through. `Material_RegisterHandle` ->
+`Material_Register` -> `Material_MakeDefault` -> `Material_Duplicate(rgp.defaultMaterial,
+name)`: on PC a material the zone does not contain prints
+`WARNING: Could not find material '%s'` and draws as `$default`. On LP64 that
+path handed the renderer a wild pointer instead.
+
+| | |
+| --- | --- |
+| shape | `*((unsigned int *)mtlNew + 45 / 46 / 47)`, plus the same three as `unsigned __int8 **` |
+| x86 | bytes 180 / 184 / 188 — `textureTable`, `localConstantTable`, `stateBitsTable` |
+| LP64 | those tables are at 184 / 192 / 200; `sizeof(Material)` is 208, not 192 |
+| cause | four 8-byte pointers at the tail of a 192-byte struct |
+
+Each 32-bit store landed in the *previous* pointer:
+
+```
++45 -> byte 180 = upper half of techniqueSet  (176..183)
++46 -> byte 184 = lower half of textureTable  (184..191)
++47 -> byte 188 = upper half of textureTable
+```
+
+So the duplicate came out with `techniqueSet` non-null — the low half was copied
+from `$default` and looks right — and its top 32 bits overwritten by a truncated
+`Material_Alloc` return. Non-null, so every `!techniqueSet` assert passes; the
+first draw dereferences it.
+
+The census found six sites here. Four more in the same twenty lines it could not
+see, because they are struct *sizes* rather than indexed bases:
+
+| line | was | is |
+| --- | --- | --- |
+| alloc size | `Material_Alloc(v3 + 193)` | `v3 + 1 + sizeof(Material)` (209) |
+| copy length | `memcpy(mtlNew, mtlCopy, 0xC0u)` | `sizeof(Material)` — 0xC0 left the last 16 bytes uninitialised |
+| name slot | `*(unsigned int *)mtlNew = (unsigned int)(mtlNew + 192)` | `mtl->info.name = (const char *)(mtlNew + sizeof(Material))` — truncated *and* aimed 16 bytes short, writing the name over `constantTable` and `stateBitsTable` |
+| texture table size | `16 * mtlCopy->textureCount` | `sizeof(MaterialTextureDef)` — 16 on x86, **24** on LP64 |
+
+Fixed by naming every field. Verified against the DWARF layout probe:
+`sizeof(Material)` ilp32 192 / lp64 208, `MaterialTextureDef` 16 / 24,
+`MaterialConstantDef` 32 / 32, `GfxStateBits` 8 / 8.
+
+Confirmed the zone itself was innocent first: `$default` in
+`code_post_gfx_mp.kbz` carries `techniqueSet` -> the registered `2d` techset
+(technique index 4, `stateBitsEntry[4] == 0`), and all 446 materials in that zone
+have a non-null technique set. The pointer was correct on disk and destroyed on
+the first duplicate.
+
+Two more in the same file, same class, fixed with it:
+
+- `Material_UpdatePicmipSingle` read `textureCount` and `textureTable` as
+  `header.xmodelPieces[14].name` and `[15].name[16 * i]` — `XModelPieces` is 12
+  bytes on x86 and 24 on LP64, so neither offset survives, and the stride was the
+  x86 `MaterialTextureDef`. Reached from `Material_UpdatePicmipAll` /
+  `R_SetPicmip`.
+- `R_GetMaterialList` addressed its output as `&data[8 * count + 4]`, which is
+  `MaterialMemory` at 8 bytes behind a 4-byte counter. On LP64 that is 16 behind
+  8. Its caller `R_MaterialList_f` relied on `inData` and `v6[4097]` being
+  adjacent on the x86 stack; both now share a real `MaterialList` struct, the one
+  the surviving assert string already named. Console command only, not on the
+  draw path.
+
+With those, `r_material.cpp` compiles clean without `-w` or `-fpermissive` and
+has graduated into `NX_SANITIZED_SOURCES`.
+
 ## Open
 
 ### `flameGeneric_s + 23` — 24 sites

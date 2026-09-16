@@ -4752,15 +4752,15 @@ CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o: CMakeFiles/KisakBlack.dir/fl
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o: /c/dev/CBO1-NX/src/gfx_d3d/r_material.cpp
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o: CMakeFiles/KisakBlack.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/c/dev/CBO1-NX/build-nx/CMakeFiles --progress-num=$(CMAKE_PROGRESS_335) "Building CXX object CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -MD -MT CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o -MF CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o.d -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o -c /c/dev/CBO1-NX/src/gfx_d3d/r_material.cpp
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o -MF CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o.d -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.o -c /c/dev/CBO1-NX/src/gfx_d3d/r_material.cpp
 
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.i"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -E /c/dev/CBO1-NX/src/gfx_d3d/r_material.cpp > CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.i
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /c/dev/CBO1-NX/src/gfx_d3d/r_material.cpp > CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.i
 
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.s"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -S /c/dev/CBO1-NX/src/gfx_d3d/r_material.cpp -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.s
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /c/dev/CBO1-NX/src/gfx_d3d/r_material.cpp -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material.s
 
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material_consts.o: CMakeFiles/KisakBlack.dir/flags.make
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_material_consts.o: /c/dev/CBO1-NX/src/gfx_d3d/r_material_consts.cpp

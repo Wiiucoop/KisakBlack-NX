@@ -17,16 +17,28 @@ F=$(grep '^CXX_FLAGS' "$FM" | cut -d= -f2- | sed 's/ -g / /')
 I=$(grep '^CXX_INCLUDES' "$FM" | cut -d= -f2-)
 D=$(grep '^CXX_DEFINES' "$FM" | cut -d= -f2-)
 
-# ILP32 copy of the compat headers: in ILP32 `long` and LONG are the same type,
-# so the (volatile long*) Interlocked* overloads collide. Layout-only build, so
-# drop them rather than teach the shim about a second ABI.
+# ILP32 copy of the compat headers: a few convenience overloads in the shim
+# differ from their primary declaration only because a pointer is wider than an
+# int. Under ILP32 they collapse onto it and redeclare it:
+#   - the (volatile long *) Interlocked* overloads, since `long` == LONG there;
+#   - GetProcessAffinityMask(DWORD *), since DWORD_PTR == DWORD there.
+# Layout-only build, so drop them in the scratch copy rather than teach the shim
+# about a second ABI.
 rm -rf compat_ilp32 && cp -r "$REPO/src/nx/compat" compat_ilp32
 python - <<'PY'
 p = 'compat_ilp32/windows.h'
 s = open(p).read()
-a = s.index('static inline LONG InterlockedIncrement(volatile long *p)')
-b = s.index('}', s.index('static inline LONG InterlockedCompareExchange(volatile long *p')) + 1
-s = s[:a] + '#if __SIZEOF_LONG__ == 8\n' + s[a:b] + '\n#endif\n' + s[b:]
+
+def drop(first, last):
+    global s
+    a = s.index(first)
+    b = s.index('}', s.index(last)) + 1
+    s = s[:a] + '#if __SIZEOF_POINTER__ == 8\n' + s[a:b] + '\n#endif\n' + s[b:]
+
+drop('static inline LONG InterlockedIncrement(volatile long *p)',
+     'static inline LONG InterlockedCompareExchange(volatile long *p')
+drop('static inline BOOL GetProcessAffinityMask(HANDLE process, DWORD *processMask',
+     'static inline BOOL GetProcessAffinityMask(HANDLE process, DWORD *processMask')
 open(p, 'w').write(s)
 PY
 

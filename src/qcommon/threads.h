@@ -71,7 +71,7 @@ bool __cdecl Sys_HaveSuspendedDiscReads(ThreadOwner owner);
 void __cdecl Sys_WaitDiscReads();
 void __cdecl Sys_InitWorkerThreadContext();
 void __cdecl Sys_ResumeThread(unsigned int threadContext);
-int __cdecl Sys_RendererSleep();
+void *__cdecl Sys_RendererSleep();
 bool __cdecl Sys_RendererReady();
 void __cdecl Sys_RenderCompleted();
 void __cdecl Sys_FrontEndSleep();

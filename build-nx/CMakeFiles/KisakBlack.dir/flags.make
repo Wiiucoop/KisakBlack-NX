@@ -713,8 +713,6 @@ CXX_FLAGS = -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ftls-model=lo
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_reflection_probe.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
-# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
-
 # Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendertarget.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rope_render.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
@@ -788,8 +786,6 @@ CXX_FLAGS = -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ftls-model=lo
 # Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_xsurface_load_obj.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_xsurface_optimize.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
-
-# Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_compositing.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
@@ -2068,8 +2064,6 @@ CXX_FLAGS = -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -ftls-model=lo
 # Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/sv_msg_write.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/sv_msg_write_mp.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
-
-# Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/threads.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 
 # Custom options: CMakeFiles/KisakBlack.dir/src/qcommon/tl_support.o_OPTIONS = -w;-fpermissive;-Wno-narrowing
 

@@ -46,7 +46,16 @@ void *demoStreamingReady;
 unsigned int g_networkOverrideThread;
 ThreadOwner g_discReadsOwner;
 
-LONG smpData;
+// nx-port: this is the whole front-end -> back-end handoff. It carries a
+// GfxBackEndData * from Sys_WakeRenderer on the main thread to
+// Sys_RendererSleep on the render thread, and it was declared LONG -- 32 bits
+// -- with the store spelled `smpData = (int)data`. On x86 that was lossless.
+// On LP64 the back end receives the low half of the pointer and then reads
+// fields through it. That is the null `backendData->skinnedCacheVb` in
+// RB_UpdateDynamicBuffers: R_ToggleSmpFrame always stores the address of a
+// static pool entry there and nothing ever clears it, so a null read means the
+// base was never s_backEndData to begin with.
+void *volatile smpData;
 int g_databaseStopServer;
 volatile unsigned int s_winThreadLock;
 
@@ -242,7 +251,7 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(unsigned int), unsigned i
         0,
         0,
         Sys_ThreadMain,
-        (LPVOID)threadContext,
+        (LPVOID)(uintptr_t)threadContext,
         CREATE_SUSPENDED,
         &threadId[threadContext]);
 
@@ -283,7 +292,10 @@ void __cdecl SetThreadName(unsigned int dwThreadID, const char *szThreadName)
 
 DWORD WINAPI Sys_ThreadMain(LPVOID parameter)
 {
-    unsigned int threadContext = (unsigned int)parameter;
+    // nx-port: the thread's context index, 0..THREAD_CONTEXT_COUNT, travels
+    // through the LPVOID parameter. Not an address, so uintptr_t is the right
+    // way across -- unlike smpData above, which really is carrying a pointer.
+    unsigned int threadContext = (unsigned int)(uintptr_t)parameter;
 
     bcassert(threadContext, THREAD_CONTEXT_COUNT);
     iassert(threadFunc[threadContext]);
@@ -463,14 +475,14 @@ void __cdecl Sys_ResumeThread(unsigned int threadContext)
     ResumeThread(threadHandle[threadContext]);
 }
 
-int __cdecl Sys_RendererSleep()
+void *__cdecl Sys_RendererSleep()
 {
-    return InterlockedExchange(&smpData, 0);
+    return InterlockedExchangePointer(&smpData, nullptr);
 }
 
 bool __cdecl Sys_RendererReady()
 {
-    return smpData != 0;
+    return smpData != nullptr;
 }
 
 void __cdecl Sys_RenderCompleted()
@@ -515,7 +527,7 @@ bool __cdecl Sys_WaitForSingleObjectTimeout(void **event, unsigned int msec)
 void __cdecl Sys_WakeRenderer(void *data)
 {
     Sys_ResetEvent(&renderCompletedEvent);
-    smpData = (int)data;
+    smpData = data;
     //PIXSetMarker(-1, "set smpData");
     Sys_SetEvent(&backendEvent[1]);
     Sys_SetWorkerCmdEvent();

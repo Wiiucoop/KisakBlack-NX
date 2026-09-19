@@ -1294,6 +1294,19 @@ MaterialTechniqueSet *__cdecl Material_GetTechniqueSet(const Material *material)
     }
     if ( !material->localTechniqueSet )
     {
+#ifdef KISAK_NX
+        // Probe: the va() just below dereferences material->info.name, so if the
+        // Material itself is corrupt we die there and Assert_MyHandler never runs
+        // -- no file, no line, nothing. Print the three raw pointers first so the
+        // two outcomes tell themselves apart: a name on the next line means the
+        // Material is sound and only the techset is missing; this line followed
+        // straight by the trap means the Material is the corrupt thing.
+        printf("[nx-mtl] Material_GetTechniqueSet: material=%p info.name=%p localTechniqueSet=%p\n",
+               (const void *)material,
+               (const void *)material->info.name,
+               (const void *)material->localTechniqueSet);
+        fflush(stdout);
+#endif
         v1 = va(
                      "material '%s' missing techset. If you are building fastfile, check Launcher for error messages.",
                      material->info.name);

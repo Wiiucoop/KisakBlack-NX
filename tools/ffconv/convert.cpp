@@ -528,6 +528,7 @@ static void tMaterial(Reader &r, Prelink &z, Prelink::Loc obj) {
         tempReserve(528);      // Load_MaterialTechniqueSetPtr -> block 0
         if (techTag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = t;
         tMaterialTechniqueSet(r, z, t);
+        z.addAsset(AT_TECHSET, t);          // Load_MaterialTechniqueSetAsset, db_load.cpp:2442
         z.putPtr(obj, 176, t);
     } else if (techTag != TAG_NULL) {
         putAssetHandleRef(z, obj, 176, techTag);
@@ -568,6 +569,7 @@ static void tMaterial(Reader &r, Prelink &z, Prelink::Loc obj) {
                 if (uTags[i] == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = im;
                 noteAliasSlot(uSlot, im);
                 tGfxImage(r, z, im);
+                z.addAsset(AT_IMAGE, im);   // Load_GfxImageAsset, db_load.cpp:1997
                 z.putPtr(e, 16, im);
             } else if (uTags[i] != TAG_NULL) {
                 noteAliasSlot(uSlot, putAssetHandleRef(z, e, 16, uTags[i]));
@@ -634,6 +636,7 @@ static void tMaterialHandle(Reader &r, Prelink &z, Prelink::Loc obj,
         if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = m;
         noteAliasSlot(x86slot, m);
         tMaterial(r, z, m);
+        z.addAsset(AT_MATERIAL, m);         // Load_MaterialAsset, db_load.cpp:2523
         z.putPtr(obj, field, m);
     } else if (tag != TAG_NULL) {
         noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
@@ -672,6 +675,7 @@ static void tGfxLightDef(Reader &r, Prelink &z, Prelink::Loc obj) {
         tempReserve(52);       // Load_GfxImagePtr -> block 0
         if (imageTag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = im;
         tGfxImage(r, z, im);
+        z.addAsset(AT_IMAGE, im);           // Load_GfxImageAsset, db_load.cpp:1997
         z.putPtr(obj, 8, im);           // attenuation.image
     } else if (imageTag != TAG_NULL) {
         putAssetHandleRef(z, obj, 8, imageTag);
@@ -1468,6 +1472,7 @@ static void tXModel(Reader &r, Prelink &z, Prelink::Loc obj) {
         tempReserve(84);       // Load_PhysPresetPtr -> block 0
         if (physPresetTag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = p;
         tPhysPreset(r, z, p);
+        z.addAsset(AT_PHYSPRESET, p);       // Load_PhysPresetAsset, db_load.cpp:2837
         z.putPtr(obj, 296, p);
     } else if (physPresetTag != TAG_NULL) {
         putAssetHandleRef(z, obj, 296, physPresetTag);
@@ -1481,6 +1486,7 @@ static void tXModel(Reader &r, Prelink &z, Prelink::Loc obj) {
         tempReserve(2696);     // Load_PhysConstraintsPtr -> block 0
         if (physConstrTag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = p;
         tPhysConstraints(r, z, p);
+        z.addAsset(AT_PHYSCONSTRAINTS, p);  // Load_PhysConstraintsAsset, db_load.cpp:2920
         z.putPtr(obj, 320, p);
     } else if (physConstrTag != TAG_NULL) {
         putAssetHandleRef(z, obj, 320, physConstrTag);
@@ -2815,6 +2821,7 @@ static void tXModelHandle(Reader &r, Prelink &z, Prelink::Loc obj,
         if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = m;
         noteAliasSlot(x86slot, m);
         tXModel(r, z, m);
+        z.addAsset(AT_XMODEL, m);           // Load_XModelAsset, db_load.cpp:3319
         z.putPtr(obj, field, m);
     } else if (tag != TAG_NULL) {
         noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
@@ -2831,6 +2838,7 @@ static void tFxEffectDefHandle(Reader &r, Prelink &z, Prelink::Loc obj,
         if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = f;
         noteAliasSlot(x86slot, f);
         tFxEffectDef(r, z, f);
+        z.addAsset(AT_FX, f);               // Load_FxEffectDefAsset, db_load.cpp:3833
         z.putPtr(obj, field, f);
     } else if (tag != TAG_NULL) {
         noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
@@ -3535,6 +3543,7 @@ static void tGfxImagePtr(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field
         if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = im;
         noteAliasSlot(x86slot, im);
         tGfxImage(r, z, im);
+        z.addAsset(AT_IMAGE, im);           // Load_GfxImageAsset, db_load.cpp:1997
         z.putPtr(obj, field, im);
     } else if (tag != TAG_NULL) {
         noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));

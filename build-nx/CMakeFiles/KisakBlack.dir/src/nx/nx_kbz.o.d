@@ -152,6 +152,7 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o: \
  C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/uses_allocator_args.h \
  C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/tuple \
  C:/dev/CBO1-NX/src/database/database.h \
+ C:/dev/CBO1-NX/src/database/db_assetnames.h \
  C:/dev/CBO1-NX/src/database/db_registry.h \
  C:/dev/CBO1-NX/src/win32/win_common.h \
  C:/dev/CBO1-NX/src/universal/mem_userhunk.h \

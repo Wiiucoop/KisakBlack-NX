@@ -30,6 +30,20 @@ def load(obj):
             cur['attr'][k] = v
     return dies
 
+# readelf prints DW_AT_data_member_location as a bare integer -- decimal for
+# small offsets and *hexadecimal* past a threshold -- or, for a bitfield or an
+# indirect member, as a location expression ending in the constant. Reading the
+# first run of digits out of '0x174bd8' yields 0, which silently placed every
+# member past that threshold at offset 0. Take the last integer token instead,
+# and let int(..., 0) pick the base.
+_INT = re.compile(r'0[xX][0-9a-fA-F]+|-?\d+')
+
+
+def memloc(v):
+    toks = _INT.findall(v)
+    return int(toks[-1], 0) if toks else 0
+
+
 def ref(v):
     m = re.search(r'<0x([0-9a-f]+)>', v)
     return int(m.group(1), 16) if m else None
@@ -75,8 +89,7 @@ def flatten(dies, d, base=0, path=''):
         for c in d['children']:
             if c['tag'] != 'DW_TAG_member':
                 continue
-            loc = c['attr'].get('DW_AT_data_member_location', '0')
-            o = int(re.findall(r'-?\d+', loc)[0]) if re.findall(r'-?\d+', loc) else 0
+            o = memloc(c['attr'].get('DW_AT_data_member_location', '0'))
             t = dies.get(ref(c['attr']['DW_AT_type']))
             nm = c['attr'].get('DW_AT_name', '?')
             yield from flatten(dies, t, base + o, (path + '.' if path else '') + nm)

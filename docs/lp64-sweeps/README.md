@@ -113,7 +113,9 @@ that the ILP32 pass uses a patched copy of `src/nx/compat`: in ILP32 `long` and
 collide. `layouts.sh` `#if`s them out in a scratch copy rather than teaching the
 shim about a second ABI.
 
-To add a struct to the census, add a line to `layouts.cpp` and rerun.
+To add a struct to the census, add a line to `layouts.cpp` and rerun. It now
+also carries `GfxBuffers`, `GfxBackEndData`, `GfxVertexBufferState`,
+`GfxIndexBufferState` and `GfxMeshData`, added for the `skinnedCacheVb` crash.
 
 ### 6. Judge — `classify.py`, `scalar_groups.py`
 
@@ -144,6 +146,126 @@ verdict about that struct has to be thrown out.
 >>> query.q('centity_s', 201, 4, 4)     # x86 word 201 == byte 804
 ('BAD', '?{clientFlags|?} @804', 'nextSlideFX @804')
 ```
+
+#### Two repairs to the probe itself
+
+Both were found while adding the render-buffer structs to `layouts.cpp`, and both
+had been silently wrong.
+
+**`dwarf.py` read large member offsets as zero.** `readelf` prints
+`DW_AT_data_member_location` in decimal for small offsets and switches to
+**hexadecimal** past a threshold. The parser took the first run of digits, so
+`0x174bd8` became `0`:
+
+```python
+o = int(re.findall(r'-?\d+', loc)[0])        # '0x174bd8' -> 0
+```
+
+72 of the 3308 members in the current `layouts.cpp` were affected. It changed
+none of the existing verdicts — every struct in the census is small enough that
+its members print in decimal, and `classify.txt` is byte-identical after the fix
+— but it makes any struct past a few hundred bytes unusable, which is exactly
+what `GfxBuffers` and `GfxBackEndData` are. `memloc()` now takes the *last*
+integer token and lets `int(..., 0)` pick the base, which also handles the
+location-expression spelling.
+
+**`layouts.sh`'s ILP32 stand-in had stopped building.** It reuses `CXX_FLAGS`
+from `flags.make`, and `-fpermissive` left that variable when the warning ratchet
+moved it per-file. A second shim overload then became an error the same way the
+`Interlocked*` ones already had: under ILP32 `DWORD_PTR` collapses onto `DWORD`,
+so `GetProcessAffinityMask(HANDLE, DWORD *)` redeclares the primary. The scratch
+copy now drops that overload too, guarded on `__SIZEOF_POINTER__` rather than
+`__SIZEOF_LONG__`, which is the property both collisions actually turn on.
+
+#### What `check()` says about the render structs
+
+With the parser fixed, the stand-in validates for everything the crash touched:
+
+| struct | ilp32 | x86 comment | lp64 | |
+| --- | ---: | ---: | ---: | --- |
+| `GfxVertexBufferState` | 16 | 16 | 24 | OK |
+| `GfxIndexBufferState` | 16 | 16 | 24 | OK |
+| `GfxBuffers` | 2359464 | 2359464 | 2359560 | OK |
+| `GfxMeshData` | 36 | 36 | 56 | OK |
+| `GfxBackEndData` | 1594048 | 1598208 | 1631136 | **!!** |
+
+so the two things the crash suggested to check are clean:
+
+- `skinnedCacheVbPool[]` steps 16 bytes on x86 and **24** on LP64 — `buffer` and
+  `verts` are pointers — but every access goes through the array subscript with a
+  real `sizeof`, so the stride follows the ABI on its own. Nothing in the tree
+  indexes `gfxBuf` by literal offset.
+- `dynamicBufferFrame` is an `int` taken `% 2` and used as that subscript, and
+  `skinnedCacheVb` is a named field (x86 1493928, LP64 1526744). Neither is read
+  through a literal.
+
+`GfxBackEndData` is the one that fails validation, and per the rule above no
+verdict about it counts until that is resolved. It is short of its x86 size by
+4160 bytes, and the cause is not in `GfxBackEndData` at all — see below.
+
+#### `float44` lost its alignment, and five structs are short because of it
+
+Running `check()` over every struct in `layouts.cpp` — 365 match their x86
+`sizeof` comment, 67 have no comment — leaves 9 that disagree. Five of them are
+one defect:
+
+| struct | ilp32 | x86 comment | short by |
+| --- | ---: | ---: | ---: |
+| `GfxLight` | 352 | 368 | 16 |
+| `PointLightPartition` | 432 | 448 | 16 |
+| `GfxSunShadow` | 1096 | 1104 | 8 |
+| `GfxViewInfo` | 14432 | 14560 | 128 |
+| `GfxBackEndData` | 1594048 | 1598208 | 4160 |
+
+`GfxLight` carries two `float44` matrices, and the decompiler wrote four
+`// padding byte` lines in front of the first one — its way of recording that on
+x86 `viewMatrix` starts at **224**, not at 220 where the declared fields end. It
+starts at 220 in both of our builds, because `float44` is declared
+
+```c
+struct float44 // sizeof=0x40
+{
+    union { float m[4][4]; float member[16]; };
+};
+```
+
+with no alignment, while the original was plainly 16-aligned — `float4`, eight
+lines below it in `com_math.h`, still carries its `alignas(16)`. Everything from
+`viewMatrix` on is 4 bytes early, `def` lands at 348 instead of 352, and the
+16-byte tail padding disappears with it. `GfxBackEndData` holds 257 `GfxLight`s
+(`sunLight`, `emissiveSpotLight`, `shadowableLights[255]`), which is 4112 of its
+missing 4160.
+
+**Verified, not guessed.** Adding `alignas(16)` to `float44` in a scratch tree
+and re-running `layouts.sh` moves four of the five rows onto their x86 sizes
+exactly:
+
+| struct | before | after | x86 comment |
+| --- | ---: | ---: | ---: |
+| `GfxLight` | 352 | **368** | 368 |
+| `PointLightPartition` | 432 | **448** | 448 |
+| `GfxViewInfo` | 14432 | **14560** | 14560 |
+| `GfxBackEndData` | 1594048 | **1598144** | 1598208 |
+| `GfxSunShadow` | 1096 | 1096 | 1104 |
+
+`GfxBackEndData` goes from 4160 bytes short to 64, and the whole-census
+mismatch count drops from 9 to 6. What is left is `GfxSunShadow`, still 8 short
+because its own alignment comes out 8 rather than 16 even with the matrices
+aligned, and the 64 in `GfxBackEndData` that follows from it and from something
+else not yet identified. Those are separate questions.
+
+This is **not an LP64 defect** — the declaration is equally wrong on x86, and the
+tree is self-consistent because every access is by name. It matters wherever
+`GfxLight` meets data laid out by something else: the BSP light array, and
+`tools/ffconv`. It is deliberately **not applied here**, because one line in
+`com_math.h` moves fields in every struct that contains a `float44`, across the
+whole renderer, and that belongs in its own change with its own build and its own
+run — not bundled into a crash fix. The measurement above is what it is worth
+starting from.
+
+The other four mismatches (`EvalValue`, `trace_t`, `scr_vehicle_s`,
+`vehicle_cache_t`) are ILP32 *larger* than x86, a different question, and
+untouched here.
 
 `ctx.py` takes `file:line@var` and prints where `var` got its value, for reading a
 site without opening the file.
@@ -279,6 +401,72 @@ surfaced four real problems, which is the point:
 | --- | ---: | --- |
 | `src/nx/**` | 4 | see above |
 | `src/universal/com_expressions_eval.cpp` | 305 | 297 pointer stores through `operandInternalDataUnion::intVal`, plus the reads and guards around them |
+| `src/gfx_d3d/r_material.cpp` | — | the default-material fallback |
+| `src/gfx_d3d/r_rendercmds.cpp` | 0 | already clean; the command-size class had been closed in `3227eae` |
+| `src/gfx_d3d/rb_backend.cpp` | 1 error, 1 warning | the command-stream alignment assert, and the truncated back-end data pointer |
+| `src/qcommon/threads.cpp` | 1 error, 1 warning | the thread-context index packed into `LPVOID`, and `smpData` |
+
+The render-path pair is worth reading together, because the two diagnostics that
+mattered were one of each kind and only one of them was an error.
+
+`rb_backend.cpp`'s single **error** was cosmetic:
+
+```c
+if (((int)execState.cmd & 3) != 0            // assert text: reinterpret_cast<psize_int>
+```
+
+— the command-stream alignment assert, masking an address it had already cut in
+half. `psize_int` is `uintptr_t`, and `q_shared.h` has had it all along.
+
+Its single substantive **warning** was the crash:
+
+```c
+data = (GfxBackEndData *)Sys_RendererSleep();   // -Wint-to-pointer-cast
+```
+
+`Sys_RendererSleep` returned `int`, because the global it reads,
+`smpData`, was declared `LONG`. That global is the entire front-end to back-end
+handoff, so the back end ran every frame against the low half of the
+`GfxBackEndData` address — which is the null `backendData->skinnedCacheVb` in
+`RB_UpdateDynamicBuffers`. Full write-up in
+[findings/truncated-pointer-loads.md](findings/truncated-pointer-loads.md).
+
+That is the second time in a row that **the error was the harmless one and the
+warning was the crash**, for the same structural reason as in
+`com_expressions_eval.cpp`: narrowing a pointer to an `int` is ill-formed and
+therefore fatal, while widening an `int` back into a pointer is legal and
+therefore only warns. A graduated file's warnings are not residue.
+
+`rb_backend.cpp` also carried two defects that produce **no diagnostic at all**,
+found by reading rather than by the compiler:
+
+- `RB_StretchPicCmd:959` tested `material->info.name` through
+  `**((unsigned int **)execState->cmd + 1)` — a 32-bit read of a pointer, one
+  line above a correct spelling of the same field;
+- `R_RenderDrawSurfListMaterial:1738` called `rb_tessTable[...]` through a cast
+  to a three-parameter signature, splitting the by-value `GfxCmdBufContext` into
+  its two members. That is the fused-parameter shape from
+  [findings/fused-parameters.md](findings/fused-parameters.md), and on AArch64 it
+  happens to pass the same two registers the real signature does — so it works,
+  by coincidence, through an ill-typed indirect call. Rebuilt and called through
+  the table's own type.
+
+Four handlers in the same file still read their commands by x86 word index:
+`RB_DrawFullScreenColoredQuadCmd`, `RB_StretchRawCmd`, `RB_DrawTrianglesCmd` and
+`RB_DrawText3DCmd`. None has a declared struct to name the fields with, and
+**none is reachable**: `R_GetCommandBuffer` is the only thing that stamps
+`GfxCmdHeader::id`, and no call site asks it for those commands. They are
+annotated in place rather than rebuilt from guessed offsets.
+
+The live handlers were all checked against their structs by hand, since no
+diagnostic covers this. `RB_ClearScreenCmd`, `RB_SetScissorCmd`,
+`RB_ProjectionSetCmd` and `RB_SetViewportCmd` read theirs by byte offset and are
+**correct on both ABIs** — `GfxCmdClearScreen`, `GfxCmdSetScissor`,
+`GfxCmdProjectionSet` and `GfxViewport` are all scalars, so nothing in front of
+the field changes width. `RB_DrawPointsCmd`, `RB_DrawLinesCmd` and
+`RB_DrawText2DCmd` had one raw index each, also landing correctly; they were
+given their field names anyway, so the next reader does not have to redo the
+arithmetic.
 
 `com_expressions_eval.cpp` was the first decompiled file through the ratchet, and
 it behaved as advertised: 298 errors and 7 warnings on the first build, 297 of

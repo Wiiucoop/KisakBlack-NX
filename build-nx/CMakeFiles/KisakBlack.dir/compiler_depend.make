@@ -144445,6 +144445,7 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o: /c/dev/CBO1-NX/src/nx/nx_kbz.cpp \
   C:/dev/CBO1-NX/src/bgame/bg_emblems.h \
   C:/dev/CBO1-NX/src/client/screen_placement.h \
   C:/dev/CBO1-NX/src/database/database.h \
+  C:/dev/CBO1-NX/src/database/db_assetnames.h \
   C:/dev/CBO1-NX/src/database/db_registry.h \
   C:/dev/CBO1-NX/src/game/teams.h \
   C:/dev/CBO1-NX/src/gfx_d3d/r_bsp.h \

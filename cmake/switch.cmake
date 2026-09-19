@@ -108,6 +108,9 @@ list(FILTER NX_SANITIZED_SOURCES INCLUDE REGEX "\.(c|cpp)$")
 list(APPEND NX_SANITIZED_SOURCES
     "${SRC_DIR}/universal/com_expressions_eval.cpp"  # menu expression evaluator
     "${SRC_DIR}/gfx_d3d/r_material.cpp"              # material registry / duplication
+    "${SRC_DIR}/gfx_d3d/r_rendercmds.cpp"            # front end: command list, SMP frame toggle
+    "${SRC_DIR}/gfx_d3d/rb_backend.cpp"              # back end: render thread, command execution
+    "${SRC_DIR}/qcommon/threads.cpp"                 # thread layer, incl. the SMP handoff slot
 )
 
 get_target_property(NX_UNSANITIZED_SOURCES ${BIN_NAME} SOURCES)

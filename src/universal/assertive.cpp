@@ -583,6 +583,54 @@ void __cdecl Assert_SetMonkeyCallbackHandler(void (__cdecl *AssertCallbackFunc)(
 
 bool Assert_MyHandler(const char *filename, int line, int type, const char *fmt, ...)
 {
+#ifdef KISAK_NX
+    // nx-port: the disabled branch below wants the clipboard, the desktop window
+    // list and ExitProcess; none of that exists here. All we need is the message
+    // and a real stack, so print where we are BEFORE formatting: the varargs are
+    // whatever the caller handed us, and an assert fired by a corrupt object
+    // usually formats that same object -- va("...%s", material->info.name) walks
+    // the garbage pointer and takes the process down inside vsnprintf. If that
+    // happens, the file and line are already out.
+    static const char *const assertTypeName[] = { "ASSERT", "SANITY CHECK", "INTERNAL ERROR" };
+    va_list va;
+
+    if ( isHandlingAssert )
+    {
+        // Recursion guard, as the original has: say so and get out without
+        // touching the formatter again.
+        printf("ASSERT (recursive) at %s:%d\n", filename, line);
+        fflush(stdout);
+        return 0;
+    }
+    isHandlingAssert = 1;
+    lastAssertType = type;
+
+    printf(
+        "ASSERTBEGIN -------------------------------------------------------------------\n"
+        "File: %s\nLine: %d\nType: %d (%s)\n",
+        filename,
+        line,
+        type,
+        (unsigned)type < 3 ? assertTypeName[type] : "UNKNOWN");
+    fflush(stdout);
+
+    va_start(va, fmt);
+    vsnprintf(message, sizeof(message), fmt, va);
+    va_end(va);
+    message[sizeof(message) - 1] = 0;
+
+    printf(
+        "Expression: %s\n"
+        "ASSERTEND ---------------------------------------------------------------------\n",
+        message);
+    fflush(stdout);
+
+    isHandlingAssert = 0;
+
+    // 0 so the caller's own __debugbreak() is the point of arrest: the stack we
+    // read is then the one that actually asserted, not this handler's.
+    return 0;
+#else
 #if 0
     char *v4; // eax
     char shouldBreak; // [esp+3h] [ebp-5h]
@@ -625,6 +673,7 @@ bool Assert_MyHandler(const char *filename, int line, int type, const char *fmt,
 #else
     __debugbreak();
     return 1;
+#endif
 #endif
 }
 

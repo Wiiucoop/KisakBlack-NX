@@ -5,6 +5,7 @@
 #include <gfx_d3d/r_draw_staticmodel.h>
 #include <gfx_d3d/r_material.h>
 #include <gfx_d3d/r_rendercmds.h>
+#include <gfx_d3d/r_buffers.h>
 #include <gfx_d3d/rb_backend.h>
 #include <gfx_d3d/r_dpvs.h>
 #include <gfx_d3d/r_dpvs_sceneent.h>
@@ -63,3 +64,8 @@ VariableStackBuffer          nx_l_variablestackbuffer;
 clientSnapshot_t             nx_l_clientsnapshot;
 vehicle_info_t               nx_l_vehicleinfo;
 DynEntityDef                 nx_l_dynentitydef;
+GfxBuffers                   nx_l_gfxbuffers;
+GfxBackEndData               nx_l_gfxbackenddata;
+GfxVertexBufferState         nx_l_gfxvertexbufferstate;
+GfxIndexBufferState          nx_l_gfxindexbufferstate;
+GfxMeshData                  nx_l_gfxmeshdata;

@@ -956,7 +956,12 @@ void __cdecl RB_StretchPicCmd(GfxRenderCommandExecState *execState)
 
     cmd = (const GfxCmdStretchPic *)execState->cmd;
 
-    if ( **((unsigned int **)execState->cmd + 1) )
+    // nx-port: this tested material->info.name by reading the command's word
+    // 1 as a pointer and dereferencing it as an unsigned int -- the x86 way of
+    // spelling `cmd->material->info.name != NULL`. On LP64 it compares only the
+    // low half of that name pointer, so a name whose low 32 bits happen to be
+    // zero takes the "noname" branch. The line below already names the field.
+    if ( cmd->material->info.name )
         v1 = va("\"%s\"", cmd->material->info.name);
     else
         v1 = va("\"%s\"", "noname");
@@ -1334,6 +1339,12 @@ void __cdecl RB_DrawEmblemLayer(GfxRenderCommandExecState *execState)
   execState->cmd = (char *)execState->cmd + *(unsigned __int16 *)execState->cmd;
 }
 
+// nx-port: reads its command through x86 word indices, and has no declared
+// struct to name the fields with. Unreachable in this build: R_GetCommandBuffer
+// is the only thing that stamps GfxCmdHeader::id, and nothing asks it for
+// RC_DRAW_FULLSCREEN_COLORED_QUAD. Left as found rather than rebuilt from guessed offsets -- anything
+// that starts producing this command has to give it a real struct first,
+// because every index past the command's first pointer is wrong on LP64.
 void __cdecl RB_DrawFullScreenColoredQuadCmd(GfxRenderCommandExecState *execState)
 {
   RB_DrawFullScreenColoredQuad(
@@ -1346,6 +1357,12 @@ void __cdecl RB_DrawFullScreenColoredQuadCmd(GfxRenderCommandExecState *execStat
   execState->cmd = (char *)execState->cmd + *(unsigned __int16 *)execState->cmd;
 }
 
+// nx-port: reads its command through x86 word indices, and has no declared
+// struct to name the fields with. Unreachable in this build: R_GetCommandBuffer
+// is the only thing that stamps GfxCmdHeader::id, and nothing asks it for
+// RC_STRETCH_RAW. Left as found rather than rebuilt from guessed offsets -- anything
+// that starts producing this command has to give it a real struct first,
+// because every index past the command's first pointer is wrong on LP64.
 void __cdecl RB_StretchRawCmd(GfxRenderCommandExecState *execState)
 {
     RB_StretchRaw(
@@ -1667,6 +1684,7 @@ unsigned int __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *lis
     unsigned int passIndex; // [esp+18h] [ebp-B0h]
     GfxCmdBufSourceState *passPrepassContext; // [esp+1Ch] [ebp-ACh]
     GfxCmdBufState *passPrepassContext_4; // [esp+20h] [ebp-A8h]
+    GfxCmdBufContext passContext;
     unsigned int firstDrawSurfIndex; // [esp+24h] [ebp-A4h]
     GfxDrawSurf drawSurf; // [esp+28h] [ebp-A0h] BYREF
     unsigned int subListCount; // [esp+B4h] [ebp-14h]
@@ -1716,10 +1734,19 @@ unsigned int __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *lis
                 R_SetupPass(prepassContext, 0);
                 passPrepassContext_4 = prepassContext.state;
             }
-            subListCount = ((int (__cdecl *)(const GfxDrawSurfListArgs *, GfxCmdBufSourceState *, GfxCmdBufState *))rb_tessTable[(drawSurf.packed >> 51) & 0xF])(
-                                             listArgs,
-                                             passPrepassContext,
-                                             passPrepassContext_4);
+            // nx-port: rb_tessTable's entries take (args, GfxCmdBufContext) --
+            // the context by value -- and every one of them is defined that
+            // way. This call cast the table entry to a three-parameter form
+            // and passed the context's two members separately, which is how
+            // the decompiler renders a by-value struct of two pointers. It
+            // happens to pass the same registers on AArch64 as it did stack
+            // slots on x86, so it works, but only by coincidence: it is an
+            // ill-typed call through a function pointer, and it also retypes
+            // the return from unsigned int to int. Rebuild the context and
+            // call the table entry through its own type.
+            passContext.source = passPrepassContext;
+            passContext.state = passPrepassContext_4;
+            subListCount = rb_tessTable[(drawSurf.packed >> 51) & 0xF](listArgs, passContext);
         }
 
         if ( isPixelCostEnabled )
@@ -1845,7 +1872,7 @@ void __cdecl RB_DrawPointsCmd(GfxRenderCommandExecState *execState)
     const GfxCmdDrawPoints *cmd; // [esp+4h] [ebp-4h]
 
     cmd = (const GfxCmdDrawPoints *)execState->cmd;
-    if ( *((_BYTE *)execState->cmd + 7) == 2 )
+    if ( cmd->dimensions == 2 )
     {
         RB_DrawPoints2D(cmd);
     }
@@ -2223,7 +2250,7 @@ void __cdecl RB_DrawLinesCmd(GfxRenderCommandExecState *execState)
     const GfxCmdDrawLines *cmd; // [esp+4h] [ebp-4h]
 
     cmd = (const GfxCmdDrawLines *)execState->cmd;
-    if ( *((_BYTE *)execState->cmd + 7) == 2 )
+    if ( cmd->dimensions == 2 )
     {
         RB_DrawLines2D(cmd->lineCount, cmd->width, cmd->verts);
     }
@@ -2245,6 +2272,12 @@ void __cdecl RB_DrawLinesCmd(GfxRenderCommandExecState *execState)
     execState->cmd = (char *)execState->cmd + *(unsigned __int16 *)execState->cmd;
 }
 
+// nx-port: reads its command through x86 word indices, and has no declared
+// struct to name the fields with. Unreachable in this build: R_GetCommandBuffer
+// is the only thing that stamps GfxCmdHeader::id, and nothing asks it for
+// RC_DRAW_TRIANGLES. Left as found rather than rebuilt from guessed offsets -- anything
+// that starts producing this command has to give it a real struct first,
+// because every index past the command's first pointer is wrong on LP64.
 void __cdecl RB_DrawTrianglesCmd(GfxRenderCommandExecState *execState)
 {
     int stOffset; // [esp+4h] [ebp-3Ch]
@@ -4504,7 +4537,7 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
     const GfxCmdDrawText2D *cmd; // [esp+7Ch] [ebp-4h]
 
     cmd = (const GfxCmdDrawText2D *)execState->cmd;
-    v1 = *((float *)execState->cmd + 4) * 0.017453292;
+    v1 = cmd->rotation * 0.017453292;
     cosAngle = cos(v1);
     sinAngle = sin(v1);
     PROF_SCOPED("RB_DrawText2DCmd");
@@ -4537,6 +4570,12 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
     execState->cmd = (char *)execState->cmd + *(unsigned __int16 *)execState->cmd;
 }
 
+// nx-port: reads its command through x86 word indices, and has no declared
+// struct to name the fields with. Unreachable in this build: R_GetCommandBuffer
+// is the only thing that stamps GfxCmdHeader::id, and nothing asks it for
+// RC_DRAW_TEXT_3D. Left as found rather than rebuilt from guessed offsets -- anything
+// that starts producing this command has to give it a real struct first,
+// because every index past the command's first pointer is wrong on LP64.
 void __cdecl RB_DrawText3DCmd(GfxRenderCommandExecState *execState)
 {
     RB_DrawTextInSpace(
@@ -4893,7 +4932,10 @@ void __cdecl RB_ExecuteRenderCommandsLoop(const void *cmds, int *ui3dTextureWind
         v3 = -1;
     while (1)
     {
-        if (((int)execState.cmd & 3) != 0
+        // nx-port: the assert text below names psize_int -- q_shared.h's
+        // uintptr_t -- but the cast had been narrowed to int, which on LP64
+        // discards the top half of the address before masking it.
+        if ((((psize_int)execState.cmd) & 3) != 0
             && !Assert_MyHandler(
                 "C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\rb_backend.cpp",
                 5999,
@@ -5272,7 +5314,7 @@ void     RB_RenderThread(unsigned int threadContext)
 
         if ( Sys_WaitBackendEvent(1) )
         {
-            data = (GfxBackEndData *)Sys_RendererSleep();
+            data = Sys_RendererSleep();
             if (data)
             {
                 RB_UpdateDynamicBuffers((GfxBackEndData*)data);

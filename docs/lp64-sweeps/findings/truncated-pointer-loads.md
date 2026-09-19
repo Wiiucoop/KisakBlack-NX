@@ -116,6 +116,96 @@ comes back off as its low 32 bits. The compiler rates that a **warning**
 (`-Wint-to-pointer-cast`), not an error — widening `int` to a pointer is legal —
 so on a graduated file the warnings matter as much as the errors.
 
+### The SMP handoff slot — `src/qcommon/threads.cpp:49` (fixed)
+
+The largest one so far, because it is not a field inside a struct — it is the
+**entire front-end to back-end handoff**.
+
+`R_ToggleSmpFrameCmd` fills a `GfxBackEndData`, then publishes it:
+
+```c
+Sys_WakeRenderer((void *)front_end_data);
+```
+
+and the render thread collects it:
+
+```c
+data = (GfxBackEndData *)Sys_RendererSleep();
+RB_UpdateDynamicBuffers((GfxBackEndData *)data);
+```
+
+In between, the pointer passes through one global:
+
+```c
+LONG smpData;                                    // int32_t, via src/nx/compat/windows.h
+
+void __cdecl Sys_WakeRenderer(void *data)  { ...; smpData = (int)data; ... }
+int  __cdecl Sys_RendererSleep()           { return InterlockedExchange(&smpData, 0); }
+```
+
+So the back end ran the whole frame against the low 32 bits of the address. The
+crash landed on the first field it read:
+
+```
+RB_UpdateDynamicBuffers  (rb_backend.cpp:5167)
+    backendData->skinnedCacheVb->buffer      <-- skinnedCacheVb was null
+```
+
+which is what identified it. `skinnedCacheVb` is written on every frame toggle,
+
+```c
+frontEndDataOut->skinnedCacheVb = &gfxBuf.skinnedCacheVbPool[gfxBuf.dynamicBufferFrame];
+```
+
+with the address of a static pool entry, and **nothing anywhere clears it**. A
+null read therefore does not mean the front end was late; it means the base was
+never `s_backEndData` at all.
+
+Fixed by giving the slot pointer width and publishing through the pointer-typed
+interlocked primitive the shim already had:
+
+```c
+void *volatile smpData;
+
+void *__cdecl Sys_RendererSleep() { return InterlockedExchangePointer(&smpData, nullptr); }
+void __cdecl Sys_WakeRenderer(void *data) { ...; smpData = data; ... }
+```
+
+`Sys_RendererSleep` is declared in `threads.h` and returns `void *` now; both its
+callers already used the result as a pointer or a truthiness test.
+
+Two things are worth recording about how this one was diagnosed, because both
+were plausible and both were wrong:
+
+- **It is not a frame-ordering race.** `R_ToggleSmpFrameCmd` captures
+  `front_end_data = frontEndDataOut` *before* calling `R_ToggleSmpFrame()`, so
+  the buffer it hands over is the one the **previous** toggle filled, and
+  `R_InitRenderCommands` performs that first toggle at startup. Every buffer the
+  back end is ever given has been through `R_ToggleSmpFrame` at least once.
+- **It is not a missing memory barrier either.** The plain store to `smpData` has
+  no release semantics on AArch64, but `Sys_WakeRenderer` signals
+  `backendEvent[1]` immediately afterwards and `Sys_WaitBackendEvent` waits on
+  it, and the port's events (`src/nx/nx_wincompat.cpp`) are a libnx `Mutex` plus
+  `CondVar`. `SetEvent` releases that mutex and the waiter acquires it, which
+  orders the frame's stores ahead of the hand-off.
+
+### `RB_StretchPicCmd`'s material-name test — `src/gfx_d3d/rb_backend.cpp:959` (fixed)
+
+The same class in its smallest form, and it survived a pass that had already
+converted the function around it to named fields:
+
+```c
+if ( **((unsigned int **)execState->cmd + 1) )          // material->info.name != NULL
+    v1 = va("\"%s\"", cmd->material->info.name);        // already fixed
+```
+
+Word 1 of the command is `material`, and `Material::info.name` is at offset 0, so
+on x86 the double dereference is a null test on the name. On LP64 the outer read
+is still 32 bits wide, so it tests only the low half of the name pointer: a name
+whose low word happens to be zero takes the `"noname"` branch. Harmless here — it
+only picks a profiler label — but it is the exact shape that was fatal in
+`GetSourceString`, sitting one line above a correct spelling of itself.
+
 ### `BG_UnlockablesCompareItemsBySortKey` (fixed in `c12c1b9`)
 
 Identical shape over `itemInfo_t *`, with the sort key at hardcoded x86 offset
@@ -134,7 +224,7 @@ address — appears **68 times across 8 files**:
 | `src/physics/physics_system_internal.cpp` | 4 |
 | `src/gfx_d3d/r_water_sim.cpp` | 3 |
 | `src/physics/phys_main.cpp` | 2 |
-| `src/qcommon/threads.cpp` | 1 |
+| `src/qcommon/threads.cpp` | 1 (commented out — the `NtCurrentTeb` TLS walk in `Sys_SetValue`) |
 | `src/clientscript/cscr_compiler.cpp` | 1 |
 | `src/DynEntity/DynEntity_client.cpp` | 1 |
 

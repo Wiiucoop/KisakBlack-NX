@@ -29,6 +29,7 @@
 #include <vector>
 
 #include <database/database.h>
+#include <database/db_assetnames.h>
 #include <database/db_registry.h>
 #include <qcommon/common.h>
 #include <universal/q_shared.h>
@@ -244,44 +245,57 @@ static void buildRuntimeObjects(const char *path, const uint8_t *assetTable,
 }
 
 // ---------------------------------------------------------------------------
-// Menus: point every reference at the pool entry, not at the block.
+// Point every reference at the pool entry, not at the block.
 //
 // DB_AddXAsset never keeps the header it is given. DB_LinkXAssetEntry allocates
 // a pool entry and memcpys the struct into it (DB_CloneXAssetInternal,
 // db_registry.cpp:1992), so the returned header is always a different pointer.
-// Load_MenuAsset writes that pointer back through the slot it was loaded from
-// (`menu->menu = DB_AddXAsset(...)`, db_registry.cpp:879): the menus[] element
-// of the MenuList, and the DB_InsertPointer slot when the tag was -2. Every
-// later reference to the menu in the zone is DB_ConvertOffsetToAlias, which
-// reads one of those slots, so on PC nothing in the zone keeps pointing at the
-// loaded copy -- the list, its aliases and the items' parent all agree on the
-// pool entry.
+// Every Load_<T>Ptr in db_load.cpp closes on that fact: after loading an inline
+// asset it calls Load_<T>Asset, and the hook writes the returned header back
+// through the slot it was loaded from -- `*material = DB_AddXAsset(...)` for
+// materials (db_registry.cpp:685), `menu->menu = DB_AddXAsset(...)` for menus
+// (:879), and so on for all 32 of them. Every later reference in the zone is a
+// DB_ConvertOffsetToAlias that reads one of those slots, so on PC nothing keeps
+// pointing at the loaded copy.
 //
-// Here those references are relocations to the block copy, fixed before any
-// asset is registered. The only relocations whose target is a menuDef_t header
-// are those references (itemDef_s::parent is runtime-only and never
-// relocated), so after a menu is registered each of them is rewritten to the
-// pool entry. It happens right after that menu's registration, before the
-// MenuList that holds it is registered, which is the PC order.
+// Here those slots are relocations to the block copy, filled before any asset
+// is registered. ffconv flattened the aliases, so a reference that on PC read
+// the slot is here a relocation of its own, and all of them have to move: after
+// an asset is registered, every relocation whose target was its block copy is
+// rewritten to the pool entry.
+//
+// The timing is the load-bearing part, and it is why this cannot be deferred to
+// one sweep at the end. DB_AddXAsset *clones the struct*, so a pointer field
+// inside an asset is frozen at the moment that asset is registered. Redirect a
+// slot after its containing asset has been cloned and the fix lands in the
+// block copy that nothing reads any more, while the pool entry keeps the stale
+// pointer. So each asset's slots are rewritten immediately after it is
+// registered, and ffconv emits an inline asset into the table ahead of the
+// parent that holds it -- which is stream order, which is PC order.
+//
+// The pre-pass stays for the same reason it was written: it is keyed on asset
+// header addresses (a few hundred per zone), so one binary search per
+// relocation collects only the slots that can ever move, instead of carrying a
+// map of every relocation in the zone (837k in patch_mp).
 // ---------------------------------------------------------------------------
-class MenuSlots
+class AssetSlots
 {
 public:
     void collect(const uint8_t *assetTable, const uint8_t *end, uint32_t assetCount,
                  const uint8_t *relocTable, uint32_t relocCount,
                  uint8_t *block[], const uint32_t blockSize[], uint32_t nblk)
     {
-        std::vector<const void *> menus;
+        std::vector<const void *> headers;
         const uint8_t *p = assetTable;
         for (uint32_t i = 0; i < assetCount && p + 9 <= end; ++i) {
-            uint32_t type; memcpy(&type, p, 4); p += 4;
+            p += 4;                             // type: every type moves, so it does not matter
             uint8_t  ab = *p++; uint32_t ao; memcpy(&ao, p, 4); p += 4;
-            if (type == ASSET_TYPE_MENU && ab < nblk && block[ab] && ao < blockSize[ab])
-                menus.push_back(block[ab] + ao);
+            if (ab < nblk && block[ab] && ao < blockSize[ab])
+                headers.push_back(block[ab] + ao);
         }
-        if (menus.empty())
+        if (headers.empty())
             return;
-        std::sort(menus.begin(), menus.end());
+        std::sort(headers.begin(), headers.end());
 
         p = relocTable;
         for (uint32_t i = 0; i < relocCount && p + 10 <= end; ++i) {
@@ -290,37 +304,40 @@ public:
             if (sb >= nblk || tb >= nblk || !block[sb] || !block[tb]) continue;
             if (so + sizeof(void *) > blockSize[sb] || to > blockSize[tb]) continue;
             const void *tgt = block[tb] + to;
-            if (std::binary_search(menus.begin(), menus.end(), tgt))
+            if (std::binary_search(headers.begin(), headers.end(), tgt))
                 m_slots.emplace_back(tgt, block[sb] + so);
         }
         std::sort(m_slots.begin(), m_slots.end());
     }
 
-    void redirect(const void *given, void *added)
+    // Returns how many slots were rewritten, for the probe at the call site.
+    uint32_t redirect(const void *given, void *added)
     {
         if (given == added)
-            return;
+            return 0;
         auto it = std::lower_bound(m_slots.begin(), m_slots.end(),
                                    std::make_pair(given, (uint8_t *)nullptr));
         uint32_t n = 0;
         for (; it != m_slots.end() && it->first == given; ++it, ++n)
             memcpy(it->second, &added, sizeof(void *));
-        // Probe: a registered menu no relocation points at keeps whatever
-        // reference reaches it pointing at the block copy.
-        if (!n) {
-            ++m_unreferenced;
-            const menuDef_t *m = (const menuDef_t *)given;
-            printf("[nx-kbz] menu '%s' block=%p pool=%p has no relocated slot\n",
-                   m->window.name ? m->window.name : "(null)", given, added);
-        }
+        m_moved += n;
+        if (n)
+            ++m_assetsMoved;
+        else
+            ++m_assetsUnreferenced;   // a top-level asset nothing in the zone points at
+        return n;
     }
 
     uint32_t slotCount() const { return (uint32_t)m_slots.size(); }
-    uint32_t unreferenced() const { return m_unreferenced; }
+    uint32_t moved() const { return m_moved; }
+    uint32_t assetsMoved() const { return m_assetsMoved; }
+    uint32_t assetsUnreferenced() const { return m_assetsUnreferenced; }
 
 private:
-    uint32_t m_unreferenced = 0;
-    std::vector<std::pair<const void *, uint8_t *>> m_slots; // menu header -> slot
+    uint32_t m_moved = 0;
+    uint32_t m_assetsMoved = 0;
+    uint32_t m_assetsUnreferenced = 0;
+    std::vector<std::pair<const void *, uint8_t *>> m_slots; // asset header -> slot
 };
 
 // Parse + relocate + register a KBZ1 image already read into `file`.
@@ -366,6 +383,17 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
         p += blockSize[i];
     }
 
+#ifdef KISAK_NX
+    // Probe: print where the blocks landed, so any pointer from a later assert
+    // can be placed. Inside one of these ranges means the reference is still on
+    // the zone's own copy; outside means it reached an XAssetPool entry.
+    for (uint32_t i = 0; i < nblk; ++i)
+        if (block[i])
+            printf("[nx-kbz] '%s' block %u = [%p, %p) %u bytes\n",
+                   path, i, (void *)block[i], (void *)(block[i] + blockSize[i]), blockSize[i]);
+    fflush(stdout);
+#endif
+
     // 2. apply relocations: each stored pointer slot becomes a real address.
     const uint8_t *relocTable = p;
     for (uint32_t i = 0; i < relocCount; ++i) {
@@ -382,8 +410,8 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
     // 3. register each asset. The header struct is already native LP64 layout,
     // so we hand DB_AddXAsset a direct pointer into the relocated block.
     const uint8_t *assetTable = p;
-    MenuSlots menuSlots;
-    menuSlots.collect(assetTable, end, assetCount, relocTable, relocCount, block, blockSize, nblk);
+    AssetSlots slots;
+    slots.collect(assetTable, end, assetCount, relocTable, relocCount, block, blockSize, nblk);
     for (uint32_t i = 0; i < assetCount; ++i) {
         if (p + 9 > end) break;
         uint32_t type; memcpy(&type, p, 4); p += 4;
@@ -392,13 +420,31 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
         XAssetHeader h;
         h.data = block[ab] + ao;
         XAssetHeader added = registerAsset((XAssetType)type, h);
-        if (type == ASSET_TYPE_MENU)
-            menuSlots.redirect(h.data, added.data);
+        uint32_t moved = slots.redirect(h.data, added.data);
+#ifdef KISAK_NX
+        // Probe: one line per asset the database moved, with the slot count.
+        // DB_AddXAsset clones into the pool, so `added` differs for practically
+        // every asset; what matters is `moved`. A zero there means no relocation
+        // in this zone pointed at the block copy, so nothing in the zone can
+        // reach what the database returned. A stub (name begins with ',') that
+        // reports zero is the case we are hunting: DB_LinkXAssetEntry resolved
+        // it to another zone's entry (db_registry.cpp:2528) and the references
+        // stayed behind on the empty stub.
+        if (added.data != h.data) {
+            XAsset probe; probe.type = (XAssetType)type; probe.header = h;
+            const char *nm = DB_GetXAssetNameNoAssert(&probe);
+            printf("[nx-kbz] asset %u t%u '%s' given=%p added=%p moved=%u%s\n",
+                   i, type, nm ? nm : "(unnamed)", h.data, added.data, moved,
+                   (nm && nm[0] == ',' && !moved) ? "  <-- STUB, NOTHING REDIRECTED" : "");
+            fflush(stdout);
+        }
+#endif
     }
-    if (menuSlots.slotCount() || menuSlots.unreferenced())
-        Com_Printf(16, "NX_KBZ: '%s' redirected %u menu slots to their pool entries"
-                       " (%u menus with no slot)\n",
-                   path, menuSlots.slotCount(), menuSlots.unreferenced());
+    if (slots.slotCount())
+        Com_Printf(16, "NX_KBZ: '%s' redirected %u of %u reference slots to pool entries"
+                       " (%u assets moved, %u referenced by nothing)\n",
+                   path, slots.moved(), slots.slotCount(),
+                   slots.assetsMoved(), slots.assetsUnreferenced());
 
     // 4. build the runtime objects db_load.cpp would have built. This runs
     // after registration so a builder may look assets up by name if it needs to.

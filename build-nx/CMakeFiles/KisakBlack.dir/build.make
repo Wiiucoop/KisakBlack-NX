@@ -4976,15 +4976,15 @@ CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o: CMakeFiles/KisakBlack.dir/
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o: /c/dev/CBO1-NX/src/gfx_d3d/r_rendercmds.cpp
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o: CMakeFiles/KisakBlack.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/c/dev/CBO1-NX/build-nx/CMakeFiles --progress-num=$(CMAKE_PROGRESS_351) "Building CXX object CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -MD -MT CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o -MF CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o.d -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o -c /c/dev/CBO1-NX/src/gfx_d3d/r_rendercmds.cpp
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o -MF CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o.d -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.o -c /c/dev/CBO1-NX/src/gfx_d3d/r_rendercmds.cpp
 
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.i"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -E /c/dev/CBO1-NX/src/gfx_d3d/r_rendercmds.cpp > CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.i
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /c/dev/CBO1-NX/src/gfx_d3d/r_rendercmds.cpp > CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.i
 
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.s"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -S /c/dev/CBO1-NX/src/gfx_d3d/r_rendercmds.cpp -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.s
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /c/dev/CBO1-NX/src/gfx_d3d/r_rendercmds.cpp -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendercmds.s
 
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendertarget.o: CMakeFiles/KisakBlack.dir/flags.make
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/r_rendertarget.o: /c/dev/CBO1-NX/src/gfx_d3d/r_rendertarget.cpp
@@ -5508,15 +5508,15 @@ CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o: CMakeFiles/KisakBlack.dir/fl
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o: /c/dev/CBO1-NX/src/gfx_d3d/rb_backend.cpp
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o: CMakeFiles/KisakBlack.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/c/dev/CBO1-NX/build-nx/CMakeFiles --progress-num=$(CMAKE_PROGRESS_389) "Building CXX object CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -MD -MT CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o -MF CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o.d -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o -c /c/dev/CBO1-NX/src/gfx_d3d/rb_backend.cpp
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o -MF CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o.d -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.o -c /c/dev/CBO1-NX/src/gfx_d3d/rb_backend.cpp
 
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.i"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -E /c/dev/CBO1-NX/src/gfx_d3d/rb_backend.cpp > CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.i
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /c/dev/CBO1-NX/src/gfx_d3d/rb_backend.cpp > CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.i
 
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.s"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -S /c/dev/CBO1-NX/src/gfx_d3d/rb_backend.cpp -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.s
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /c/dev/CBO1-NX/src/gfx_d3d/rb_backend.cpp -o CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_backend.s
 
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_compositing.o: CMakeFiles/KisakBlack.dir/flags.make
 CMakeFiles/KisakBlack.dir/src/gfx_d3d/rb_compositing.o: /c/dev/CBO1-NX/src/gfx_d3d/rb_compositing.cpp
@@ -14468,15 +14468,15 @@ CMakeFiles/KisakBlack.dir/src/qcommon/threads.o: CMakeFiles/KisakBlack.dir/flags
 CMakeFiles/KisakBlack.dir/src/qcommon/threads.o: /c/dev/CBO1-NX/src/qcommon/threads.cpp
 CMakeFiles/KisakBlack.dir/src/qcommon/threads.o: CMakeFiles/KisakBlack.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/c/dev/CBO1-NX/build-nx/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1029) "Building CXX object CMakeFiles/KisakBlack.dir/src/qcommon/threads.o"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -MD -MT CMakeFiles/KisakBlack.dir/src/qcommon/threads.o -MF CMakeFiles/KisakBlack.dir/src/qcommon/threads.o.d -o CMakeFiles/KisakBlack.dir/src/qcommon/threads.o -c /c/dev/CBO1-NX/src/qcommon/threads.cpp
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KisakBlack.dir/src/qcommon/threads.o -MF CMakeFiles/KisakBlack.dir/src/qcommon/threads.o.d -o CMakeFiles/KisakBlack.dir/src/qcommon/threads.o -c /c/dev/CBO1-NX/src/qcommon/threads.cpp
 
 CMakeFiles/KisakBlack.dir/src/qcommon/threads.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KisakBlack.dir/src/qcommon/threads.i"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -E /c/dev/CBO1-NX/src/qcommon/threads.cpp > CMakeFiles/KisakBlack.dir/src/qcommon/threads.i
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /c/dev/CBO1-NX/src/qcommon/threads.cpp > CMakeFiles/KisakBlack.dir/src/qcommon/threads.i
 
 CMakeFiles/KisakBlack.dir/src/qcommon/threads.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KisakBlack.dir/src/qcommon/threads.s"
-	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -w -fpermissive -Wno-narrowing -S /c/dev/CBO1-NX/src/qcommon/threads.cpp -o CMakeFiles/KisakBlack.dir/src/qcommon/threads.s
+	/opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /c/dev/CBO1-NX/src/qcommon/threads.cpp -o CMakeFiles/KisakBlack.dir/src/qcommon/threads.s
 
 CMakeFiles/KisakBlack.dir/src/qcommon/tl_support.o: CMakeFiles/KisakBlack.dir/flags.make
 CMakeFiles/KisakBlack.dir/src/qcommon/tl_support.o: /c/dev/CBO1-NX/src/qcommon/tl_support.cpp

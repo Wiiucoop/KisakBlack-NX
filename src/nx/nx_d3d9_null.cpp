@@ -2,15 +2,32 @@
 //
 // Resources are backed by real memory (Lock/Unlock return writable buffers
 // with correct pitches, including DXT block formats), queries complete
-// immediately, draws/state changes are discarded, TestCooperativeLevel is
-// always D3D_OK. The renderer runs "for real" -- it just produces no pixels.
-// This is the seam where a GL/deko3d backend can be grown later.
+// immediately, TestCooperativeLevel is always D3D_OK. The renderer runs "for
+// real" -- and a growing slice of the API now reaches the screen over EGL and
+// Mesa's OpenGL: Clear, the swap chain's Present, and indexed geometry in flat
+// colour (vertex and index buffers, the position in the vertex declaration,
+// DrawIndexedPrimitive). Shaders, textures and render state are still
+// discarded, so what lands on screen is untextured and unlit by construction.
 #include <d3d9.h>
 #include <d3dx9.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <switch.h>
+
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+// gl.h stops at 1.1; everything the geometry path uses -- buffers, shaders,
+// vertex arrays -- lives past that, in the glext.h that gl.h pulls in at its
+// end. This Mesa build exports those entry points from libGL, so prototypes
+// are all that is missing, and the switch for them has to be set before gl.h
+// reaches that include.
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
+
+#include <qcommon/threads.h>
 
 // Counters for the D3D9 call census. The point is to learn which subset of
 // the API the engine actually uses before writing any real backend.
@@ -23,6 +40,11 @@ static unsigned s_nSetRenderState, s_nSetTexture, s_nSetVertexShader;
 static unsigned s_nSetPixelShader, s_nSetStreamSource, s_nSetIndices;
 static unsigned s_nClear;
 
+// What the engine last asked Clear for, so Present's 60-frame report can say
+// whether a black screen is our bug or simply the colour we were handed.
+static D3DCOLOR s_lastClearColor;
+static DWORD s_lastClearFlags;
+
 static void nxDumpCallCensus(void)
 {
     printf("[d3d census] swapPresent=%u devPresent=%u beginScene=%u clear=%u\n"
@@ -34,6 +56,246 @@ static void nxDumpCallCensus(void)
            s_nSetRenderState, s_nSetTexture,
            s_nSetVertexShader, s_nSetPixelShader,
            s_nSetStreamSource, s_nSetIndices);
+}
+
+// ===========================================================================
+// EGL / OpenGL presentation
+// ===========================================================================
+// Just enough of a backend to prove the swap chain: Clear becomes
+// glClearColor + glClear, and the swap chain's Present becomes
+// eglSwapBuffers. Nothing else is wired -- no shaders, no vertices, no
+// textures -- so every draw call below still discards.
+//
+// initEgl/deinitEgl are the devkitPro simple_triangle example's
+// ($DEVKITPRO/examples/switch/graphics/opengl/simple_triangle), kept as they
+// are: desktop OpenGL core 4.3 on an NWindow surface. The example loads its
+// entry points through glad; this Mesa build exports them from libGL, so
+// there is no loader.
+//
+// THREAD OWNERSHIP. An EGL context belongs to the thread that made it
+// current, and it cannot be released from any other thread, so it matters a
+// great deal which thread gets here first.
+//
+// Clear and Present are always on the same thread as each other: both sit
+// inside one RB_* sequence -- RB_BeginFrame, RB_CallExecuteRenderCommands
+// (Clear), RB_EndFrame -> RB_SwapBuffers (Present). Which thread runs that
+// sequence is decided by R_HandOffToBackend (r_rendercmds.cpp:493): with
+// r_smp_backend and sys_smp_allowed both on it goes to RB_RenderThread, and
+// with either off it runs inline on the caller. On this port both are on --
+// r_smp_backend defaults to 1, and sys_smp_allowed defaults to CpuCount > 1
+// where nx_wincompat's GetProcessAffinityMask reports 0x7, so three.
+//
+// The renderer is also *started* on the render thread, not the main one:
+// Com_Init calls R_InitThreads, which spawns RB_RenderThread; CL_InitRenderer
+// then signals the rgRegistered event, and the render thread picks it up and
+// runs R_BeginRegistrationInternal -> R_Init -> R_InitGraphicsApi. So the
+// device, the first R_ToggleSmpFrame and the first Clear are all on it.
+//
+// None of that is assumed here. The context is created on whichever thread
+// gets here first and that thread is named in the log, so the first run says
+// out loud which one it was. If a later call arrives from another thread --
+// which would mean the engine changed modes underneath us -- it says so once
+// instead of failing silently.
+static EGLDisplay s_display;
+static EGLContext s_context;
+static EGLSurface s_surface;
+
+static Mutex s_glLock;
+static bool s_glReady;
+static bool s_glFailed;
+static bool s_glWrongThread;
+static unsigned int s_glThreadId;
+
+static const char *nxThreadName(void)
+{
+    if (Sys_IsRenderThread()) return "render";
+    if (Sys_IsMainThread())   return "main";
+    return "other";
+}
+
+static bool initEgl(NWindow *win)
+{
+    // The window first. Nothing in this tree calls consoleInit, gfxInitDefault
+    // or framebufferCreate -- grep says so, and nx_main.cpp sends stdout to
+    // nxlink or to sdmc:/switch/kisakblack/kisakblack.log, never to a console
+    // layer -- so the default NWindow should be unowned and ours to bind. If
+    // that ever stops being true this is where it shows: a console holds the
+    // layer, and eglCreateWindowSurface below gets a window it cannot present
+    // through.
+    u32 winW = 0, winH = 0;
+    Result rc = nwindowGetDimensions(win, &winW, &winH);
+    printf("[nx-gl] NWindow %p (default %p) valid=%d dims=%ux%u rc=0x%x\n",
+           (void *)win, (void *)nwindowGetDefault(),
+           win ? (int)nwindowIsValid(win) : -1, winW, winH, (unsigned)rc);
+
+    // The engine is hardwired to 1280x720 (GetViewport, the back buffer, the
+    // depth surface). libnx would otherwise let the window inherit the layer
+    // size, which is 1920x1080 docked.
+    rc = nwindowSetDimensions(win, 1280, 720);
+    if (R_FAILED(rc))
+        printf("[nx-gl] nwindowSetDimensions(1280,720) failed: 0x%x\n", (unsigned)rc);
+    nwindowGetDimensions(win, &winW, &winH);
+    printf("[nx-gl] NWindow now %ux%u\n", winW, winH);
+    fflush(stdout);
+
+    // Connect to the EGL default display
+    s_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (!s_display) {
+        printf("[nx-gl] could not connect to display! error: %d\n", eglGetError());
+        goto _fail0;
+    }
+
+    // Initialize the EGL display connection
+    eglInitialize(s_display, nullptr, nullptr);
+
+    // Select OpenGL (Core) as the desired graphics API
+    if (eglBindAPI(EGL_OPENGL_API) == EGL_FALSE) {
+        printf("[nx-gl] could not set API! error: %d\n", eglGetError());
+        goto _fail1;
+    }
+
+    // Get an appropriate EGL framebuffer configuration
+    EGLConfig config;
+    EGLint numConfigs;
+    static const EGLint framebufferAttributeList[] =
+    {
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        EGL_RED_SIZE,     8,
+        EGL_GREEN_SIZE,   8,
+        EGL_BLUE_SIZE,    8,
+        EGL_ALPHA_SIZE,   8,
+        EGL_DEPTH_SIZE,   24,
+        EGL_STENCIL_SIZE, 8,
+        EGL_NONE
+    };
+    eglChooseConfig(s_display, framebufferAttributeList, &config, 1, &numConfigs);
+    if (numConfigs == 0) {
+        printf("[nx-gl] no config found! error: %d\n", eglGetError());
+        goto _fail1;
+    }
+
+    // Create an EGL window surface
+    s_surface = eglCreateWindowSurface(s_display, config, win, nullptr);
+    if (!s_surface) {
+        printf("[nx-gl] surface creation failed! error: %d\n", eglGetError());
+        goto _fail1;
+    }
+
+    // Create an EGL rendering context
+    static const EGLint contextAttributeList[] =
+    {
+        EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR,
+        EGL_CONTEXT_MAJOR_VERSION_KHR, 4,
+        EGL_CONTEXT_MINOR_VERSION_KHR, 3,
+        EGL_NONE
+    };
+    s_context = eglCreateContext(s_display, config, EGL_NO_CONTEXT, contextAttributeList);
+    if (!s_context) {
+        printf("[nx-gl] context creation failed! error: %d\n", eglGetError());
+        goto _fail2;
+    }
+
+    // Connect the context to the surface. The example ignores the result;
+    // here it decides whether GL is usable at all, so it is checked -- and so
+    // is what EGL says is current afterwards, because a make-current that
+    // reports success but binds nothing is exactly the shape of "EGL is up
+    // and the screen never changes".
+    if (eglMakeCurrent(s_display, s_surface, s_surface, s_context) == EGL_FALSE) {
+        printf("[nx-gl] eglMakeCurrent failed! error: 0x%x\n", eglGetError());
+        goto _fail3;
+    }
+    if (eglGetCurrentContext() != s_context
+     || eglGetCurrentSurface(EGL_DRAW) != s_surface
+     || eglGetCurrentSurface(EGL_READ) != s_surface) {
+        printf("[nx-gl] eglMakeCurrent succeeded but bound something else: "
+               "ctx %p (want %p) draw %p read %p (want %p)\n",
+               eglGetCurrentContext(), s_context,
+               eglGetCurrentSurface(EGL_DRAW), eglGetCurrentSurface(EGL_READ),
+               s_surface);
+        goto _fail3;
+    }
+    return true;
+
+_fail3:
+    eglDestroyContext(s_display, s_context);
+    s_context = nullptr;
+
+_fail2:
+    eglDestroySurface(s_display, s_surface);
+    s_surface = nullptr;
+_fail1:
+    eglTerminate(s_display);
+    s_display = nullptr;
+_fail0:
+    return false;
+}
+
+static void deinitEgl(void)
+{
+    if (s_display) {
+        eglMakeCurrent(s_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (s_context) {
+            eglDestroyContext(s_display, s_context);
+            s_context = nullptr;
+        }
+        if (s_surface) {
+            eglDestroySurface(s_display, s_surface);
+            s_surface = nullptr;
+        }
+        eglTerminate(s_display);
+        s_display = nullptr;
+    }
+}
+
+// True when GL may be used from the calling thread. Creates the context on
+// first use; after that, only the creating thread gets a yes.
+static bool nxGlAcquire(void)
+{
+    unsigned int self = Sys_GetCurrentThreadId();
+
+    if (!s_glReady && !s_glFailed) {
+        mutexLock(&s_glLock);
+        if (!s_glReady && !s_glFailed) {
+            if (initEgl(nwindowGetDefault())) {
+                s_glThreadId = self;
+                s_glReady = true;
+                EGLint sw = -1, sh = -1;
+                eglQuerySurface(s_display, s_surface, EGL_WIDTH, &sw);
+                eglQuerySurface(s_display, s_surface, EGL_HEIGHT, &sh);
+                printf("[nx-gl] EGL up on the %s thread (id %u)\n"
+                       "        vendor   : %s\n"
+                       "        renderer : %s\n"
+                       "        version  : %s\n"
+                       "        surface  : %dx%d\n",
+                       nxThreadName(), self,
+                       (const char *)glGetString(GL_VENDOR),
+                       (const char *)glGetString(GL_RENDERER),
+                       (const char *)glGetString(GL_VERSION),
+                       sw, sh);
+            } else {
+                s_glFailed = true;
+                printf("[nx-gl] EGL init failed; staying headless\n");
+            }
+            fflush(stdout);
+        }
+        mutexUnlock(&s_glLock);
+    }
+
+    if (!s_glReady)
+        return false;
+
+    if (self != s_glThreadId) {
+        if (!s_glWrongThread) {
+            s_glWrongThread = true;
+            printf("[nx-gl] the context belongs to thread %u, but the %s thread "
+                   "(id %u) is presenting. An EGL context cannot be released "
+                   "from another thread, so these calls are being dropped.\n",
+                   s_glThreadId, nxThreadName(), self);
+            fflush(stdout);
+        }
+        return false;
+    }
+    return true;
 }
 // ===========================================================================
 // format helpers
@@ -146,6 +408,8 @@ struct NxBuffer {
     D3DFORMAT format;  // index format
     DWORD fvf;
     void *bits;
+    GLuint glName;     // 0 until the first upload on the GL thread
+    bool glDirty;      // bits changed since the last glBufferData
 };
 
 struct NxQuery {
@@ -238,6 +502,10 @@ static void nxDestroy(NxD3DObject *o)
     case D3DRTYPE_VERTEXBUFFER:
     case D3DRTYPE_INDEXBUFFER: {
         NxBuffer *b = (NxBuffer *)o;
+        // Only the owning thread may delete it. Anywhere else the name leaks,
+        // which is the lesser of the two outcomes.
+        if (b->glName && s_glReady && nxGlAcquire())
+            glDeleteBuffers(1, &b->glName);
         free(b->bits);
         free(b);
         break;
@@ -306,6 +574,426 @@ static NxSurface *nxTextureSurface(NxTexture *t, UINT face, UINT level)
     }
     nxAddRef(t->surfaces[idx]);
     return t->surfaces[idx];
+}
+
+// ===========================================================================
+// geometry
+// ===========================================================================
+// One step past Clear: an indexed primitive on the screen, in flat colour.
+//
+// The game's own vertex and pixel shaders are D3D9 bytecode and translating
+// them is a chapter of its own, so CreateVertexShader/CreatePixelShader keep
+// handing out stubs and SetVertexShader/SetPixelShader keep discarding. In
+// their place sits one hardwired GLSL program: a position in, a fixed colour
+// out. What that proves is everything underneath the shading -- that vertex
+// and index buffers reach the GPU with the right bytes, that the vertex
+// declaration says where the position lives, and that the index run
+// DrawIndexedPrimitive asks for is the run GL draws.
+//
+// THE TRANSFORM. D3D9 hands a vertex shader a matrix as four consecutive
+// float4 constants, laid out so that `m4x4 oPos, v0, c0` means
+// oPos.x = dot(v0, c0): c0 is the first row of a row-vector-times-matrix
+// transform. glUniformMatrix4fv with transpose=GL_TRUE reads its sixteen
+// floats in that same order, so the registers can go to GL untouched -- the
+// row-major/column-major difference is paid for by one flag.
+//
+// Clip space does differ: D3D9 wants z in [0,w], GL wants [-w,w], so the
+// shader ends with z = 2z - w. Clip-space y points up in both, and both map
+// +1 to the top of the default framebuffer, so nothing is flipped; if the
+// first geometry arrives upside down anyway, that assumption is the thing to
+// doubt first.
+//
+// WHICH four registers hold the transform is not fixed. The dest register
+// comes from the material's shader arguments (r_shade.cpp:217), assigned when
+// the shader asset was built, so c0 here is a guess -- the usual answer, but a
+// guess. That is where the 60-frame report earns its keep: it prints every
+// four-register window that would land the last drawn vertex inside the NDC
+// box, so if c0 is wrong the log names the alternatives instead of leaving a
+// black screen to interpret.
+
+// Vertex shader constant registers, recorded as the engine sets them. Only the
+// float file is kept: the transform is all this step needs from it.
+enum { NX_VS_CONST_ROWS = 256 };
+static float s_vsConst[NX_VS_CONST_ROWS][4];
+static bool s_vsConstWritten[NX_VS_CONST_ROWS];
+static unsigned s_vsConstBase;   // the register quad used as the transform
+
+enum { NX_MAX_STREAMS = 4 };
+static NxBuffer *s_streamVB[NX_MAX_STREAMS];
+static UINT s_streamOffset[NX_MAX_STREAMS];
+static UINT s_streamStride[NX_MAX_STREAMS];
+static NxBuffer *s_indexBuf;
+static NxVDecl *s_vdecl;
+
+static GLuint s_prog, s_vao;
+static GLint s_locTransform = -1;
+static bool s_progFailed;
+enum { NX_ATTR_POS = 0 };
+
+// Draw-path tally. The skip counters matter as much as the success one: a
+// report that says ok=0 is useless without the reason, and every early return
+// in nxGlDrawIndexed has its own.
+static unsigned s_nGlDrawOk, s_nGlDrawFailed;
+static unsigned s_nSkipNoGl, s_nSkipNoProgram, s_nSkipNoDecl, s_nSkipNoPos;
+static unsigned s_nSkipNoBuffer, s_nSkipBadType;
+static GLenum s_lastGlDrawError;
+
+// The shape of the last draw that made it through, for the report.
+static GLenum s_lastDrawMode;
+static GLsizei s_lastDrawCount;
+static GLenum s_lastDrawIdxType;
+static UINT s_lastDrawStride, s_lastDrawPosOffset;
+static BYTE s_lastDrawPosType;
+static float s_lastDrawPos[3];
+static bool s_lastDrawPosValid;
+
+static const char *s_vsSrc =
+    "#version 330 core\n"
+    "layout(location = 0) in vec4 nxPos;\n"
+    "uniform mat4 nxTransform;\n"
+    "void main() {\n"
+    "    vec4 p = nxTransform * vec4(nxPos.xyz, 1.0);\n"
+    "    p.z = 2.0 * p.z - p.w;\n"          // D3D9 clip z [0,w] -> GL [-w,w]
+    "    gl_Position = p;\n"
+    "}\n";
+
+static const char *s_fsSrc =
+    "#version 330 core\n"
+    "out vec4 nxFrag;\n"
+    "void main() { nxFrag = vec4(1.0, 0.1, 0.8, 1.0); }\n";   // loud magenta
+
+static GLuint nxGlCompile(GLenum type, const char *src, const char *what)
+{
+    GLuint sh = glCreateShader(type);
+    glShaderSource(sh, 1, &src, nullptr);
+    glCompileShader(sh);
+    GLint ok = GL_FALSE;
+    glGetShaderiv(sh, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        char log[1024];
+        log[0] = 0;
+        glGetShaderInfoLog(sh, sizeof(log) - 1, nullptr, log);
+        printf("[nx-gl] %s shader did not compile: %s\n", what, log);
+        fflush(stdout);
+        glDeleteShader(sh);
+        return 0;
+    }
+    return sh;
+}
+
+// The one-time setup the draw path needs. It lives here rather than in initEgl
+// because it has to run on the thread that owns the context, after nxGlAcquire
+// has said this is that thread.
+static bool nxGlEnsurePipeline(void)
+{
+    if (s_prog) return true;
+    if (s_progFailed) return false;
+
+    GLuint vs = nxGlCompile(GL_VERTEX_SHADER, s_vsSrc, "vertex");
+    GLuint fs = vs ? nxGlCompile(GL_FRAGMENT_SHADER, s_fsSrc, "fragment") : 0;
+    if (!vs || !fs) {
+        if (vs) glDeleteShader(vs);
+        s_progFailed = true;
+        return false;
+    }
+
+    s_prog = glCreateProgram();
+    glAttachShader(s_prog, vs);
+    glAttachShader(s_prog, fs);
+    glBindAttribLocation(s_prog, NX_ATTR_POS, "nxPos");
+    glLinkProgram(s_prog);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    GLint linked = GL_FALSE;
+    glGetProgramiv(s_prog, GL_LINK_STATUS, &linked);
+    if (!linked) {
+        char log[1024];
+        log[0] = 0;
+        glGetProgramInfoLog(s_prog, sizeof(log) - 1, nullptr, log);
+        printf("[nx-gl] flat-colour program did not link: %s\n", log);
+        fflush(stdout);
+        glDeleteProgram(s_prog);
+        s_prog = 0;
+        s_progFailed = true;
+        return false;
+    }
+    s_locTransform = glGetUniformLocation(s_prog, "nxTransform");
+
+    // The core profile refuses to draw with no vertex array object bound, and
+    // nothing else here ever binds one, so this one stays current for good.
+    glGenVertexArrays(1, &s_vao);
+    glBindVertexArray(s_vao);
+
+    // Every one of these is state this file still discards: SetRenderState is
+    // a no-op, no depth buffer is ever filled, no winding order is tracked. So
+    // leaving them on could only throw the geometry away for reasons that have
+    // nothing to do with whether the geometry arrived.
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glDisable(GL_SCISSOR_TEST);
+
+    // SetViewport is a no-op too, so nobody has called glViewport. The surface
+    // is the only viewport that means anything at this stage.
+    EGLint sw = 0, sh = 0;
+    eglQuerySurface(s_display, s_surface, EGL_WIDTH, &sw);
+    eglQuerySurface(s_display, s_surface, EGL_HEIGHT, &sh);
+    glViewport(0, 0, sw, sh);
+
+    printf("[nx-gl] flat-colour pipeline up: program %u vao %u "
+           "nxTransform at %d, viewport %dx%d\n",
+           s_prog, s_vao, s_locTransform, sw, sh);
+    fflush(stdout);
+    return true;
+}
+
+// Uploads a buffer's bytes if they changed, creating its GL name on first use.
+// Both halves need the context, so this only works on the GL thread: Unlock
+// calls it when it happens to be there, and the draw path -- which always is --
+// picks up whatever is still dirty.
+static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
+{
+    if (!b || !b->bits || !b->length)
+        return false;
+    if (!b->glName) {
+        glGenBuffers(1, &b->glName);
+        if (!b->glName)
+            return false;
+        b->glDirty = true;
+    }
+    glBindBuffer(target, b->glName);
+    if (b->glDirty) {
+        glBufferData(target, (GLsizeiptr)b->length, b->bits,
+                     (b->usage & D3DUSAGE_DYNAMIC) ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
+        b->glDirty = false;
+    }
+    return true;
+}
+
+// Called from Unlock. A buffer the engine filled off the GL thread cannot be
+// uploaded from there; marking it dirty is enough, because the draw that needs
+// it runs on the right thread and syncs it then.
+static void nxGlBufferDirty(NxBuffer *b, GLenum target)
+{
+    b->glDirty = true;
+    if (nxGlAcquire())
+        nxGlSyncBuffer(b, target);
+}
+
+struct NxAttrFormat {
+    GLint size;
+    GLenum type;
+    GLboolean normalized;
+};
+
+#define NX_ATTR_FMT(sz, ty, nrm) \
+    do { out->size = (sz); out->type = (ty); out->normalized = (nrm); return true; } while (0)
+
+static bool nxDeclTypeToGl(BYTE type, NxAttrFormat *out)
+{
+    switch (type) {
+    case D3DDECLTYPE_FLOAT1:    NX_ATTR_FMT(1, GL_FLOAT, GL_FALSE);
+    case D3DDECLTYPE_FLOAT2:    NX_ATTR_FMT(2, GL_FLOAT, GL_FALSE);
+    case D3DDECLTYPE_FLOAT3:    NX_ATTR_FMT(3, GL_FLOAT, GL_FALSE);
+    case D3DDECLTYPE_FLOAT4:    NX_ATTR_FMT(4, GL_FLOAT, GL_FALSE);
+    case D3DDECLTYPE_FLOAT16_2: NX_ATTR_FMT(2, GL_HALF_FLOAT, GL_FALSE);
+    case D3DDECLTYPE_FLOAT16_4: NX_ATTR_FMT(4, GL_HALF_FLOAT, GL_FALSE);
+    case D3DDECLTYPE_SHORT2:    NX_ATTR_FMT(2, GL_SHORT, GL_FALSE);
+    case D3DDECLTYPE_SHORT4:    NX_ATTR_FMT(4, GL_SHORT, GL_FALSE);
+    case D3DDECLTYPE_SHORT2N:   NX_ATTR_FMT(2, GL_SHORT, GL_TRUE);
+    case D3DDECLTYPE_SHORT4N:   NX_ATTR_FMT(4, GL_SHORT, GL_TRUE);
+    case D3DDECLTYPE_USHORT2N:  NX_ATTR_FMT(2, GL_UNSIGNED_SHORT, GL_TRUE);
+    case D3DDECLTYPE_USHORT4N:  NX_ATTR_FMT(4, GL_UNSIGNED_SHORT, GL_TRUE);
+    case D3DDECLTYPE_UBYTE4:    NX_ATTR_FMT(4, GL_UNSIGNED_BYTE, GL_FALSE);
+    case D3DDECLTYPE_UBYTE4N:   NX_ATTR_FMT(4, GL_UNSIGNED_BYTE, GL_TRUE);
+    default: return false;   // D3DCOLOR, UDEC3, DEC3N: no position uses them
+    }
+}
+#undef NX_ATTR_FMT
+
+static bool nxPrimToGl(D3DPRIMITIVETYPE type, UINT primCount, GLenum *mode, GLsizei *count)
+{
+    if (!primCount)
+        return false;
+    switch (type) {
+    case D3DPT_POINTLIST:     *mode = GL_POINTS;         *count = (GLsizei)primCount;     return true;
+    case D3DPT_LINELIST:      *mode = GL_LINES;          *count = (GLsizei)primCount * 2; return true;
+    case D3DPT_LINESTRIP:     *mode = GL_LINE_STRIP;     *count = (GLsizei)primCount + 1; return true;
+    case D3DPT_TRIANGLELIST:  *mode = GL_TRIANGLES;      *count = (GLsizei)primCount * 3; return true;
+    case D3DPT_TRIANGLESTRIP: *mode = GL_TRIANGLE_STRIP; *count = (GLsizei)primCount + 2; return true;
+    case D3DPT_TRIANGLEFAN:   *mode = GL_TRIANGLE_FAN;   *count = (GLsizei)primCount + 2; return true;
+    default: return false;
+    }
+}
+
+static const D3DVERTEXELEMENT9 *nxFindPosition(const NxVDecl *d)
+{
+    for (UINT i = 0; i < d->count; ++i) {
+        if (d->elements[i].Usage == D3DDECLUSAGE_POSITION
+         && d->elements[i].UsageIndex == 0)
+            return &d->elements[i];
+    }
+    return nullptr;
+}
+
+static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
+                            UINT startIndex, UINT primCount)
+{
+    if (!nxGlAcquire())        { ++s_nSkipNoGl;      return; }
+    if (!nxGlEnsurePipeline()) { ++s_nSkipNoProgram; return; }
+    if (!s_vdecl)              { ++s_nSkipNoDecl;    return; }
+
+    // Position only. Normals, tangents, texcoords and blend weights have
+    // nothing to feed in a shader that emits one fixed colour.
+    const D3DVERTEXELEMENT9 *pos = nxFindPosition(s_vdecl);
+    if (!pos || pos->Stream >= NX_MAX_STREAMS) { ++s_nSkipNoPos; return; }
+
+    NxAttrFormat fmt;
+    if (!nxDeclTypeToGl(pos->Type, &fmt)) { ++s_nSkipBadType; return; }
+
+    GLenum mode;
+    GLsizei count;
+    if (!nxPrimToGl(type, primCount, &mode, &count)) { ++s_nSkipBadType; return; }
+
+    NxBuffer *vb = s_streamVB[pos->Stream];
+    NxBuffer *ib = s_indexBuf;
+    if (!vb || !ib) { ++s_nSkipNoBuffer; return; }
+
+    GLenum idxType = GL_UNSIGNED_SHORT;
+    UINT idxSize = 2;
+    if (ib->format == D3DFMT_INDEX32) { idxType = GL_UNSIGNED_INT; idxSize = 4; }
+
+    if (!nxGlSyncBuffer(vb, GL_ARRAY_BUFFER))         { ++s_nSkipNoBuffer; return; }
+    if (!nxGlSyncBuffer(ib, GL_ELEMENT_ARRAY_BUFFER)) { ++s_nSkipNoBuffer; return; }
+
+    glUseProgram(s_prog);
+    if (s_locTransform >= 0) {
+        // transpose=GL_TRUE: the registers already are the rows of the
+        // transform, which is the order this call wants them in.
+        glUniformMatrix4fv(s_locTransform, 1, GL_TRUE, &s_vsConst[s_vsConstBase][0]);
+    }
+
+    // glVertexAttribPointer takes its buffer from whatever is bound to
+    // GL_ARRAY_BUFFER, which nxGlSyncBuffer left as this stream's.
+    UINT stride = s_streamStride[pos->Stream];
+    UINT attrOffset = s_streamOffset[pos->Stream] + pos->Offset;
+    glEnableVertexAttribArray(NX_ATTR_POS);
+    glVertexAttribPointer(NX_ATTR_POS, fmt.size, fmt.type, fmt.normalized,
+                          (GLsizei)stride, (const void *)(uintptr_t)attrOffset);
+
+    glGetError();   // clear anything stale, so the reading below is this draw's
+    glDrawElementsBaseVertex(mode, count, idxType,
+                             (const void *)(uintptr_t)(startIndex * idxSize),
+                             baseVertexIndex);
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        s_lastGlDrawError = err;
+        ++s_nGlDrawFailed;
+        return;
+    }
+    ++s_nGlDrawOk;
+
+    s_lastDrawMode = mode;
+    s_lastDrawCount = count;
+    s_lastDrawIdxType = idxType;
+    s_lastDrawStride = stride;
+    s_lastDrawPosOffset = attrOffset;
+    s_lastDrawPosType = pos->Type;
+
+    // One vertex, kept so the report can say where the transform puts it. Only
+    // the float forms are read back: a packed position would need unpacking
+    // that nothing else here needs.
+    s_lastDrawPosValid = false;
+    if (fmt.type == GL_FLOAT && stride) {
+        UINT v = (UINT)(baseVertexIndex > 0 ? baseVertexIndex : 0);
+        size_t byteOff = (size_t)v * stride + attrOffset;
+        if (byteOff + 3 * sizeof(float) <= (size_t)vb->length) {
+            memcpy(s_lastDrawPos, (const BYTE *)vb->bits + byteOff, sizeof(s_lastDrawPos));
+            if (fmt.size < 3) s_lastDrawPos[2] = 0.0f;
+            s_lastDrawPosValid = true;
+        }
+    }
+}
+
+// Row vector times matrix -- the D3D9 convention the constant registers are in.
+static void nxTransformPoint(const float *rows, const float *p, float *out)
+{
+    for (int c = 0; c < 4; ++c)
+        out[c] = p[0] * rows[c] + p[1] * rows[4 + c] + p[2] * rows[8 + c] + rows[12 + c];
+}
+
+static const char *nxGlModeName(GLenum mode)
+{
+    switch (mode) {
+    case GL_POINTS:         return "POINTS";
+    case GL_LINES:          return "LINES";
+    case GL_LINE_STRIP:     return "LINE_STRIP";
+    case GL_TRIANGLES:      return "TRIANGLES";
+    case GL_TRIANGLE_STRIP: return "TRIANGLE_STRIP";
+    case GL_TRIANGLE_FAN:   return "TRIANGLE_FAN";
+    default:                return "?";
+    }
+}
+
+static void nxGlDumpGeometry(void)
+{
+    printf("[nx-gl] geometry: glDrawElements ok=%u failed=%u lastError 0x%x\n"
+           "        skipped: noGl=%u noProgram=%u noDecl=%u noPosition=%u "
+           "noBuffer=%u badType=%u\n",
+           s_nGlDrawOk, s_nGlDrawFailed, (unsigned)s_lastGlDrawError,
+           s_nSkipNoGl, s_nSkipNoProgram, s_nSkipNoDecl, s_nSkipNoPos,
+           s_nSkipNoBuffer, s_nSkipBadType);
+
+    if (s_nGlDrawOk) {
+        printf("        last draw: %s, %d %s, stride %u, position at +%u "
+               "decltype %u\n",
+               nxGlModeName(s_lastDrawMode), (int)s_lastDrawCount,
+               s_lastDrawIdxType == GL_UNSIGNED_INT ? "u32 indices" : "u16 indices",
+               s_lastDrawStride, s_lastDrawPosOffset, (unsigned)s_lastDrawPosType);
+    }
+
+    const float *rows = &s_vsConst[s_vsConstBase][0];
+    printf("        transform c%u..c%u:\n", s_vsConstBase, s_vsConstBase + 3);
+    for (int r = 0; r < 4; ++r)
+        printf("          % .4f % .4f % .4f % .4f\n",
+               rows[r * 4 + 0], rows[r * 4 + 1], rows[r * 4 + 2], rows[r * 4 + 3]);
+
+    if (s_lastDrawPosValid) {
+        float clip[4];
+        nxTransformPoint(rows, s_lastDrawPos, clip);
+        printf("        vertex (% .2f % .2f % .2f) -> clip (% .3f % .3f % .3f % .3f)",
+               s_lastDrawPos[0], s_lastDrawPos[1], s_lastDrawPos[2],
+               clip[0], clip[1], clip[2], clip[3]);
+        if (clip[3] != 0.0f)
+            printf(" -> ndc (% .3f % .3f % .3f)",
+                   clip[0] / clip[3], clip[1] / clip[3],
+                   2.0f * clip[2] / clip[3] - 1.0f);
+        printf("\n");
+
+        // If c0 is the wrong guess, the right answer is very likely among the
+        // windows that put this vertex on screen. Naming them costs one scan of
+        // a 256-register file and saves a blind iteration.
+        char cands[128];
+        int used = 0, found = 0;
+        for (unsigned b = 0; b + 3 < NX_VS_CONST_ROWS && found < 6; ++b) {
+            if (!s_vsConstWritten[b] || !s_vsConstWritten[b + 1]
+             || !s_vsConstWritten[b + 2] || !s_vsConstWritten[b + 3])
+                continue;
+            float c[4];
+            nxTransformPoint(&s_vsConst[b][0], s_lastDrawPos, c);
+            if (c[3] <= 0.0f) continue;
+            if (c[0] < -c[3] || c[0] > c[3] || c[1] < -c[3] || c[1] > c[3]) continue;
+            int n = snprintf(cands + used, sizeof(cands) - used, "%sc%u",
+                             found ? " " : "", b);
+            if (n < 0 || used + n >= (int)sizeof(cands)) break;
+            used += n;
+            ++found;
+        }
+        printf("        transform candidates (this vertex lands on screen): %s\n",
+               found ? cands : "none");
+    }
+    fflush(stdout);
 }
 
 // ===========================================================================
@@ -668,7 +1356,53 @@ HRESULT IDirect3DDevice9::GetDepthStencilSurface(IDirect3DSurface9 **depthStenci
 }
 HRESULT IDirect3DDevice9::BeginScene() { ++s_nBeginScene; return D3D_OK; }
 HRESULT IDirect3DDevice9::EndScene() { return D3D_OK; }
-HRESULT IDirect3DDevice9::Clear(DWORD, const D3DRECT *, DWORD, D3DCOLOR, float, DWORD) { ++s_nClear; return D3D_OK; }
+HRESULT IDirect3DDevice9::Clear(
+    DWORD, const D3DRECT *, DWORD flags, D3DCOLOR color, float depth, DWORD stencil)
+{
+    ++s_nClear;
+    s_lastClearColor = color;
+    s_lastClearFlags = flags;
+
+    // RB_SwapBuffers skips the swap chain entirely while rg.renderHiResShot or
+    // dx.resizeWindow is set (rb_backend.cpp:4756). If that is where we are,
+    // Present never runs, its 60-frame report never prints, and the log looks
+    // identical to GL being broken. Distinguish the two.
+    if (s_nClear == 300 && s_nSwapPresent == 0) {
+        printf("[nx-gl] 300 clears and not one Present: RB_SwapBuffers is not "
+               "reaching the swap chain (rg.renderHiResShot or dx.resizeWindow).\n");
+        fflush(stdout);
+    }
+
+    if (!nxGlAcquire())
+        return D3D_OK;
+
+    // D3DCOLOR is 0xAARRGGBB -- Byte4PackPixelColor (r_state.cpp:3122) writes
+    // B,G,R,A into ascending bytes and the packed word is read back
+    // little-endian, so this is the colour R_ClearScreen was given.
+    GLbitfield mask = 0;
+    if (flags & D3DCLEAR_TARGET) {
+        glClearColor(((color >> 16) & 0xff) / 255.0f,
+                     ((color >>  8) & 0xff) / 255.0f,
+                     ((color      ) & 0xff) / 255.0f,
+                     ((color >> 24) & 0xff) / 255.0f);
+        mask |= GL_COLOR_BUFFER_BIT;
+    }
+    if (flags & D3DCLEAR_ZBUFFER) {
+        glClearDepth(depth);
+        mask |= GL_DEPTH_BUFFER_BIT;
+    }
+    if (flags & D3DCLEAR_STENCIL) {
+        glClearStencil((GLint)stencil);
+        mask |= GL_STENCIL_BUFFER_BIT;
+    }
+
+    // The rect list is ignored: clearing the whole framebuffer is the point of
+    // this step, and honouring it would need the scissor state the rest of the
+    // backend does not track yet.
+    if (mask)
+        glClear(mask);
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::SetViewport(const D3DVIEWPORT9 *) { return D3D_OK; }
 HRESULT IDirect3DDevice9::GetViewport(D3DVIEWPORT9 *viewport)
 {
@@ -691,16 +1425,57 @@ HRESULT IDirect3DDevice9::SetTextureStageState(DWORD, D3DTEXTURESTAGESTATETYPE, 
 HRESULT IDirect3DDevice9::SetSamplerState(DWORD, D3DSAMPLERSTATETYPE, DWORD) { return D3D_OK; }
 HRESULT IDirect3DDevice9::SetScissorRect(const RECT *) { return D3D_OK; }
 HRESULT IDirect3DDevice9::DrawPrimitive(D3DPRIMITIVETYPE, UINT, UINT) { ++s_nDrawPrim; return D3D_OK; }
-HRESULT IDirect3DDevice9::DrawIndexedPrimitive(D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT) { ++s_nDrawIndexed; return D3D_OK; }
+// MinVertexIndex and NumVertices are dropped: they describe the range for the
+// driver to validate or copy, and glDrawElementsBaseVertex needs neither.
+HRESULT IDirect3DDevice9::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, INT baseVertexIndex,
+                                              UINT, UINT, UINT startIndex, UINT primCount)
+{
+    ++s_nDrawIndexed;
+    nxGlDrawIndexed(type, baseVertexIndex, startIndex, primCount);
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::DrawPrimitiveUP(D3DPRIMITIVETYPE, UINT, const void *, UINT) { ++s_nDrawPrimUP; return D3D_OK; }
-HRESULT IDirect3DDevice9::SetVertexDeclaration(IDirect3DVertexDeclaration9 *) { return D3D_OK; }
+// The three bindings the draw path reads back. None of them takes a reference:
+// the engine holds every one of these alive for as long as it is bound, and a
+// reference taken here would only change when the object dies, not whether.
+HRESULT IDirect3DDevice9::SetVertexDeclaration(IDirect3DVertexDeclaration9 *decl)
+{
+    s_vdecl = (NxVDecl *)decl;
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::SetFVF(DWORD) { return D3D_OK; }
 HRESULT IDirect3DDevice9::SetVertexShader(IDirect3DVertexShader9 *) { ++s_nSetVertexShader; return D3D_OK; }
-HRESULT IDirect3DDevice9::SetVertexShaderConstantF(UINT, const float *, UINT) { return D3D_OK; }
+// The shader itself is discarded, but its constants are not: four consecutive
+// registers out of this file are the transform the flat-colour program uses.
+HRESULT IDirect3DDevice9::SetVertexShaderConstantF(UINT startRegister, const float *data, UINT count)
+{
+    if (!data)
+        return D3D_OK;
+    for (UINT i = 0; i < count && startRegister + i < NX_VS_CONST_ROWS; ++i) {
+        memcpy(s_vsConst[startRegister + i], data + i * 4, 4 * sizeof(float));
+        s_vsConstWritten[startRegister + i] = true;
+    }
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::SetPixelShader(IDirect3DPixelShader9 *) { ++s_nSetPixelShader; return D3D_OK; }
 HRESULT IDirect3DDevice9::SetPixelShaderConstantF(UINT, const float *, UINT) { return D3D_OK; }
-HRESULT IDirect3DDevice9::SetStreamSource(UINT, IDirect3DVertexBuffer9 *, UINT, UINT) { ++s_nSetStreamSource; return D3D_OK; }
-HRESULT IDirect3DDevice9::SetIndices(IDirect3DIndexBuffer9 *) { ++s_nSetIndices; return D3D_OK; }
+HRESULT IDirect3DDevice9::SetStreamSource(UINT streamNumber, IDirect3DVertexBuffer9 *vb,
+                                          UINT offsetInBytes, UINT stride)
+{
+    ++s_nSetStreamSource;
+    if (streamNumber < NX_MAX_STREAMS) {
+        s_streamVB[streamNumber] = (NxBuffer *)vb;
+        s_streamOffset[streamNumber] = offsetInBytes;
+        s_streamStride[streamNumber] = stride;
+    }
+    return D3D_OK;
+}
+HRESULT IDirect3DDevice9::SetIndices(IDirect3DIndexBuffer9 *ib)
+{
+    ++s_nSetIndices;
+    s_indexBuf = (NxBuffer *)ib;
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::EvictManagedResources() { return D3D_OK; }
 
 // ===========================================================================
@@ -708,7 +1483,54 @@ HRESULT IDirect3DDevice9::EvictManagedResources() { return D3D_OK; }
 // ===========================================================================
 HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const void *, DWORD)
 {
-    if ((++s_nSwapPresent % 60) == 1) nxDumpCallCensus();
+    bool report = (++s_nSwapPresent % 60) == 1;
+    if (report) nxDumpCallCensus();
+    if (report) nxGlDumpGeometry();
+
+    if (!nxGlAcquire()) {
+        if (report) {
+            printf("[nx-gl] present %u: no GL on this thread, nothing swapped\n",
+                   s_nSwapPresent);
+            fflush(stdout);
+        }
+        return D3D_OK;
+    }
+
+    // Whatever is still pending from the frame the engine just drew, read
+    // before the swap so the report can attribute it to that frame.
+    GLenum errBeforeSwap = glGetError();
+
+    EGLBoolean swapped = eglSwapBuffers(s_display, s_surface);
+    EGLint eglErr = eglGetError();
+    GLenum errAfterSwap = glGetError();
+
+    if (report) {
+        EGLint sw = -1, sh = -1;
+        eglQuerySurface(s_display, s_surface, EGL_WIDTH, &sw);
+        eglQuerySurface(s_display, s_surface, EGL_HEIGHT, &sh);
+        u32 winW = 0, winH = 0;
+        nwindowGetDimensions(nwindowGetDefault(), &winW, &winH);
+        printf("[nx-gl] present %u: glGetError before swap 0x%x | eglSwapBuffers %s "
+               "eglGetError 0x%x | glGetError after swap 0x%x\n"
+               "        surface %dx%d  nwindow %ux%u  ctx %s  clears seen %u\n"
+               "        last Clear: color 0x%08x (a=%u r=%u g=%u b=%u) flags 0x%x%s%s%s\n",
+               s_nSwapPresent, (unsigned)errBeforeSwap,
+               swapped == EGL_TRUE ? "TRUE" : "FALSE",
+               (unsigned)eglErr, (unsigned)errAfterSwap,
+               sw, sh, winW, winH,
+               eglGetCurrentContext() == s_context ? "current" : "NOT CURRENT",
+               s_nClear,
+               (unsigned)s_lastClearColor,
+               (unsigned)((s_lastClearColor >> 24) & 0xff),
+               (unsigned)((s_lastClearColor >> 16) & 0xff),
+               (unsigned)((s_lastClearColor >>  8) & 0xff),
+               (unsigned)((s_lastClearColor      ) & 0xff),
+               (unsigned)s_lastClearFlags,
+               (s_lastClearFlags & D3DCLEAR_TARGET)  ? " TARGET"  : "",
+               (s_lastClearFlags & D3DCLEAR_ZBUFFER) ? " ZBUFFER" : "",
+               (s_lastClearFlags & D3DCLEAR_STENCIL) ? " STENCIL" : "");
+        fflush(stdout);
+    }
     return D3D_OK;
 }
 HRESULT IDirect3DSwapChain9::GetBackBuffer(UINT, D3DBACKBUFFER_TYPE, IDirect3DSurface9 **surface)
@@ -845,7 +1667,11 @@ HRESULT IDirect3DVertexBuffer9::Lock(UINT offset, UINT, void **data, DWORD)
     *data = (BYTE *)b->bits + offset;
     return D3D_OK;
 }
-HRESULT IDirect3DVertexBuffer9::Unlock() { return D3D_OK; }
+HRESULT IDirect3DVertexBuffer9::Unlock()
+{
+    nxGlBufferDirty((NxBuffer *)this, GL_ARRAY_BUFFER);
+    return D3D_OK;
+}
 HRESULT IDirect3DVertexBuffer9::GetDesc(D3DVERTEXBUFFER_DESC *desc)
 {
     NxBuffer *b = (NxBuffer *)this;
@@ -864,7 +1690,11 @@ HRESULT IDirect3DIndexBuffer9::Lock(UINT offset, UINT, void **data, DWORD)
     *data = (BYTE *)b->bits + offset;
     return D3D_OK;
 }
-HRESULT IDirect3DIndexBuffer9::Unlock() { return D3D_OK; }
+HRESULT IDirect3DIndexBuffer9::Unlock()
+{
+    nxGlBufferDirty((NxBuffer *)this, GL_ELEMENT_ARRAY_BUFFER);
+    return D3D_OK;
+}
 HRESULT IDirect3DIndexBuffer9::GetDesc(D3DINDEXBUFFER_DESC *desc)
 {
     NxBuffer *b = (NxBuffer *)this;

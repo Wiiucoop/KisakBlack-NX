@@ -490,3 +490,4 @@ CLAUDE.md
 # LP64 sweep intermediates (docs/lp64-sweeps/tools); see $LP64_WORK
 build-nx/lp64-work/
 __pycache__/
+mesa-switch-main/

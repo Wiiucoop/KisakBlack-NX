@@ -10,9 +10,26 @@ starts its worker threads, creates a Direct3D device and initialises
 render targets, the static model cache and the particle buffers, then sits
 in its main loop.
 
-The screen stays black: `src/nx/nx_d3d9_null.cpp` is a null driver that
-accepts every call and draws nothing. A real backend is the largest piece
-of work remaining.
+`src/nx/nx_d3d9_null.cpp` is still a null driver -- it accepts every call
+and discards every draw -- but two calls out of the whole API now reach the
+screen. `Clear` becomes `glClearColor` + `glClear` with the `D3DCOLOR` the
+engine passed, and the swap chain's `Present` becomes `eglSwapBuffers`, over
+Mesa's EGL and desktop OpenGL (`mesa-switch`, `docs/switch-opengl.rst`). So
+the screen is the colour the game asked for, which is what proves the swap
+chain, the context and the frame synchronisation. Everything else -- shaders,
+vertices, textures -- is still the largest piece of work remaining.
+
+The EGL context is created on first use and belongs to that thread. It lands
+on `RB_RenderThread`, which is where `R_HandOffToBackend` puts the whole
+`RB_*` sequence with `r_smp_backend` and `sys_smp_allowed` on, and also where
+`R_BeginRegistrationInternal` brings the renderer up in the first place. The
+driver logs which thread it got, rather than assuming.
+
+Linking Mesa needs two portlibs devkitPro does not pull in as dependencies:
+
+```sh
+dkp-pacman -S switch-libexpat switch-libzstd
+```
 
 ## What was needed to get here
 

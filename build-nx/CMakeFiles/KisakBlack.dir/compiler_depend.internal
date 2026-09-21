@@ -145283,15 +145283,18 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_bink_stubs.o
 
 CMakeFiles/KisakBlack.dir/src/nx/nx_d3d9_null.o
  /c/dev/CBO1-NX/src/nx/nx_d3d9_null.cpp
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/Windows.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/d3d9.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/d3dx9.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/nx_prefix.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/windows.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/compat/winsock.h
  /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/nx/nx_d3d9_null.cpp
+ /c/dev/CBO1-NX/build-nx/C:/dev/CBO1-NX/src/qcommon/threads.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/_ansi.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/_newlib_version.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/alloca.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/assert.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/c++config.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/cpu_defines.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/os_defines.h
@@ -145395,16 +145398,198 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_d3d9_null.o
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/sys/unistd.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/time.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/aarch64-none-elf/include/unistd.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/arm_acle.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/float.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdalign.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdarg.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdbool.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stddef.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdint.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/arpa/inet.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/netdb.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/netinet/in.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/album_la.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/error.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/friends_la.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/hid_la.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/libapplet.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/mii_la.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/nfp_la.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/nifm_la.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/pctlauth.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/psel.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/swkbd.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/applets/web.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/arm/cache.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/arm/counter.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/arm/thread_context.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/arm/tls.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/audio/audio.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/audio/driver.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/crypto/aes.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/crypto/aes_cbc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/crypto/aes_ctr.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/crypto/aes_xts.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/crypto/cmac.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/crypto/crc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/crypto/hmac.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/crypto/sha1.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/crypto/sha256.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/display/binder.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/display/buffer_producer.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/display/framebuffer.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/display/native_window.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/display/parcel.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/display/types.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/barrier.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/condvar.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/detect.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/event.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/jit.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/levent.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/mutex.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/random.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/rwlock.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/semaphore.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/shmem.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/svc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/thread.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/tmem.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/uevent.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/utimer.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/virtmem.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/kernel/wait.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nacp.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nro.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nvidia/address_space.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nvidia/channel.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nvidia/fence.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nvidia/gpu.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nvidia/gpu_channel.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nvidia/graphic_buffer.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nvidia/ioctl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nvidia/map.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/nvidia/types.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/result.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/btdev.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/devices/console.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/devices/fs_dev.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/devices/romfs_dev.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/devices/socket.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/devices/usb_comms.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/diag.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/env.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/hosversion.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/nxlink.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/pad.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/resolver.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/ringcon.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/runtime/util/utf.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/acc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/apm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/applet.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/async.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/aud.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/audctl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/auddev.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/audin.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/audout.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/audrec.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/audren.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/avm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/bpc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/bt.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/btdrv.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/btdrv_ids.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/btdrv_types.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/btm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/btm_types.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/btmsys.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/btmu.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/capmtp.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/caps.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/capsa.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/capsc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/capsdc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/capssc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/capssu.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/capsu.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/clkrst.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/csrng.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ectx.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/fan.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/fatal.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/friends.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/fs.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/fsldr.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/fspr.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/gpio.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/grc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/hid.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/hidbus.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/hiddbg.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/hidsys.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/hwopus.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/i2c.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ins.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/irs.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/lbl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ldn.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ldr.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/lp2p.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/lr.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/mii.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/miiimg.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/mm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ncm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ncm_types.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/news.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/nfc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/nifm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/nim.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/notif.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ns.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/nv.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/pctl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/pcv.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/pdm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/pgl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/pl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/pm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/psc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/psm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ro.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/set.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/sm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/smm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/spl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/spsm.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ssl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/tc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/time.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/ts.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/uart.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/usb.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/usbds.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/usbhs.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/vi.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/services/wlaninf.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/sf/cmif.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/sf/hipc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/sf/service.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/sf/sessionmgr.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/sf/tipc.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/switch/types.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/sys/_iovec.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/sys/_sockaddr_storage.h
  /c/dev/CBO1-NX/build-nx/C:/devkitPro/libnx/include/sys/socket.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/portlibs/switch/include/EGL/egl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/portlibs/switch/include/EGL/eglext.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/portlibs/switch/include/EGL/eglplatform.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/portlibs/switch/include/GL/gl.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/portlibs/switch/include/GL/glext.h
+ /c/dev/CBO1-NX/build-nx/C:/devkitPro/portlibs/switch/include/KHR/khrplatform.h
 
 CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o
  /c/dev/CBO1-NX/src/nx/nx_kbz.cpp

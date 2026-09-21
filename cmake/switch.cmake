@@ -11,8 +11,17 @@
 # time; make cmake pass them via @response files.
 set(CMAKE_C_USE_RESPONSE_FILE_FOR_OBJECTS 1)
 set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_OBJECTS 1)
-set(CMAKE_C_USE_RESPONSE_FILE_FOR_LIBRARIES 1)
-set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_LIBRARIES 1)
+
+# Libraries must NOT go through a response file. The devkitA64 tools are MSYS
+# programs, so MSYS rewrites POSIX paths in their *command line* into Windows
+# ones -- which is the only reason -L/opt/devkitpro/... and
+# -specs=/opt/devkitpro/... resolve at all. It does not rewrite the contents of
+# an @file, so an absolute /opt/... archive path written there reaches ld
+# verbatim and comes back as "cannot find ...: No error". The object list is
+# what actually overflows the limit; the library list is a dozen entries and
+# is fine on the command line, where it gets translated.
+set(CMAKE_C_USE_RESPONSE_FILE_FOR_LIBRARIES 0)
+set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_LIBRARIES 0)
 
 set(NX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/nx")
 
@@ -141,7 +150,57 @@ target_link_options(${BIN_NAME} PRIVATE
     -Wl,--wrap=rename
 )
 
-target_link_libraries(${BIN_NAME} PRIVATE nx)
+# ----- Mesa EGL / OpenGL -----
+# For src/nx/nx_d3d9_null.cpp's Clear and Present. Nothing else uses GL yet.
+#
+# $DEVKITPRO holds "C:/devkitPro" in a Windows-inherited environment, and this
+# is an MSYS cmake: it does not treat a drive letter as absolute, so a path
+# taken from it is rejected as relative the moment it reaches an imported
+# target's INTERFACE_INCLUDE_DIRECTORIES. Convert once, here.
+set(NX_PORTLIBS "${DEVKITPRO}/portlibs/switch")
+if(NOT IS_ABSOLUTE "${NX_PORTLIBS}")
+    string(REGEX REPLACE "^([A-Za-z]):[\\/]" "/\\1/" NX_PORTLIBS "${NX_PORTLIBS}")
+endif()
+target_include_directories(${BIN_NAME} PUBLIC "${NX_PORTLIBS}/include")
+
+# The link order is deliberately not spelled out here. devkitPro's
+# simple_triangle example links `-lglad -lEGL -lglapi -ldrm_nouveau -lnx`, but
+# that is the old SDK: this Mesa build (mesa-switch, docs/switch-opengl.rst)
+# owns the GPU through src/nouveau/horizon and ships neither glad nor
+# switch-libdrm_nouveau. It ships the authoritative order instead, in
+# portlibs/switch/lib/cmake/OpenGL/OpenGLConfig.cmake: fifteen archives with a
+# circular dependency between libGL, libEGL and the mesa_util set, which
+# OpenGL::GL wraps in a --start-group/--end-group rescan. Reproducing that by
+# hand would be a worse copy of a file that is already installed.
+#
+# CONFIG mode is explicit because CMake ships its own FindOpenGL module, which
+# would win in module mode and go looking for a system GL that is not here.
+#
+# One thing has to be worked around. This is the unified SDK, so Zink is
+# embedded in libEGL and calls the loaderless NVK entrypoints -- libEGL really
+# does need libvulkan. OpenGLConfig then also demands libelf, which NVK's
+# nv_cubin.c.o wants. devkitPro packages no switch-libelf, and nothing in
+# devkitA64 provides one, so OpenGL::GL cannot be produced here at all.
+#
+# It is not needed: nv_cubin.c.o is only pulled in by a symbol nothing on the
+# EGL/GL path references, verified by linking libvulkan into the group and
+# watching every elf_* reference stay away. So opt out of the config's own
+# Zink handling -- which is what OPENGL_SWITCH_VULKAN_LIBRARY is for -- and
+# put libvulkan into the rescan group directly.
+#
+# The archive list still comes from the config's own variables rather than
+# being retyped here. Only the group membership changes. If a future Mesa does
+# reach nv_cubin, the link fails loudly on elf_* rather than silently.
+set(OPENGL_SWITCH_VULKAN_LIBRARY "")
+find_package(OpenGL REQUIRED CONFIG
+    PATHS "${NX_PORTLIBS}/lib/cmake/OpenGL" NO_DEFAULT_PATH)
+
+find_library(NX_VULKAN_LIBRARY vulkan
+    PATHS "${NX_PORTLIBS}/lib" NO_DEFAULT_PATH REQUIRED)
+
+target_link_libraries(${BIN_NAME} PRIVATE
+    "$<LINK_GROUP:RESCAN,${OPENGL_gl_LIBRARY},${OPENGL_egl_LIBRARY},${NX_VULKAN_LIBRARY},${_OPENGL_SWITCH_LIBRARIES}>"
+    nx)
 
 # ----- NRO packaging -----
 nx_create_nro(${BIN_NAME}

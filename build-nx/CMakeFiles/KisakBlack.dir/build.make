@@ -19167,7 +19167,19 @@ KisakBlack.elf: CMakeFiles/KisakBlack.dir/src/nx/nx_winsock.o
 KisakBlack.elf: CMakeFiles/KisakBlack.dir/src/nx/nx_winuser.o
 KisakBlack.elf: CMakeFiles/KisakBlack.dir/src/nx/nx_xinput.o
 KisakBlack.elf: CMakeFiles/KisakBlack.dir/build.make
-KisakBlack.elf: CMakeFiles/KisakBlack.dir/linkLibs.rsp
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libGL.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libEGL.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libvulkan.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libglapi.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libmesa_util_c11.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libblake3.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libmesa_util.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libmesa_util_simd.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libxmlconfig.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libexpat.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libzstd.a
+KisakBlack.elf: /opt/devkitpro/portlibs/switch/lib/libz.a
+KisakBlack.elf: /opt/devkitpro/libnx/lib/libnx.a
 KisakBlack.elf: CMakeFiles/KisakBlack.dir/objects1.rsp
 KisakBlack.elf: CMakeFiles/KisakBlack.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/c/dev/CBO1-NX/build-nx/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1194) "Linking CXX executable KisakBlack.elf"

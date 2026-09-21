@@ -144318,15 +144318,18 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_bink_stubs.o: /c/dev/CBO1-NX/src/nx/nx_bink_
   C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdint.h
 
 CMakeFiles/KisakBlack.dir/src/nx/nx_d3d9_null.o: /c/dev/CBO1-NX/src/nx/nx_d3d9_null.cpp \
+  C:/dev/CBO1-NX/src/nx/compat/Windows.h \
   C:/dev/CBO1-NX/src/nx/compat/d3d9.h \
   C:/dev/CBO1-NX/src/nx/compat/d3dx9.h \
   C:/dev/CBO1-NX/src/nx/compat/nx_prefix.h \
   C:/dev/CBO1-NX/src/nx/compat/windows.h \
   C:/dev/CBO1-NX/src/nx/compat/winsock.h \
   C:/dev/CBO1-NX/src/nx/nx_d3d9_null.cpp \
+  C:/dev/CBO1-NX/src/qcommon/threads.h \
   C:/devkitPro/devkitA64/aarch64-none-elf/include/_ansi.h \
   C:/devkitPro/devkitA64/aarch64-none-elf/include/_newlib_version.h \
   C:/devkitPro/devkitA64/aarch64-none-elf/include/alloca.h \
+  C:/devkitPro/devkitA64/aarch64-none-elf/include/assert.h \
   C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/c++config.h \
   C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/cpu_defines.h \
   C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/aarch64-none-elf/pic/bits/os_defines.h \
@@ -144430,16 +144433,198 @@ CMakeFiles/KisakBlack.dir/src/nx/nx_d3d9_null.o: /c/dev/CBO1-NX/src/nx/nx_d3d9_n
   C:/devkitPro/devkitA64/aarch64-none-elf/include/sys/unistd.h \
   C:/devkitPro/devkitA64/aarch64-none-elf/include/time.h \
   C:/devkitPro/devkitA64/aarch64-none-elf/include/unistd.h \
+  C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/arm_acle.h \
   C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/float.h \
+  C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdalign.h \
   C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdarg.h \
+  C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdbool.h \
   C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stddef.h \
   C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdint.h \
   C:/devkitPro/libnx/include/arpa/inet.h \
   C:/devkitPro/libnx/include/netdb.h \
   C:/devkitPro/libnx/include/netinet/in.h \
+  C:/devkitPro/libnx/include/switch.h \
+  C:/devkitPro/libnx/include/switch/applets/album_la.h \
+  C:/devkitPro/libnx/include/switch/applets/error.h \
+  C:/devkitPro/libnx/include/switch/applets/friends_la.h \
+  C:/devkitPro/libnx/include/switch/applets/hid_la.h \
+  C:/devkitPro/libnx/include/switch/applets/libapplet.h \
+  C:/devkitPro/libnx/include/switch/applets/mii_la.h \
+  C:/devkitPro/libnx/include/switch/applets/nfp_la.h \
+  C:/devkitPro/libnx/include/switch/applets/nifm_la.h \
+  C:/devkitPro/libnx/include/switch/applets/pctlauth.h \
+  C:/devkitPro/libnx/include/switch/applets/psel.h \
+  C:/devkitPro/libnx/include/switch/applets/swkbd.h \
+  C:/devkitPro/libnx/include/switch/applets/web.h \
+  C:/devkitPro/libnx/include/switch/arm/cache.h \
+  C:/devkitPro/libnx/include/switch/arm/counter.h \
+  C:/devkitPro/libnx/include/switch/arm/thread_context.h \
+  C:/devkitPro/libnx/include/switch/arm/tls.h \
+  C:/devkitPro/libnx/include/switch/audio/audio.h \
+  C:/devkitPro/libnx/include/switch/audio/driver.h \
+  C:/devkitPro/libnx/include/switch/crypto/aes.h \
+  C:/devkitPro/libnx/include/switch/crypto/aes_cbc.h \
+  C:/devkitPro/libnx/include/switch/crypto/aes_ctr.h \
+  C:/devkitPro/libnx/include/switch/crypto/aes_xts.h \
+  C:/devkitPro/libnx/include/switch/crypto/cmac.h \
+  C:/devkitPro/libnx/include/switch/crypto/crc.h \
+  C:/devkitPro/libnx/include/switch/crypto/hmac.h \
+  C:/devkitPro/libnx/include/switch/crypto/sha1.h \
+  C:/devkitPro/libnx/include/switch/crypto/sha256.h \
+  C:/devkitPro/libnx/include/switch/display/binder.h \
+  C:/devkitPro/libnx/include/switch/display/buffer_producer.h \
+  C:/devkitPro/libnx/include/switch/display/framebuffer.h \
+  C:/devkitPro/libnx/include/switch/display/native_window.h \
+  C:/devkitPro/libnx/include/switch/display/parcel.h \
+  C:/devkitPro/libnx/include/switch/display/types.h \
+  C:/devkitPro/libnx/include/switch/kernel/barrier.h \
+  C:/devkitPro/libnx/include/switch/kernel/condvar.h \
+  C:/devkitPro/libnx/include/switch/kernel/detect.h \
+  C:/devkitPro/libnx/include/switch/kernel/event.h \
+  C:/devkitPro/libnx/include/switch/kernel/jit.h \
+  C:/devkitPro/libnx/include/switch/kernel/levent.h \
+  C:/devkitPro/libnx/include/switch/kernel/mutex.h \
+  C:/devkitPro/libnx/include/switch/kernel/random.h \
+  C:/devkitPro/libnx/include/switch/kernel/rwlock.h \
+  C:/devkitPro/libnx/include/switch/kernel/semaphore.h \
+  C:/devkitPro/libnx/include/switch/kernel/shmem.h \
+  C:/devkitPro/libnx/include/switch/kernel/svc.h \
+  C:/devkitPro/libnx/include/switch/kernel/thread.h \
+  C:/devkitPro/libnx/include/switch/kernel/tmem.h \
+  C:/devkitPro/libnx/include/switch/kernel/uevent.h \
+  C:/devkitPro/libnx/include/switch/kernel/utimer.h \
+  C:/devkitPro/libnx/include/switch/kernel/virtmem.h \
+  C:/devkitPro/libnx/include/switch/kernel/wait.h \
+  C:/devkitPro/libnx/include/switch/nacp.h \
+  C:/devkitPro/libnx/include/switch/nro.h \
+  C:/devkitPro/libnx/include/switch/nvidia/address_space.h \
+  C:/devkitPro/libnx/include/switch/nvidia/channel.h \
+  C:/devkitPro/libnx/include/switch/nvidia/fence.h \
+  C:/devkitPro/libnx/include/switch/nvidia/gpu.h \
+  C:/devkitPro/libnx/include/switch/nvidia/gpu_channel.h \
+  C:/devkitPro/libnx/include/switch/nvidia/graphic_buffer.h \
+  C:/devkitPro/libnx/include/switch/nvidia/ioctl.h \
+  C:/devkitPro/libnx/include/switch/nvidia/map.h \
+  C:/devkitPro/libnx/include/switch/nvidia/types.h \
+  C:/devkitPro/libnx/include/switch/result.h \
+  C:/devkitPro/libnx/include/switch/runtime/btdev.h \
+  C:/devkitPro/libnx/include/switch/runtime/devices/console.h \
+  C:/devkitPro/libnx/include/switch/runtime/devices/fs_dev.h \
+  C:/devkitPro/libnx/include/switch/runtime/devices/romfs_dev.h \
+  C:/devkitPro/libnx/include/switch/runtime/devices/socket.h \
+  C:/devkitPro/libnx/include/switch/runtime/devices/usb_comms.h \
+  C:/devkitPro/libnx/include/switch/runtime/diag.h \
+  C:/devkitPro/libnx/include/switch/runtime/env.h \
+  C:/devkitPro/libnx/include/switch/runtime/hosversion.h \
+  C:/devkitPro/libnx/include/switch/runtime/nxlink.h \
+  C:/devkitPro/libnx/include/switch/runtime/pad.h \
+  C:/devkitPro/libnx/include/switch/runtime/resolver.h \
+  C:/devkitPro/libnx/include/switch/runtime/ringcon.h \
+  C:/devkitPro/libnx/include/switch/runtime/util/utf.h \
+  C:/devkitPro/libnx/include/switch/services/acc.h \
+  C:/devkitPro/libnx/include/switch/services/apm.h \
+  C:/devkitPro/libnx/include/switch/services/applet.h \
+  C:/devkitPro/libnx/include/switch/services/async.h \
+  C:/devkitPro/libnx/include/switch/services/aud.h \
+  C:/devkitPro/libnx/include/switch/services/audctl.h \
+  C:/devkitPro/libnx/include/switch/services/auddev.h \
+  C:/devkitPro/libnx/include/switch/services/audin.h \
+  C:/devkitPro/libnx/include/switch/services/audout.h \
+  C:/devkitPro/libnx/include/switch/services/audrec.h \
+  C:/devkitPro/libnx/include/switch/services/audren.h \
+  C:/devkitPro/libnx/include/switch/services/avm.h \
+  C:/devkitPro/libnx/include/switch/services/bpc.h \
+  C:/devkitPro/libnx/include/switch/services/bt.h \
+  C:/devkitPro/libnx/include/switch/services/btdrv.h \
+  C:/devkitPro/libnx/include/switch/services/btdrv_ids.h \
+  C:/devkitPro/libnx/include/switch/services/btdrv_types.h \
+  C:/devkitPro/libnx/include/switch/services/btm.h \
+  C:/devkitPro/libnx/include/switch/services/btm_types.h \
+  C:/devkitPro/libnx/include/switch/services/btmsys.h \
+  C:/devkitPro/libnx/include/switch/services/btmu.h \
+  C:/devkitPro/libnx/include/switch/services/capmtp.h \
+  C:/devkitPro/libnx/include/switch/services/caps.h \
+  C:/devkitPro/libnx/include/switch/services/capsa.h \
+  C:/devkitPro/libnx/include/switch/services/capsc.h \
+  C:/devkitPro/libnx/include/switch/services/capsdc.h \
+  C:/devkitPro/libnx/include/switch/services/capssc.h \
+  C:/devkitPro/libnx/include/switch/services/capssu.h \
+  C:/devkitPro/libnx/include/switch/services/capsu.h \
+  C:/devkitPro/libnx/include/switch/services/clkrst.h \
+  C:/devkitPro/libnx/include/switch/services/csrng.h \
+  C:/devkitPro/libnx/include/switch/services/ectx.h \
+  C:/devkitPro/libnx/include/switch/services/fan.h \
+  C:/devkitPro/libnx/include/switch/services/fatal.h \
+  C:/devkitPro/libnx/include/switch/services/friends.h \
+  C:/devkitPro/libnx/include/switch/services/fs.h \
+  C:/devkitPro/libnx/include/switch/services/fsldr.h \
+  C:/devkitPro/libnx/include/switch/services/fspr.h \
+  C:/devkitPro/libnx/include/switch/services/gpio.h \
+  C:/devkitPro/libnx/include/switch/services/grc.h \
+  C:/devkitPro/libnx/include/switch/services/hid.h \
+  C:/devkitPro/libnx/include/switch/services/hidbus.h \
+  C:/devkitPro/libnx/include/switch/services/hiddbg.h \
+  C:/devkitPro/libnx/include/switch/services/hidsys.h \
+  C:/devkitPro/libnx/include/switch/services/hwopus.h \
+  C:/devkitPro/libnx/include/switch/services/i2c.h \
+  C:/devkitPro/libnx/include/switch/services/ins.h \
+  C:/devkitPro/libnx/include/switch/services/irs.h \
+  C:/devkitPro/libnx/include/switch/services/lbl.h \
+  C:/devkitPro/libnx/include/switch/services/ldn.h \
+  C:/devkitPro/libnx/include/switch/services/ldr.h \
+  C:/devkitPro/libnx/include/switch/services/lp2p.h \
+  C:/devkitPro/libnx/include/switch/services/lr.h \
+  C:/devkitPro/libnx/include/switch/services/mii.h \
+  C:/devkitPro/libnx/include/switch/services/miiimg.h \
+  C:/devkitPro/libnx/include/switch/services/mm.h \
+  C:/devkitPro/libnx/include/switch/services/ncm.h \
+  C:/devkitPro/libnx/include/switch/services/ncm_types.h \
+  C:/devkitPro/libnx/include/switch/services/news.h \
+  C:/devkitPro/libnx/include/switch/services/nfc.h \
+  C:/devkitPro/libnx/include/switch/services/nifm.h \
+  C:/devkitPro/libnx/include/switch/services/nim.h \
+  C:/devkitPro/libnx/include/switch/services/notif.h \
+  C:/devkitPro/libnx/include/switch/services/ns.h \
+  C:/devkitPro/libnx/include/switch/services/nv.h \
+  C:/devkitPro/libnx/include/switch/services/pctl.h \
+  C:/devkitPro/libnx/include/switch/services/pcv.h \
+  C:/devkitPro/libnx/include/switch/services/pdm.h \
+  C:/devkitPro/libnx/include/switch/services/pgl.h \
+  C:/devkitPro/libnx/include/switch/services/pl.h \
+  C:/devkitPro/libnx/include/switch/services/pm.h \
+  C:/devkitPro/libnx/include/switch/services/psc.h \
+  C:/devkitPro/libnx/include/switch/services/psm.h \
+  C:/devkitPro/libnx/include/switch/services/ro.h \
+  C:/devkitPro/libnx/include/switch/services/set.h \
+  C:/devkitPro/libnx/include/switch/services/sm.h \
+  C:/devkitPro/libnx/include/switch/services/smm.h \
+  C:/devkitPro/libnx/include/switch/services/spl.h \
+  C:/devkitPro/libnx/include/switch/services/spsm.h \
+  C:/devkitPro/libnx/include/switch/services/ssl.h \
+  C:/devkitPro/libnx/include/switch/services/tc.h \
+  C:/devkitPro/libnx/include/switch/services/time.h \
+  C:/devkitPro/libnx/include/switch/services/ts.h \
+  C:/devkitPro/libnx/include/switch/services/uart.h \
+  C:/devkitPro/libnx/include/switch/services/usb.h \
+  C:/devkitPro/libnx/include/switch/services/usbds.h \
+  C:/devkitPro/libnx/include/switch/services/usbhs.h \
+  C:/devkitPro/libnx/include/switch/services/vi.h \
+  C:/devkitPro/libnx/include/switch/services/wlaninf.h \
+  C:/devkitPro/libnx/include/switch/sf/cmif.h \
+  C:/devkitPro/libnx/include/switch/sf/hipc.h \
+  C:/devkitPro/libnx/include/switch/sf/service.h \
+  C:/devkitPro/libnx/include/switch/sf/sessionmgr.h \
+  C:/devkitPro/libnx/include/switch/sf/tipc.h \
+  C:/devkitPro/libnx/include/switch/types.h \
   C:/devkitPro/libnx/include/sys/_iovec.h \
   C:/devkitPro/libnx/include/sys/_sockaddr_storage.h \
-  C:/devkitPro/libnx/include/sys/socket.h
+  C:/devkitPro/libnx/include/sys/socket.h \
+  C:/devkitPro/portlibs/switch/include/EGL/egl.h \
+  C:/devkitPro/portlibs/switch/include/EGL/eglext.h \
+  C:/devkitPro/portlibs/switch/include/EGL/eglplatform.h \
+  C:/devkitPro/portlibs/switch/include/GL/gl.h \
+  C:/devkitPro/portlibs/switch/include/GL/glext.h \
+  C:/devkitPro/portlibs/switch/include/KHR/khrplatform.h
 
 CMakeFiles/KisakBlack.dir/src/nx/nx_kbz.o: /c/dev/CBO1-NX/src/nx/nx_kbz.cpp \
   C:/dev/CBO1-NX/src/bgame/bg_emblems.h \
@@ -190772,6 +190957,30 @@ C:/dev/CBO1-NX/src/nx/nx_platform_stubs.cpp:
 
 /c/dev/CBO1-NX/src/nx/nx_platform_stubs.cpp:
 
+C:/devkitPro/devkitA64/aarch64-none-elf/include/sys/stat.h:
+
+C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/vector:
+
+C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/utility:
+
+C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_uninitialized.h:
+
+C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_relops.h:
+
+C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_bvector.h:
+
+C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/intcmp.h:
+
+C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/hash_bytes.h:
+
+C:/dev/CBO1-NX/src/nx/nx_kbz.cpp:
+
+C:/devkitPro/portlibs/switch/include/GL/gl.h:
+
+C:/devkitPro/portlibs/switch/include/EGL/eglplatform.h:
+
+C:/devkitPro/portlibs/switch/include/EGL/egl.h:
+
 C:/devkitPro/libnx/include/switch/types.h:
 
 C:/devkitPro/libnx/include/switch/sf/sessionmgr.h:
@@ -190997,24 +191206,6 @@ C:/devkitPro/libnx/include/switch/applets/error.h:
 C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/stdbool.h:
 
 C:/devkitPro/devkitA64/lib/gcc/aarch64-none-elf/16.1.0/include/arm_acle.h:
-
-C:/devkitPro/devkitA64/aarch64-none-elf/include/sys/stat.h:
-
-C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/vector:
-
-C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/utility:
-
-C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_uninitialized.h:
-
-C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_relops.h:
-
-C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/stl_bvector.h:
-
-C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/intcmp.h:
-
-C:/devkitPro/devkitA64/aarch64-none-elf/include/c++/16.1.0/bits/hash_bytes.h:
-
-C:/dev/CBO1-NX/src/nx/nx_kbz.cpp:
 
 /c/dev/CBO1-NX/src/nx/nx_d3d9_null.cpp:
 
@@ -192768,6 +192959,8 @@ C:/dev/CBO1-NX/src/bgame/bg_weapons_def.cpp:
 
 /c/dev/CBO1-NX/src/bgame/bg_weapons_attachment.cpp:
 
+C:/devkitPro/portlibs/switch/include/EGL/eglext.h:
+
 C:/dev/CBO1-NX/src/universal/base64.h:
 
 /c/dev/CBO1-NX/src/universal/q_shared.cpp:
@@ -193315,6 +193508,8 @@ C:/dev/CBO1-NX/src/bgame/bg_vehicles_mp.cpp:
 /c/dev/CBO1-NX/src/client/cl_medal.cpp:
 
 C:/dev/CBO1-NX/src/CubeMapGenLib/CBBoxInt32.h:
+
+C:/devkitPro/portlibs/switch/include/KHR/khrplatform.h:
 
 C:/dev/CBO1-NX/src/libs/libtommath-1.0/bncore.c:
 
@@ -195125,6 +195320,8 @@ C:/dev/CBO1-NX/src/cgame/cg_bolt.cpp:
 C:/dev/CBO1-NX/src/bgame/bg_dog_animations_mp.h:
 
 C:/dev/CBO1-NX/src/qcommon/cm_load_obj.h:
+
+C:/devkitPro/portlibs/switch/include/GL/glext.h:
 
 /c/dev/CBO1-NX/src/gfx_d3d/r_primarylights.cpp:
 

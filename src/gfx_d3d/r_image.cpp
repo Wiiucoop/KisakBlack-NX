@@ -167,7 +167,11 @@ void __cdecl Image_Release(GfxImage *image)
     }
     if ( image->texture.basemap )
     {
-        if ( Sys_IsRenderThread() )
+        // nx-port: Sys_CanCreateDeviceResourcesInline, non Sys_IsRenderThread.
+        // Vedi Load_CreateMaterialPixelShader: il ramo accodato qui sotto
+        // aspetta che RB_RenderThread lo svuoti, e durante il caricamento di
+        // una zona quel giro non arriva.
+        if ( Sys_CanCreateDeviceResourcesInline() )
             image->texture.basemap->Release();
         else
             RB_Resource_Release(image->texture.basemap);
@@ -403,13 +407,16 @@ void __cdecl Image_Create2DTexture_PC(
         memPool = (_D3DPOOL)(usage == 0);
     if ( (imageFlags & 0x100) != 0 )
         memPool = D3DPOOL_SYSTEMMEM;
-    if ( !Sys_IsRenderThread()
+    // nx-port: l'assert originale dice "solo il thread renderer crea risorse",
+    // che e' la regola PC. La domanda e' la stessa dei tre hook degli shader, e
+    // la risposta la da' Sys_CanCreateDeviceResourcesInline.
+    if ( !Sys_CanCreateDeviceResourcesInline()
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_image.cpp",
                     675,
                     0,
                     "%s",
-                    "Sys_IsRenderThread()") )
+                    "Sys_CanCreateDeviceResourcesInline()") )
     {
         __debugbreak();
     }
@@ -485,13 +492,16 @@ void __cdecl Image_Create3DTexture_PC(
     image->depth = depth;
     image->mapType = 4;
     Image_GetUsage(imageFlags, imageFormat);
-    if ( !Sys_IsRenderThread()
+    // nx-port: l'assert originale dice "solo il thread renderer crea risorse",
+    // che e' la regola PC. La domanda e' la stessa dei tre hook degli shader, e
+    // la risposta la da' Sys_CanCreateDeviceResourcesInline.
+    if ( !Sys_CanCreateDeviceResourcesInline()
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_image.cpp",
                     717,
                     0,
                     "%s",
-                    "Sys_IsRenderThread()") )
+                    "Sys_CanCreateDeviceResourcesInline()") )
     {
         __debugbreak();
     }
@@ -548,13 +558,16 @@ void __cdecl Image_CreateCubeTexture_PC(
     image->mapType = 5;
     if ( !gfxMetrics.canMipCubemaps )
         mipmapCount = 1;
-    if ( !Sys_IsRenderThread()
+    // nx-port: l'assert originale dice "solo il thread renderer crea risorse",
+    // che e' la regola PC. La domanda e' la stessa dei tre hook degli shader, e
+    // la risposta la da' Sys_CanCreateDeviceResourcesInline.
+    if ( !Sys_CanCreateDeviceResourcesInline()
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_image.cpp",
                     754,
                     0,
                     "%s",
-                    "Sys_IsRenderThread()") )
+                    "Sys_CanCreateDeviceResourcesInline()") )
     {
         __debugbreak();
     }

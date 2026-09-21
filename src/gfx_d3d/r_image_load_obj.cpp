@@ -850,7 +850,9 @@ char __cdecl Image_LoadFromFileWithReader(
                 bool loadHighmip,
                 int (__cdecl *OpenFileRead)(const char *, int *))
 {
-    if ( Sys_IsRenderThread() )
+    // nx-port: come sopra. RB_Resource_Flush qui sotto blocca finche' il
+    // thread renderer non esegue la callback, e durante una zona non lo fa.
+    if ( Sys_CanCreateDeviceResourcesInline() )
         return _Image_LoadFromFileWithReader(image, loadHighmip, OpenFileRead);
 
     iassert(image->category == 3/*IMG_CATEGORY_LOAD_FROM_FILE*/);

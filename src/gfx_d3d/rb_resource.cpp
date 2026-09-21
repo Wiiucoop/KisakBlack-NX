@@ -23,6 +23,62 @@ void __cdecl RB_Resource_Unlock()
     Sys_UnlockWrite(&resourceLock);
 }
 
+// Create the texture and push its mip chain into it. This used to live
+// inline in RB_Resource_Update_Internal's ACTION_CREATE_TEXTURE case and is
+// unchanged from it; it is a function now because the caller may also be the
+// one thread that owns the device, in which case queueing it would be a
+// message to nobody.
+void __cdecl RB_Resource_DoCreateTexture(
+                GfxImage *image,
+                void *imageBuffer,
+                int mipCount,
+                int flags,
+                _D3DFORMAT imageFormat)
+{
+    unsigned __int8 *data = (unsigned __int8 *)imageBuffer;
+    int faceCount;
+
+    switch ( image->mapType )
+    {
+    case MAPTYPE_2D:
+        Image_Create2DTexture_PC(image, image->width, image->height, mipCount, flags, imageFormat);
+        faceCount = 1;
+        break;
+    case MAPTYPE_3D:
+        Image_Create3DTexture_PC(image, image->width, image->height, image->depth, mipCount, flags, imageFormat);
+        faceCount = 1;
+        break;
+    default:
+        iassert(image->mapType == MAPTYPE_CUBE);
+        Image_CreateCubeTexture_PC(image, image->width, mipCount, imageFormat);
+        faceCount = 6;
+        break;
+    }
+
+    if ( !data )
+        return;
+
+    for ( int faceIndex = 0; faceIndex < faceCount; ++faceIndex )
+    {
+        _D3DCUBEMAP_FACES face = faceCount == 1
+                               ? D3DCUBEMAP_FACE_POSITIVE_X
+                               : (_D3DCUBEMAP_FACES)Image_CubemapFace(faceIndex);
+        for ( int mipLevel = 0; mipLevel < mipCount; ++mipLevel )
+        {
+            Image_UploadData(image, imageFormat, face, mipLevel, data);
+            unsigned int w = image->width >> mipLevel;
+            unsigned int h = image->height >> mipLevel;
+            unsigned int d = image->depth >> mipLevel;
+            if ( w <= 1 ) w = 1;
+            if ( h <= 1 ) h = 1;
+            if ( d <= 1 ) d = 1;
+            data += Image_GetCardMemoryAmountForMipLevel(imageFormat, w, h, d);
+        }
+    }
+    image->texture.basemap->PreLoad();
+    Z_VirtualFree(imageBuffer, 20);
+}
+
 void __cdecl RB_Resource_CreateTexture(
                 GfxImage *image,
                 void *imageBuffer,
@@ -31,6 +87,17 @@ void __cdecl RB_Resource_CreateTexture(
                 _D3DFORMAT imageFormat)
 {
     r_resource_action *action; // [esp+0h] [ebp-8h]
+
+    // Same rule the three shader hooks in r_material.cpp follow, and for the
+    // reason Sys_CanCreateDeviceResourcesInline sets out: the queue below is
+    // drained only by RB_RenderThread, and code_pre_gfx_mp is loaded before
+    // R_InitThreads has spawned that thread at all, so a caller that queued
+    // there would block in RB_Resource_Flush on a signal nobody can send.
+    if ( Sys_CanCreateDeviceResourcesInline() )
+    {
+        RB_Resource_DoCreateTexture(image, imageBuffer, mipCount, flags, imageFormat);
+        return;
+    }
 
     RB_Resource_Lock();
     action = RB_Resource_AllocEntry();
@@ -230,11 +297,6 @@ void __cdecl RB_Resource_Update(int msec)
 
 void RB_Resource_Update_Internal()
 {
-    unsigned int v1; // [esp+0h] [ebp-C0h]
-    unsigned int v2; // [esp+4h] [ebp-BCh]
-    unsigned int v3; // [esp+8h] [ebp-B8h]
-    _D3DCUBEMAP_FACES v4; // [esp+Ch] [ebp-B4h]
-    unsigned __int8 mapType; // [esp+10h] [ebp-B0h]
     unsigned __int8 *indexBuffer; // [esp+2Ch] [ebp-94h]
     int rawIndexBytes; // [esp+30h] [ebp-90h]
     signed int indexBytes; // [esp+34h] [ebp-8Ch]
@@ -243,13 +305,7 @@ void RB_Resource_Update_Internal()
     GfxImage *resource; // [esp+6Ch] [ebp-54h]
     GfxImageFileHeader *v12; // [esp+74h] [ebp-4Ch]
     GfxImage *image; // [esp+88h] [ebp-38h]
-    signed int mipCount; // [esp+90h] [ebp-30h]
     unsigned __int8 *data; // [esp+94h] [ebp-2Ch]
-    int faceCount; // [esp+A4h] [ebp-1Ch]
-    signed int faceIndex; // [esp+A8h] [ebp-18h]
-    _D3DFORMAT imageFormat; // [esp+ACh] [ebp-14h]
-    signed int mipLevel; // [esp+B0h] [ebp-10h]
-    int flags; // [esp+B4h] [ebp-Ch]
     r_resource_action *action; // [esp+B8h] [ebp-8h]
     int resourceIndex; // [esp+BCh] [ebp-4h]
 
@@ -263,57 +319,11 @@ void RB_Resource_Update_Internal()
         switch ( action->action )
         {
             case ACTION_CREATE_TEXTURE:
-                image = (GfxImage *)action->resource;
-                data = (unsigned __int8 *)action->data;
-                mipCount = action->p1;
-                imageFormat = (_D3DFORMAT)(action->p2);
-                flags = action->p3;
-                mapType = image->mapType;
-                if ( mapType == MAPTYPE_2D)
-                {
-                    Image_Create2DTexture_PC(image, image->width, image->height, mipCount, flags, imageFormat);
-                    faceCount = 1;
-                }
-                else if ( mapType == MAPTYPE_3D)
-                {
-                    Image_Create3DTexture_PC(image, image->width, image->height, image->depth, mipCount, flags, imageFormat);
-                    faceCount = 1;
-                }
-                else
-                {
-                    iassert(image->mapType == MAPTYPE_CUBE);
-                    Image_CreateCubeTexture_PC(image, image->width, mipCount, imageFormat);
-                    faceCount = 6;
-                }
-                if ( data )
-                {
-                    for ( faceIndex = 0; faceIndex < faceCount; ++faceIndex )
-                    {
-                        if ( faceCount == 1 )
-                            v4 = D3DCUBEMAP_FACE_POSITIVE_X;
-                        else
-                            v4 = (_D3DCUBEMAP_FACES)Image_CubemapFace(faceIndex);
-                        for ( mipLevel = 0; mipLevel < mipCount; ++mipLevel )
-                        {
-                            Image_UploadData(image, imageFormat, v4, mipLevel, data);
-                            if ( image->width >> mipLevel > 1 )
-                                v3 = image->width >> mipLevel;
-                            else
-                                v3 = 1;
-                            if ( image->height >> mipLevel > 1 )
-                                v2 = image->height >> mipLevel;
-                            else
-                                v2 = 1;
-                            if ( image->depth >> mipLevel > 1 )
-                                v1 = image->depth >> mipLevel;
-                            else
-                                v1 = 1;
-                            data += Image_GetCardMemoryAmountForMipLevel(imageFormat, v3, v2, v1);
-                        }
-                    }
-                    image->texture.basemap->PreLoad();
-                    Z_VirtualFree(action->data, 20);
-                }
+                RB_Resource_DoCreateTexture((GfxImage *)action->resource,
+                                            action->data,
+                                            action->p1,
+                                            action->p3,
+                                            (_D3DFORMAT)(action->p2));
                 goto LABEL_2;
             case ACTION_RELEASE:
                 (*(void (__thiscall **)(void *, void *))(*(unsigned int *)action->resource + 8))(action->resource, action->resource);

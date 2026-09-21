@@ -34,6 +34,8 @@
 #include <qcommon/common.h>
 #include <universal/q_shared.h>
 #include <gfx_d3d/r_material.h>
+#include <gfx_d3d/r_image.h>
+#include <gfx_d3d/r_init.h>
 #include <gfx_d3d/rb_resource.h>
 #include <sound/snd_bank.h>
 #include <ui/ui_shared.h>
@@ -159,15 +161,36 @@ static XAssetHeader registerAsset(XAssetType type, XAssetHeader h)
 //   GFXWORLD (17)       Load_VertexBuffer         :7984,:8001  static vertex buffers
 //   MATERIAL (6)        Load_PicmipWater                :2334  water_t FFT tables (CPU-side)
 //
-// Only TECHNIQUE_SET is wired up here: it is what the first draw call needs,
-// since R_SetPixelShader (r_shade.cpp:876) asserts on a null prog.ps before it
-// touches anything else. The table below is the extension point -- one row per
-// asset type, run in table order, so a type that must be built after another
-// just goes further down the list.
+// TECHNIQUE_SET and IMAGE are wired up here. The first is what the first draw
+// call needs, since R_SetPixelShader (r_shade.cpp:876) asserts on a null
+// prog.ps before it touches anything else; the second is what makes that draw
+// show anything but flat colour. The table below is the extension point --
+// one row per asset type, run in table order, so a type that must be built
+// after another just goes further down the list.
 // ---------------------------------------------------------------------------
 
+// What a builder needs besides the asset: where this zone's blocks are, which
+// is how buildImage tells a load def from a texture, and what it has built so
+// far, which is how it recreates an alias.
+struct NxBuildCtx {
+    uint8_t *const *block;
+    const uint32_t *blockSize;
+    uint32_t        nblk;
+    std::vector<std::pair<const void *, GfxImage *>> builtLoadDefs;
+
+    bool inBlocks(const void *ptr) const
+    {
+        const uint8_t *b = (const uint8_t *)ptr;
+        if (!b) return false;
+        for (uint32_t i = 0; i < nblk; ++i)
+            if (block[i] && b >= block[i] && b < block[i] + blockSize[i])
+                return true;
+        return false;
+    }
+};
+
 // A builder returns how many runtime objects it actually created, for logging.
-typedef unsigned (*NxAssetBuilder)(XAssetHeader);
+typedef unsigned (*NxAssetBuilder)(XAssetHeader, NxBuildCtx &);
 
 struct NxBuildStep {
     XAssetType     type;
@@ -175,12 +198,18 @@ struct NxBuildStep {
     const char    *what;   // plural noun, for the summary line
 };
 
+// One asset as the database returned it, kept from step 3 for step 4 to walk.
+struct NxRegistered {
+    XAssetType   type;
+    XAssetHeader header;
+};
+
 // Passes inside a zone share their shader and vertex-decl objects with every
 // other pass that referenced the same one in the original .ff, so a builder is
 // reached many times for the same object. The prog.vs / prog.ps / isLoaded
 // tests below are what keep the build idempotent: without them the second
 // visitor creates a duplicate and orphans the first.
-static unsigned buildTechniqueSet(XAssetHeader h)
+static unsigned buildTechniqueSet(XAssetHeader h, NxBuildCtx &)
 {
     MaterialTechniqueSet *techSet = h.techniqueSet;
     if (!techSet) return 0;
@@ -211,30 +240,91 @@ static unsigned buildTechniqueSet(XAssetHeader h)
     return built;
 }
 
+// IMAGE (8) -- Load_Texture (db_load.cpp:1923).
+//
+// A zone carries pixels, not textures. GfxImage::texture is a union, and what
+// the stream leaves in it is a GfxImageLoadDef -- level count, flags, format,
+// and the whole mip chain inline -- which Load_Texture turns into the D3D
+// object the samplers bind. Skip it and the field keeps pointing at the load
+// def for the rest of the run, so every SetTexture in the frame hands the
+// driver a pointer that was never a texture.
+//
+// Nothing in GfxImage says which of the two the field holds, so the address is
+// the test: a load def lives inside one of this zone's blocks, and a texture
+// comes from the D3D allocator, which is nowhere near them. That also skips
+// the images DB_LinkXAssetEntry resolved to an entry another zone has already
+// built -- their texture is real and rebuilding it would orphan it.
+// Images the build had to leave alone because the device was not up yet. It
+// should stay at zero; if it does not, the zone order and R_Init raced.
+static unsigned s_imagesWithoutDevice;
+
+static unsigned buildImage(XAssetHeader h, NxBuildCtx &ctx)
+{
+    GfxImage *image = h.image;
+    if (!image)
+        return 0;
+
+    const void *loadDef = image->texture.loadDef;
+    if (!ctx.inBlocks(loadDef))
+        return 0;
+
+    // Load_Texture ends in dx.device->CreateTexture, by every one of its three
+    // routes. The dvar it checks first, r_loadForRenderer, is registered by
+    // R_Register two lines before R_InitGraphicsApi creates the device
+    // (r_init.cpp:891), so on the ordinary path a live dvar means a live
+    // device -- but a zone read on the database thread could land in that gap,
+    // and the cost of being wrong there is a null call. Material_BuildVertexDecl
+    // guards the same way.
+    if (!dx.device) {
+        ++s_imagesWithoutDevice;
+        return 0;
+    }
+
+    // An aliased load def: two images, one set of pixels. On PC
+    // Load_GfxTextureLoad calls Load_Texture for the first image that carries
+    // it and DB_ConvertOffsetToAlias for the rest, so they end up sharing one
+    // texture. ffconv flattens the alias into an ordinary relocation to the
+    // same load def, so the sharing has to be put back here; without it the
+    // same pixels are uploaded once per image.
+    for (size_t i = 0; i < ctx.builtLoadDefs.size(); ++i)
+        if (ctx.builtLoadDefs[i].first == loadDef)
+            return R_DuplicateTexture(image, ctx.builtLoadDefs[i].second) ? 1 : 0;
+
+    // Load_Texture clears the field before it does anything else, so the load
+    // def pointer above is the only copy left after this returns.
+    Load_Texture(&image->texture, image);
+    if (!image->texture.basemap)
+        return 0;   // r_loadForRenderer still off, or the pixels are external
+    ctx.builtLoadDefs.push_back(std::make_pair(loadDef, image));
+    return 1;
+}
+
 static const NxBuildStep kBuildSteps[] = {
     { ASSET_TYPE_TECHNIQUE_SET, buildTechniqueSet, "shader/vertex-decl objects" },
+    { ASSET_TYPE_IMAGE,         buildImage,        "textures" },
 };
 
-// Walk the zone's asset table once per step, in table order.
-static void buildRuntimeObjects(const char *path, const uint8_t *assetTable,
-                                const uint8_t *end, uint32_t assetCount,
-                                uint8_t *const *block, const uint32_t *blockSize,
-                                uint32_t nblk)
+// Walk the assets this zone registered, once per step, in registration order.
+//
+// The header is the POOL entry, not the block copy. DB_AddXAsset clones the
+// struct (DB_CloneXAssetInternal, db_registry.cpp:1992) and AssetSlots then
+// redirects every reference in the zone onto the clone, so the block copy is
+// the one nothing reads any more. For a technique set the difference costs
+// nothing -- the clone is shallow, and the techniques it points at are the
+// same objects either way -- but a GfxImage keeps its texture INSIDE the
+// struct, so building the block copy would leave the pool entry, which is the
+// one the materials actually reach, still holding its load def.
+static void buildRuntimeObjects(const char *path,
+                                const std::vector<NxRegistered> &registered,
+                                NxBuildCtx &ctx)
 {
     for (unsigned step = 0; step < ARRAY_COUNT(kBuildSteps); ++step) {
         const NxBuildStep *bs = &kBuildSteps[step];
-        const uint8_t *p = assetTable;
         unsigned built = 0, visited = 0;
 
-        for (uint32_t i = 0; i < assetCount; ++i) {
-            if (p + 9 > end) break;
-            uint32_t type; memcpy(&type, p, 4); p += 4;
-            uint8_t  ab = *p++; uint32_t ao; memcpy(&ao, p, 4); p += 4;
-            if ((XAssetType)type != bs->type) continue;
-            if (ab >= nblk || !block[ab] || ao >= blockSize[ab]) continue;
-            XAssetHeader h;
-            h.data = block[ab] + ao;
-            built += bs->build(h);
+        for (size_t i = 0; i < registered.size(); ++i) {
+            if (registered[i].type != bs->type) continue;
+            built += bs->build(registered[i].header, ctx);
             ++visited;
         }
 
@@ -242,6 +332,10 @@ static void buildRuntimeObjects(const char *path, const uint8_t *assetTable,
             Com_Printf(16, "NX_KBZ: '%s' built %u %s over %u assets of type %d\n",
                        path, built, bs->what, visited, (int)bs->type);
     }
+    if (s_imagesWithoutDevice)
+        Com_PrintWarning(10, "NX_KBZ: '%s' left %u images unbuilt: no D3D device yet\n",
+                         path, s_imagesWithoutDevice);
+    s_imagesWithoutDevice = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -412,6 +506,10 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
     const uint8_t *assetTable = p;
     AssetSlots slots;
     slots.collect(assetTable, end, assetCount, relocTable, relocCount, block, blockSize, nblk);
+    // Kept for step 4, which has to build the entry the database returned and
+    // not the one in the block -- see buildRuntimeObjects.
+    std::vector<NxRegistered> registered;
+    registered.reserve(assetCount);
     for (uint32_t i = 0; i < assetCount; ++i) {
         if (p + 9 > end) break;
         uint32_t type; memcpy(&type, p, 4); p += 4;
@@ -421,6 +519,8 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
         h.data = block[ab] + ao;
         XAssetHeader added = registerAsset((XAssetType)type, h);
         uint32_t moved = slots.redirect(h.data, added.data);
+        NxRegistered rec = { (XAssetType)type, added };
+        registered.push_back(rec);
 #ifdef KISAK_NX
         // Probe: one line per asset the database moved, with the slot count.
         // DB_AddXAsset clones into the pool, so `added` differs for practically
@@ -448,7 +548,11 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
 
     // 4. build the runtime objects db_load.cpp would have built. This runs
     // after registration so a builder may look assets up by name if it needs to.
-    buildRuntimeObjects(path, assetTable, end, assetCount, block, blockSize, nblk);
+    NxBuildCtx ctx;
+    ctx.block = block;
+    ctx.blockSize = blockSize;
+    ctx.nblk = nblk;
+    buildRuntimeObjects(path, registered, ctx);
 
     Com_Printf(16, "NX_TryLoadKbz: loaded '%s' (%u assets, %u relocs)\n",
                path, assetCount, relocCount);

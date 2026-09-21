@@ -680,11 +680,19 @@ bool __cdecl Sys_IsRenderThread()
 //
 // On PC the answer is "only the renderer thread", and everyone else posts to the
 // RB_Resource queue and blocks in RB_Resource_Flush until the renderer signals
-// it back. This port never calls Sys_CreateThread(THREAD_CONTEXT_RENDERER), so
-// threadId[1] stays 0, Sys_IsRenderThread() is false for every thread, and
-// nothing ever drains that queue -- RB_Resource_Flush would wait forever on
-// Sys_WaitResourcesFlushedEvent(). With a single thread touching the device,
-// inline creation is both safe and the only path that terminates.
+// it back.
+//
+// This port answers yes for every thread, and the reason is the order inside
+// Com_Init. Com_InitCodeXAssets loads code_pre_gfx_mp at common.cpp:1799;
+// R_InitThreads, which spawns THREAD_CONTEXT_BACKEND and is the only thing
+// that makes threadId[1] non-zero, does not run until :1942. For the whole of
+// that load Sys_IsRenderThread() is false on every thread, nothing drains the
+// queue, and RB_Resource_Flush would wait forever on
+// Sys_WaitResourcesFlushedEvent(). The thread does exist by the time the later
+// zones are read, but those are read on the database thread while the renderer
+// is somewhere in its own loop, so the handshake is a timing bet either way.
+// With one device that nothing else is touching, inline creation is both safe
+// and the only path that always terminates.
 bool __cdecl Sys_CanCreateDeviceResourcesInline()
 {
 #ifdef KISAK_NX

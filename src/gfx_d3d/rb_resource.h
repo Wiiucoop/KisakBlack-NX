@@ -37,6 +37,14 @@ void __cdecl RB_Resource_CreateTexture(
                 int mipCount,
                 int flags,
                 _D3DFORMAT imageFormat);
+// The body of ACTION_CREATE_TEXTURE, callable without the queue. Both the
+// queue and RB_Resource_CreateTexture's inline path run this.
+void __cdecl RB_Resource_DoCreateTexture(
+                GfxImage *image,
+                void *imageBuffer,
+                int mipCount,
+                int flags,
+                _D3DFORMAT imageFormat);
 r_resource_action *__cdecl RB_Resource_AllocEntry();
 #ifdef KISAK_NX
 typedef IUnknown9Like RbD3DUnknown; // null-D3D9 objects have no COM IUnknown

@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/c/dev/CBO1-NX/build-nx/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

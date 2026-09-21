@@ -4,10 +4,12 @@
 // with correct pitches, including DXT block formats), queries complete
 // immediately, TestCooperativeLevel is always D3D_OK. The renderer runs "for
 // real" -- and a growing slice of the API now reaches the screen over EGL and
-// Mesa's OpenGL: Clear, the swap chain's Present, and indexed geometry in flat
-// colour (vertex and index buffers, the position in the vertex declaration,
-// DrawIndexedPrimitive). Shaders, textures and render state are still
-// discarded, so what lands on screen is untextured and unlit by construction.
+// Mesa's OpenGL: Clear, the swap chain's Present, and indexed geometry
+// (vertex and index buffers, the position and colour elements of the vertex
+// declaration, DrawIndexedPrimitive) drawn in its own vertex colours and
+// composited with the blend state the engine asked for. Shaders and textures
+// are still discarded, so what lands on screen is untextured and unlit by
+// construction, and most of the D3DRS file is recorded but not acted on.
 #include <d3d9.h>
 #include <d3dx9.h>
 
@@ -611,12 +613,206 @@ static NxSurface *nxTextureSurface(NxTexture *t, UINT face, UINT level)
 // box, so if c0 is wrong the log names the alternatives instead of leaving a
 // black screen to interpret.
 
+// ---------------------------------------------------------------------------
+// Render state
+// ---------------------------------------------------------------------------
+// SetRenderState used to be a counter and nothing else, which made every draw
+// opaque: the last quad written to a pixel was the one that stayed, so a menu
+// built out of stacked translucent panels showed only its topmost layer.
+//
+// The whole D3DRS file is recorded here -- it is one small array and the cost
+// of keeping all of it is the same as keeping three -- but only the states
+// that decide whether and how a draw reaches the framebuffer are acted on:
+// the blend equation, its factors, and the colour write mask. Depth, stencil,
+// culling and alpha test are still ignored on purpose, for the reason
+// nxGlEnsurePipeline gives: nothing here fills a depth buffer or tracks a
+// winding order yet, so honouring them could only discard geometry for
+// reasons that have nothing to do with whether the geometry is right.
+enum { NX_RS_COUNT = 256 };
+static DWORD s_rs[NX_RS_COUNT];
+
+// D3D9's own defaults, not zero. Zero is not a legal D3DBLEND, and a blend
+// state that has never been set has to read as "opaque, source only" or the
+// first draw before the engine touches these would vanish.
+static void nxInitRenderStates(void)
+{
+    s_rs[D3DRS_ALPHABLENDENABLE] = FALSE;
+    s_rs[D3DRS_SRCBLEND]  = D3DBLEND_ONE;
+    s_rs[D3DRS_DESTBLEND] = D3DBLEND_ZERO;
+    s_rs[D3DRS_BLENDOP]   = D3DBLENDOP_ADD;
+    s_rs[D3DRS_SEPARATEALPHABLENDENABLE] = FALSE;
+    s_rs[D3DRS_SRCBLENDALPHA]  = D3DBLEND_ONE;
+    s_rs[D3DRS_DESTBLENDALPHA] = D3DBLEND_ZERO;
+    s_rs[D3DRS_BLENDOPALPHA]   = D3DBLENDOP_ADD;
+    s_rs[D3DRS_BLENDFACTOR]    = 0xFFFFFFFFu;
+    s_rs[D3DRS_COLORWRITEENABLE] = 0xF;   // all four channels
+}
+
+// BLENDFACTOR and INVBLENDFACTOR need glBlendColor, which is one piece of
+// state for the whole equation rather than per-factor, so it is set from
+// D3DRS_BLENDFACTOR whenever blending is on and costs nothing when unused.
+static GLenum nxBlendToGl(DWORD b)
+{
+    switch (b) {
+    case D3DBLEND_ZERO:            return GL_ZERO;
+    case D3DBLEND_ONE:             return GL_ONE;
+    case D3DBLEND_SRCCOLOR:        return GL_SRC_COLOR;
+    case D3DBLEND_INVSRCCOLOR:     return GL_ONE_MINUS_SRC_COLOR;
+    case D3DBLEND_SRCALPHA:        return GL_SRC_ALPHA;
+    case D3DBLEND_INVSRCALPHA:     return GL_ONE_MINUS_SRC_ALPHA;
+    case D3DBLEND_DESTALPHA:       return GL_DST_ALPHA;
+    case D3DBLEND_INVDESTALPHA:    return GL_ONE_MINUS_DST_ALPHA;
+    case D3DBLEND_DESTCOLOR:       return GL_DST_COLOR;
+    case D3DBLEND_INVDESTCOLOR:    return GL_ONE_MINUS_DST_COLOR;
+    case D3DBLEND_SRCALPHASAT:     return GL_SRC_ALPHA_SATURATE;
+    case D3DBLEND_BLENDFACTOR:     return GL_CONSTANT_COLOR;
+    case D3DBLEND_INVBLENDFACTOR:  return GL_ONE_MINUS_CONSTANT_COLOR;
+    default:                       return GL_ONE;
+    }
+}
+
+static GLenum nxBlendOpToGl(DWORD op)
+{
+    switch (op) {
+    case D3DBLENDOP_SUBTRACT:    return GL_FUNC_SUBTRACT;
+    case D3DBLENDOP_REVSUBTRACT: return GL_FUNC_REVERSE_SUBTRACT;
+    case D3DBLENDOP_MIN:         return GL_MIN;
+    case D3DBLENDOP_MAX:         return GL_MAX;
+    default:                     return GL_FUNC_ADD;
+    }
+}
+
+// Applied per draw rather than inside SetRenderState, because SetRenderState
+// can arrive on any thread and only the draw path is guaranteed to hold the
+// context. It is a handful of redundant GL calls per draw; correctness first,
+// and a state cache is a later, separate change.
+static void nxGlApplyBlend(void)
+{
+    DWORD mask = s_rs[D3DRS_COLORWRITEENABLE];
+    glColorMask((mask & 1) ? GL_TRUE : GL_FALSE,    // RED
+                (mask & 2) ? GL_TRUE : GL_FALSE,    // GREEN
+                (mask & 4) ? GL_TRUE : GL_FALSE,    // BLUE
+                (mask & 8) ? GL_TRUE : GL_FALSE);   // ALPHA
+
+    if (!s_rs[D3DRS_ALPHABLENDENABLE]) {
+        glDisable(GL_BLEND);
+        return;
+    }
+    glEnable(GL_BLEND);
+
+    GLenum src = nxBlendToGl(s_rs[D3DRS_SRCBLEND]);
+    GLenum dst = nxBlendToGl(s_rs[D3DRS_DESTBLEND]);
+    GLenum op  = nxBlendOpToGl(s_rs[D3DRS_BLENDOP]);
+
+    // With the separate-alpha switch off, D3D9 runs the colour factors on the
+    // alpha channel too; glBlendFuncSeparate has no such mode, so the same
+    // pair is passed twice.
+    GLenum srcA = src, dstA = dst, opA = op;
+    if (s_rs[D3DRS_SEPARATEALPHABLENDENABLE]) {
+        srcA = nxBlendToGl(s_rs[D3DRS_SRCBLENDALPHA]);
+        dstA = nxBlendToGl(s_rs[D3DRS_DESTBLENDALPHA]);
+        opA  = nxBlendOpToGl(s_rs[D3DRS_BLENDOPALPHA]);
+    }
+    glBlendFuncSeparate(src, dst, srcA, dstA);
+    glBlendEquationSeparate(op, opA);
+
+    // Same ARGB packing Clear reads, for the same reason.
+    DWORD f = s_rs[D3DRS_BLENDFACTOR];
+    glBlendColor(((f >> 16) & 0xff) / 255.0f,
+                 ((f >>  8) & 0xff) / 255.0f,
+                 ((f      ) & 0xff) / 255.0f,
+                 ((f >> 24) & 0xff) / 255.0f);
+}
+
 // Vertex shader constant registers, recorded as the engine sets them. Only the
 // float file is kept: the transform is all this step needs from it.
 enum { NX_VS_CONST_ROWS = 256 };
 static float s_vsConst[NX_VS_CONST_ROWS][4];
 static bool s_vsConstWritten[NX_VS_CONST_ROWS];
 static unsigned s_vsConstBase;   // the register quad used as the transform
+
+// c0 was only ever a guess, and the comment above says why: the register the
+// transform lands in comes from the material's shader arguments, not from any
+// fixed convention. Two things narrow it down without guessing.
+//
+// The first is generic. A matrix constant reaches the device as one
+// SetVertexShaderConstantF of four rows (r_shade.cpp:269 uploads
+// routingData->u.codeConst.rowCount rows in a single call), while every
+// non-matrix code constant is a one-row write. So the start register of the
+// most recent four-row write is where the engine last put a matrix.
+static bool s_vsMatrixSeen;
+static unsigned s_vsMatrixBase;    // start register of the last 4-row write
+static unsigned s_nVsMatrixWrites;
+
+// The second is exact, and only works for the 2D view -- which is all that is
+// on screen right now. R_CmdBufSet2D (r_state_utils.cpp:370) builds the UI
+// projection by hand:
+//
+//   m[0][0] = 2/W      m[1][1] = -2/H     m[3][2] = 1     m[3][3] = 1
+//   m[3][0] = -1 - 1/W                    m[3][1] = 1 + 1/H
+//
+// and everything else is zero. HLSL packs a matrix constant column by column,
+// so mul(pos, m) compiles to four dp4s, one per register, and register i ends
+// up holding COLUMN i of that matrix:
+//
+//   base+0  ( 2/W,    0,  0,  -1 - 1/W )
+//   base+1  (   0, -2/H,  0,   1 + 1/H )
+//   base+2  (   0,    0,  0,         1 )
+//   base+3  (   0,    0,  0,         1 )
+//
+// Two registers that are (0,0,0,1) back to back is already a rare shape, and
+// the agreement between the 2/W in the first slot and the -1-1/W in the last
+// pins it down completely -- W and H fall out of the match rather than having
+// to be known in advance, so this needs nothing from the viewport.
+static int s_vs2dBase = -1;
+static float s_vs2dWidth, s_vs2dHeight;
+
+static bool nxNear(float a, float b, float tol)
+{
+    float d = a - b;
+    return (d < 0 ? -d : d) <= tol;
+}
+
+static bool nxLooksLike2dProjection(unsigned base, float *outW, float *outH)
+{
+    if (base + 4 > NX_VS_CONST_ROWS)
+        return false;
+    for (unsigned i = 0; i < 4; ++i)
+        if (!s_vsConstWritten[base + i])
+            return false;
+
+    const float *c0 = s_vsConst[base + 0];
+    const float *c1 = s_vsConst[base + 1];
+    const float *c2 = s_vsConst[base + 2];
+    const float *c3 = s_vsConst[base + 3];
+
+    // The two constant columns first: cheapest, and they reject almost
+    // everything else in the file on their own.
+    if (!nxNear(c2[0], 0.0f, 1e-6f) || !nxNear(c2[1], 0.0f, 1e-6f)
+     || !nxNear(c2[2], 0.0f, 1e-6f) || !nxNear(c2[3], 1.0f, 1e-6f))
+        return false;
+    if (!nxNear(c3[0], 0.0f, 1e-6f) || !nxNear(c3[1], 0.0f, 1e-6f)
+     || !nxNear(c3[2], 0.0f, 1e-6f) || !nxNear(c3[3], 1.0f, 1e-6f))
+        return false;
+
+    if (!nxNear(c0[1], 0.0f, 1e-6f) || !nxNear(c0[2], 0.0f, 1e-6f))
+        return false;
+    if (!nxNear(c1[0], 0.0f, 1e-6f) || !nxNear(c1[2], 0.0f, 1e-6f))
+        return false;
+
+    float sx = c0[0];    // 2/W, so a viewport wider than one pixel
+    float sy = c1[1];    // -2/H, negative because D3D9's 2D y points down
+    if (!(sx > 0.0f) || !(sy < 0.0f))
+        return false;
+    if (!nxNear(c0[3], -1.0f - sx * 0.5f, 1e-4f))
+        return false;
+    if (!nxNear(c1[3],  1.0f - sy * 0.5f, 1e-4f))
+        return false;
+
+    if (outW) *outW = 2.0f / sx;
+    if (outH) *outH = -2.0f / sy;
+    return true;
+}
 
 enum { NX_MAX_STREAMS = 4 };
 static NxBuffer *s_streamVB[NX_MAX_STREAMS];
@@ -628,7 +824,7 @@ static NxVDecl *s_vdecl;
 static GLuint s_prog, s_vao;
 static GLint s_locTransform = -1;
 static bool s_progFailed;
-enum { NX_ATTR_POS = 0 };
+enum { NX_ATTR_POS = 0, NX_ATTR_COLOR = 1 };
 
 // Draw-path tally. The skip counters matter as much as the success one: a
 // report that says ok=0 is useless without the reason, and every early return
@@ -638,29 +834,177 @@ static unsigned s_nSkipNoGl, s_nSkipNoProgram, s_nSkipNoDecl, s_nSkipNoPos;
 static unsigned s_nSkipNoBuffer, s_nSkipBadType;
 static GLenum s_lastGlDrawError;
 
+// How the colour attribute resolved, per draw. The split matters: a frame
+// that is entirely s_nColorDefault is a frame still drawing in flat white,
+// and that is a declaration problem, not a blending one.
+static unsigned s_nColorAttrib, s_nColorDefault;
+
 // The shape of the last draw that made it through, for the report.
+static BYTE s_lastDrawColorType;
+static bool s_lastDrawHadColor;
 static GLenum s_lastDrawMode;
 static GLsizei s_lastDrawCount;
 static GLenum s_lastDrawIdxType;
 static UINT s_lastDrawStride, s_lastDrawPosOffset;
 static BYTE s_lastDrawPosType;
-static float s_lastDrawPos[3];
-static bool s_lastDrawPosValid;
 
+// Four components now, not three, and the fourth watched across the whole
+// frame rather than sampled once. R_SetVertex2d (rb_backend.cpp:378) writes
+// xyzw[3] = 1 for an ordinary UI quad, but RB_DrawStretchPicW writes a real w
+// per vertex, so a span that is not exactly 1..1 says which of the two the
+// menu is actually built from.
+static float s_lastDrawPos[4];
+static int s_lastDrawPosComponents;
+static bool s_lastDrawPosValid;
+static float s_frameMinPosW, s_frameMaxPosW;
+static bool s_framePosWSeen;
+
+// One frame's worth of every draw, not one vertex out of the last of them.
+// A sampled vertex landing on screen says nothing about the other thousand
+// draws in the frame; these say whether the frame as a whole does.
+//
+// Transform source splits by the three branches nxGlDrawIndexed picks from.
+// The box is in NDC over every index the frame drew, transformed on the CPU
+// with the same registers the shader got: a box that is a speck in the
+// middle means most draws collapse and the sampled vertex was lucky, a box
+// that spans [-1,1] means the geometry is where it belongs and whatever is
+// missing is missing in colour. z is the D3D value (clip z / w, 0..1), kept
+// because 1.0 is exactly GL's far plane after the conversion.
+//
+// The alpha figures come from the raw D3DCOLOR bytes in the vertex buffer,
+// not from anything GL decoded, so they hold whichever way the swizzle is.
+struct NxFrameStats {
+    unsigned draws, via2d, viaMatrix, viaDefault;
+    unsigned drawsBlended;
+    unsigned drawsNoReadback;          // non-float position: not in the box
+    unsigned refs, refsBehind, refsInside, refsOutOfRange;
+    float minX, maxX, minY, maxY, minZ, maxZ;
+    bool boxSeen;
+    unsigned colRefs, alphaZero, alphaLow, alphaFull;   // low: 1..31
+    unsigned alphaMin, alphaMax;
+    unsigned alphaZeroBlended;         // alpha 0 in a draw that blends
+};
+// Cleared at every swap-chain Present, which prints it first when the
+// report is due -- so the figures are always the frame just finished.
+static NxFrameStats s_frame;
+
+// First vertex of the last draw with a colour element, raw.
+static DWORD s_lastDrawColorRaw;
+static bool s_lastDrawColorRawValid;
+
+static void nxTransformPoint(const float *regs, const float *p, float *out);
+
+// Walks the index run a draw just used and folds every vertex it referenced
+// into s_frame. The same bytes GL read, from the same client-side copies the
+// buffers were uploaded from, so this sees what the GPU saw.
+static void nxFrameAccumulate(const NxBuffer *ib, UINT idxSize, UINT startIndex,
+                              GLsizei count, INT baseVertexIndex,
+                              const float *regs,
+                              const NxBuffer *vb, UINT posStride, UINT posOffset,
+                              int posComps, bool posIsFloat,
+                              const NxBuffer *cb, UINT colStride, UINT colOffset,
+                              bool blended)
+{
+    for (GLsizei i = 0; i < count; ++i) {
+        size_t ioff = ((size_t)startIndex + (size_t)i) * idxSize;
+        if (ioff + idxSize > (size_t)ib->length) { ++s_frame.refsOutOfRange; break; }
+        const BYTE *ip = (const BYTE *)ib->bits + ioff;
+        UINT idx;
+        if (idxSize == 4) { uint32_t v; memcpy(&v, ip, 4); idx = v; }
+        else              { uint16_t v; memcpy(&v, ip, 2); idx = v; }
+        long long vert = (long long)baseVertexIndex + (long long)idx;
+        if (vert < 0) { ++s_frame.refsOutOfRange; continue; }
+
+        if (posIsFloat) {
+            size_t off = (size_t)vert * posStride + posOffset;
+            if (off + (size_t)posComps * sizeof(float) > (size_t)vb->length) {
+                ++s_frame.refsOutOfRange;
+            } else {
+                float p[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+                memcpy(p, (const BYTE *)vb->bits + off, (size_t)posComps * sizeof(float));
+                // The shader drops the fourth component and uses 1; so does this.
+                p[3] = 1.0f;
+                float c[4];
+                nxTransformPoint(regs, p, c);
+                ++s_frame.refs;
+                if (!(c[3] > 0.0f)) {
+                    ++s_frame.refsBehind;
+                } else {
+                    float x = c[0] / c[3], y = c[1] / c[3], z = c[2] / c[3];
+                    if (!s_frame.boxSeen) {
+                        s_frame.minX = s_frame.maxX = x;
+                        s_frame.minY = s_frame.maxY = y;
+                        s_frame.minZ = s_frame.maxZ = z;
+                        s_frame.boxSeen = true;
+                    } else {
+                        if (x < s_frame.minX) s_frame.minX = x;
+                        if (x > s_frame.maxX) s_frame.maxX = x;
+                        if (y < s_frame.minY) s_frame.minY = y;
+                        if (y > s_frame.maxY) s_frame.maxY = y;
+                        if (z < s_frame.minZ) s_frame.minZ = z;
+                        if (z > s_frame.maxZ) s_frame.maxZ = z;
+                    }
+                    if (x >= -1.0f && x <= 1.0f && y >= -1.0f && y <= 1.0f)
+                        ++s_frame.refsInside;
+                }
+            }
+        }
+
+        if (cb) {
+            size_t off = (size_t)vert * colStride + colOffset;
+            if (off + 4 <= (size_t)cb->length) {
+                DWORD raw;
+                memcpy(&raw, (const BYTE *)cb->bits + off, 4);
+                unsigned a = raw >> 24;   // D3DCOLOR is 0xAARRGGBB
+                if (!s_frame.colRefs) s_frame.alphaMin = s_frame.alphaMax = a;
+                if (a < s_frame.alphaMin) s_frame.alphaMin = a;
+                if (a > s_frame.alphaMax) s_frame.alphaMax = a;
+                ++s_frame.colRefs;
+                if (a == 0) {
+                    ++s_frame.alphaZero;
+                    if (blended) ++s_frame.alphaZeroBlended;
+                } else if (a < 32) {
+                    ++s_frame.alphaLow;
+                } else if (a == 255) {
+                    ++s_frame.alphaFull;
+                }
+            }
+        }
+    }
+}
+
+// The colour attribute arrives already in the right order and range: a
+// D3DCOLOR is four bytes read back as normalized BGRA (see nxDeclTypeToGl),
+// so by the time it reaches the shader it is an ordinary vec4 RGBA in 0..1.
+//
+// A declaration with no COLOR element leaves the attribute array disabled and
+// the constant white that nxGlDrawIndexed sets stands in. White is the
+// identity for the modulate a texture will bring next, so that fallback keeps
+// working unchanged once sampling lands.
 static const char *s_vsSrc =
     "#version 330 core\n"
     "layout(location = 0) in vec4 nxPos;\n"
+    "layout(location = 1) in vec4 nxColor;\n"
     "uniform mat4 nxTransform;\n"
+    "out vec4 vColor;\n"
     "void main() {\n"
     "    vec4 p = nxTransform * vec4(nxPos.xyz, 1.0);\n"
     "    p.z = 2.0 * p.z - p.w;\n"          // D3D9 clip z [0,w] -> GL [-w,w]
+    // TEST: the 2D projection gives clip z = w = 1, which the line above
+    // turns into z = w -- the far plane exactly, on the edge of GL's
+    // -w <= z <= w clip test, where one rounding step discards the triangle.
+    // Pinning z to the middle of the volume takes clipping out of the
+    // question. Revert once the report has answered it.
+    "    p.z = 0.0;\n"
     "    gl_Position = p;\n"
+    "    vColor = nxColor;\n"
     "}\n";
 
 static const char *s_fsSrc =
     "#version 330 core\n"
+    "in vec4 vColor;\n"
     "out vec4 nxFrag;\n"
-    "void main() { nxFrag = vec4(1.0, 0.1, 0.8, 1.0); }\n";   // loud magenta
+    "void main() { nxFrag = vColor; }\n";
 
 static GLuint nxGlCompile(GLenum type, const char *src, const char *what)
 {
@@ -701,6 +1045,7 @@ static bool nxGlEnsurePipeline(void)
     glAttachShader(s_prog, vs);
     glAttachShader(s_prog, fs);
     glBindAttribLocation(s_prog, NX_ATTR_POS, "nxPos");
+    glBindAttribLocation(s_prog, NX_ATTR_COLOR, "nxColor");
     glLinkProgram(s_prog);
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -725,13 +1070,15 @@ static bool nxGlEnsurePipeline(void)
     glGenVertexArrays(1, &s_vao);
     glBindVertexArray(s_vao);
 
-    // Every one of these is state this file still discards: SetRenderState is
-    // a no-op, no depth buffer is ever filled, no winding order is tracked. So
+    // Every one of these is still state this file discards: no depth buffer is
+    // ever filled, no winding order is tracked, SetScissorRect is a no-op. So
     // leaving them on could only throw the geometry away for reasons that have
     // nothing to do with whether the geometry arrived.
+    //
+    // GL_BLEND has left this list: nxGlApplyBlend now sets it per draw, from
+    // the state the engine actually asked for.
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
-    glDisable(GL_BLEND);
     glDisable(GL_SCISSOR_TEST);
 
     // SetViewport is a no-op too, so nobody has called glViewport. The surface
@@ -741,7 +1088,7 @@ static bool nxGlEnsurePipeline(void)
     eglQuerySurface(s_display, s_surface, EGL_HEIGHT, &sh);
     glViewport(0, 0, sw, sh);
 
-    printf("[nx-gl] flat-colour pipeline up: program %u vao %u "
+    printf("[nx-gl] vertex-colour pipeline up: program %u vao %u "
            "nxTransform at %d, viewport %dx%d\n",
            s_prog, s_vao, s_locTransform, sw, sh);
     fflush(stdout);
@@ -807,7 +1154,13 @@ static bool nxDeclTypeToGl(BYTE type, NxAttrFormat *out)
     case D3DDECLTYPE_USHORT4N:  NX_ATTR_FMT(4, GL_UNSIGNED_SHORT, GL_TRUE);
     case D3DDECLTYPE_UBYTE4:    NX_ATTR_FMT(4, GL_UNSIGNED_BYTE, GL_FALSE);
     case D3DDECLTYPE_UBYTE4N:   NX_ATTR_FMT(4, GL_UNSIGNED_BYTE, GL_TRUE);
-    default: return false;   // D3DCOLOR, UDEC3, DEC3N: no position uses them
+    // D3DCOLOR is four bytes in B,G,R,A order, normalized. GL_BGRA is not a
+    // component count -- it is the one legal non-numeric `size`, and it means
+    // exactly that reordering, which is why the swizzle costs nothing in the
+    // shader. It has been core since 3.2 (ARB_vertex_array_bgra) and the rule
+    // that comes with it is that `normalized` must be GL_TRUE, as it is here.
+    case D3DDECLTYPE_D3DCOLOR:  NX_ATTR_FMT(GL_BGRA, GL_UNSIGNED_BYTE, GL_TRUE);
+    default: return false;   // UDEC3, DEC3N: nothing bound here uses them
     }
 }
 #undef NX_ATTR_FMT
@@ -827,14 +1180,41 @@ static bool nxPrimToGl(D3DPRIMITIVETYPE type, UINT primCount, GLenum *mode, GLsi
     }
 }
 
-static const D3DVERTEXELEMENT9 *nxFindPosition(const NxVDecl *d)
+static const D3DVERTEXELEMENT9 *nxFindUsage(const NxVDecl *d, BYTE usage, BYTE usageIndex)
 {
     for (UINT i = 0; i < d->count; ++i) {
-        if (d->elements[i].Usage == D3DDECLUSAGE_POSITION
-         && d->elements[i].UsageIndex == 0)
+        if (d->elements[i].Usage == usage
+         && d->elements[i].UsageIndex == usageIndex)
             return &d->elements[i];
     }
     return nullptr;
+}
+
+// Binds one declaration element as a vertex attribute, syncing the stream it
+// lives in. Returns false when the element is missing, in a stream this file
+// does not track, of a type with no GL equivalent, or backed by no buffer --
+// every one of which the caller answers by leaving the attribute disabled.
+static bool nxGlBindAttrib(GLuint attr, const D3DVERTEXELEMENT9 *elem)
+{
+    if (!elem || elem->Stream >= NX_MAX_STREAMS)
+        return false;
+
+    NxAttrFormat fmt;
+    if (!nxDeclTypeToGl(elem->Type, &fmt))
+        return false;
+
+    NxBuffer *vb = s_streamVB[elem->Stream];
+    if (!nxGlSyncBuffer(vb, GL_ARRAY_BUFFER))
+        return false;
+
+    // glVertexAttribPointer takes its buffer from whatever is bound to
+    // GL_ARRAY_BUFFER, which nxGlSyncBuffer has just left as this stream's.
+    UINT offset = s_streamOffset[elem->Stream] + elem->Offset;
+    glEnableVertexAttribArray(attr);
+    glVertexAttribPointer(attr, fmt.size, fmt.type, fmt.normalized,
+                          (GLsizei)s_streamStride[elem->Stream],
+                          (const void *)(uintptr_t)offset);
+    return true;
 }
 
 static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
@@ -844,9 +1224,9 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     if (!nxGlEnsurePipeline()) { ++s_nSkipNoProgram; return; }
     if (!s_vdecl)              { ++s_nSkipNoDecl;    return; }
 
-    // Position only. Normals, tangents, texcoords and blend weights have
-    // nothing to feed in a shader that emits one fixed colour.
-    const D3DVERTEXELEMENT9 *pos = nxFindPosition(s_vdecl);
+    // Position and colour. Normals, tangents and blend weights still have
+    // nothing to feed; texcoords are the next thing to arrive here.
+    const D3DVERTEXELEMENT9 *pos = nxFindUsage(s_vdecl, D3DDECLUSAGE_POSITION, 0);
     if (!pos || pos->Stream >= NX_MAX_STREAMS) { ++s_nSkipNoPos; return; }
 
     NxAttrFormat fmt;
@@ -864,23 +1244,51 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     UINT idxSize = 2;
     if (ib->format == D3DFMT_INDEX32) { idxType = GL_UNSIGNED_INT; idxSize = 4; }
 
-    if (!nxGlSyncBuffer(vb, GL_ARRAY_BUFFER))         { ++s_nSkipNoBuffer; return; }
     if (!nxGlSyncBuffer(ib, GL_ELEMENT_ARRAY_BUFFER)) { ++s_nSkipNoBuffer; return; }
+
+    // Which registers hold the transform, best answer first: the window that
+    // matches the 2D projection exactly, else wherever the engine last wrote
+    // a four-row matrix, else the old c0 guess. Everything on screen at this
+    // stage is the menu, so the 2D window being preferred is a help and not
+    // yet a lie; the first frame with a world in it will have to pick per
+    // draw instead, from the technique the material selected.
+    s_vsConstBase = s_vs2dBase >= 0 ? (unsigned)s_vs2dBase
+                  : s_vsMatrixSeen  ? s_vsMatrixBase
+                                    : 0u;
 
     glUseProgram(s_prog);
     if (s_locTransform >= 0) {
-        // transpose=GL_TRUE: the registers already are the rows of the
-        // transform, which is the order this call wants them in.
+        // transpose=GL_TRUE makes register r mathematical row r of the mat4,
+        // so GLSL's nxTransform * p is dot(register r, p) per component --
+        // the same arithmetic nxTransformPoint does for the report, and the
+        // same four dp4s the HLSL original compiled to.
         glUniformMatrix4fv(s_locTransform, 1, GL_TRUE, &s_vsConst[s_vsConstBase][0]);
     }
 
-    // glVertexAttribPointer takes its buffer from whatever is bound to
-    // GL_ARRAY_BUFFER, which nxGlSyncBuffer left as this stream's.
+    // The two attributes may live in different streams, and each of these
+    // calls binds its own before handing the pointer over, so the order they
+    // go in does not matter: glVertexAttribPointer captures the buffer that
+    // is bound at its own call, not at draw time.
+    const D3DVERTEXELEMENT9 *col = nxFindUsage(s_vdecl, D3DDECLUSAGE_COLOR, 0);
+    if (nxGlBindAttrib(NX_ATTR_COLOR, col)) {
+        ++s_nColorAttrib;
+        s_lastDrawColorType = col->Type;
+        s_lastDrawHadColor = true;
+    } else {
+        // No usable COLOR element. The disabled array reads back as the
+        // current generic attribute, so white it is -- see s_vsSrc.
+        ++s_nColorDefault;
+        glDisableVertexAttribArray(NX_ATTR_COLOR);
+        glVertexAttrib4f(NX_ATTR_COLOR, 1.0f, 1.0f, 1.0f, 1.0f);
+        s_lastDrawHadColor = false;
+    }
+
+    if (!nxGlBindAttrib(NX_ATTR_POS, pos)) { ++s_nSkipNoBuffer; return; }
+
+    nxGlApplyBlend();
+
     UINT stride = s_streamStride[pos->Stream];
     UINT attrOffset = s_streamOffset[pos->Stream] + pos->Offset;
-    glEnableVertexAttribArray(NX_ATTR_POS);
-    glVertexAttribPointer(NX_ATTR_POS, fmt.size, fmt.type, fmt.normalized,
-                          (GLsizei)stride, (const void *)(uintptr_t)attrOffset);
 
     glGetError();   // clear anything stale, so the reading below is this draw's
     glDrawElementsBaseVertex(mode, count, idxType,
@@ -893,6 +1301,38 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
         return;
     }
     ++s_nGlDrawOk;
+
+    ++s_frame.draws;
+    if (s_vs2dBase >= 0)     ++s_frame.via2d;
+    else if (s_vsMatrixSeen) ++s_frame.viaMatrix;
+    else                     ++s_frame.viaDefault;
+    bool blended = s_rs[D3DRS_ALPHABLENDENABLE] != 0;
+    if (blended) ++s_frame.drawsBlended;
+    if (fmt.type != GL_FLOAT) ++s_frame.drawsNoReadback;
+
+    // Only D3DCOLOR is read raw: it is all the UI declares, and its byte
+    // order is the question.
+    const NxBuffer *cb = nullptr;
+    UINT colStride = 0, colOffset = 0;
+    if (s_lastDrawHadColor && col->Type == D3DDECLTYPE_D3DCOLOR) {
+        cb = s_streamVB[col->Stream];
+        colStride = s_streamStride[col->Stream];
+        colOffset = s_streamOffset[col->Stream] + col->Offset;
+        if (cb && cb->bits) {
+            UINT v = (UINT)(baseVertexIndex > 0 ? baseVertexIndex : 0);
+            size_t off = (size_t)v * colStride + colOffset;
+            s_lastDrawColorRawValid = off + 4 <= (size_t)cb->length;
+            if (s_lastDrawColorRawValid)
+                memcpy(&s_lastDrawColorRaw, (const BYTE *)cb->bits + off, 4);
+        } else {
+            cb = nullptr;
+        }
+    }
+    if (ib->bits && vb->bits)
+        nxFrameAccumulate(ib, idxSize, startIndex, count, baseVertexIndex,
+                          &s_vsConst[s_vsConstBase][0],
+                          vb, stride, attrOffset, fmt.size, fmt.type == GL_FLOAT,
+                          cb, colStride, colOffset, blended);
 
     s_lastDrawMode = mode;
     s_lastDrawCount = count;
@@ -908,19 +1348,49 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     if (fmt.type == GL_FLOAT && stride) {
         UINT v = (UINT)(baseVertexIndex > 0 ? baseVertexIndex : 0);
         size_t byteOff = (size_t)v * stride + attrOffset;
-        if (byteOff + 3 * sizeof(float) <= (size_t)vb->length) {
-            memcpy(s_lastDrawPos, (const BYTE *)vb->bits + byteOff, sizeof(s_lastDrawPos));
-            if (fmt.size < 3) s_lastDrawPos[2] = 0.0f;
+        int comps = fmt.size;
+        if (byteOff + (size_t)comps * sizeof(float) <= (size_t)vb->length) {
+            s_lastDrawPos[0] = s_lastDrawPos[1] = s_lastDrawPos[2] = 0.0f;
+            // The missing components read as the homogeneous default, so a
+            // FLOAT2 or FLOAT3 declaration still transforms correctly.
+            s_lastDrawPos[3] = 1.0f;
+            memcpy(s_lastDrawPos, (const BYTE *)vb->bits + byteOff,
+                   (size_t)comps * sizeof(float));
+            s_lastDrawPosComponents = comps;
             s_lastDrawPosValid = true;
+
+            float w = s_lastDrawPos[3];
+            if (!s_framePosWSeen) {
+                s_frameMinPosW = s_frameMaxPosW = w;
+                s_framePosWSeen = true;
+            } else {
+                if (w < s_frameMinPosW) s_frameMinPosW = w;
+                if (w > s_frameMaxPosW) s_frameMaxPosW = w;
+            }
         }
     }
 }
 
-// Row vector times matrix -- the D3D9 convention the constant registers are in.
-static void nxTransformPoint(const float *rows, const float *p, float *out)
+// One clip component per register: component r is register r dotted with the
+// position, w included.
+//
+// This used to read the four registers as the ROWS of a matrix and multiply a
+// row vector by it, which is the transpose of what the shader does -- and the
+// shader is the one that is right. glUniformMatrix4fv is given transpose=TRUE,
+// so register r becomes mathematical row r of nxTransform, and GLSL's
+// nxTransform * p is then exactly dot(register r, p) per component. That is
+// also what the constant file holds: HLSL packs a matrix column by column and
+// mul(pos, m) compiles to one dp4 per register, so a register IS a column of
+// the D3D matrix and dotting it with the position is the whole operation.
+//
+// While the two disagreed, every clip and ndc figure this report printed --
+// and every candidate it ruled in or out -- described a draw that never
+// happened.
+static void nxTransformPoint(const float *regs, const float *p, float *out)
 {
-    for (int c = 0; c < 4; ++c)
-        out[c] = p[0] * rows[c] + p[1] * rows[4 + c] + p[2] * rows[8 + c] + rows[12 + c];
+    for (int r = 0; r < 4; ++r)
+        out[r] = p[0] * regs[r * 4 + 0] + p[1] * regs[r * 4 + 1]
+               + p[2] * regs[r * 4 + 2] + p[3] * regs[r * 4 + 3];
 }
 
 static const char *nxGlModeName(GLenum mode)
@@ -945,7 +1415,22 @@ static void nxGlDumpGeometry(void)
            s_nSkipNoGl, s_nSkipNoProgram, s_nSkipNoDecl, s_nSkipNoPos,
            s_nSkipNoBuffer, s_nSkipBadType);
 
+    printf("        colour: from vertices=%u default white=%u\n",
+           s_nColorAttrib, s_nColorDefault);
+    printf("        blend: %s src=%u dst=%u op=%u sepAlpha=%u "
+           "colorWrite=0x%x\n",
+           s_rs[D3DRS_ALPHABLENDENABLE] ? "on" : "off",
+           (unsigned)s_rs[D3DRS_SRCBLEND], (unsigned)s_rs[D3DRS_DESTBLEND],
+           (unsigned)s_rs[D3DRS_BLENDOP],
+           (unsigned)s_rs[D3DRS_SEPARATEALPHABLENDENABLE],
+           (unsigned)s_rs[D3DRS_COLORWRITEENABLE]);
+
     if (s_nGlDrawOk) {
+        if (s_lastDrawHadColor)
+            printf("        last colour element: decltype %u\n",
+                   (unsigned)s_lastDrawColorType);
+        else
+            printf("        last colour element: none, drew white\n");
         printf("        last draw: %s, %d %s, stride %u, position at +%u "
                "decltype %u\n",
                nxGlModeName(s_lastDrawMode), (int)s_lastDrawCount,
@@ -953,17 +1438,75 @@ static void nxGlDumpGeometry(void)
                s_lastDrawStride, s_lastDrawPosOffset, (unsigned)s_lastDrawPosType);
     }
 
-    const float *rows = &s_vsConst[s_vsConstBase][0];
-    printf("        transform c%u..c%u:\n", s_vsConstBase, s_vsConstBase + 3);
+    // Where the transform was taken from, and on whose authority.
+    if (s_vs2dBase >= 0)
+        printf("        transform c%d..c%d, matched R_CmdBufSet2D exactly "
+               "(viewport %.0fx%.0f)\n",
+               s_vs2dBase, s_vs2dBase + 3, s_vs2dWidth, s_vs2dHeight);
+    else if (s_vsMatrixSeen)
+        printf("        transform c%u..c%u, last of %u four-row writes; "
+               "no window matched R_CmdBufSet2D\n",
+               s_vsMatrixBase, s_vsMatrixBase + 3, s_nVsMatrixWrites);
+    else
+        printf("        transform c0..c3 by default: no four-row write has "
+               "arrived at all\n");
+
+    const float *regs = &s_vsConst[s_vsConstBase][0];
     for (int r = 0; r < 4; ++r)
-        printf("          % .4f % .4f % .4f % .4f\n",
-               rows[r * 4 + 0], rows[r * 4 + 1], rows[r * 4 + 2], rows[r * 4 + 3]);
+        printf("          c%-3u % .4f % .4f % .4f % .4f\n",
+               s_vsConstBase + r,
+               regs[r * 4 + 0], regs[r * 4 + 1], regs[r * 4 + 2], regs[r * 4 + 3]);
+
+    if (s_framePosWSeen) {
+        printf("        position w since the last report: %.4f .. %.4f (%s)\n",
+               s_frameMinPosW, s_frameMaxPosW,
+               s_frameMinPosW == s_frameMaxPosW ? "constant" : "varies per vertex");
+        s_framePosWSeen = false;   // next window starts clean
+    }
+
+    // The frame as a whole. Everything below this block is one vertex.
+    const NxFrameStats &f = s_frame;
+    printf("        this frame: %u draws | transform: R_CmdBufSet2D match=%u "
+           "last 4-row write=%u c0 default=%u | blended=%u\n",
+           f.draws, f.via2d, f.viaMatrix, f.viaDefault, f.drawsBlended);
+    printf("          indices %u: in front %u, on screen %u, w<=0 %u, "
+           "out of buffer %u, draws not read back (non-float pos) %u\n",
+           f.refs, f.refs - f.refsBehind, f.refsInside, f.refsBehind,
+           f.refsOutOfRange, f.drawsNoReadback);
+    if (f.boxSeen) {
+        printf("          ndc box x [% .3f, % .3f] y [% .3f, % .3f] "
+               "d3d z [% .4f, % .4f]\n",
+               f.minX, f.maxX, f.minY, f.maxY, f.minZ, f.maxZ);
+    } else {
+        printf("          ndc box: no vertex in front of the camera\n");
+    }
+    if (f.colRefs) {
+        printf("          D3DCOLOR alpha over %u indices: min %u max %u | "
+               "0: %u (in blended draws %u)  1..31: %u  255: %u\n",
+               f.colRefs, f.alphaMin, f.alphaMax, f.alphaZero,
+               f.alphaZeroBlended, f.alphaLow, f.alphaFull);
+    } else {
+        printf("          D3DCOLOR alpha: no D3DCOLOR element this frame\n");
+    }
+    if (s_lastDrawColorRawValid) {
+        // Raw DWORD as the engine packed it, then what GL_BGRA hands the
+        // shader. If the alpha here is 0 while the quad should be visible,
+        // the bytes are not in the order D3DCOLOR promises.
+        DWORD c = s_lastDrawColorRaw;
+        printf("          last draw vertex colour raw 0x%08x -> shader rgba "
+               "(%.3f %.3f %.3f %.3f)\n",
+               (unsigned)c,
+               ((c >> 16) & 0xff) / 255.0f, ((c >> 8) & 0xff) / 255.0f,
+               (c & 0xff) / 255.0f, (c >> 24) / 255.0f);
+    }
 
     if (s_lastDrawPosValid) {
         float clip[4];
-        nxTransformPoint(rows, s_lastDrawPos, clip);
-        printf("        vertex (% .2f % .2f % .2f) -> clip (% .3f % .3f % .3f % .3f)",
-               s_lastDrawPos[0], s_lastDrawPos[1], s_lastDrawPos[2],
+        nxTransformPoint(regs, s_lastDrawPos, clip);
+        printf("        vertex %df raw (% .2f % .2f % .2f % .2f)\n",
+               s_lastDrawPosComponents, s_lastDrawPos[0], s_lastDrawPos[1],
+               s_lastDrawPos[2], s_lastDrawPos[3]);
+        printf("               -> clip (% .3f % .3f % .3f % .3f)",
                clip[0], clip[1], clip[2], clip[3]);
         if (clip[3] != 0.0f)
             printf(" -> ndc (% .3f % .3f % .3f)",
@@ -971,10 +1514,12 @@ static void nxGlDumpGeometry(void)
                    2.0f * clip[2] / clip[3] - 1.0f);
         printf("\n");
 
-        // If c0 is the wrong guess, the right answer is very likely among the
-        // windows that put this vertex on screen. Naming them costs one scan of
-        // a 256-register file and saves a blind iteration.
-        char cands[128];
+        // If the chosen window is still wrong, the right answer is very likely
+        // among the ones that put this vertex on screen. Naming them costs one
+        // scan of a 256-register file and saves a blind iteration. A 2D
+        // projection leaves w at exactly 1, so that is worth marking: a
+        // candidate whose w drifts is a perspective matrix that happens to fit.
+        char cands[160];
         int used = 0, found = 0;
         for (unsigned b = 0; b + 3 < NX_VS_CONST_ROWS && found < 6; ++b) {
             if (!s_vsConstWritten[b] || !s_vsConstWritten[b + 1]
@@ -984,13 +1529,14 @@ static void nxGlDumpGeometry(void)
             nxTransformPoint(&s_vsConst[b][0], s_lastDrawPos, c);
             if (c[3] <= 0.0f) continue;
             if (c[0] < -c[3] || c[0] > c[3] || c[1] < -c[3] || c[1] > c[3]) continue;
-            int n = snprintf(cands + used, sizeof(cands) - used, "%sc%u",
-                             found ? " " : "", b);
+            int n = snprintf(cands + used, sizeof(cands) - used, "%sc%u%s",
+                             found ? " " : "", b,
+                             nxNear(c[3], 1.0f, 1e-4f) ? "(w=1)" : "");
             if (n < 0 || used + n >= (int)sizeof(cands)) break;
             used += n;
             ++found;
         }
-        printf("        transform candidates (this vertex lands on screen): %s\n",
+        printf("        candidates (this vertex lands on screen): %s\n",
                found ? cands : "none");
     }
     fflush(stdout);
@@ -1166,6 +1712,9 @@ HRESULT IDirect3D9::CreateDevice(UINT, D3DDEVTYPE, HWND, DWORD, D3DPRESENT_PARAM
     memset(&s_device, 0, sizeof(s_device));
     s_device.obj.refCount = 1;
     s_device.swapChain.obj.refCount = 1;
+    // Before the engine's first SetRenderState, and well before the first
+    // draw reads the file.
+    nxInitRenderStates();
     if (pp) {
         s_device.pp = *pp;
         UINT w = pp->BackBufferWidth ? pp->BackBufferWidth : 1280;
@@ -1379,6 +1928,12 @@ HRESULT IDirect3DDevice9::Clear(
     // D3DCOLOR is 0xAARRGGBB -- Byte4PackPixelColor (r_state.cpp:3122) writes
     // B,G,R,A into ascending bytes and the packed word is read back
     // little-endian, so this is the colour R_ClearScreen was given.
+    // glClear obeys the colour write mask; D3D9's Clear does not. Now that
+    // nxGlApplyBlend actually sets that mask, a frame whose last draw had
+    // channels switched off would leave the next clear partly undone, so the
+    // mask is opened here first. The next draw sets it again anyway.
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
     GLbitfield mask = 0;
     if (flags & D3DCLEAR_TARGET) {
         glClearColor(((color >> 16) & 0xff) / 255.0f,
@@ -1414,10 +1969,24 @@ HRESULT IDirect3DDevice9::GetViewport(D3DVIEWPORT9 *viewport)
     }
     return D3D_OK;
 }
-HRESULT IDirect3DDevice9::SetRenderState(D3DRENDERSTATETYPE, DWORD) { ++s_nSetRenderState; return D3D_OK; }
-HRESULT IDirect3DDevice9::GetRenderState(D3DRENDERSTATETYPE, DWORD *value)
+// Recorded, not applied: the draw path reads this file through nxGlApplyBlend
+// on the thread that owns the context. Anything outside NX_RS_COUNT is a state
+// this D3DRS enum does not define, and dropping it is what the old no-op did
+// to all of them.
+HRESULT IDirect3DDevice9::SetRenderState(D3DRENDERSTATETYPE state, DWORD value)
 {
-    if (value) *value = 0;
+    ++s_nSetRenderState;
+    if ((unsigned)state < NX_RS_COUNT)
+        s_rs[state] = value;
+    return D3D_OK;
+}
+// Now that the values are kept, hand back the real one. Returning zero for
+// everything was safe only while nothing was tracked; with a state file in
+// place it would be the one answer guaranteed to disagree with the draw.
+HRESULT IDirect3DDevice9::GetRenderState(D3DRENDERSTATETYPE state, DWORD *value)
+{
+    if (value)
+        *value = (unsigned)state < NX_RS_COUNT ? s_rs[state] : 0;
     return D3D_OK;
 }
 HRESULT IDirect3DDevice9::SetTexture(DWORD, IDirect3DBaseTexture9 *) { ++s_nSetTexture; return D3D_OK; }
@@ -1455,6 +2024,24 @@ HRESULT IDirect3DDevice9::SetVertexShaderConstantF(UINT startRegister, const flo
         memcpy(s_vsConst[startRegister + i], data + i * 4, 4 * sizeof(float));
         s_vsConstWritten[startRegister + i] = true;
     }
+
+    // Four rows in one call is a matrix; one row is a plain code constant.
+    if (count >= 4 && startRegister + 4 <= NX_VS_CONST_ROWS) {
+        s_vsMatrixBase = startRegister;
+        s_vsMatrixSeen = true;
+        ++s_nVsMatrixWrites;
+
+        // A single call can carry more than one matrix, so every window it
+        // just filled gets the 2D test, not only the first.
+        for (UINT i = 0; i + 4 <= count && startRegister + i + 4 <= NX_VS_CONST_ROWS; ++i) {
+            float w, h;
+            if (nxLooksLike2dProjection(startRegister + i, &w, &h)) {
+                s_vs2dBase = (int)(startRegister + i);
+                s_vs2dWidth = w;
+                s_vs2dHeight = h;
+            }
+        }
+    }
     return D3D_OK;
 }
 HRESULT IDirect3DDevice9::SetPixelShader(IDirect3DPixelShader9 *) { ++s_nSetPixelShader; return D3D_OK; }
@@ -1486,6 +2073,7 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     bool report = (++s_nSwapPresent % 60) == 1;
     if (report) nxDumpCallCensus();
     if (report) nxGlDumpGeometry();
+    memset(&s_frame, 0, sizeof(s_frame));   // the next frame starts here
 
     if (!nxGlAcquire()) {
         if (report) {

@@ -883,6 +883,11 @@ struct NxFrameStats {
     unsigned colRefs, alphaZero, alphaLow, alphaFull;   // low: 1..31
     unsigned alphaMin, alphaMax;
     unsigned alphaZeroBlended;         // alpha 0 in a draw that blends
+    // The same byte-order check, done on byte 0 instead of byte 3: if
+    // "alpha" lands in 200..255 here and not up there, the channels are
+    // reordered; if neither end is plausible, they are not colour at all.
+    // Eight buckets of 32.
+    unsigned alphaHiHist[8], alphaLoHist[8];
 };
 // Cleared at every swap-chain Present, which prints it first when the
 // report is due -- so the figures are always the frame just finished.
@@ -956,6 +961,8 @@ static void nxFrameAccumulate(const NxBuffer *ib, UINT idxSize, UINT startIndex,
                 DWORD raw;
                 memcpy(&raw, (const BYTE *)cb->bits + off, 4);
                 unsigned a = raw >> 24;   // D3DCOLOR is 0xAARRGGBB
+                ++s_frame.alphaHiHist[a >> 5];
+                ++s_frame.alphaLoHist[(raw & 0xff) >> 5];
                 if (!s_frame.colRefs) s_frame.alphaMin = s_frame.alphaMax = a;
                 if (a < s_frame.alphaMin) s_frame.alphaMin = a;
                 if (a > s_frame.alphaMax) s_frame.alphaMax = a;
@@ -990,12 +997,6 @@ static const char *s_vsSrc =
     "void main() {\n"
     "    vec4 p = nxTransform * vec4(nxPos.xyz, 1.0);\n"
     "    p.z = 2.0 * p.z - p.w;\n"          // D3D9 clip z [0,w] -> GL [-w,w]
-    // TEST: the 2D projection gives clip z = w = 1, which the line above
-    // turns into z = w -- the far plane exactly, on the edge of GL's
-    // -w <= z <= w clip test, where one rounding step discards the triangle.
-    // Pinning z to the middle of the volume takes clipping out of the
-    // question. Revert once the report has answered it.
-    "    p.z = 0.0;\n"
     "    gl_Position = p;\n"
     "    vColor = nxColor;\n"
     "}\n";
@@ -1159,6 +1160,15 @@ static bool nxDeclTypeToGl(BYTE type, NxAttrFormat *out)
     // exactly that reordering, which is why the swizzle costs nothing in the
     // shader. It has been core since 3.2 (ARB_vertex_array_bgra) and the rule
     // that comes with it is that `normalized` must be GL_TRUE, as it is here.
+    //
+    // This mapping is right and is the one place the order is decided: the
+    // engine packs vertex colour through Byte4PackVertexColor, which writes
+    // B, G, R, A -- the PC layout, and on a little-endian target no swap is
+    // owed on top of it. When the menu once came through with alpha 1..31
+    // almost everywhere, the bytes were not reordered but garbage: that
+    // function had been compiled to fill three of the four from the stack
+    // (see the comment on it in fx_convert.cpp). Swizzling here to match
+    // would have hidden a broken packer behind a wrong declaration.
     case D3DDECLTYPE_D3DCOLOR:  NX_ATTR_FMT(GL_BGRA, GL_UNSIGNED_BYTE, GL_TRUE);
     default: return false;   // UDEC3, DEC3N: nothing bound here uses them
     }
@@ -1485,6 +1495,13 @@ static void nxGlDumpGeometry(void)
                "0: %u (in blended draws %u)  1..31: %u  255: %u\n",
                f.colRefs, f.alphaMin, f.alphaMax, f.alphaZero,
                f.alphaZeroBlended, f.alphaLow, f.alphaFull);
+        const unsigned *h[2] = { f.alphaHiHist, f.alphaLoHist };
+        const char *name[2] = { "high byte (D3DCOLOR alpha)", "low byte" };
+        for (int k = 0; k < 2; ++k)
+            printf("          %-26s 0-31:%u 32-63:%u 64-95:%u 96-127:%u "
+                   "128-159:%u 160-191:%u 192-223:%u 224-255:%u\n",
+                   name[k], h[k][0], h[k][1], h[k][2], h[k][3],
+                   h[k][4], h[k][5], h[k][6], h[k][7]);
     } else {
         printf("          D3DCOLOR alpha: no D3DCOLOR element this frame\n");
     }

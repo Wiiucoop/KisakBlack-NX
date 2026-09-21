@@ -1532,139 +1532,45 @@ void __cdecl FX_SampleVisualState(FxElemDef *elemDef, const FxEditorElemDef *edE
     }
 }
 
+// Packs an RGBA float colour into the four bytes of a D3DCOLOR vertex
+// element: B, G, R, A in memory, i.e. 0xAARRGGBB read as a little-endian
+// DWORD. That is what the vertex declarations say (D3DDECLTYPE_D3DCOLOR) and
+// what the D3D9 layer on the Switch hands GL as GL_BGRA, so on this
+// little-endian target no byte swap is wanted anywhere.
+//
+// The decompiled body this replaces did the same thing in the shape of the
+// original vector code: each channel rounded and clamped in its own 32-bit
+// lane, then one byte picked out of each lane by a vperm-style table,
+// NATIVE_VERTEX_PERM, whose bytes are 0c 00 04 08 -- lanes B, G, R, A. It
+// read those bytes as v14[0].unitVec[0].array[8], [4], [12]: indices 4..12
+// into a four-byte array. MSVC on x86 happened to read the neighbouring
+// lanes. GCC for aarch64 took the out-of-bounds index as undefined behaviour
+// and kept only what a four-byte array can hold: it computed the red lane
+// alone, never stored green, blue or alpha, and filled those three bytes
+// from whatever was on the stack. That is why every UI vertex arrived with a
+// near-random alpha, mostly under 32, and the whole menu drew as a faint
+// haze. The table was never wrong; indexing it past a four-byte array was.
+//
+// Every caller of R_ConvertColorToBytes goes through here, so this fixes the
+// colour of every vertex, draw command and debug primitive packed that way.
+static unsigned __int8 Byte4PackUnitFloat(float f)
+{
+    // round to nearest, then clamp to [0,255] -- the same order as the
+    // original: floor(f * 255 + 0.5), min 255, max 0.
+    float v = floorf(f * 255.0f + 0.5f);
+    if (!(v >= 0.0f))       // also catches NaN, as the vector max did
+        v = 0.0f;
+    if (v > 255.0f)
+        v = 255.0f;
+    return (unsigned __int8)v;
+}
+
 void __cdecl Byte4PackVertexColor(const float *from, unsigned __int8 *to)
 {
-    float v2; // [esp+48h] [ebp-144h]
-    unsigned int v3; // [esp+4Ch] [ebp-140h]
-    unsigned int v4; // [esp+50h] [ebp-13Ch]
-    unsigned int v5; // [esp+54h] [ebp-138h]
-    unsigned int v6; // [esp+58h] [ebp-134h]
-    unsigned int v7; // [esp+5Ch] [ebp-130h]
-    unsigned int v8; // [esp+60h] [ebp-12Ch]
-    unsigned int v9; // [esp+64h] [ebp-128h]
-    float v10; // [esp+68h] [ebp-124h]
-    float v11; // [esp+6Ch] [ebp-120h]
-    float v12; // [esp+70h] [ebp-11Ch]
-    float v13; // [esp+74h] [ebp-118h]
-    float4 v14[3]; // [esp+7Ch] [ebp-110h]
-    float4 *p_permed; // [esp+B0h] [ebp-DCh]
-    unsigned int v16; // [esp+B4h] [ebp-D8h]
-    unsigned int v17; // [esp+B8h] [ebp-D4h]
-    unsigned int v18; // [esp+BCh] [ebp-D0h]
-    unsigned int v19; // [esp+C0h] [ebp-CCh]
-    unsigned int v20; // [esp+C4h] [ebp-C8h]
-    unsigned int v21; // [esp+C8h] [ebp-C4h]
-    unsigned int v22; // [esp+CCh] [ebp-C0h]
-    unsigned int v23; // [esp+D0h] [ebp-BCh]
-    unsigned int v24; // [esp+D4h] [ebp-B8h]
-    unsigned int v25; // [esp+D8h] [ebp-B4h]
-    unsigned int v26; // [esp+DCh] [ebp-B0h]
-    unsigned int v27; // [esp+E0h] [ebp-ACh]
-    unsigned int v28; // [esp+E4h] [ebp-A8h]
-    unsigned int v29; // [esp+E8h] [ebp-A4h]
-    unsigned int v30; // [esp+ECh] [ebp-A0h]
-    float v31; // [esp+F0h] [ebp-9Ch]
-    float4 minned; // [esp+F4h] [ebp-98h]
-    float4 inted; // [esp+104h] [ebp-88h]
-    float4 permed; // [esp+118h] [ebp-74h] BYREF
-    float4 v35; // [esp+128h] [ebp-64h]
-    float4 bumped; // [esp+138h] [ebp-54h]
-    float4 maxxed; // [esp+148h] [ebp-44h]
-    float4 scaled; // [esp+158h] [ebp-34h]
-    float4 floored; // [esp+168h] [ebp-24h]
-    float4 scale; // [esp+178h] [ebp-14h]
-
-    scale.v[0] = 255.0f;
-    scale.v[1] = 255.0f;
-    scale.v[2] = 255.0f;
-    scale.v[3] = 255.0f;
-    *(_QWORD *)v35.v = *(_QWORD *)from;
-    *(_QWORD *)&v35.unitVec[2].packed = *((_QWORD *)from + 1);
-    scaled.v[0] = v35.v[0] * 255.0;
-    scaled.v[1] = v35.v[1] * 255.0;
-    scaled.v[2] = v35.v[2] * 255.0;
-    scaled.v[3] = v35.v[3] * 255.0;
-    bumped.v[0] = (float)(v35.v[0] * 255.0) + 0.5;
-    bumped.v[1] = (float)(v35.v[1] * 255.0) + 0.5;
-    bumped.v[2] = (float)(v35.v[2] * 255.0) + 0.5;
-    bumped.v[3] = (float)(v35.v[3] * 255.0) + 0.5;
-    v31 = bumped.v[0];
-    v13 = floor(bumped.v[0]);
-    floored.v[0] = v13;
-    v30 = bumped.u[1];
-    v12 = floor(bumped.v[1]);
-    floored.v[1] = v12;
-    v29 = bumped.u[2];
-    v11 = floor(bumped.v[2]);
-    floored.v[2] = v11;
-    v28 = bumped.u[3];
-    v10 = floor(bumped.v[3]);
-    floored.v[3] = v10;
-    if ( (float)(255.0 - v13) < 0.0 )
-        v9 = scale.u[0];
-    else
-        v9 = floored.u[0];
-    minned.u[0] = v9;
-    v26 = floored.u[1];
-    v27 = scale.u[1];
-    if ( (float)(scale.v[1] - floored.v[1]) < 0.0 )
-        v8 = v27;
-    else
-        v8 = v26;
-    minned.u[1] = v8;
-    v24 = floored.u[2];
-    v25 = scale.u[2];
-    if ( (float)(scale.v[2] - floored.v[2]) < 0.0 )
-        v7 = v25;
-    else
-        v7 = v24;
-    minned.u[2] = v7;
-    v22 = floored.u[3];
-    v23 = scale.u[3];
-    if ( (float)(scale.v[3] - floored.v[3]) < 0.0 )
-        v6 = v23;
-    else
-        v6 = v22;
-    minned.u[3] = v6;
-    if ( (float)(0.0 - minned.v[0]) < 0.0 )
-        v5 = minned.u[0];
-    else
-        v5 = g_zero.u[0];
-    maxxed.u[0] = v5;
-    v20 = g_zero.u[1];
-    v21 = minned.u[1];
-    if ( (float)(0.0 - minned.v[1]) < 0.0 )
-        v4 = v21;
-    else
-        v4 = v20;
-    maxxed.u[1] = v4;
-    v18 = g_zero.u[2];
-    v19 = minned.u[2];
-    if ( (float)(0.0 - minned.v[2]) < 0.0 )
-        v3 = v19;
-    else
-        v3 = v18;
-    maxxed.u[2] = v3;
-    v16 = g_zero.u[3];
-    v17 = minned.u[3];
-    if ( (float)(0.0 - minned.v[3]) < 0.0 )
-        v2 = *(float *)&v17;
-    else
-        v2 = *(float *)&v16;
-    maxxed.v[3] = v2;
-    inted.u[0] = (__int64)maxxed.v[0];
-    inted.u[1] = (__int64)maxxed.v[1];
-    inted.u[2] = (__int64)maxxed.v[2];
-    inted.u[3] = (__int64)v2;
-    v14[0] = inted;
-    v14[1] = inted;
-    v14[2] = NATIVE_VERTEX_PERM;
-    p_permed = &permed;
-    permed.unitVec[0].array[0] = v14[0].unitVec[0].array[NATIVE_VERTEX_PERM.unitVec[0].array[3]];
-    permed.unitVec[0].array[1] = v14[0].unitVec[0].array[NATIVE_VERTEX_PERM.unitVec[0].array[2]];
-    permed.unitVec[0].array[2] = v14[0].unitVec[0].array[NATIVE_VERTEX_PERM.unitVec[0].array[1]];
-    permed.unitVec[0].array[3] = v14[0].unitVec[0].array[NATIVE_VERTEX_PERM.unitVec[0].array[0]];
-    *(unsigned int *)to = permed.u[0];
+    to[0] = Byte4PackUnitFloat(from[2]);    // B
+    to[1] = Byte4PackUnitFloat(from[1]);    // G
+    to[2] = Byte4PackUnitFloat(from[0]);    // R
+    to[3] = Byte4PackUnitFloat(from[3]);    // A
 }
 
 void __cdecl FX_SampleCurve3D(const FxCurve *curve, float scale, float time, float *value)

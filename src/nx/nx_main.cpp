@@ -3,6 +3,7 @@
 // (src/win32/win_main.cpp), which never returns.
 #include <switch.h>
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,6 +74,97 @@ static void nxReportMemory(void)
                "         while opening an installed game, then run KisakBlack from there.\n",
                (unsigned long long)(freeHeap >> 20));
     }
+}
+
+// ----- Crash reporting -----
+// libnx runs __libnx_exception_handler on the stack below when a thread
+// faults. It logs where, as offsets into the module -- the ELF is linked at 0,
+// so they go straight to addr2line against the ELF from the same build -- and
+// then hands the exception back unhandled, so Atmosphere still writes its own
+// crash report.
+//
+// The build omits frame pointers (-O2), so there is no frame chain to walk.
+// Instead the faulting thread's stack is scanned for words that point into the
+// module's code: every live return address is among them, with some stale
+// ones mixed in. Read them top down.
+extern "C" {
+alignas(16) u8 __nx_exception_stack[0x8000];
+u64 __nx_exception_stack_size = sizeof(__nx_exception_stack);
+}
+
+// printf could deadlock on a stdout lock the faulting thread holds; format
+// into a local buffer and write() it instead.
+static void nxCrashWrite(const char *fmt, ...)
+{
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (n > 0)
+        write(fileno(stdout), buf, n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1);
+}
+
+static const char *nxExceptionName(u32 desc)
+{
+    switch (desc) {
+    case ThreadExceptionDesc_InstructionAbort: return "instruction abort";
+    case ThreadExceptionDesc_MisalignedPC:     return "misaligned PC";
+    case ThreadExceptionDesc_MisalignedSP:     return "misaligned SP";
+    case ThreadExceptionDesc_SError:           return "SError";
+    case ThreadExceptionDesc_BadSVC:           return "bad SVC";
+    case ThreadExceptionDesc_Trap:             return "trap (incl. __builtin_trap / __debugbreak)";
+    case ThreadExceptionDesc_Other:            return "data abort or other";
+    default:                                   return "unknown";
+    }
+}
+
+extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
+{
+    MemoryInfo text = {};
+    u32 pageInfo;
+    svcQueryMemory(&text, &pageInfo, (u64)&__libnx_exception_handler);
+    const u64 textBase = text.addr, textEnd = text.addr + text.size;
+    auto inText = [&](u64 a) { return a >= textBase && a < textEnd; };
+
+    nxCrashWrite("\n[nx-crash] ===== CRASH: %s (error_desc 0x%x) =====\n",
+                 nxExceptionName(ctx->error_desc), ctx->error_desc);
+    nxCrashWrite("[nx-crash] module text 0x%llx..0x%llx; offsets below are KisakBlack.elf addresses\n",
+                 (unsigned long long)textBase, (unsigned long long)textEnd);
+    const u64 pc = ctx->pc.x, lr = ctx->lr.x;
+    if (inText(pc))
+        nxCrashWrite("[nx-crash] pc  elf+0x%llx\n", (unsigned long long)(pc - textBase));
+    else
+        nxCrashWrite("[nx-crash] pc  0x%llx (outside the module)\n", (unsigned long long)pc);
+    if (inText(lr))
+        nxCrashWrite("[nx-crash] lr  elf+0x%llx\n", (unsigned long long)(lr - textBase));
+    else
+        nxCrashWrite("[nx-crash] lr  0x%llx (outside the module)\n", (unsigned long long)lr);
+    nxCrashWrite("[nx-crash] far 0x%llx  esr 0x%x  sp 0x%llx\n", (unsigned long long)ctx->far.x, ctx->esr,
+                 (unsigned long long)ctx->sp.x);
+    for (int i = 0; i < 29; i += 4) {
+        char line[160];
+        int n = 0;
+        for (int j = i; j < i + 4 && j < 29; ++j)
+            n += snprintf(line + n, sizeof(line) - n, " x%-2d %016llx", j, (unsigned long long)ctx->cpu_gprs[j].x);
+        nxCrashWrite("[nx-crash] %s\n", line);
+    }
+
+    MemoryInfo stack = {};
+    svcQueryMemory(&stack, &pageInfo, ctx->sp.x);
+    const u64 *word = (const u64 *)ctx->sp.x;
+    const u64 *stackEnd = (const u64 *)(stack.addr + stack.size);
+    int found = 0;
+    nxCrashWrite("[nx-crash] code addresses on the stack, innermost first:\n");
+    for (int i = 0; i < 4096 && word + i < stackEnd && found < 32; ++i) {
+        if (inText(word[i])) {
+            nxCrashWrite("[nx-crash]   sp+0x%-5x elf+0x%llx\n", i * 8, (unsigned long long)(word[i] - textBase));
+            ++found;
+        }
+    }
+    nxCrashWrite("[nx-crash] resolve with: aarch64-none-elf-addr2line -f -C -e build-nx/KisakBlack.elf <elf+ offsets>\n");
+
+    svcReturnFromException(MAKERESULT(Module_Kernel, KernelError_UnhandledUserInterrupt));
 }
 
 int main(int argc, char **argv)

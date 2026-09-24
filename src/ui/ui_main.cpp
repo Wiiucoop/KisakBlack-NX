@@ -51,6 +51,9 @@
 #include <game_mp/g_main_mp.h>
 #include <live/live_win.h>
 #include <stringed/stringed_hooks.h>
+#ifdef KISAK_NX
+#include "keycodes.h"
+#endif
 
 const dvar_t *ui_netGameType;
 const dvar_t *uiscript_debug;
@@ -3640,6 +3643,34 @@ char __cdecl UI_KeyEvent_AutoJoinButtonPressed(int localClientNum, UiContext *dc
     return 0;
 }
 
+#ifdef KISAK_NX
+// BlackOpsMP.exe navigates menus with the keyboard arrows, the keypad arrows
+// and the mouse wheel only: Menu_HandleKey and the item handlers have no case
+// for the D-pad or the left stick's direction keys, so those fall through to
+// "default: return" and a controller can never move focus. Give the menus the
+// arrow key each direction means. A and B need nothing -- Menu_HandleKey
+// already treats K_BUTTON_A like K_ENTER and K_BUTTON_B like K_ESCAPE.
+static int NX_UI_GamepadDirectionToArrow(int key)
+{
+    switch ( key )
+    {
+    case K_DPAD_UP:
+    case K_APAD_UP:
+        return K_UPARROW;
+    case K_DPAD_DOWN:
+    case K_APAD_DOWN:
+        return K_DOWNARROW;
+    case K_DPAD_LEFT:
+    case K_APAD_LEFT:
+        return K_LEFTARROW;
+    case K_DPAD_RIGHT:
+    case K_APAD_RIGHT:
+        return K_RIGHTARROW;
+    }
+    return key;
+}
+#endif
+
 int bypassKeyClear;
 void __cdecl UI_KeyEvent(int localClientNum, int key, int down)
 {
@@ -3649,6 +3680,9 @@ void __cdecl UI_KeyEvent(int localClientNum, int key, int down)
     int savedregs; // [esp+Ch] [ebp+0h] BYREF
 
     uiInfo = UI_GetInfo(localClientNum);
+#ifdef KISAK_NX
+    key = NX_UI_GamepadDirectionToArrow(key);
+#endif
     if ( Menu_Count(&uiInfo->uiDC) )
     {
         menu = Menu_GetFocused(&uiInfo->uiDC);

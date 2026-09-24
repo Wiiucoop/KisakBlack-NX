@@ -217,7 +217,13 @@ int __cdecl RB_PickSymmetricFilterMaterial(int halfTapCount, const Material **ma
     {
         __debugbreak();
     }
-    *material = (const Material *)*((unsigned int *)&rgp.poisonFXMaterial + halfTapCount);
+    // nx-port: the decompile read this as the 32-bit word `halfTapCount` slots
+    // past &rgp.poisonFXMaterial. symmetricFilterMaterial[8] follows that
+    // field, so on x86 it was symmetricFilterMaterial[halfTapCount - 1]; on
+    // LP64 the 4-byte stride lands inside a pointer and the truncated value
+    // became the blur material -- the UI3D blur behind the settings menu then
+    // died in Material_GetTechniqueSet. Index the array it always meant.
+    *material = rgp.symmetricFilterMaterial[halfTapCount - 1];
     return halfTapCount;
 }
 

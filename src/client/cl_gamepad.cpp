@@ -694,6 +694,12 @@ void __cdecl CL_GamepadButtonEvent(
                         && keys[19].down
                         && keys[18].down
                         && controllerIndex != -1
+#ifdef KISAK_NX
+                        // Live_GetTier asserts a signed-in user, and nobody is
+                        // ever signed in here: L3+R3 with both triggers held
+                        // trapped on the main menu.
+                        && Live_IsSignedIn(controllerIndex)
+#endif
                         && Live_GetTier(controllerIndex) == 1
                         && (Menu_IsMenuOpenAndVisible(localClientNum, "menu_xboxlive")
                          || Menu_IsMenuOpenAndVisible(localClientNum, "menu_xboxlive_lobby")) )

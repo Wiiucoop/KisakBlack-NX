@@ -18,6 +18,7 @@
 #include <d3d9.h>
 #include <d3dx9.h>
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -790,9 +791,27 @@ template <typename T> static T *nxAlloc()
     return p;
 }
 
-static ULONG nxAddRef(void *self)
+// A surface from GetSurfaceLevel / GetCubeMapSurface is a view of one level of
+// its texture, and in D3D9 the two share a single reference count: holding
+// the surface keeps the texture alive, and the texture only goes when the
+// last reference to either is released. So references to a level surface are
+// counted on the texture. They used to be counted on the surface while the
+// texture freed its levels unconditionally, which was harmless until the
+// first device reset: R_ShutDownSingleRenderTarget releases a render
+// target's surface and its image in whichever order, and the release that
+// came second wrote into freed memory -- the heap corruption that crashed
+// vid_restart inside malloc.
+static NxD3DObject *nxRefTarget(void *self)
 {
     NxD3DObject *o = (NxD3DObject *)self;
+    if (o->type == D3DRTYPE_SURFACE && ((NxSurface *)o)->owner)
+        return &((NxSurface *)o)->owner->obj;
+    return o;
+}
+
+static ULONG nxAddRef(void *self)
+{
+    NxD3DObject *o = nxRefTarget(self);
     return (ULONG)__atomic_add_fetch(&o->refCount, 1, __ATOMIC_SEQ_CST);
 }
 
@@ -800,7 +819,7 @@ static void nxDestroy(NxD3DObject *o);
 
 static ULONG nxRelease(void *self)
 {
-    NxD3DObject *o = (NxD3DObject *)self;
+    NxD3DObject *o = nxRefTarget(self);
     if (o == &s_d3d9.obj || o == &s_device.obj || o == &s_device.swapChain.obj)
         return 1; // static singletons
     LONG r = __atomic_sub_fetch(&o->refCount, 1, __ATOMIC_SEQ_CST);
@@ -816,9 +835,8 @@ static void nxDestroy(NxD3DObject *o)
     switch ((int)o->type) {
     case D3DRTYPE_SURFACE: {
         NxSurface *s = (NxSurface *)o;
-        // A level view belongs to its texture, which frees it -- and forgets
-        // it -- with the rest of its levels. Freeing it here as well would be
-        // a double free the day the engine over-releases one.
+        // A level view never gets here -- its references are its texture's
+        // (nxRefTarget) -- and the texture frees it with the rest.
         if (s->owner)
             break;
         nxForgetSurface(s);
@@ -1304,6 +1322,7 @@ struct NxFrameStats {
     unsigned clears, clearsNoTarget, targetSwitches;
     // Which program drew: the engine's own shaders, translated, or the built-in
     // one -- and for the built-in, why.
+    bool usedUi3d;                  // a draw sampled $ui3d: a menu composite frame
     unsigned drawsTranslated;
     unsigned fallbackNoShader;      // no vertex or pixel shader bound
     unsigned fallbackUntranslated;  // a bound shader has no translation
@@ -1344,6 +1363,8 @@ static void nxFrameForgetTexture(const NxTexture *t)
 // a busy menu -- a linear scan is cheaper than anything with a hash in it.
 static void nxFrameNoteTexture(const NxTexture *t)
 {
+    if (t && !strcmp(t->imageName, "$ui3d"))
+        s_frame.usedUi3d = true;
     for (unsigned i = 0; i < s_frame.texCount; ++i) {
         if (s_frame.tex[i] == t) {
             ++s_frame.texDraws[i];
@@ -2668,6 +2689,104 @@ static void nxGlSetupTranslated(const NxProgram *p)
     }
 }
 
+// ---------------------------------------------------------------------------
+// Frame trace
+// ---------------------------------------------------------------------------
+// The 60-frame report says how many draws a frame made and where; it cannot say
+// in what order, with what depth and stencil state, over what part of the
+// screen -- which is what it takes to see why the menus' popups vanish behind
+// their own blurred background. So once a report frame has composited $ui3d
+// (the frames that have a popup up), the next frame is traced: one line per
+// draw, clear and blit, in submission order. At most three traces a run, ten
+// seconds apart.
+static bool s_traceThisFrame;
+static unsigned s_traceIndex, s_traceCount, s_traceLastPresent;
+
+static void nxTraceTarget(char *buf, size_t size)
+{
+    const NxSurface *s = s_rt ? s_rt : s_device.backBuffer;
+    if (s == s_device.backBuffer)
+        snprintf(buf, size, "backbuffer");
+    else if (s && s->owner && s->owner->imageName[0])
+        snprintf(buf, size, "%s", s->owner->imageName);
+    else
+        snprintf(buf, size, "%p", (const void *)s);
+}
+
+// The draw's screen box, through the 2D transform every menu draw uses.
+static void nxTraceBox(const NxBuffer *ib, UINT idxSize, UINT startIndex, GLsizei count,
+                       INT baseVertex, const NxBuffer *vb, UINT stride, UINT offset,
+                       int comps, float box[4])
+{
+    box[0] = box[1] = 1e9f;
+    box[2] = box[3] = -1e9f;
+    const float *regs = &s_vsConst[s_vsConstBase][0];
+    for (GLsizei i = 0; i < count; ++i) {
+        size_t ioff = ((size_t)startIndex + (size_t)i) * idxSize;
+        if (ioff + idxSize > (size_t)ib->length) break;
+        UINT idx;
+        if (idxSize == 4) { uint32_t v; memcpy(&v, (const BYTE *)ib->bits + ioff, 4); idx = v; }
+        else              { uint16_t v; memcpy(&v, (const BYTE *)ib->bits + ioff, 2); idx = v; }
+        size_t off = (size_t)((long long)baseVertex + idx) * stride + offset;
+        if (off + (size_t)comps * sizeof(float) > (size_t)vb->length) continue;
+        float p[4] = { 0.0f, 0.0f, 0.0f, 1.0f }, c[4];
+        memcpy(p, (const BYTE *)vb->bits + off, (size_t)comps * sizeof(float));
+        p[3] = 1.0f;
+        nxTransformPoint(regs, p, c);
+        if (!(c[3] > 0.0f)) continue;
+        // To pixels, top-left origin, the way the engine laid the menu out.
+        float x = (c[0] / c[3] * 0.5f + 0.5f) * (float)s_vp.Width;
+        float y = (0.5f - c[1] / c[3] * 0.5f) * (float)s_vp.Height;
+        if (x < box[0]) box[0] = x;
+        if (y < box[1]) box[1] = y;
+        if (x > box[2]) box[2] = x;
+        if (y > box[3]) box[3] = y;
+    }
+}
+
+static void nxTraceDraw(bool translated, GLsizei count, const float box[4])
+{
+    char target[64], tex[160];
+    nxTraceTarget(target, sizeof(target));
+    int used = 0;
+    tex[0] = 0;
+    unsigned mask = translated && s_ps ? s_ps->info.samplerMask : 1u;
+    for (unsigned i = 0; mask && used < (int)sizeof(tex) - 24; ++i, mask >>= 1) {
+        if (!(mask & 1)) continue;
+        const NxTexture *t = s_samplerTex[i];
+        used += snprintf(tex + used, sizeof(tex) - used, "%ss%u=%s", used ? " " : "", i,
+                         t ? (t->imageName[0] ? t->imageName : "<unnamed>") : "-");
+    }
+    printf("[nx-trace] #%-3u draw %-10s %-8s idx %-5d box (%4.0f,%4.0f)-(%4.0f,%4.0f) | %s\n"
+           "                blend %s %u/%u write 0x%x | z %s write %u func %u | stencil %s func %u ref %u "
+           "mask 0x%x pass %u | cull %u | alphatest %s | scissor %s\n",
+           s_traceIndex++, target, translated ? "shader" : "builtin", (int)count,
+           box[0], box[1], box[2], box[3], tex[0] ? tex : "(no samplers)",
+           s_rs[D3DRS_ALPHABLENDENABLE] ? "on" : "off", (unsigned)s_rs[D3DRS_SRCBLEND],
+           (unsigned)s_rs[D3DRS_DESTBLEND], (unsigned)s_rs[D3DRS_COLORWRITEENABLE],
+           s_rs[D3DRS_ZENABLE] ? "on" : "off", (unsigned)s_rs[D3DRS_ZWRITEENABLE],
+           (unsigned)s_rs[D3DRS_ZFUNC],
+           s_rs[D3DRS_STENCILENABLE] ? "on" : "off", (unsigned)s_rs[D3DRS_STENCILFUNC],
+           (unsigned)s_rs[D3DRS_STENCILREF], (unsigned)s_rs[D3DRS_STENCILMASK],
+           (unsigned)s_rs[D3DRS_STENCILPASS], (unsigned)s_rs[D3DRS_CULLMODE],
+           s_rs[D3DRS_ALPHATESTENABLE] ? "on" : "off",
+           s_rs[D3DRS_SCISSORTESTENABLE] ? "on" : "off");
+}
+
+static void nxTraceNote(const char *fmt, ...)
+{
+    if (!s_traceThisFrame)
+        return;
+    char target[64];
+    nxTraceTarget(target, sizeof(target));
+    char msg[200];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, args);
+    va_end(args);
+    printf("[nx-trace] #%-3u %s (target %s)\n", s_traceIndex++, msg, target);
+}
+
 static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
                             UINT startIndex, UINT primCount)
 {
@@ -2869,6 +2988,13 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
                           &s_vsConst[s_vsConstBase][0],
                           vb, stride, attrOffset, fmt.size, fmt.type == GL_FLOAT,
                           cb, colStride, colOffset, blended);
+    if (s_traceThisFrame) {
+        float box[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        if (ib->bits && vb->bits && fmt.type == GL_FLOAT)
+            nxTraceBox(ib, idxSize, startIndex, count, baseVertexIndex, vb, stride, attrOffset,
+                       fmt.size, box);
+        nxTraceDraw(prog != nullptr, count, box);
+    }
 
     s_lastDrawMode = mode;
     s_lastDrawCount = count;
@@ -3234,8 +3360,65 @@ static void nxGlDumpTargets(void)
 // ===========================================================================
 // IUnknown-ish
 // ===========================================================================
-ULONG IUnknown9Like::AddRef() { return nxAddRef(this); }
-ULONG IUnknown9Like::Release() { return nxRelease(this); }
+// Whether an interface pointer is an object this file made. The engine can
+// hand back a pointer it believes is a texture while the GfxImage it came from
+// still holds the load def a zone left in that union -- an image Load_Texture
+// never reached -- and reference counting through that pointer used to end in
+// free() on zone memory: the picmip change after a vid_restart crashed that
+// way. Such a call is refused and named instead (the first few times), and
+// nx_kbz.cpp's audit uses the texture test to find which images they are.
+static bool nxIsOurObject(const void *p)
+{
+    const NxD3DObject *o = (const NxD3DObject *)p;
+    if (!o)
+        return false;
+    if (o == &s_d3d9.obj || o == &s_device.obj || o == &s_device.swapChain.obj)
+        return true;
+    switch ((int)o->type) {
+    case D3DRTYPE_TEXTURE:
+    case D3DRTYPE_CUBETEXTURE:
+    case D3DRTYPE_VOLUMETEXTURE:
+        return ((const NxTexture *)o)->magic == NX_TEXTURE_MAGIC;
+    case D3DRTYPE_SURFACE:
+    case D3DRTYPE_VERTEXBUFFER:
+    case D3DRTYPE_INDEXBUFFER:
+    case 100: case 101: case 102: case 103:   // decl, vs, ps, query
+        return true;
+    default:
+        return false;
+    }
+}
+
+extern "C" bool NX_D3D_IsTexture(const void *p)
+{
+    const NxD3DObject *o = (const NxD3DObject *)p;
+    return o && (o->type == D3DRTYPE_TEXTURE || o->type == D3DRTYPE_CUBETEXTURE
+              || o->type == D3DRTYPE_VOLUMETEXTURE)
+             && ((const NxTexture *)o)->magic == NX_TEXTURE_MAGIC;
+}
+
+static unsigned s_nForeignRefs;
+
+static void nxForeignRef(const void *p, const char *what)
+{
+    if (++s_nForeignRefs <= 8) {
+        printf("[nx-gl] %s on %p, which is not a D3D object this driver made -- "
+               "refused (most likely a GfxImage still holding its zone load def)\n",
+               what, p);
+        fflush(stdout);
+    }
+}
+
+ULONG IUnknown9Like::AddRef()
+{
+    if (!nxIsOurObject(this)) { nxForeignRef(this, "AddRef"); return 1; }
+    return nxAddRef(this);
+}
+ULONG IUnknown9Like::Release()
+{
+    if (!nxIsOurObject(this)) { nxForeignRef(this, "Release"); return 0; }
+    return nxRelease(this);
+}
 DWORD IDirect3DResource9::SetPriority(DWORD) { return 0; }
 void IDirect3DResource9::PreLoad() {}
 
@@ -3449,9 +3632,27 @@ HRESULT IDirect3DDevice9::GetCreationParameters(D3DDEVICE_CREATION_PARAMETERS *p
     params->DeviceType = D3DDEVTYPE_HAL;
     return D3D_OK;
 }
+// The engine releases every default-pool resource before calling this
+// (R_ResetDevice), and D3D9 then hands it a device in its initial state: the
+// back buffer as render target 0, the automatic depth surface or none, the
+// viewport and scissor covering the back buffer, default sampler states. The
+// back buffer itself survives -- same size, 1280x720, on this port.
 HRESULT IDirect3DDevice9::Reset(D3DPRESENT_PARAMETERS *pp)
 {
     if (pp) s_device.pp = *pp;
+    s_rt = s_device.backBuffer;
+    s_ds = (pp && pp->EnableAutoDepthStencil) ? s_device.depthStencil : nullptr;
+    UINT w = s_device.backBuffer ? s_device.backBuffer->width : 1280;
+    UINT h = s_device.backBuffer ? s_device.backBuffer->height : 720;
+    memset(&s_vp, 0, sizeof(s_vp));
+    s_vp.Width = w;
+    s_vp.Height = h;
+    s_vp.MaxZ = 1.0f;
+    s_scissor.left = s_scissor.top = 0;
+    s_scissor.right = (LONG)w;
+    s_scissor.bottom = (LONG)h;
+    nxInitRenderStates();
+    nxInitSamplerStates();
     return D3D_OK;
 }
 HRESULT IDirect3DDevice9::Present(const RECT *, const RECT *, HWND, const void *)
@@ -3692,6 +3893,12 @@ HRESULT IDirect3DDevice9::StretchRect(IDirect3DSurface9 *srcSurface, const RECT 
     RECT d = { 0, 0, (LONG)dst->width, (LONG)dst->height };
     if (srcRect) s = *srcRect;
     if (dstRect) d = *dstRect;
+    if (s_traceThisFrame) {
+        char a[128], b[128];
+        nxDescribeSurface(src, a, sizeof(a));
+        nxDescribeSurface(dst, b, sizeof(b));
+        nxTraceNote("StretchRect %s -> %s", a, b);
+    }
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, rf.name);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, df.name);
@@ -3810,6 +4017,9 @@ HRESULT IDirect3DDevice9::Clear(
         ++s_frame.clearsNoTarget;
         return D3D_OK;
     }
+    nxTraceNote("clear flags 0x%x colour 0x%08x depth %.2f stencil %u rects %u viewport %u,%u %ux%u",
+                (unsigned)flags, (unsigned)color, depth, (unsigned)stencil, (unsigned)rectCount,
+                (unsigned)s_vp.X, (unsigned)s_vp.Y, (unsigned)s_vp.Width, (unsigned)s_vp.Height);
 
     // D3DCOLOR is 0xAARRGGBB -- Byte4PackPixelColor (r_state.cpp:3122) writes
     // B,G,R,A into ascending bytes and the packed word is read back
@@ -4062,6 +4272,19 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     if (report) nxGlDumpTextures();
     if (report) nxGlDumpTargets();
     if (report) nxGlDumpShaders();
+    if (s_traceThisFrame) {
+        printf("[nx-trace] ===== end of traced frame (%u entries) =====\n", s_traceIndex);
+        fflush(stdout);
+        s_traceThisFrame = false;
+    } else if (report && s_frame.usedUi3d && s_traceCount < 3
+               && (!s_traceCount || s_nSwapPresent - s_traceLastPresent >= 600)) {
+        s_traceThisFrame = true;
+        s_traceIndex = 0;
+        ++s_traceCount;
+        s_traceLastPresent = s_nSwapPresent;
+        printf("[nx-trace] ===== frame %u: every draw, clear and blit in order =====\n",
+               s_nSwapPresent + 1);
+    }
     memset(&s_frame, 0, sizeof(s_frame));   // the next frame starts here
 
     if (!nxGlAcquire()) {

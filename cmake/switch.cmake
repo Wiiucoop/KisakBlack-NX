@@ -56,6 +56,10 @@ set_target_properties(${BIN_NAME} PROPERTIES SOURCES "${KB_SOURCES}")
 target_compile_definitions(${BIN_NAME} PUBLIC
     KISAK_MP
     KISAK_NX
+    # From OpenBLOPS: the online checks in the menu expressions report success,
+    # so Play and Combat Training open with no live layer. See
+    # src/universal/com_expressions_eval.cpp, above IsSignedIn().
+    OPENBLOPS_OFFLINE_MENUS
     _CRT_SECURE_NO_WARNINGS
     $<$<CONFIG:Debug>:_DEBUG>
     $<$<CONFIG:Release>:NDEBUG>

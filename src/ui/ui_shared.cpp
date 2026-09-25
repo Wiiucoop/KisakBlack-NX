@@ -7825,12 +7825,44 @@ bool __cdecl IsVisible(char flags)
     return (flags & 4) != 0 && (flags & 0x10) == 0;
 }
 
+#ifdef KISAK_NX
+// Why the last Menu_IsVisible said no -- read by Menu_Paint's trace below.
+static const char *s_nxMenuHiddenWhy;
+#define NX_MENU_HIDDEN(why) (s_nxMenuHiddenWhy = (why), 0)
+
+// An OPEN menu Menu_Paint returned early for, and why -- once per menu and
+// reason. The popups opened by the main menu (error_netconnect_popmenu,
+// vid_restart_popmenu) never reached their items, while full-screen menus
+// did; closed menus take these exits every frame by design, so only menus on
+// the stack are named.
+static void NX_MenuNotPainted(UiContext *dc, menuDef_t *menu, const char *why)
+{
+    static struct { const menuDef_t *menu; const char *why; } s_seen[48];
+    static unsigned s_nSeen;
+    if (!Menus_MenuIsInStack(dc, menu))
+        return;
+    for (unsigned i = 0; i < s_nSeen; ++i)
+        if (s_seen[i].menu == menu && s_seen[i].why == why)
+            return;
+    if (s_nSeen < 48) {
+        s_seen[s_nSeen].menu = menu;
+        s_seen[s_nSeen].why = why;
+        ++s_nSeen;
+    }
+    printf("[nx-paint] open menu '%s' not painted: %s\n",
+           menu->window.name ? menu->window.name : "?", why ? why : "?");
+    fflush(stdout);
+}
+#else
+#define NX_MENU_HIDDEN(why) 0
+#endif
+
 char    Menu_IsVisible(int localClientNum, UiContext *dc, menuDef_t *menu)
 {
         if ( !Window_IsVisible(dc->contextIndex, &menu->window) )
-        return 0;
+        return NX_MENU_HIDDEN("window not visible (dynamic flags)");
     if ( menu->window.ownerDrawFlags && !UI_OwnerDrawVisible(menu->window.ownerDrawFlags) )
-        return 0;
+        return NX_MENU_HIDDEN("ownerDrawFlags");
     if ( localClientNum == -1
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\ui\\ui_shared.cpp",
@@ -7851,7 +7883,7 @@ LABEL_18:
     if ( (menu->window.staticFlags & 0x40000000) != 0
         && (CL_GetLocalClientUIGlobals(localClientNum)->keyCatchers & 0x10) != 0 )
     {
-        return 0;
+        return NX_MENU_HIDDEN("staticFlags 0x40000000 with the UI key catcher");
     }
 
     itemDef_s dummyDef; // [esp+0h] [ebp-110h]
@@ -7864,11 +7896,22 @@ LABEL_18:
             HIDWORD(sharedUiInfo.visibilityBits[localClientNum]) | HIDWORD(menu->hideBits),
             LODWORD(sharedUiInfo.visibilityBits[localClientNum]) | LODWORD(menu->hideBits)) != menu->hideBits)
     {
+#ifdef KISAK_NX
+        static char s_why[160];
+        snprintf(s_why, sizeof(s_why), "show/hide bits: visibility 0x%llx show 0x%llx hide 0x%llx",
+                 (unsigned long long)sharedUiInfo.visibilityBits[localClientNum],
+                 (unsigned long long)menu->showBits, (unsigned long long)menu->hideBits);
+        return NX_MENU_HIDDEN(s_why);
+#else
         return 0;
+#endif
     }
 
     if ( !menu->visibleExp.filename || IsExpressionTrue(localClientNum, &dummyDef, &menu->visibleExp) )
         return 1;
+#ifdef KISAK_NX
+    s_nxMenuHiddenWhy = "its 'visible when' expression is false";
+#endif
     if ( uiscript_debug && uiscript_debug->current.integer )
     {
         if ( menu->window.name )
@@ -8115,6 +8158,9 @@ char    Menu_Paint(
         PROF_SCOPED("Menu_IsVisible");
         if (!Menu_IsVisible(localClientNum, dc, menu))
         {
+#ifdef KISAK_NX
+            NX_MenuNotPainted(dc, menu, s_nxMenuHiddenWhy);
+#endif
             R_UI3DStack_Pop(windowIdStack.mStack);
             return 0;
         }
@@ -8133,6 +8179,9 @@ char    Menu_Paint(
         }
         if (menu->itemCount > 0 && !anyItemVisible)
         {
+#ifdef KISAK_NX
+            NX_MenuNotPainted(dc, menu, "no item visible (all static-hidden with alpha 0, none animating)");
+#endif
             R_UI3DStack_Pop(windowIdStack.mStack);
             return 0;
         }

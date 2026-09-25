@@ -689,17 +689,20 @@ void __cdecl CL_GamepadButtonEvent(
                 else
                 {
                     Demo_HandleInput(localClientNum, controllerIndex, key, pressed);
-                    if ( keys[16].down
+                    if (
+#ifdef KISAK_NX
+                        // L3+R3 with both triggers held: an Xbox Live developer
+                        // combo that asks Live_GetTier for the tier. There is no
+                        // Live service here, and no safe way to ask -- both
+                        // Live_GetTier and Live_IsSignedIn assert a signed-in
+                        // user -- so the combo cannot apply on this port.
+                        false &&
+#endif
+                        keys[16].down
                         && keys[17].down
                         && keys[19].down
                         && keys[18].down
                         && controllerIndex != -1
-#ifdef KISAK_NX
-                        // Live_GetTier asserts a signed-in user, and nobody is
-                        // ever signed in here: L3+R3 with both triggers held
-                        // trapped on the main menu.
-                        && Live_IsSignedIn(controllerIndex)
-#endif
                         && Live_GetTier(controllerIndex) == 1
                         && (Menu_IsMenuOpenAndVisible(localClientNum, "menu_xboxlive")
                          || Menu_IsMenuOpenAndVisible(localClientNum, "menu_xboxlive_lobby")) )

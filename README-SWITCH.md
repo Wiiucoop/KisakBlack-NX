@@ -273,12 +273,54 @@ ELF addresses already.
 
 ---
 
-## 4. Known problems
+## 4. Findings worth remembering
 
-- **Some menu buttons are hard to reach with a controller.** The PC menus
-  expect a mouse; focus moves between list items with the D-pad, but buttons
-  such as the graphics menu's save/apply are not always reachable, so settings
-  changes cannot always be applied.
+- **Menus are mouse-driven.** The D-pad only focuses items with focus scripts
+  and a button only takes focus under the cursor, so the right stick drives a
+  cursor in menus (ZR clicks, touchscreen points and taps; `NX_VirtualMouse`,
+  `win_input.cpp`). The right stick is untouched in game.
+- **Play / Theater / Operations open `error_netconnect_popmenu`**, the correct
+  answer with no online services. OpenBLOPS (below) fakes those checks with
+  `OPENBLOPS_OFFLINE_MENUS`; that is the way to Combat Training offline.
+- **Popups drew as an empty blur** because the converter wrote
+  `menuDef_t::visibleExp.rpn` 8 bytes late, over `showBits`: every menu with a
+  `visible when` failed `Menu_IsVisible`. Converter offset bugs look like
+  this -- a field that holds a pointer where a bitmask belongs.
+- **`vid_restart` crashed in malloc** until level surfaces shared their
+  texture's reference count, as in D3D9. Resets also restore device state.
+- **One image, `tv_lookup`, still holds a load def** after a picmip reload;
+  `Image_Release` names it and skips it. Not yet explained.
+- **Diagnostics in the log:** `[nx-trace]` (one frame's draws in order, with
+  target and state), `[nx-paint]` (what `Menu_PaintAll` painted and why an
+  open menu was not), `[nx-kbz] audit` (materials whose images are not
+  textures), `[nx-crash]`.
+
+## 5. Plan
+
+**Renderer stages.** 1, render targets: done. 2, the engine's shaders
+translated to GLSL: done (every menu draw). 3, depth, stencil, culling (with
+`glFrontFace` answering the y flip), depth bias, `DrawPrimitive` /
+`DrawPrimitiveUP`, sRGB, MRT -- needed before any 3D. 4, performance: a
+program cache on the SD card, per-draw constant uploads trimmed, batching (the
+web port solved the same problems).
+
+**Order.** Offline menus -> map-zone converters (`mp_nuked`: `gfx_map`,
+`col_map_mp`, `com_map`, `game_map_mp`, `destructibledef`, `glasses` are the
+six missing types) -> renderer stage 3 -> first 3D map via `devmap`, fixing the
+LP64 crashes on that path -> SP / Zombies.
+
+**Zombies goes through OpenBLOPS.** OpenBLOPS (GPL-3.0, no history available)
+is the same KisakBlack tree with SP and Zombies built from it under `KISAK_SP`:
+1344 of its 1372 engine/game files map one-to-one onto `src/<module>`, the SP
+delta is ~700 `#ifdef KISAK_SP` lines in 145 files plus 28 new files, and it
+is 32-bit x86 only. Bringing it in means a second Switch target with
+`KISAK_SP`, an SP mode in the converter (SP numbers its asset types
+differently and has `col_map_sp` / `game_map_sp`), and LP64 work on the SP-only
+code. It waits for 3D: everything a Zombies map needs is shared with MP, and
+the SP front end (`frontend.ff`) is itself a 3D scene.
+
+## 6. Known problems
+
 - **Settings only persist on a clean quit or an explicit apply.** Closing the
   title from the Home menu kills the process before the config is written.
 - **Crash on forced exit.** The worker threads are never stopped, so tearing
@@ -293,7 +335,7 @@ ELF addresses already.
 
 ---
 
-## 5. What is missing to reach a map
+## 7. What is missing to reach a map
 
 1. **Convert the map zones.** `GfxWorld`, `clipMap`, `comWorld`, `gameWorld`
    and `mapEnts` have no transcoder in `tools/ffconv/convert.cpp` yet, and
@@ -324,7 +366,7 @@ ELF addresses already.
 
 ---
 
-## 6. Scope: this is the multiplayer executable
+## 8. Scope: this is the multiplayer executable
 
 KisakBlack reimplements **only `BlackOpsMP.exe`** — as its own README and its
 author's blog say. Campaign and Zombies live in `BlackOps.exe`, which is not
@@ -347,7 +389,7 @@ renderer is what transfers here, not its engine-side work.
 
 ---
 
-## 7. Credits
+## 9. Credits
 
 - [KisakBlack](https://github.com/SwagSoftware/KisakBlack) — the decompiled
   engine this is a port of.

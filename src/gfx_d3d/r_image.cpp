@@ -1,5 +1,8 @@
 #include "r_image.h"
 #include <universal/com_memory.h>
+#ifdef KISAK_NX
+extern "C" bool NX_D3D_IsTexture(const void *p);   // nx_d3d9_null.cpp
+#endif
 #include <xanim/xmodel.h>
 #include <qcommon/threads.h>
 #include "rb_resource.h"
@@ -165,6 +168,24 @@ void __cdecl Image_Release(GfxImage *image)
         for ( platform = 0; platform < 2; ++platform )
             imageGlobals.totalMemory.platform[platform] -= image->cardMemory.platform[platform];
     }
+#ifdef KISAK_NX
+    // nx-port: an image can reach here still holding the GfxImageLoadDef its
+    // zone left in the texture union -- one Load_Texture never built. Releasing
+    // that as a texture freed zone memory (the picmip change after vid_restart
+    // crashed so). Name it and drop it instead; the driver refuses it anyway.
+    if ( image->texture.basemap && !NX_D3D_IsTexture(image->texture.basemap) )
+    {
+        static unsigned s_nNotTexture;
+        if ( ++s_nNotTexture <= 16 )
+            Com_PrintWarning(8, "Image_Release: '%s' (category %d, track %d) holds %p, not a texture\n",
+                             image->name ? image->name : "?", (int)image->category,
+                             (int)image->track, (void *)image->texture.basemap);
+        image->texture.basemap = 0;
+        image->cardMemory.platform[0] = 0;
+        image->cardMemory.platform[1] = 0;
+        return;
+    }
+#endif
     if ( image->texture.basemap )
     {
         // nx-port: Sys_CanCreateDeviceResourcesInline, non Sys_IsRenderThread.

@@ -338,6 +338,52 @@ static void buildRuntimeObjects(const char *path,
     s_imagesWithoutDevice = 0;
 }
 
+extern "C" bool NX_D3D_IsTexture(const void *p);   // nx_d3d9_null.cpp
+
+// After the build: does every image this zone's materials reach hold a texture
+// (or nothing yet, for pixels that load later)? The driver has counted
+// SetTexture calls on objects it never made since the first menus, and the
+// picmip change after a vid_restart released one -- a GfxImage whose texture
+// union still held a load def. buildImage only visits the images the zone
+// registered, through their pool entries, so a material that still reaches an
+// image through its block copy, or an image the zone never registered, is
+// exactly what would slip past it. This names them, with which of the two
+// each one is.
+static void auditMaterialImages(const char *path, const std::vector<NxRegistered> &registered,
+                                NxBuildCtx &ctx)
+{
+    unsigned checked = 0, bad = 0;
+    for (size_t i = 0; i < registered.size(); ++i) {
+        if (registered[i].type != ASSET_TYPE_MATERIAL)
+            continue;
+        Material *m = registered[i].header.material;
+        if (!m || !m->textureTable)
+            continue;
+        for (unsigned t = 0; t < m->textureCount; ++t) {
+            const MaterialTextureDef *td = &m->textureTable[t];
+            if (td->semantic == 11)   // water: u.water, not an image
+                continue;
+            GfxImage *img = td->u.image;
+            if (!img)
+                continue;
+            ++checked;
+            const void *tex = img->texture.basemap;
+            if (!tex || NX_D3D_IsTexture(tex))
+                continue;
+            if (++bad <= 12)
+                printf("[nx-kbz] audit '%s': material '%s' texture %u image '%s' holds %p, not a "
+                       "texture | image is %s, what it holds is %s\n",
+                       path, m->info.name ? m->info.name : "?", t,
+                       img->name ? img->name : "?", tex,
+                       ctx.inBlocks(img) ? "a BLOCK copy" : "a pool entry",
+                       ctx.inBlocks(tex) ? "in this zone's blocks" : "outside this zone");
+        }
+    }
+    printf("[nx-kbz] audit '%s': %u material textures checked, %u not textures\n",
+           path, checked, bad);
+    fflush(stdout);
+}
+
 // ---------------------------------------------------------------------------
 // Point every reference at the pool entry, not at the block.
 //
@@ -553,6 +599,7 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
     ctx.blockSize = blockSize;
     ctx.nblk = nblk;
     buildRuntimeObjects(path, registered, ctx);
+    auditMaterialImages(path, registered, ctx);
 
     Com_Printf(16, "NX_TryLoadKbz: loaded '%s' (%u assets, %u relocs)\n",
                path, assetCount, relocCount);

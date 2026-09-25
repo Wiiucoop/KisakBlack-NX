@@ -8,9 +8,13 @@
 // (vertex and index buffers, the position, colour and texcoord elements of
 // the vertex declaration, DrawIndexedPrimitive) drawn in its own vertex
 // colours, modulated by the texture SetTexture bound to sampler 0, and
-// composited with the blend state the engine asked for. The game's own
-// shaders are still discarded, so nothing on screen is lit, and most of the
-// D3DRS file is recorded but not acted on.
+// composited with the blend state the engine asked for. Render targets are
+// real: every surface the engine draws into -- the back buffer included -- is
+// a GL texture behind a framebuffer object, with the viewport, scissor and
+// sampler states the engine set, and Present copies the back buffer to the
+// window. The game's own shaders run, translated to GLSL (nx_d3d9_shader.cpp),
+// with the built-in program as the fallback for any pair that cannot; depth,
+// stencil and culling are still recorded but not acted on.
 #include <d3d9.h>
 #include <d3dx9.h>
 
@@ -31,6 +35,11 @@
 #include <GL/gl.h>
 
 #include <qcommon/threads.h>
+
+#include "nx_d3d9_shader.h"
+
+#include <map>
+#include <utility>
 
 // For the texture report only. Nothing in the D3D9 API carries a name, and
 // GfxImage is where the engine keeps it -- see nxImageFromOutPtr.
@@ -557,6 +566,16 @@ struct NxSurface {
     UINT pitch;
     void *bits;       // owned unless owner != NULL
     struct NxTexture *owner;
+    // A view of one level of `owner`: which one. Drawing into it through
+    // SetRenderTarget draws into that level of the owner's GL texture.
+    UINT face, level;
+    // A standalone surface -- CreateRenderTarget, CreateDepthStencilSurface,
+    // the back buffer -- says through `usage` whether it may be bound at all,
+    // and keeps its own GL storage. An offscreen plain surface has neither:
+    // it is memory the engine reads back into, nothing more.
+    DWORD usage;
+    GLuint glName;
+    bool glUnsupported;
 };
 
 // NX_TEXTURE_MAGIC is written by nxCreateTexture and cleared by nxDestroy,
@@ -580,9 +599,13 @@ struct NxTexture {
     // several images, and an image can be freed while the texture it lent
     // its basemap to lives on, so the pointer would outlive the string.
     char imageName[64];    // empty when no GfxImage claimed this texture
+    // D3DUSAGE_RENDERTARGET or D3DUSAGE_DEPTHSTENCIL: the GPU writes it, so
+    // it gets empty GL storage once and levelBits never go up over it.
+    DWORD usage;
     GLuint glName;     // 0 until the first upload on the GL thread
     bool glDirty;      // levelBits changed since the last upload
     bool glUnsupported; // no GL equivalent for this format: do not retry
+    bool glAllocated;  // render target storage exists
 };
 
 struct NxBuffer {
@@ -603,6 +626,19 @@ struct NxQuery {
 
 struct NxShader {
     NxD3DObject obj;
+    // The bytecode and what the built-in program's fallback reads of it: the
+    // sampler declarations -- see nxShaderRead.
+    DWORD *tokens;
+    UINT tokenCount;
+    bool parsed;             // the declarations below can be trusted
+    unsigned sampler2dMask;  // bit s: the shader declares s# as a 2D sampler
+    unsigned samplerMask;    // bit s: s# declared at all, any dimension
+    // The shader itself, translated to GLSL at creation (any thread) and
+    // compiled on first use (the GL thread) -- see "Translated shaders".
+    char *glsl;              // null when the stream could not be translated
+    NxShaderInfo info;
+    GLuint glName;
+    bool glFailed;           // compile failed once; not retried
 };
 
 struct NxVDecl {
@@ -638,6 +674,9 @@ struct NxD3D9 {
 enum { NX_MAX_SAMPLERS = 16 };
 static NxTexture *s_samplerTex[NX_MAX_SAMPLERS];
 static unsigned s_nSamplerBind[NX_MAX_SAMPLERS];
+// The vertex-shader sampler slots, D3DVERTEXTEXTURESAMPLER0..3 (stages 257..260).
+enum { NX_VTX_SAMPLER_STAGE0 = 257 };
+static NxTexture *s_vtxSamplerTex[NX_SHADER_VS_SAMPLERS];
 
 static unsigned s_nTexCreated, s_nTex2d, s_nTexCube, s_nTexVolume;
 static unsigned s_nTexNamed;          // linked back to a GfxImage
@@ -675,6 +714,13 @@ static NxFormatTally *nxFormatTally(D3DFORMAT fmt)
 // lives in the geometry section further down; this is how a texture that dies
 // mid-frame gets out of it.
 static void nxFrameForgetTexture(const NxTexture *t);
+
+// The same for render targets, which live in the section of that name: a
+// surface that dies must leave the framebuffer cache and stop being the
+// current target before anything draws through it again.
+static void nxForgetSurface(const NxSurface *s);
+struct NxShader;
+static void nxForgetShader(const NxShader *s);
 
 static void nxTextureCreated(NxTexture *t)
 {
@@ -770,7 +816,15 @@ static void nxDestroy(NxD3DObject *o)
     switch ((int)o->type) {
     case D3DRTYPE_SURFACE: {
         NxSurface *s = (NxSurface *)o;
-        if (!s->owner) free(s->bits);
+        // A level view belongs to its texture, which frees it -- and forgets
+        // it -- with the rest of its levels. Freeing it here as well would be
+        // a double free the day the engine over-releases one.
+        if (s->owner)
+            break;
+        nxForgetSurface(s);
+        if (s->glName && s_glReady && nxGlAcquire())
+            glDeleteTextures(1, &s->glName);
+        free(s->bits);
         free(s);
         break;
     }
@@ -787,6 +841,8 @@ static void nxDestroy(NxD3DObject *o)
         // meant to explain crashes.
         for (UINT i = 0; i < NX_MAX_SAMPLERS; ++i)
             if (s_samplerTex[i] == t) s_samplerTex[i] = nullptr;
+        for (UINT i = 0; i < NX_SHADER_VS_SAMPLERS; ++i)
+            if (s_vtxSamplerTex[i] == t) s_vtxSamplerTex[i] = nullptr;
         nxFrameForgetTexture(t);
         // Same rule as the buffers below: only the thread that owns the
         // context may delete a GL name, and a leak beats a lost context.
@@ -797,8 +853,11 @@ static void nxDestroy(NxD3DObject *o)
         for (UINT i = 0; i < n; ++i)
             free(t->levelBits[i]);
         if (t->surfaces) {
-            for (UINT i = 0; i < n; ++i)
+            for (UINT i = 0; i < n; ++i) {
+                if (t->surfaces[i])
+                    nxForgetSurface(t->surfaces[i]);
                 free(t->surfaces[i]);
+            }
             free(t->surfaces);
         }
         free(t->levelBits);
@@ -814,6 +873,17 @@ static void nxDestroy(NxD3DObject *o)
             glDeleteBuffers(1, &b->glName);
         free(b->bits);
         free(b);
+        break;
+    }
+    case 101:   // vertex shader
+    case 102: { // pixel shader
+        NxShader *sh = (NxShader *)o;
+        nxForgetShader(sh);   // unbinds it and drops every program linked from it
+        if (sh->glName && s_glReady && nxGlAcquire())
+            glDeleteShader(sh->glName);
+        free(sh->glsl);
+        free(sh->tokens);
+        free(sh);
         break;
     }
     default:
@@ -880,6 +950,8 @@ static NxSurface *nxTextureSurface(NxTexture *t, UINT face, UINT level)
         nxLevelLayout(t->format, s->width, s->height, &s->pitch, &size);
         s->bits = t->levelBits[idx];
         s->owner = t;
+        s->face = idx / t->levels;
+        s->level = idx % t->levels;
         t->surfaces[idx] = s;
     }
     nxAddRef(t->surfaces[idx]);
@@ -908,10 +980,10 @@ static NxSurface *nxTextureSurface(NxTexture *t, UINT face, UINT level)
 // row-major/column-major difference is paid for by one flag.
 //
 // Clip space does differ: D3D9 wants z in [0,w], GL wants [-w,w], so the
-// shader ends with z = 2z - w. Clip-space y points up in both, and both map
-// +1 to the top of the default framebuffer, so nothing is flipped; if the
-// first geometry arrives upside down anyway, that assumption is the thing to
-// doubt first.
+// shader ends with z = 2z - w. It also negates y, and that is a storage
+// decision rather than a clip-space one: every target here is kept top row
+// first, the way D3D9 addresses it, so that a render target sampled as a
+// texture reads the right way up -- the section on render targets says why.
 //
 // WHICH four registers hold the transform is not fixed. The dest register
 // comes from the material's shader arguments (r_shade.cpp:217), assigned when
@@ -1036,6 +1108,10 @@ static void nxGlApplyBlend(void)
 // float file is kept: the transform is all this step needs from it.
 enum { NX_VS_CONST_ROWS = 256 };
 static float s_vsConst[NX_VS_CONST_ROWS][4];
+// And the pixel shader's, which only translated shaders read. ps_3_0 has 224;
+// 256 keeps the two files the same shape.
+enum { NX_PS_CONST_ROWS = 256 };
+static float s_psConst[NX_PS_CONST_ROWS][4];
 static bool s_vsConstWritten[NX_VS_CONST_ROWS];
 static unsigned s_vsConstBase;   // the register quad used as the transform
 
@@ -1135,10 +1211,16 @@ static GLuint s_prog, s_vao;
 // untextured draw comes out in its vertex colour exactly as it did before
 // sampling existed -- no branch in the shader, no separate program.
 static GLuint s_whiteTex;
+// The same for the other two sampler types a translated shader can declare: a
+// sampler with nothing bound still needs a complete texture of its own type,
+// or the draw samples from an incomplete one.
+static GLuint s_whiteCube, s_white3D;
 static GLint s_locTransform = -1;
 static GLint s_locTex = -1;
 static bool s_progFailed;
 static bool s_glHasS3tc;
+static bool s_glHasAniso;
+static GLuint s_glSampler[NX_MAX_SAMPLERS];
 enum { NX_ATTR_POS = 0, NX_ATTR_COLOR = 1, NX_ATTR_TEXCOORD = 2 };
 
 // Draw-path tally. The skip counters matter as much as the success one: a
@@ -1212,6 +1294,22 @@ struct NxFrameStats {
     unsigned drawsWhiteNoTexcoord;// bound, but the vertices carry no uv
     unsigned drawsWhiteNot2d;     // a cube or volume map on a sampler2D
     unsigned drawsWhiteNoUpload;  // bound, but the format did not go up
+    unsigned drawsWhiteNoSampler; // the pixel shader declares no 2D sampler
+    // Which sampler the built-in program read, per draw -- the pixel
+    // shader's first 2D sampler, see nxGlDrawIndexed.
+    unsigned drawsBySampler[NX_MAX_SAMPLERS];
+    // Where the frame's pixels went. A menu drawn entirely offscreen and a
+    // back buffer that never receives it look identical on the TV.
+    unsigned drawsBackBuffer, drawsOffscreen, drawsNoTarget;
+    unsigned clears, clearsNoTarget, targetSwitches;
+    // Which program drew: the engine's own shaders, translated, or the built-in
+    // one -- and for the built-in, why.
+    unsigned drawsTranslated;
+    unsigned fallbackNoShader;      // no vertex or pixel shader bound
+    unsigned fallbackUntranslated;  // a bound shader has no translation
+    unsigned fallbackCompile;       // its GLSL did not compile
+    unsigned fallbackLink;          // the pair did not link
+    unsigned samplersMissing;       // a declared sampler drew with the dummy texture
     unsigned drawsNoReadback;          // non-float position: not in the box
     unsigned refs, refsBehind, refsInside, refsOutOfRange;
     float minX, maxX, minY, maxY, minZ, maxZ;
@@ -1361,6 +1459,7 @@ static const char *s_vsSrc =
     "void main() {\n"
     "    vec4 p = nxTransform * vec4(nxPos.xyz, 1.0);\n"
     "    p.z = 2.0 * p.z - p.w;\n"          // D3D9 clip z [0,w] -> GL [-w,w]
+    "    p.y = -p.y;\n"                     // targets are stored top row first
     "    gl_Position = p;\n"
     "    vColor = nxColor;\n"
     "    vTexCoord = nxTexCoord;\n"
@@ -1456,6 +1555,22 @@ static bool nxGlEnsurePipeline(void)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+    glGenTextures(1, &s_whiteCube);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, s_whiteCube);
+    for (GLenum face = 0; face < 6; ++face)
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, GL_RGBA8, 1, 1, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, whiteTexel);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glGenTextures(1, &s_white3D);
+    glBindTexture(GL_TEXTURE_3D, s_white3D);
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8, 1, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whiteTexel);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, s_whiteTex);
+
     // Whether the DXT blocks can go up untouched is a runtime question on
     // this driver, and the answer decides whether most of the game's images
     // exist at all -- so it is asked once, here, and printed rather than
@@ -1478,27 +1593,34 @@ static bool nxGlEnsurePipeline(void)
     glGenVertexArrays(1, &s_vao);
     glBindVertexArray(s_vao);
 
-    // Every one of these is still state this file discards: no depth buffer is
-    // ever filled, no winding order is tracked, SetScissorRect is a no-op. So
-    // leaving them on could only throw the geometry away for reasons that have
-    // nothing to do with whether the geometry arrived.
+    // Still state this file discards: no depth buffer is filled and no winding
+    // order is tracked, so leaving these on could only throw the geometry away
+    // for reasons that have nothing to do with whether the geometry arrived.
+    // (The y flip in s_vsSrc also reverses every winding, which culling will
+    // have to answer for when it is honoured.)
     //
-    // GL_BLEND has left this list: nxGlApplyBlend now sets it per draw, from
-    // the state the engine actually asked for.
+    // GL_BLEND, the scissor and the viewport have left this list: the draw
+    // path sets all three per draw, from the state the engine asked for.
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
-    glDisable(GL_SCISSOR_TEST);
 
-    // SetViewport is a no-op too, so nobody has called glViewport. The surface
-    // is the only viewport that means anything at this stage.
-    EGLint sw = 0, sh = 0;
-    eglQuerySurface(s_display, s_surface, EGL_WIDTH, &sw);
-    eglQuerySurface(s_display, s_surface, EGL_HEIGHT, &sh);
-    glViewport(0, 0, sw, sh);
+    // One GL sampler object per D3D9 sampler slot, carrying that slot's
+    // SetSamplerState values. A sampler object bound to a unit overrides the
+    // texture's own parameters, so the texture keeps D3D9's defaults and the
+    // engine's filtering and addressing ride on the slot, as they do in D3D9.
+    glGenSamplers(NX_MAX_SAMPLERS, s_glSampler);
+    for (GLint i = 0; i < extCount; ++i) {
+        const char *ext = (const char *)glGetStringi(GL_EXTENSIONS, (GLuint)i);
+        if (ext && (!strcmp(ext, "GL_EXT_texture_filter_anisotropic")
+                 || !strcmp(ext, "GL_ARB_texture_filter_anisotropic")))
+            s_glHasAniso = true;
+    }
 
     printf("[nx-gl] textured vertex-colour pipeline up: program %u vao %u "
-           "white %u, nxTransform at %d nxTex at %d, viewport %dx%d\n",
-           s_prog, s_vao, s_whiteTex, s_locTransform, s_locTex, sw, sh);
+           "white %u, nxTransform at %d nxTex at %d, %d sampler objects, "
+           "anisotropic filtering %s\n",
+           s_prog, s_vao, s_whiteTex, s_locTransform, s_locTex, NX_MAX_SAMPLERS,
+           s_glHasAniso ? "available" : "not available");
     fflush(stdout);
     return true;
 }
@@ -1582,6 +1704,173 @@ static void nxGlUploadLevel(const NxTexture *t, const NxTexFormat *f,
     }
 }
 
+// ---------------------------------------------------------------------------
+// Render target storage
+// ---------------------------------------------------------------------------
+// A render target's pixels come from the GPU, never from LockRect, so its GL
+// texture is allocated empty exactly once and its levelBits are never
+// uploaded over what was drawn into it.
+//
+// The formats are nxFormatToGl's, with two changes a target needs. The depth
+// formats get the depth internal formats a framebuffer can attach. And the
+// three-channel colour formats become four-channel storage whose alpha reads
+// back as one: GL_RGB8 and its kin are not required to be colour-renderable,
+// while an X8R8G8B8 target is exactly what D3D9 promises can be drawn into.
+struct NxGlStorage {
+    GLenum internalFormat, format, type;
+    GLint swizzle[4];
+    GLenum attachment;  // GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT or GL_DEPTH_STENCIL_ATTACHMENT
+};
+
+static bool nxRenderFormatToGl(D3DFORMAT fmt, NxGlStorage *out)
+{
+    out->swizzle[0] = GL_RED;
+    out->swizzle[1] = GL_GREEN;
+    out->swizzle[2] = GL_BLUE;
+    out->swizzle[3] = GL_ALPHA;
+
+    switch ((DWORD)fmt) {
+    case D3DFMT_D24S8:
+    case D3DFMT_D24X4S4:
+    case D3DFMT_D24FS8:
+        out->internalFormat = GL_DEPTH24_STENCIL8;
+        out->format = GL_DEPTH_STENCIL;
+        out->type = GL_UNSIGNED_INT_24_8;
+        out->attachment = GL_DEPTH_STENCIL_ATTACHMENT;
+        return true;
+    case D3DFMT_D24X8:
+        out->internalFormat = GL_DEPTH_COMPONENT24;
+        out->format = GL_DEPTH_COMPONENT;
+        out->type = GL_UNSIGNED_INT;
+        out->attachment = GL_DEPTH_ATTACHMENT;
+        return true;
+    case D3DFMT_D16:
+    case D3DFMT_D16_LOCKABLE:
+    case D3DFMT_D15S1:
+        out->internalFormat = GL_DEPTH_COMPONENT16;
+        out->format = GL_DEPTH_COMPONENT;
+        out->type = GL_UNSIGNED_SHORT;
+        out->attachment = GL_DEPTH_ATTACHMENT;
+        return true;
+    case D3DFMT_D32:
+    case D3DFMT_D32F_LOCKABLE:
+        out->internalFormat = GL_DEPTH_COMPONENT32F;
+        out->format = GL_DEPTH_COMPONENT;
+        out->type = GL_FLOAT;
+        out->attachment = GL_DEPTH_ATTACHMENT;
+        return true;
+    default:
+        break;
+    }
+
+    NxTexFormat f;
+    if (!nxFormatToGl(fmt, &f) || !f.format)
+        return false;   // no GL equivalent, or compressed: never a target
+    out->internalFormat = f.internalFormat;
+    out->format = f.format;
+    out->type = f.type;
+    memcpy(out->swizzle, f.swizzle, sizeof(out->swizzle));
+    switch (f.internalFormat) {
+    case GL_RGB8: out->internalFormat = GL_RGBA8;   out->swizzle[3] = GL_ONE; break;
+    case GL_RGB5: out->internalFormat = GL_RGB5_A1; out->swizzle[3] = GL_ONE; break;
+    case GL_RGB4: out->internalFormat = GL_RGBA4;   out->swizzle[3] = GL_ONE; break;
+    default: break;
+    }
+    out->attachment = GL_COLOR_ATTACHMENT0;
+    return true;
+}
+
+static unsigned s_nRtAllocated, s_nRtUnsupported;
+
+// A render target read as a texture is filtered by the sampler object on its
+// unit (see nxGlApplySampler); these only matter until one is bound, and keep
+// every level but the first from being required for completeness.
+static void nxGlRenderStorageParams(GLenum target, UINT levels, const NxGlStorage *st)
+{
+    glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, (GLint)levels - 1);
+    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    if (st->attachment == GL_COLOR_ATTACHMENT0)
+        glTexParameteriv(target, GL_TEXTURE_SWIZZLE_RGBA, st->swizzle);
+}
+
+static void nxRenderStorageUnsupported(D3DFORMAT fmt, UINT w, UINT h, const char *what)
+{
+    if (++s_nRtUnsupported <= 8) {
+        char fmtName[16];
+        printf("[nx-gl] %s %ux%u %s: no GL format to render into; it will "
+               "never receive a draw\n", what, w, h,
+               nxFormatName(fmt, fmtName, sizeof(fmtName)));
+        fflush(stdout);
+    }
+}
+
+// The render-target half of nxGlSyncTexture: empty storage for every level of
+// every face, once. Leaves the texture bound, as its caller expects.
+static bool nxGlSyncRenderTexture(NxTexture *t)
+{
+    GLenum target = nxTexTarget(t);
+    if (!t->glName) {
+        glGenTextures(1, &t->glName);
+        if (!t->glName)
+            return false;
+    }
+    glBindTexture(target, t->glName);
+    if (t->glAllocated)
+        return true;
+
+    NxGlStorage st;
+    if (target == GL_TEXTURE_3D || !nxRenderFormatToGl(t->format, &st)) {
+        t->glUnsupported = true;
+        nxFormatTally(t->format)->unsupported++;
+        nxRenderStorageUnsupported(t->format, t->width, t->height, "render target texture");
+        return false;
+    }
+    for (UINT face = 0; face < t->faces; ++face) {
+        GLenum faceTarget = target == GL_TEXTURE_CUBE_MAP
+                          ? (GLenum)(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face)
+                          : target;
+        for (UINT level = 0; level < t->levels; ++level)
+            glTexImage2D(faceTarget, (GLint)level, (GLint)st.internalFormat,
+                         (GLsizei)nxMipDim(t->width, level),
+                         (GLsizei)nxMipDim(t->height, level), 0,
+                         st.format, st.type, nullptr);
+    }
+    nxGlRenderStorageParams(target, t->levels, &st);
+    t->glAllocated = true;
+    t->glDirty = false;
+    ++s_nRtAllocated;
+    return true;
+}
+
+// The same for a standalone surface: one 2D level of its own.
+static bool nxGlSyncSurface(NxSurface *s)
+{
+    if (s->glName)
+        return true;
+    if (s->glUnsupported)
+        return false;
+    NxGlStorage st;
+    if (!nxRenderFormatToGl(s->format, &st)) {
+        s->glUnsupported = true;
+        nxRenderStorageUnsupported(s->format, s->width, s->height, "surface");
+        return false;
+    }
+    glGenTextures(1, &s->glName);
+    if (!s->glName)
+        return false;
+    glBindTexture(GL_TEXTURE_2D, s->glName);
+    glTexImage2D(GL_TEXTURE_2D, 0, (GLint)st.internalFormat,
+                 (GLsizei)s->width, (GLsizei)s->height, 0,
+                 st.format, st.type, nullptr);
+    nxGlRenderStorageParams(GL_TEXTURE_2D, 1, &st);
+    ++s_nRtAllocated;
+    return true;
+}
+
 // Creates the GL name on first use and re-uploads whenever Unlock said the
 // pixels moved. Leaves the texture bound to its own target on the active
 // unit, which is what the caller wants next.
@@ -1589,6 +1878,8 @@ static bool nxGlSyncTexture(NxTexture *t)
 {
     if (!t || t->glUnsupported)
         return false;
+    if (t->usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL))
+        return nxGlSyncRenderTexture(t);
 
     NxTexFormat f;
     if (!nxFormatToGl(t->format, &f)) {
@@ -1628,9 +1919,9 @@ static bool nxGlSyncTexture(NxTexture *t)
             nxGlUploadLevel(t, &f, faceTarget, face, level);
     }
 
-    // The engine's own sampler state is still a no-op, so these are D3D9's
-    // defaults: wrap, and linear with mips when there are mips. Once
-    // SetSamplerState is honoured this is where its answer belongs instead.
+    // What the engine asked for with SetSamplerState travels on the sampler
+    // object bound next to the texture, which overrides all of these; they
+    // only hold for a draw that finds no sampler object bound.
     glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
     glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, (GLint)t->levels - 1);
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER,
@@ -1646,6 +1937,393 @@ static bool nxGlSyncTexture(NxTexture *t)
     s_texUploadBytes += t->bytes;
     nxFormatTally(t->format)->uploaded++;
     return true;
+}
+
+// ===========================================================================
+// Render targets
+// ===========================================================================
+// Every surface the engine draws into is a GL texture behind a framebuffer
+// object -- the back buffer too. Nothing is drawn into the window directly:
+// Present copies the back buffer there and swaps. That keeps one rule for
+// every target instead of a special case for the one the engine calls
+// "frame buffer", and the special case would have been wrong anyway, because
+// the engine pairs the back buffer with a depth surface of its own making,
+// which the window's depth buffer cannot stand in for.
+//
+// ORIENTATION. D3D9 numbers a target's rows from the top: viewport and
+// scissor y count down from the first row, and a render target sampled as a
+// texture has v = 0 at its top. GL numbers them from the bottom. Rather than
+// correct every consumer, each target is simply stored top row first:
+// s_vsSrc negates clip-space y, so D3D9's top lands in GL's row 0. After
+// that the D3D9 numbers are GL's numbers -- glViewport and glScissor take the
+// engine's rectangles as they are, a target sampled as a texture reads the
+// right way up, and StretchRect copies rectangle for rectangle. The one place
+// the order is undone is the copy to the window at Present.
+static NxSurface *s_rt;          // SetRenderTarget(0, ...)
+static NxSurface *s_ds;          // SetDepthStencilSurface; null is legal
+static D3DVIEWPORT9 s_vp;
+static RECT s_scissor;
+static GLuint s_boundFbo = ~0u;  // for the switch count only
+
+static unsigned s_nStretchRect, s_nStretchRectSkipped, s_nColorFill;
+static unsigned s_nReadback, s_nReadbackSkipped, s_nMrtIgnored;
+
+// Framebuffer objects, one per colour/depth pairing the engine has drawn
+// with. The engine has a few dozen targets and pairs each with at most one
+// or two depth surfaces, so a small list does; the entry used last moves to
+// the end, and the one at the front is the one given up when it is full.
+struct NxFbo {
+    const NxSurface *color, *depth;
+    GLuint name;
+    bool complete;
+};
+enum { NX_MAX_FBOS = 48 };
+static NxFbo s_fbos[NX_MAX_FBOS];
+static unsigned s_nFbos;
+static unsigned s_nFboCreated, s_nFboIncomplete, s_nFboEvicted;
+
+// What a caller keeps. Never a pointer into s_fbos: the next lookup can move
+// every entry.
+struct NxFboRef {
+    GLuint name;
+    bool complete;
+};
+
+static void nxDescribeSurface(const NxSurface *s, char *buf, size_t size)
+{
+    if (!s) {
+        snprintf(buf, size, "none");
+        return;
+    }
+    char fmtName[16];
+    nxFormatName(s->format, fmtName, sizeof(fmtName));
+    if (s->owner)
+        snprintf(buf, size, "%ux%u %s, level %u of '%s'", s->width, s->height, fmtName,
+                 s->level, s->owner->imageName[0] ? s->owner->imageName : "<no GfxImage>");
+    else
+        snprintf(buf, size, "%ux%u %s, %s", s->width, s->height, fmtName,
+                 s == s_device.backBuffer ? "the back buffer" : "standalone surface");
+}
+
+static void nxGlFboDelete(unsigned i)
+{
+    if (s_fbos[i].name && s_glReady && nxGlAcquire())
+        glDeleteFramebuffers(1, &s_fbos[i].name);
+    memmove(&s_fbos[i], &s_fbos[i + 1], (s_nFbos - i - 1) * sizeof(s_fbos[0]));
+    --s_nFbos;
+}
+
+// The texture, level and attachment point a surface draws through, with its
+// GL storage created on first use. False for anything that cannot be a
+// target: an offscreen plain surface, a level of an ordinary texture, a
+// format with no renderable equivalent.
+static bool nxGlSurfaceTarget(NxSurface *s, GLenum *texTarget, GLuint *name,
+                              GLint *level, GLenum *attachment)
+{
+    NxGlStorage st;
+    if (!nxRenderFormatToGl(s->format, &st))
+        return false;
+    *attachment = st.attachment;
+    if (s->owner) {
+        NxTexture *t = s->owner;
+        if (!(t->usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)))
+            return false;
+        if (!nxGlSyncRenderTexture(t))
+            return false;
+        *texTarget = nxTexTarget(t) == GL_TEXTURE_CUBE_MAP
+                   ? (GLenum)(GL_TEXTURE_CUBE_MAP_POSITIVE_X + s->face)
+                   : (GLenum)GL_TEXTURE_2D;
+        *name = t->glName;
+        *level = (GLint)s->level;
+        return true;
+    }
+    if (!(s->usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)))
+        return false;
+    if (!nxGlSyncSurface(s))
+        return false;
+    *texTarget = GL_TEXTURE_2D;
+    *name = s->glName;
+    *level = 0;
+    return true;
+}
+
+// Finds or builds the framebuffer for one pairing. Must run on the GL thread.
+// Leaves GL_FRAMEBUFFER bound to it.
+static NxFboRef nxGlFbo(const NxSurface *color, const NxSurface *depth)
+{
+    for (unsigned i = 0; i < s_nFbos; ++i) {
+        if (s_fbos[i].color != color || s_fbos[i].depth != depth)
+            continue;
+        NxFbo hit = s_fbos[i];
+        memmove(&s_fbos[i], &s_fbos[i + 1], (s_nFbos - i - 1) * sizeof(s_fbos[0]));
+        s_fbos[s_nFbos - 1] = hit;
+        glBindFramebuffer(GL_FRAMEBUFFER, hit.name);
+        return NxFboRef{ hit.name, hit.complete };
+    }
+    if (s_nFbos == NX_MAX_FBOS) {
+        nxGlFboDelete(0);
+        ++s_nFboEvicted;
+    }
+
+    NxFbo f = { color, depth, 0, false };
+    glGenFramebuffers(1, &f.name);
+    glBindFramebuffer(GL_FRAMEBUFFER, f.name);
+    bool attached = true;
+    GLenum texTarget, attachment;
+    GLuint tex;
+    GLint level;
+    if (color) {
+        if (nxGlSurfaceTarget((NxSurface *)color, &texTarget, &tex, &level, &attachment)
+            && attachment == GL_COLOR_ATTACHMENT0)
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texTarget, tex, level);
+        else
+            attached = false;
+    }
+    // A depth-only pass -- a shadow map, a depth prepass -- has no colour to
+    // write, and GL calls a framebuffer whose draw buffer names a missing
+    // attachment incomplete.
+    glDrawBuffer(color ? GL_COLOR_ATTACHMENT0 : GL_NONE);
+    glReadBuffer(color ? GL_COLOR_ATTACHMENT0 : GL_NONE);
+    if (depth) {
+        if (nxGlSurfaceTarget((NxSurface *)depth, &texTarget, &tex, &level, &attachment)
+            && attachment != GL_COLOR_ATTACHMENT0)
+            glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, texTarget, tex, level);
+        else
+            attached = false;
+    }
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    f.complete = attached && status == GL_FRAMEBUFFER_COMPLETE;
+    ++s_nFboCreated;
+    if (!f.complete && ++s_nFboIncomplete <= 8) {
+        char c[128], d[128];
+        nxDescribeSurface(color, c, sizeof(c));
+        nxDescribeSurface(depth, d, sizeof(d));
+        printf("[nx-gl] framebuffer %u incomplete (status 0x%x, %s): colour %s | depth %s\n",
+               f.name, (unsigned)status, attached ? "attached" : "an attachment was refused",
+               c, d);
+        fflush(stdout);
+    }
+    s_fbos[s_nFbos++] = f;
+    return NxFboRef{ f.name, f.complete };
+}
+
+static void nxForgetSurface(const NxSurface *s)
+{
+    for (unsigned i = 0; i < s_nFbos;) {
+        if (s_fbos[i].color == s || s_fbos[i].depth == s)
+            nxGlFboDelete(i);
+        else
+            ++i;
+    }
+    // A target released while bound. D3D9 would keep it alive through the
+    // device's own reference; the engine never lets that happen, and if it
+    // ever does the back buffer is a safer place to draw than freed memory.
+    if (s_rt == s)
+        s_rt = s == s_device.backBuffer ? nullptr : s_device.backBuffer;
+    if (s_ds == s)
+        s_ds = nullptr;
+}
+
+// Binds the framebuffer SetRenderTarget and SetDepthStencilSurface describe,
+// with the viewport the engine set for it. Every GL path that writes pixels
+// comes through here first.
+static bool nxGlBindTarget(void)
+{
+    NxSurface *color = s_rt ? s_rt : s_device.backBuffer;
+    if (!color)
+        return false;
+    NxFboRef f = nxGlFbo(color, s_ds);
+    // Colour without its depth is better than nothing, for as long as depth
+    // is not tested anyway.
+    if (!f.complete && s_ds)
+        f = nxGlFbo(color, nullptr);
+    if (!f.complete)
+        return false;
+    if (f.name != s_boundFbo) {
+        ++s_frame.targetSwitches;
+        s_boundFbo = f.name;
+    }
+    glViewport((GLint)s_vp.X, (GLint)s_vp.Y, (GLsizei)s_vp.Width, (GLsizei)s_vp.Height);
+    glDepthRangef(s_vp.MinZ, s_vp.MaxZ);
+    return true;
+}
+
+static void nxGlApplyScissor(void)
+{
+    if (!s_rs[D3DRS_SCISSORTESTENABLE]) {
+        glDisable(GL_SCISSOR_TEST);
+        return;
+    }
+    glEnable(GL_SCISSOR_TEST);
+    LONG w = s_scissor.right - s_scissor.left;
+    LONG h = s_scissor.bottom - s_scissor.top;
+    glScissor((GLint)s_scissor.left, (GLint)s_scissor.top,
+              (GLsizei)(w > 0 ? w : 0), (GLsizei)(h > 0 ? h : 0));
+}
+
+// ---------------------------------------------------------------------------
+// Sampler state
+// ---------------------------------------------------------------------------
+// D3D9 keeps filtering and addressing on the sampler slot, not the texture:
+// R_HW_SetSamplerState (r_state.cpp:2035) sets them per slot, and a texture
+// bound to another slot is sampled another way. GL sampler objects are that
+// model exactly, so each slot has one, updated only when the engine changed
+// something on it.
+enum { NX_SAMP_COUNT = 14 };
+static DWORD s_samp[NX_MAX_SAMPLERS][NX_SAMP_COUNT];
+static bool s_sampDirty[NX_MAX_SAMPLERS];
+
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#endif
+
+// D3D9's own defaults (point, no mips, wrap) -- which the engine overrides for
+// every sampler it uses before the first draw that uses it.
+static void nxInitSamplerStates(void)
+{
+    for (unsigned i = 0; i < NX_MAX_SAMPLERS; ++i) {
+        memset(s_samp[i], 0, sizeof(s_samp[i]));
+        s_samp[i][D3DSAMP_ADDRESSU] = D3DTADDRESS_WRAP;
+        s_samp[i][D3DSAMP_ADDRESSV] = D3DTADDRESS_WRAP;
+        s_samp[i][D3DSAMP_ADDRESSW] = D3DTADDRESS_WRAP;
+        s_samp[i][D3DSAMP_MAGFILTER] = D3DTEXF_POINT;
+        s_samp[i][D3DSAMP_MINFILTER] = D3DTEXF_POINT;
+        s_samp[i][D3DSAMP_MIPFILTER] = D3DTEXF_NONE;
+        s_samp[i][D3DSAMP_MAXANISOTROPY] = 1;
+        s_sampDirty[i] = true;
+    }
+}
+
+static GLenum nxAddressToGl(DWORD a)
+{
+    switch (a) {
+    case D3DTADDRESS_MIRROR:     return GL_MIRRORED_REPEAT;
+    case D3DTADDRESS_CLAMP:      return GL_CLAMP_TO_EDGE;
+    case D3DTADDRESS_BORDER:     return GL_CLAMP_TO_BORDER;
+    // GL_MIRROR_CLAMP_TO_EDGE is 4.4; nothing in this engine asks for it.
+    case D3DTADDRESS_MIRRORONCE: return GL_MIRRORED_REPEAT;
+    default:                     return GL_REPEAT;
+    }
+}
+
+// Brings slot `stage`'s sampler object up to date and binds it to `unit`.
+static void nxGlApplySampler(unsigned stage, GLuint unit)
+{
+    GLuint smp = s_glSampler[stage];
+    if (s_sampDirty[stage]) {
+        const DWORD *ss = s_samp[stage];
+        bool minLinear = ss[D3DSAMP_MINFILTER] >= D3DTEXF_LINEAR;
+        bool magLinear = ss[D3DSAMP_MAGFILTER] >= D3DTEXF_LINEAR;
+        DWORD mip = ss[D3DSAMP_MIPFILTER];
+        GLenum minFilter;
+        if (mip == D3DTEXF_NONE)
+            minFilter = minLinear ? GL_LINEAR : GL_NEAREST;
+        else if (mip == D3DTEXF_POINT)
+            minFilter = minLinear ? GL_LINEAR_MIPMAP_NEAREST : GL_NEAREST_MIPMAP_NEAREST;
+        else
+            minFilter = minLinear ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST_MIPMAP_LINEAR;
+        glSamplerParameteri(smp, GL_TEXTURE_MIN_FILTER, (GLint)minFilter);
+        glSamplerParameteri(smp, GL_TEXTURE_MAG_FILTER, magLinear ? GL_LINEAR : GL_NEAREST);
+        glSamplerParameteri(smp, GL_TEXTURE_WRAP_S, (GLint)nxAddressToGl(ss[D3DSAMP_ADDRESSU]));
+        glSamplerParameteri(smp, GL_TEXTURE_WRAP_T, (GLint)nxAddressToGl(ss[D3DSAMP_ADDRESSV]));
+        glSamplerParameteri(smp, GL_TEXTURE_WRAP_R, (GLint)nxAddressToGl(ss[D3DSAMP_ADDRESSW]));
+        DWORD b = ss[D3DSAMP_BORDERCOLOR];   // ARGB, like every D3DCOLOR
+        const GLfloat border[4] = { ((b >> 16) & 0xff) / 255.0f, ((b >> 8) & 0xff) / 255.0f,
+                                    (b & 0xff) / 255.0f, ((b >> 24) & 0xff) / 255.0f };
+        glSamplerParameterfv(smp, GL_TEXTURE_BORDER_COLOR, border);
+        // MAXMIPLEVEL is the index of the largest mip allowed, so it is a
+        // floor on the level of detail, not a ceiling.
+        glSamplerParameterf(smp, GL_TEXTURE_MIN_LOD, (GLfloat)ss[D3DSAMP_MAXMIPLEVEL]);
+        float bias;
+        memcpy(&bias, &ss[D3DSAMP_MIPMAPLODBIAS], sizeof(bias));
+        glSamplerParameterf(smp, GL_TEXTURE_LOD_BIAS, bias);
+        if (s_glHasAniso) {
+            bool aniso = ss[D3DSAMP_MINFILTER] == D3DTEXF_ANISOTROPIC
+                      || ss[D3DSAMP_MAGFILTER] == D3DTEXF_ANISOTROPIC;
+            DWORD level = ss[D3DSAMP_MAXANISOTROPY];
+            level = level < 1 ? 1 : level > 16 ? 16 : level;
+            glSamplerParameterf(smp, GL_TEXTURE_MAX_ANISOTROPY_EXT, aniso ? (GLfloat)level : 1.0f);
+        }
+        s_sampDirty[stage] = false;
+    }
+    glBindSampler(unit, smp);
+}
+
+// ---------------------------------------------------------------------------
+// What a pixel shader samples
+// ---------------------------------------------------------------------------
+// The built-in program samples one texture. Which one used to be sampler 0,
+// always -- and sampler 0 still holds whatever the previous material left
+// there, because D3D9 never clears a slot on its own. A material that samples
+// s8 (the blur passes: RB_FilterPingPong, rb_imagefilter.cpp) or no texture at
+// all then drew with that leftover image, which is how the settings menu's
+// background came out as the button-icon sheet.
+//
+// The pixel shader knows which samplers it reads: every one is declared up
+// front with a dcl instruction. So the bytecode is kept, and those
+// declarations are read out of it -- nothing else is, yet. The shader-model 2
+// and 3 token stream is: a version token; then instructions, each an opcode
+// token whose bits 24..27 give the number of tokens after it; comments,
+// opcode 0xFFFE with their length in bits 16..30; and 0x0000FFFF at the end.
+// A dcl on a sampler register carries the texture type in bits 27..30 of its
+// first token (2 = 2D) and the register in its second, where the type is
+// split across bits 28..30 and 11..12 and the number sits in bits 0..10.
+static NxShader *s_ps;
+
+static void nxShaderRead(NxShader *s, const DWORD *code)
+{
+    if (!code)
+        return;
+    const UINT limit = 1u << 16;   // no shader here comes near this
+    DWORD version = code[0];
+    UINT major = (version >> 8) & 0xff;
+    UINT i = 1;
+    bool ended = false;
+    while (i < limit) {
+        DWORD tok = code[i];
+        if (tok == 0x0000FFFFu) {   // D3DSIO_END
+            ++i;
+            ended = true;
+            break;
+        }
+        DWORD op = tok & 0xFFFF;
+        if (op == 0xFFFE) {         // D3DSIO_COMMENT
+            i += 1 + ((tok >> 16) & 0x7FFF);
+            continue;
+        }
+        if (major < 2)
+            break;                  // 1.x does not encode lengths; not used here
+        UINT len = (tok >> 24) & 0xF;
+        if (op == 31 && len >= 2) { // D3DSIO_DCL
+            DWORD usage = code[i + 1], reg = code[i + 2];
+            UINT regType = ((reg >> 28) & 7) | ((reg >> 8) & 0x18);
+            UINT regNum = reg & 0x7FF;
+            if (regType == 10 && regNum < NX_MAX_SAMPLERS) {   // D3DSPR_SAMPLER
+                s->samplerMask |= 1u << regNum;
+                if (((usage >> 27) & 0xF) == 2)                // D3DSTT_2D
+                    s->sampler2dMask |= 1u << regNum;
+            }
+        }
+        i += 1 + len;
+    }
+    s->parsed = ended;
+    s->tokenCount = i;
+    s->tokens = (DWORD *)malloc(i * sizeof(DWORD));
+    if (s->tokens)
+        memcpy(s->tokens, code, i * sizeof(DWORD));
+}
+
+static NxShader *s_vs;
+
+static void nxForgetPrograms(const NxShader *s);   // "Translated shaders", below
+
+static void nxForgetShader(const NxShader *s)
+{
+    if (s_ps == s)
+        s_ps = nullptr;
+    if (s_vs == s)
+        s_vs = nullptr;
+    nxForgetPrograms(s);
 }
 
 struct NxAttrFormat {
@@ -1719,6 +2397,22 @@ static const D3DVERTEXELEMENT9 *nxFindUsage(const NxVDecl *d, BYTE usage, BYTE u
     return nullptr;
 }
 
+// Which generic attribute arrays are enabled. The two programs a draw can use
+// read different locations -- the built-in one 0..2, a translated shader up to
+// all sixteen -- so each draw switches off whatever the previous one left on
+// that it does not feed itself. A stale enabled array would read past the end
+// of whatever buffer it last pointed at.
+static unsigned s_attribEnabled;
+
+static void nxGlKeepAttribs(unsigned keep)
+{
+    unsigned off = s_attribEnabled & ~keep;
+    for (unsigned i = 0; off; ++i, off >>= 1)
+        if (off & 1)
+            glDisableVertexAttribArray(i);
+    s_attribEnabled &= keep;
+}
+
 // Binds one declaration element as a vertex attribute, syncing the stream it
 // lives in. Returns false when the element is missing, in a stream this file
 // does not track, of a type with no GL equivalent, or backed by no buffer --
@@ -1740,10 +2434,238 @@ static bool nxGlBindAttrib(GLuint attr, const D3DVERTEXELEMENT9 *elem)
     // GL_ARRAY_BUFFER, which nxGlSyncBuffer has just left as this stream's.
     UINT offset = s_streamOffset[elem->Stream] + elem->Offset;
     glEnableVertexAttribArray(attr);
+    s_attribEnabled |= 1u << attr;
     glVertexAttribPointer(attr, fmt.size, fmt.type, fmt.normalized,
                           (GLsizei)s_streamStride[elem->Stream],
                           (const void *)(uintptr_t)offset);
     return true;
+}
+
+// ===========================================================================
+// Translated shaders
+// ===========================================================================
+// The engine's own vertex and pixel shaders, translated to GLSL by
+// nx_d3d9_shader.cpp when the engine creates them, compiled here on first use,
+// and linked in pairs on first draw. When both bound shaders have a working
+// translation, a draw runs them: the constant files go up as vsc[]/psc[], every
+// sampler the pair declares gets its D3D9 slot's texture on the unit of the
+// same number (vertex samplers on 16 and up), and every element of the vertex
+// declaration feeds the attribute its usage maps to. Anything short of that --
+// no shader bound, one that did not translate, compile or link -- draws with
+// the built-in program as before, and the report says which.
+static unsigned s_nShTranslated, s_nShUntranslatable, s_nShSuspect, s_nShNot3;
+static unsigned s_nShCompiled, s_nShCompileFailed;
+static unsigned s_nProgLinked, s_nProgLinkFailed;
+
+struct NxProgram {
+    GLuint name;       // 0 when the link failed; kept so it is not retried
+    GLint vsc, psc;    // uniform array locations, -1 when unused
+    GLint vscCount, pscCount;
+    GLint alphaFunc, alphaRef, halfPixel;
+};
+static std::map<std::pair<const NxShader *, const NxShader *>, NxProgram> s_programs;
+
+static void nxGlShaderLog(GLuint obj, bool program, const char *what, const char *src)
+{
+    static unsigned s_nLogged;
+    if (++s_nLogged > 6)
+        return;
+    char log[2048];
+    log[0] = 0;
+    if (program) glGetProgramInfoLog(obj, sizeof(log) - 1, nullptr, log);
+    else         glGetShaderInfoLog(obj, sizeof(log) - 1, nullptr, log);
+    printf("[nx-gl] %s failed:\n%s\n", what, log);
+    if (src)
+        printf("[nx-gl] --- its GLSL ---\n%s\n[nx-gl] --- end ---\n", src);
+    fflush(stdout);
+}
+
+// Compiles a shader's translation on first use. GL thread only.
+static GLuint nxGlShaderObject(NxShader *s)
+{
+    if (s->glName || s->glFailed || !s->glsl)
+        return s->glName;
+    GLuint sh = glCreateShader(s->info.isPixel ? GL_FRAGMENT_SHADER : GL_VERTEX_SHADER);
+    const char *src = s->glsl;
+    glShaderSource(sh, 1, &src, nullptr);
+    glCompileShader(sh);
+    GLint ok = GL_FALSE;
+    glGetShaderiv(sh, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        nxGlShaderLog(sh, false, s->info.isPixel ? "pixel shader compile" : "vertex shader compile",
+                      s->glsl);
+        glDeleteShader(sh);
+        s->glFailed = true;
+        ++s_nShCompileFailed;
+        return 0;
+    }
+    s->glName = sh;
+    ++s_nShCompiled;
+    return sh;
+}
+
+// The linked program for the bound pair, or null to use the built-in one, with
+// the reason counted. GL thread only.
+static const NxProgram *nxGlProgram(void)
+{
+    if (!s_vs || !s_ps) { ++s_frame.fallbackNoShader; return nullptr; }
+    if (!s_vs->glsl || !s_ps->glsl) { ++s_frame.fallbackUntranslated; return nullptr; }
+
+    auto key = std::make_pair((const NxShader *)s_vs, (const NxShader *)s_ps);
+    auto it = s_programs.find(key);
+    if (it != s_programs.end()) {
+        if (!it->second.name) { ++s_frame.fallbackLink; return nullptr; }
+        return &it->second;
+    }
+
+    GLuint vs = nxGlShaderObject(s_vs), ps = nxGlShaderObject(s_ps);
+    if (!vs || !ps) { ++s_frame.fallbackCompile; return nullptr; }
+
+    NxProgram p = { 0, -1, -1, 0, 0, -1, -1, -1 };
+    GLuint prog = glCreateProgram();
+    glAttachShader(prog, vs);
+    glAttachShader(prog, ps);
+    int pairs[32][2];
+    int n = NX_ShaderAttribAll(pairs, 32);
+    for (int i = 0; i < n; ++i) {
+        char name[32];
+        NX_ShaderAttribName(pairs[i][0], pairs[i][1], name, sizeof(name));
+        glBindAttribLocation(prog, (GLuint)NX_ShaderAttribLocation(pairs[i][0], pairs[i][1]), name);
+    }
+    glLinkProgram(prog);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        nxGlShaderLog(prog, true, "program link", nullptr);
+        glDeleteProgram(prog);
+        ++s_nProgLinkFailed;
+        s_programs[key] = p;   // name 0: remembered as failed
+        ++s_frame.fallbackLink;
+        return nullptr;
+    }
+    p.name = prog;
+    p.vsc = glGetUniformLocation(prog, "vsc");
+    p.psc = glGetUniformLocation(prog, "psc");
+    p.alphaFunc = glGetUniformLocation(prog, "uAlphaTestFunc");
+    p.alphaRef = glGetUniformLocation(prog, "uAlphaRef");
+    p.halfPixel = glGetUniformLocation(prog, "nxHalfPixel");
+    // The arrays are sized to the highest register each shader reads, so only
+    // that many rows go up per draw.
+    GLint uniforms = 0;
+    glGetProgramiv(prog, GL_ACTIVE_UNIFORMS, &uniforms);
+    for (GLint i = 0; i < uniforms; ++i) {
+        char name[64];
+        GLint size = 0;
+        GLenum type = 0;
+        glGetActiveUniform(prog, (GLuint)i, sizeof(name), nullptr, &size, &type, name);
+        if (!strncmp(name, "vsc", 3) && (name[3] == '[' || !name[3])) p.vscCount = size;
+        if (!strncmp(name, "psc", 3) && (name[3] == '[' || !name[3])) p.pscCount = size;
+    }
+    if (p.vscCount > NX_VS_CONST_ROWS) p.vscCount = NX_VS_CONST_ROWS;
+    if (p.pscCount > NX_PS_CONST_ROWS) p.pscCount = NX_PS_CONST_ROWS;
+    // Sampler sN reads texture unit N and svN unit 16 + N, for good.
+    glUseProgram(prog);
+    for (int i = 0; i < NX_MAX_SAMPLERS; ++i) {
+        char name[8];
+        snprintf(name, sizeof(name), "s%d", i);
+        GLint loc = glGetUniformLocation(prog, name);
+        if (loc >= 0) glUniform1i(loc, i);
+    }
+    for (int i = 0; i < NX_SHADER_VS_SAMPLERS; ++i) {
+        char name[8];
+        snprintf(name, sizeof(name), "sv%d", i);
+        GLint loc = glGetUniformLocation(prog, name);
+        if (loc >= 0) glUniform1i(loc, NX_SHADER_VS_SAMPLER_UNIT + i);
+    }
+    ++s_nProgLinked;
+    return &(s_programs[key] = p);
+}
+
+static void nxForgetPrograms(const NxShader *s)
+{
+    for (auto it = s_programs.begin(); it != s_programs.end();) {
+        if (it->first.first == s || it->first.second == s) {
+            if (it->second.name && s_glReady && nxGlAcquire())
+                glDeleteProgram(it->second.name);
+            it = s_programs.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// One sampler of a translated pair: the slot's texture on `unit` if it has one
+// of the dimension the shader declared and it can be made resident, the white
+// dummy of that dimension otherwise.
+static void nxGlBindShaderSampler(GLuint unit, NxTexture *t, unsigned char dim, int stage)
+{
+    glActiveTexture(GL_TEXTURE0 + unit);
+    GLenum want = dim == 3 ? GL_TEXTURE_CUBE_MAP : dim == 4 ? GL_TEXTURE_3D : GL_TEXTURE_2D;
+    if (t && nxTexTarget(t) == want && nxGlSyncTexture(t)) {
+        if (stage >= 0)
+            nxGlApplySampler((unsigned)stage, unit);
+        else
+            glBindSampler(unit, 0);   // vertex slots: the texture's own parameters
+        nxFrameNoteTexture(t);
+        return;
+    }
+    ++s_frame.samplersMissing;
+    glBindSampler(unit, 0);
+    glBindTexture(want, want == GL_TEXTURE_CUBE_MAP ? s_whiteCube
+                      : want == GL_TEXTURE_3D       ? s_white3D : s_whiteTex);
+}
+
+// Everything a translated pair needs before the draw call.
+static void nxGlSetupTranslated(const NxProgram *p)
+{
+    glUseProgram(p->name);
+    if (p->vsc >= 0 && p->vscCount > 0)
+        glUniform4fv(p->vsc, p->vscCount, &s_vsConst[0][0]);
+    if (p->psc >= 0 && p->pscCount > 0)
+        glUniform4fv(p->psc, p->pscCount, &s_psConst[0][0]);
+    if (p->alphaFunc >= 0)
+        glUniform1i(p->alphaFunc, s_rs[D3DRS_ALPHATESTENABLE] ? (GLint)s_rs[D3DRS_ALPHAFUNC] : 0);
+    if (p->alphaRef >= 0)
+        glUniform1f(p->alphaRef, (float)(s_rs[D3DRS_ALPHAREF] & 0xFF) / 255.0f);
+    if (p->halfPixel >= 0) {
+        float w = s_vp.Width ? (float)s_vp.Width : 1.0f;
+        float h = s_vp.Height ? (float)s_vp.Height : 1.0f;
+        glUniform2f(p->halfPixel, -1.0f / w, 1.0f / h);
+    }
+
+    unsigned mask = s_ps->info.samplerMask;
+    for (unsigned i = 0; mask; ++i, mask >>= 1)
+        if (mask & 1)
+            nxGlBindShaderSampler(i, s_samplerTex[i], s_ps->info.samplerDim[i], (int)i);
+    mask = s_vs->info.samplerMask;
+    for (unsigned i = 0; mask && i < NX_SHADER_VS_SAMPLERS; ++i, mask >>= 1)
+        if (mask & 1)
+            nxGlBindShaderSampler(NX_SHADER_VS_SAMPLER_UNIT + i, s_vtxSamplerTex[i],
+                                  s_vs->info.samplerDim[i], -1);
+    glActiveTexture(GL_TEXTURE0);
+
+    // Every element of the declaration, at the location its usage maps to.
+    // Anything the shader reads that the declaration does not supply reads a
+    // constant: D3D9 leaves it undefined, and (0,0,0,1) -- white for colours --
+    // is what hardware tends to hand back.
+    unsigned bound = 0;
+    for (UINT i = 0; i < s_vdecl->count; ++i) {
+        const D3DVERTEXELEMENT9 *e = &s_vdecl->elements[i];
+        int loc = NX_ShaderAttribLocation(e->Usage, e->UsageIndex);
+        if (loc < 0 || (bound & (1u << loc)))
+            continue;
+        if (nxGlBindAttrib((GLuint)loc, e))
+            bound |= 1u << loc;
+    }
+    nxGlKeepAttribs(bound);
+    for (unsigned loc = 0; loc < 16; ++loc) {
+        if (bound & (1u << loc))
+            continue;
+        if (loc == 5 || loc == 6)   // COLOR0, COLOR1
+            glVertexAttrib4f(loc, 1.0f, 1.0f, 1.0f, 1.0f);
+        else
+            glVertexAttrib4f(loc, 0.0f, 0.0f, 0.0f, 1.0f);
+    }
 }
 
 static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
@@ -1773,6 +2695,11 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     UINT idxSize = 2;
     if (ib->format == D3DFMT_INDEX32) { idxType = GL_UNSIGNED_INT; idxSize = 4; }
 
+    // The target first: building its framebuffer can bind textures, and
+    // everything after this binds its own.
+    if (!nxGlBindTarget()) { ++s_frame.drawsNoTarget; return; }
+    nxGlApplyScissor();
+
     if (!nxGlSyncBuffer(ib, GL_ELEMENT_ARRAY_BUFFER)) { ++s_nSkipNoBuffer; return; }
 
     // Which registers hold the transform, best answer first: the window that
@@ -1784,6 +2711,22 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     s_vsConstBase = s_vs2dBase >= 0 ? (unsigned)s_vs2dBase
                   : s_vsMatrixSeen  ? s_vsMatrixBase
                                     : 0u;
+
+    // The engine's own shaders when both bound ones have a working
+    // translation (see "Translated shaders"), the built-in program otherwise.
+    const D3DVERTEXELEMENT9 *col = nxFindUsage(s_vdecl, D3DDECLUSAGE_COLOR, 0);
+    const NxProgram *prog = nxGlProgram();
+    if (prog) {
+        nxGlSetupTranslated(prog);
+        ++s_frame.drawsTranslated;
+        s_lastDrawHadColor = col && (s_attribEnabled & (1u << 5));
+        if (s_lastDrawHadColor)
+            s_lastDrawColorType = col->Type;
+    } else {
+    // The built-in program reads locations 0..2 through unit 0; whatever a
+    // translated draw left enabled or active beyond that goes first.
+    nxGlKeepAttribs(0x7u);
+    glActiveTexture(GL_TEXTURE0);
 
     glUseProgram(s_prog);
     if (s_locTransform >= 0) {
@@ -1798,7 +2741,6 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     // calls binds its own before handing the pointer over, so the order they
     // go in does not matter: glVertexAttribPointer captures the buffer that
     // is bound at its own call, not at draw time.
-    const D3DVERTEXELEMENT9 *col = nxFindUsage(s_vdecl, D3DDECLUSAGE_COLOR, 0);
     if (nxGlBindAttrib(NX_ATTR_COLOR, col)) {
         ++s_nColorAttrib;
         s_lastDrawColorType = col->Type;
@@ -1807,7 +2749,7 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
         // No usable COLOR element. The disabled array reads back as the
         // current generic attribute, so white it is -- see s_vsSrc.
         ++s_nColorDefault;
-        glDisableVertexAttribArray(NX_ATTR_COLOR);
+        nxGlKeepAttribs(s_attribEnabled & ~(1u << NX_ATTR_COLOR));
         glVertexAttrib4f(NX_ATTR_COLOR, 1.0f, 1.0f, 1.0f, 1.0f);
         s_lastDrawHadColor = false;
     }
@@ -1821,21 +2763,34 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
         ++s_nTexcoordAttrib;
     } else {
         ++s_nTexcoordDefault;
-        glDisableVertexAttribArray(NX_ATTR_TEXCOORD);
+        nxGlKeepAttribs(s_attribEnabled & ~(1u << NX_ATTR_TEXCOORD));
         glVertexAttrib2f(NX_ATTR_TEXCOORD, 0.0f, 0.0f);
     }
 
-    // Sampler 0. The slot a map lands in is arg->dest, the sampler register
-    // the material's compiled shader declared it on
-    // (R_SetPassShaderObjectArguments, r_shade.cpp:338), so a 2D material's
-    // single colour map is s0 -- but that is this step's most likely wrong
-    // assumption, which is why the report prints all sixteen slots.
+    // The sampler the pixel shader reads: its first declared 2D sampler (see
+    // nxShaderRead). The slot a map lands in is arg->dest, the register the
+    // material's compiled shader declared it on (R_SetPassShaderObjectArguments,
+    // r_shade.cpp:338), so this is the image the material meant -- where
+    // sampler 0 is only whatever the last material that used it left behind.
+    // A shader that declares no 2D sampler draws in its vertex colour. With no
+    // readable shader bound at all, sampler 0 is the old answer and still
+    // the best one.
     //
     // A cube or volume map bound to a slot this shader declares as sampler2D
     // cannot be sampled at all, so those fall back to white with the rest
     // rather than leaving an incomplete texture on the unit.
-    NxTexture *bound = s_samplerTex[0];
-    if (!bound) {
+    unsigned stage = 0;
+    bool noSampler = false;
+    if (s_ps && s_ps->parsed) {
+        if (s_ps->sampler2dMask)
+            stage = (unsigned)__builtin_ctz(s_ps->sampler2dMask);
+        else
+            noSampler = true;
+    }
+    NxTexture *bound = noSampler ? nullptr : s_samplerTex[stage];
+    if (noSampler) {
+        ++s_frame.drawsWhiteNoSampler;
+    } else if (!bound) {
         ++s_frame.drawsWhiteUnbound;
     } else if (!haveTexcoord) {
         // A texture with nowhere to sample it. The constant attribute above
@@ -1851,12 +2806,18 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
         bound = nullptr;
     } else {
         ++s_frame.drawsTextured;
+        ++s_frame.drawsBySampler[stage];
         nxFrameNoteTexture(bound);
     }
-    if (!bound)
+    if (bound) {
+        nxGlApplySampler(stage, 0);
+    } else {
+        glBindSampler(0, 0);   // the white texel's own nearest filtering
         glBindTexture(GL_TEXTURE_2D, s_whiteTex);
+    }
 
     if (!nxGlBindAttrib(NX_ATTR_POS, pos)) { ++s_nSkipNoBuffer; return; }
+    }   // built-in program
 
     nxGlApplyBlend();
 
@@ -1876,6 +2837,8 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     ++s_nGlDrawOk;
 
     ++s_frame.draws;
+    if (s_rt && s_rt != s_device.backBuffer) ++s_frame.drawsOffscreen;
+    else                                     ++s_frame.drawsBackBuffer;
     if (s_vs2dBase >= 0)     ++s_frame.via2d;
     else if (s_vsMatrixSeen) ++s_frame.viaMatrix;
     else                     ++s_frame.viaDefault;
@@ -2198,6 +3161,12 @@ static void nxGlDumpTextures(void)
            + f.drawsWhiteNoUpload,
            f.drawsWhiteUnbound, f.drawsWhiteNoTexcoord, f.drawsWhiteNot2d,
            f.drawsWhiteNoUpload);
+    printf("        sampler each textured draw read (the pixel shader's first 2D "
+           "sampler):");
+    for (unsigned i = 0; i < NX_MAX_SAMPLERS; ++i)
+        if (f.drawsBySampler[i])
+            printf(" s%u=%u", i, f.drawsBySampler[i]);
+    printf(" | shader declares none: %u\n", f.drawsWhiteNoSampler);
     if (f.texCount) {
         printf("        images this frame sampled:\n");
         for (unsigned i = 0; i < f.texCount; ++i) {
@@ -2212,6 +3181,53 @@ static void nxGlDumpTextures(void)
     }
     printf("        texcoords: from vertices %u, none declared %u\n",
            s_nTexcoordAttrib, s_nTexcoordDefault);
+    fflush(stdout);
+}
+
+static void nxGlDumpShaders(void)
+{
+    const NxFrameStats &f = s_frame;
+    printf("[nx-gl] shaders: translated %u (untranslatable %u, with skipped "
+           "instructions %u, not shader model 3 %u), compiled %u (failed %u), "
+           "programs linked %u (failed %u)\n",
+           s_nShTranslated, s_nShUntranslatable, s_nShSuspect, s_nShNot3,
+           s_nShCompiled, s_nShCompileFailed, s_nProgLinked, s_nProgLinkFailed);
+    printf("        this frame: %u draws ran the engine's shaders, %u the built-in "
+           "program (no shader bound %u, untranslated %u, compile failed %u, "
+           "link failed %u) | samplers with nothing usable bound %u\n",
+           f.drawsTranslated,
+           f.fallbackNoShader + f.fallbackUntranslated + f.fallbackCompile + f.fallbackLink,
+           f.fallbackNoShader, f.fallbackUntranslated, f.fallbackCompile, f.fallbackLink,
+           f.samplersMissing);
+    fflush(stdout);
+}
+
+static void nxGlDumpTargets(void)
+{
+    const NxFrameStats &f = s_frame;
+    printf("[nx-gl] targets: %u framebuffers cached (built %u, incomplete %u, "
+           "given up %u), storage for %u targets (%u with no GL format)\n",
+           s_nFbos, s_nFboCreated, s_nFboIncomplete, s_nFboEvicted,
+           s_nRtAllocated, s_nRtUnsupported);
+    printf("        this frame: draws to the back buffer %u, offscreen %u, "
+           "dropped for want of a complete target %u | clears %u (dropped %u) | "
+           "target switches %u\n",
+           f.drawsBackBuffer, f.drawsOffscreen, f.drawsNoTarget,
+           f.clears, f.clearsNoTarget, f.targetSwitches);
+    printf("        so far: StretchRect %u (skipped %u), ColorFill %u, "
+           "GetRenderTargetData %u (skipped %u), MRT slots ignored %u\n",
+           s_nStretchRect, s_nStretchRectSkipped, s_nColorFill,
+           s_nReadback, s_nReadbackSkipped, s_nMrtIgnored);
+    char c[128], d[128];
+    nxDescribeSurface(s_rt, c, sizeof(c));
+    nxDescribeSurface(s_ds, d, sizeof(d));
+    printf("        now: colour %s | depth %s\n"
+           "             viewport %u,%u %ux%u z %.2f..%.2f, scissor %s (%ld,%ld)-(%ld,%ld)\n",
+           c, d, (unsigned)s_vp.X, (unsigned)s_vp.Y, (unsigned)s_vp.Width,
+           (unsigned)s_vp.Height, s_vp.MinZ, s_vp.MaxZ,
+           s_rs[D3DRS_SCISSORTESTENABLE] ? "on" : "off",
+           (long)s_scissor.left, (long)s_scissor.top,
+           (long)s_scissor.right, (long)s_scissor.bottom);
     fflush(stdout);
 }
 
@@ -2388,13 +3404,31 @@ HRESULT IDirect3D9::CreateDevice(UINT, D3DDEVTYPE, HWND, DWORD, D3DPRESENT_PARAM
     // Before the engine's first SetRenderState, and well before the first
     // draw reads the file.
     nxInitRenderStates();
+    nxInitSamplerStates();
+    UINT w = 1280, h = 720;
     if (pp) {
         s_device.pp = *pp;
-        UINT w = pp->BackBufferWidth ? pp->BackBufferWidth : 1280;
-        UINT h = pp->BackBufferHeight ? pp->BackBufferHeight : 720;
-        s_device.backBuffer = nxCreateSurface(D3DFMT_A8R8G8B8, w, h);
-        s_device.depthStencil = nxCreateSurface(D3DFMT_D24S8, w, h);
+        if (pp->BackBufferWidth)  w = pp->BackBufferWidth;
+        if (pp->BackBufferHeight) h = pp->BackBufferHeight;
     }
+    s_device.backBuffer = nxCreateSurface(D3DFMT_A8R8G8B8, w, h);
+    s_device.backBuffer->usage = D3DUSAGE_RENDERTARGET;
+    // The engine asks for no automatic depth buffer (r_init.cpp:377) and
+    // makes its own, so D3D9 would start with none bound -- and so does this.
+    if (pp && pp->EnableAutoDepthStencil) {
+        s_device.depthStencil = nxCreateSurface(
+            pp->AutoDepthStencilFormat ? pp->AutoDepthStencilFormat : D3DFMT_D24S8, w, h);
+        s_device.depthStencil->usage = D3DUSAGE_DEPTHSTENCIL;
+    }
+    s_rt = s_device.backBuffer;
+    s_ds = s_device.depthStencil;
+    memset(&s_vp, 0, sizeof(s_vp));
+    s_vp.Width = w;
+    s_vp.Height = h;
+    s_vp.MaxZ = 1.0f;
+    s_scissor.left = s_scissor.top = 0;
+    s_scissor.right = (LONG)w;
+    s_scissor.bottom = (LONG)h;
     *device = (IDirect3DDevice9 *)&s_device;
     return D3D_OK;
 }
@@ -2433,18 +3467,21 @@ HRESULT IDirect3DDevice9::GetSwapChain(UINT, IDirect3DSwapChain9 **swapChain)
 }
 HRESULT IDirect3DDevice9::GetBackBuffer(UINT, UINT, D3DBACKBUFFER_TYPE, IDirect3DSurface9 **surface)
 {
-    if (!s_device.backBuffer)
+    if (!s_device.backBuffer) {
         s_device.backBuffer = nxCreateSurface(D3DFMT_A8R8G8B8, 1280, 720);
+        s_device.backBuffer->usage = D3DUSAGE_RENDERTARGET;
+    }
     nxAddRef(s_device.backBuffer);
     *surface = (IDirect3DSurface9 *)s_device.backBuffer;
     return D3D_OK;
 }
 void IDirect3DDevice9::SetGammaRamp(UINT, DWORD, const D3DGAMMARAMP *) {}
 
-HRESULT IDirect3DDevice9::CreateTexture(UINT width, UINT height, UINT levels, DWORD, D3DFORMAT format,
+HRESULT IDirect3DDevice9::CreateTexture(UINT width, UINT height, UINT levels, DWORD usage, D3DFORMAT format,
                                         D3DPOOL, IDirect3DTexture9 **texture, HANDLE *)
 {
     NxTexture *t = nxCreateTexture(D3DRTYPE_TEXTURE, format, width, height, 1, levels, 1);
+    t->usage = usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL);
     // `texture` is &image->texture.map when this came from
     // Image_Create2DTexture_PC, and the address of some local or global when
     // it did not. nxLinkImage decides which -- see the comment on it.
@@ -2462,10 +3499,11 @@ HRESULT IDirect3DDevice9::CreateVolumeTexture(UINT width, UINT height, UINT dept
     return D3D_OK;
 }
 
-HRESULT IDirect3DDevice9::CreateCubeTexture(UINT edgeLength, UINT levels, DWORD, D3DFORMAT format,
+HRESULT IDirect3DDevice9::CreateCubeTexture(UINT edgeLength, UINT levels, DWORD usage, D3DFORMAT format,
                                             D3DPOOL, IDirect3DCubeTexture9 **texture, HANDLE *)
 {
     NxTexture *t = nxCreateTexture(D3DRTYPE_CUBETEXTURE, format, edgeLength, edgeLength, 1, levels, 6);
+    t->usage = usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL);
     nxLinkImage(t, texture, edgeLength, edgeLength, 1, MAPTYPE_CUBE);
     *texture = (IDirect3DCubeTexture9 *)t;
     return D3D_OK;
@@ -2500,14 +3538,18 @@ HRESULT IDirect3DDevice9::CreateIndexBuffer(UINT length, DWORD usage, D3DFORMAT 
 HRESULT IDirect3DDevice9::CreateRenderTarget(UINT width, UINT height, D3DFORMAT format, D3DMULTISAMPLE_TYPE,
                                              DWORD, BOOL, IDirect3DSurface9 **surface, HANDLE *)
 {
-    *surface = (IDirect3DSurface9 *)nxCreateSurface(format, width, height);
+    NxSurface *s = nxCreateSurface(format, width, height);
+    s->usage = D3DUSAGE_RENDERTARGET;
+    *surface = (IDirect3DSurface9 *)s;
     return D3D_OK;
 }
 
 HRESULT IDirect3DDevice9::CreateDepthStencilSurface(UINT width, UINT height, D3DFORMAT format, D3DMULTISAMPLE_TYPE,
                                                     DWORD, BOOL, IDirect3DSurface9 **surface, HANDLE *)
 {
-    *surface = (IDirect3DSurface9 *)nxCreateSurface(format, width, height);
+    NxSurface *s = nxCreateSurface(format, width, height);
+    s->usage = D3DUSAGE_DEPTHSTENCIL;
+    *surface = (IDirect3DSurface9 *)s;
     return D3D_OK;
 }
 
@@ -2532,18 +3574,41 @@ HRESULT IDirect3DDevice9::CreateVertexDeclaration(const D3DVERTEXELEMENT9 *eleme
     return D3D_OK;
 }
 
-HRESULT IDirect3DDevice9::CreateVertexShader(const DWORD *, IDirect3DVertexShader9 **shader)
+// Translation happens here, on whichever thread creates the shader -- it is
+// CPU work only. Compiling waits for the first draw, on the GL thread.
+static void nxShaderTranslate(NxShader *s, const DWORD *code)
+{
+    s->glsl = NX_TranslateD3D9Shader(code, &s->info);
+    if (!s->glsl) {
+        ++s_nShUntranslatable;
+        return;
+    }
+    ++s_nShTranslated;
+    if (s->info.unknownOps && ++s_nShSuspect <= 8) {
+        printf("[nx-gl] %s shader translated with %u instruction(s) skipped, first opcode %u\n",
+               s->info.isPixel ? "pixel" : "vertex", s->info.unknownOps, s->info.firstUnknownOp);
+        fflush(stdout);
+    }
+    if ((s->info.version >> 8) != 3)
+        ++s_nShNot3;
+}
+
+HRESULT IDirect3DDevice9::CreateVertexShader(const DWORD *code, IDirect3DVertexShader9 **shader)
 {
     NxShader *s = nxAlloc<NxShader>();
     s->obj.type = (D3DRESOURCETYPE)101;
+    nxShaderRead(s, code);
+    nxShaderTranslate(s, code);
     *shader = (IDirect3DVertexShader9 *)s;
     return D3D_OK;
 }
 
-HRESULT IDirect3DDevice9::CreatePixelShader(const DWORD *, IDirect3DPixelShader9 **shader)
+HRESULT IDirect3DDevice9::CreatePixelShader(const DWORD *code, IDirect3DPixelShader9 **shader)
 {
     NxShader *s = nxAlloc<NxShader>();
     s->obj.type = (D3DRESOURCETYPE)102;
+    nxShaderRead(s, code);
+    nxShaderTranslate(s, code);
     *shader = (IDirect3DPixelShader9 *)s;
     return D3D_OK;
 }
@@ -2560,35 +3625,169 @@ HRESULT IDirect3DDevice9::CreateQuery(D3DQUERYTYPE type, IDirect3DQuery9 **query
 
 HRESULT IDirect3DDevice9::UpdateSurface(IDirect3DSurface9 *, const RECT *, IDirect3DSurface9 *, const POINT *) { return D3D_OK; }
 HRESULT IDirect3DDevice9::UpdateTexture(IDirect3DBaseTexture9 *, IDirect3DBaseTexture9 *) { return D3D_OK; }
-HRESULT IDirect3DDevice9::GetRenderTargetData(IDirect3DSurface9 *, IDirect3DSurface9 *) { return D3D_OK; }
-HRESULT IDirect3DDevice9::StretchRect(IDirect3DSurface9 *, const RECT *, IDirect3DSurface9 *, const RECT *, D3DTEXTUREFILTERTYPE) { return D3D_OK; }
-HRESULT IDirect3DDevice9::ColorFill(IDirect3DSurface9 *, const RECT *, D3DCOLOR) { return D3D_OK; }
-HRESULT IDirect3DDevice9::SetRenderTarget(DWORD, IDirect3DSurface9 *) { return D3D_OK; }
-HRESULT IDirect3DDevice9::GetRenderTarget(DWORD, IDirect3DSurface9 **renderTarget)
+#ifndef D3DERR_NOTFOUND
+#define D3DERR_NOTFOUND ((HRESULT)0x88760866)
+#endif
+
+// A colour target's pixels as BGRA words, the two formats the engine reads
+// back (screenshots). Stored top row first, so the rows already come out in
+// the order D3D9 hands them over.
+HRESULT IDirect3DDevice9::GetRenderTargetData(IDirect3DSurface9 *renderTarget, IDirect3DSurface9 *destSurface)
 {
-    if (renderTarget) {
-        if (!s_device.backBuffer)
-            s_device.backBuffer = nxCreateSurface(D3DFMT_A8R8G8B8, 1280, 720);
-        nxAddRef(s_device.backBuffer);
-        *renderTarget = (IDirect3DSurface9 *)s_device.backBuffer;
+    NxSurface *src = (NxSurface *)renderTarget, *dst = (NxSurface *)destSurface;
+    if (!src || !dst || !dst->bits || src->width != dst->width || src->height != dst->height
+     || (dst->format != D3DFMT_A8R8G8B8 && dst->format != D3DFMT_X8R8G8B8)
+     || !nxGlAcquire()) {
+        ++s_nReadbackSkipped;
+        return D3D_OK;
     }
+    NxFboRef f = nxGlFbo(src, nullptr);
+    if (!f.complete) {
+        ++s_nReadbackSkipped;
+        return D3D_OK;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, f.name);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glPixelStorei(GL_PACK_ROW_LENGTH, (GLint)(dst->pitch / 4));
+    glReadPixels(0, 0, (GLsizei)dst->width, (GLsizei)dst->height,
+                 GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, dst->bits);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    s_boundFbo = ~0u;
+    ++s_nReadback;
     return D3D_OK;
 }
-HRESULT IDirect3DDevice9::SetDepthStencilSurface(IDirect3DSurface9 *) { return D3D_OK; }
+
+static bool nxIsDepthFormat(D3DFORMAT fmt)
+{
+    NxGlStorage st;
+    return nxRenderFormatToGl(fmt, &st) && st.attachment != GL_COLOR_ATTACHMENT0;
+}
+
+// A blit between two targets. Both are stored top row first, so D3D9's
+// rectangles are GL's as they stand. The engine's uses are resolves -- the
+// scene into an image it then samples (rb_backend.cpp:865) -- and depth
+// copies, which GL only does unfiltered.
+HRESULT IDirect3DDevice9::StretchRect(IDirect3DSurface9 *srcSurface, const RECT *srcRect,
+                                      IDirect3DSurface9 *dstSurface, const RECT *dstRect,
+                                      D3DTEXTUREFILTERTYPE filter)
+{
+    ++s_nStretchRect;
+    NxSurface *src = (NxSurface *)srcSurface, *dst = (NxSurface *)dstSurface;
+    if (!src || !dst || !nxGlAcquire()) {
+        ++s_nStretchRectSkipped;
+        return D3D_OK;
+    }
+    bool depth = nxIsDepthFormat(src->format);
+    if (depth != nxIsDepthFormat(dst->format)) {
+        ++s_nStretchRectSkipped;
+        return D3D_OK;
+    }
+    NxFboRef rf = depth ? nxGlFbo(nullptr, src) : nxGlFbo(src, nullptr);
+    NxFboRef df = depth ? nxGlFbo(nullptr, dst) : nxGlFbo(dst, nullptr);
+    if (!rf.complete || !df.complete) {
+        ++s_nStretchRectSkipped;
+        return D3D_OK;
+    }
+    RECT s = { 0, 0, (LONG)src->width, (LONG)src->height };
+    RECT d = { 0, 0, (LONG)dst->width, (LONG)dst->height };
+    if (srcRect) s = *srcRect;
+    if (dstRect) d = *dstRect;
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, rf.name);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, df.name);
+    // A blit is clipped by the scissor, and the last draw may have left one.
+    glDisable(GL_SCISSOR_TEST);
+    GLbitfield mask = GL_COLOR_BUFFER_BIT;
+    if (depth) {
+        NxGlStorage st;
+        nxRenderFormatToGl(src->format, &st);
+        mask = GL_DEPTH_BUFFER_BIT
+             | (st.attachment == GL_DEPTH_STENCIL_ATTACHMENT ? GL_STENCIL_BUFFER_BIT : 0);
+    }
+    glBlitFramebuffer(s.left, s.top, s.right, s.bottom, d.left, d.top, d.right, d.bottom, mask,
+                      depth || filter == D3DTEXF_POINT ? GL_NEAREST : GL_LINEAR);
+    s_boundFbo = ~0u;
+    return D3D_OK;
+}
+
+HRESULT IDirect3DDevice9::ColorFill(IDirect3DSurface9 *surface, const RECT *rect, D3DCOLOR color)
+{
+    ++s_nColorFill;
+    NxSurface *s = (NxSurface *)surface;
+    if (!s || !nxGlAcquire())
+        return D3D_OK;
+    NxFboRef f = nxGlFbo(s, nullptr);
+    if (!f.complete)
+        return D3D_OK;
+    RECT r = { 0, 0, (LONG)s->width, (LONG)s->height };
+    if (rect) r = *rect;
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(r.left, r.top, r.right - r.left, r.bottom - r.top);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glClearColor(((color >> 16) & 0xff) / 255.0f, ((color >> 8) & 0xff) / 255.0f,
+                 (color & 0xff) / 255.0f, ((color >> 24) & 0xff) / 255.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    s_boundFbo = ~0u;
+    return D3D_OK;
+}
+
+// Recorded; nxGlBindTarget acts on it at the next draw or clear, on the
+// thread that owns the context. No reference is taken, as with textures and
+// streams: the engine keeps every target alive for as long as it is set.
+HRESULT IDirect3DDevice9::SetRenderTarget(DWORD index, IDirect3DSurface9 *renderTarget)
+{
+    if (index) {
+        // Multiple render targets. Nothing the menus draw uses them, and the
+        // built-in program writes one colour anyway.
+        if (renderTarget) ++s_nMrtIgnored;
+        return D3D_OK;
+    }
+    NxSurface *s = (NxSurface *)renderTarget;
+    if (!s)
+        return D3DERR_INVALIDCALL;   // D3D9 does not allow slot 0 empty
+    s_rt = s;
+    // Setting a render target resets the viewport and the scissor rectangle
+    // to the whole of it, in D3D9 -- R_HW_SetRenderTarget relies on that for
+    // the viewport and so does everything that draws after it.
+    memset(&s_vp, 0, sizeof(s_vp));
+    s_vp.Width = s->width;
+    s_vp.Height = s->height;
+    s_vp.MaxZ = 1.0f;
+    s_scissor.left = s_scissor.top = 0;
+    s_scissor.right = (LONG)s->width;
+    s_scissor.bottom = (LONG)s->height;
+    return D3D_OK;
+}
+HRESULT IDirect3DDevice9::GetRenderTarget(DWORD index, IDirect3DSurface9 **renderTarget)
+{
+    if (!renderTarget)
+        return D3DERR_INVALIDCALL;
+    NxSurface *s = index ? nullptr : (s_rt ? s_rt : s_device.backBuffer);
+    *renderTarget = (IDirect3DSurface9 *)s;
+    if (!s)
+        return D3DERR_NOTFOUND;
+    nxAddRef(s);
+    return D3D_OK;
+}
+HRESULT IDirect3DDevice9::SetDepthStencilSurface(IDirect3DSurface9 *depthStencil)
+{
+    s_ds = (NxSurface *)depthStencil;
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::GetDepthStencilSurface(IDirect3DSurface9 **depthStencil)
 {
-    if (depthStencil) {
-        if (!s_device.depthStencil)
-            s_device.depthStencil = nxCreateSurface(D3DFMT_D24S8, 1280, 720);
-        nxAddRef(s_device.depthStencil);
-        *depthStencil = (IDirect3DSurface9 *)s_device.depthStencil;
-    }
+    if (!depthStencil)
+        return D3DERR_INVALIDCALL;
+    *depthStencil = (IDirect3DSurface9 *)s_ds;
+    if (!s_ds)
+        return D3DERR_NOTFOUND;
+    nxAddRef(s_ds);
     return D3D_OK;
 }
 HRESULT IDirect3DDevice9::BeginScene() { ++s_nBeginScene; return D3D_OK; }
 HRESULT IDirect3DDevice9::EndScene() { return D3D_OK; }
 HRESULT IDirect3DDevice9::Clear(
-    DWORD, const D3DRECT *, DWORD flags, D3DCOLOR color, float depth, DWORD stencil)
+    DWORD rectCount, const D3DRECT *rects, DWORD flags, D3DCOLOR color, float depth, DWORD stencil)
 {
     ++s_nClear;
     s_lastClearColor = color;
@@ -2606,15 +3805,22 @@ HRESULT IDirect3DDevice9::Clear(
 
     if (!nxGlAcquire())
         return D3D_OK;
+    ++s_frame.clears;
+    if (!nxGlBindTarget()) {
+        ++s_frame.clearsNoTarget;
+        return D3D_OK;
+    }
 
     // D3DCOLOR is 0xAARRGGBB -- Byte4PackPixelColor (r_state.cpp:3122) writes
     // B,G,R,A into ascending bytes and the packed word is read back
     // little-endian, so this is the colour R_ClearScreen was given.
-    // glClear obeys the colour write mask; D3D9's Clear does not. Now that
-    // nxGlApplyBlend actually sets that mask, a frame whose last draw had
-    // channels switched off would leave the next clear partly undone, so the
-    // mask is opened here first. The next draw sets it again anyway.
+    // glClear obeys the write masks; D3D9's Clear does not. Now that
+    // nxGlApplyBlend actually sets the colour mask, a frame whose last draw
+    // had channels switched off would leave the next clear partly undone, so
+    // the masks are opened here first. The next draw sets its own anyway.
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_TRUE);
+    glStencilMask(0xFFu);
 
     GLbitfield mask = 0;
     if (flags & D3DCLEAR_TARGET) {
@@ -2633,22 +3839,50 @@ HRESULT IDirect3DDevice9::Clear(
         mask |= GL_STENCIL_BUFFER_BIT;
     }
 
-    // The rect list is ignored: clearing the whole framebuffer is the point of
-    // this step, and honouring it would need the scissor state the rest of the
-    // backend does not track yet.
-    if (mask)
+    if (!mask)
+        return D3D_OK;
+
+    // D3D9 clears the viewport, not the target: a clear issued for one view
+    // of a split target leaves the rest alone. Within the viewport it clears
+    // each rect it was given, or all of it, and honours the scissor rectangle
+    // when scissoring is on. GL's clear only knows the scissor, so every
+    // piece becomes one scissored glClear. Top-row-first storage means all of
+    // these rectangles are already in GL's terms.
+    LONG vx0 = (LONG)s_vp.X, vy0 = (LONG)s_vp.Y;
+    LONG vx1 = vx0 + (LONG)s_vp.Width, vy1 = vy0 + (LONG)s_vp.Height;
+    if (s_rs[D3DRS_SCISSORTESTENABLE]) {
+        if (s_scissor.left > vx0)   vx0 = s_scissor.left;
+        if (s_scissor.top > vy0)    vy0 = s_scissor.top;
+        if (s_scissor.right < vx1)  vx1 = s_scissor.right;
+        if (s_scissor.bottom < vy1) vy1 = s_scissor.bottom;
+    }
+    glEnable(GL_SCISSOR_TEST);
+    DWORD pieces = (rects && rectCount) ? rectCount : 1;
+    for (DWORD i = 0; i < pieces; ++i) {
+        LONG x0 = vx0, y0 = vy0, x1 = vx1, y1 = vy1;
+        if (rects && rectCount) {
+            if (rects[i].x1 > x0) x0 = rects[i].x1;
+            if (rects[i].y1 > y0) y0 = rects[i].y1;
+            if (rects[i].x2 < x1) x1 = rects[i].x2;
+            if (rects[i].y2 < y1) y1 = rects[i].y2;
+        }
+        if (x1 <= x0 || y1 <= y0)
+            continue;
+        glScissor(x0, y0, x1 - x0, y1 - y0);
         glClear(mask);
+    }
     return D3D_OK;
 }
-HRESULT IDirect3DDevice9::SetViewport(const D3DVIEWPORT9 *) { return D3D_OK; }
+HRESULT IDirect3DDevice9::SetViewport(const D3DVIEWPORT9 *viewport)
+{
+    if (viewport)
+        s_vp = *viewport;
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::GetViewport(D3DVIEWPORT9 *viewport)
 {
-    if (viewport) {
-        memset(viewport, 0, sizeof(*viewport));
-        viewport->Width = 1280;
-        viewport->Height = 720;
-        viewport->MaxZ = 1.0f;
-    }
+    if (viewport)
+        *viewport = s_vp;
     return D3D_OK;
 }
 // Recorded, not applied: the draw path reads this file through nxGlApplyBlend
@@ -2678,6 +3912,13 @@ HRESULT IDirect3DDevice9::GetRenderState(D3DRENDERSTATETYPE state, DWORD *value)
 HRESULT IDirect3DDevice9::SetTexture(DWORD stage, IDirect3DBaseTexture9 *texture)
 {
     ++s_nSetTexture;
+    if (stage >= NX_VTX_SAMPLER_STAGE0 && stage < NX_VTX_SAMPLER_STAGE0 + (unsigned)NX_SHADER_VS_SAMPLERS) {
+        // A vertex texture slot: only a translated vertex shader reads these.
+        NxTexture *vt = (NxTexture *)texture;
+        s_vtxSamplerTex[stage - NX_VTX_SAMPLER_STAGE0] =
+            vt && vt->magic == NX_TEXTURE_MAGIC ? vt : nullptr;
+        return D3D_OK;
+    }
     if (stage >= NX_MAX_SAMPLERS)
         return D3D_OK;
 
@@ -2700,8 +3941,25 @@ HRESULT IDirect3DDevice9::SetTexture(DWORD stage, IDirect3DBaseTexture9 *texture
     return D3D_OK;
 }
 HRESULT IDirect3DDevice9::SetTextureStageState(DWORD, D3DTEXTURESTAGESTATETYPE, DWORD) { return D3D_OK; }
-HRESULT IDirect3DDevice9::SetSamplerState(DWORD, D3DSAMPLERSTATETYPE, DWORD) { return D3D_OK; }
-HRESULT IDirect3DDevice9::SetScissorRect(const RECT *) { return D3D_OK; }
+// Recorded per slot and turned into sampler object parameters at the next
+// draw that samples through the slot (nxGlApplySampler). The vertex texture
+// slots, D3DVERTEXTEXTURESAMPLER0 and up, sit far above the sixteen pixel
+// ones, and nothing drawn yet reads them.
+HRESULT IDirect3DDevice9::SetSamplerState(DWORD sampler, D3DSAMPLERSTATETYPE type, DWORD value)
+{
+    if (sampler < NX_MAX_SAMPLERS && (unsigned)type < NX_SAMP_COUNT
+     && s_samp[sampler][type] != value) {
+        s_samp[sampler][type] = value;
+        s_sampDirty[sampler] = true;
+    }
+    return D3D_OK;
+}
+HRESULT IDirect3DDevice9::SetScissorRect(const RECT *rect)
+{
+    if (rect)
+        s_scissor = *rect;
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::DrawPrimitive(D3DPRIMITIVETYPE, UINT, UINT) { ++s_nDrawPrim; return D3D_OK; }
 // MinVertexIndex and NumVertices are dropped: they describe the range for the
 // driver to validate or copy, and glDrawElementsBaseVertex needs neither.
@@ -2722,7 +3980,12 @@ HRESULT IDirect3DDevice9::SetVertexDeclaration(IDirect3DVertexDeclaration9 *decl
     return D3D_OK;
 }
 HRESULT IDirect3DDevice9::SetFVF(DWORD) { return D3D_OK; }
-HRESULT IDirect3DDevice9::SetVertexShader(IDirect3DVertexShader9 *) { ++s_nSetVertexShader; return D3D_OK; }
+HRESULT IDirect3DDevice9::SetVertexShader(IDirect3DVertexShader9 *shader)
+{
+    ++s_nSetVertexShader;
+    s_vs = (NxShader *)shader;
+    return D3D_OK;
+}
 // The shader itself is discarded, but its constants are not: four consecutive
 // registers out of this file are the transform the flat-colour program uses.
 HRESULT IDirect3DDevice9::SetVertexShaderConstantF(UINT startRegister, const float *data, UINT count)
@@ -2753,8 +4016,22 @@ HRESULT IDirect3DDevice9::SetVertexShaderConstantF(UINT startRegister, const flo
     }
     return D3D_OK;
 }
-HRESULT IDirect3DDevice9::SetPixelShader(IDirect3DPixelShader9 *) { ++s_nSetPixelShader; return D3D_OK; }
-HRESULT IDirect3DDevice9::SetPixelShaderConstantF(UINT, const float *, UINT) { return D3D_OK; }
+// Kept only so the draw path can ask which samplers it declares.
+HRESULT IDirect3DDevice9::SetPixelShader(IDirect3DPixelShader9 *shader)
+{
+    ++s_nSetPixelShader;
+    s_ps = (NxShader *)shader;
+    return D3D_OK;
+}
+// Recorded like the vertex file; a translated pixel shader reads it as psc[].
+HRESULT IDirect3DDevice9::SetPixelShaderConstantF(UINT startRegister, const float *data, UINT count)
+{
+    if (!data)
+        return D3D_OK;
+    for (UINT i = 0; i < count && startRegister + i < NX_PS_CONST_ROWS; ++i)
+        memcpy(s_psConst[startRegister + i], data + i * 4, 4 * sizeof(float));
+    return D3D_OK;
+}
 HRESULT IDirect3DDevice9::SetStreamSource(UINT streamNumber, IDirect3DVertexBuffer9 *vb,
                                           UINT offsetInBytes, UINT stride)
 {
@@ -2783,6 +4060,8 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     if (report) nxDumpCallCensus();
     if (report) nxGlDumpGeometry();
     if (report) nxGlDumpTextures();
+    if (report) nxGlDumpTargets();
+    if (report) nxGlDumpShaders();
     memset(&s_frame, 0, sizeof(s_frame));   // the next frame starts here
 
     if (!nxGlAcquire()) {
@@ -2798,14 +4077,37 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     // before the swap so the report can attribute it to that frame.
     GLenum errBeforeSwap = glGetError();
 
+    // The back buffer to the window. Every target is stored top row first,
+    // the window wants its top row last, so the destination rows run
+    // backwards -- the one place that order is undone. A blit ignores the
+    // write masks but not the scissor, which the last draw may have left on.
+    EGLint sw = -1, sh = -1;
+    eglQuerySurface(s_display, s_surface, EGL_WIDTH, &sw);
+    eglQuerySurface(s_display, s_surface, EGL_HEIGHT, &sh);
+    NxSurface *bb = s_device.backBuffer;
+    bool blitted = false;
+    if (bb && sw > 0 && sh > 0) {
+        NxFboRef f = nxGlFbo(bb, nullptr);
+        if (f.complete) {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, f.name);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glDisable(GL_SCISSOR_TEST);
+            bool sameSize = (EGLint)bb->width == sw && (EGLint)bb->height == sh;
+            glBlitFramebuffer(0, 0, (GLint)bb->width, (GLint)bb->height, 0, sh, sw, 0,
+                              GL_COLOR_BUFFER_BIT, sameSize ? GL_NEAREST : GL_LINEAR);
+            blitted = true;
+        }
+        s_boundFbo = ~0u;
+    }
+
     EGLBoolean swapped = eglSwapBuffers(s_display, s_surface);
     EGLint eglErr = eglGetError();
     GLenum errAfterSwap = glGetError();
 
     if (report) {
-        EGLint sw = -1, sh = -1;
-        eglQuerySurface(s_display, s_surface, EGL_WIDTH, &sw);
-        eglQuerySurface(s_display, s_surface, EGL_HEIGHT, &sh);
+        if (!blitted)
+            printf("[nx-gl] present %u: the back buffer could not be copied to the "
+                   "window; the screen shows whatever was there before\n", s_nSwapPresent);
         u32 winW = 0, winH = 0;
         nwindowGetDimensions(nwindowGetDefault(), &winW, &winH);
         printf("[nx-gl] present %u: glGetError before swap 0x%x | eglSwapBuffers %s "

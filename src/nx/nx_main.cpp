@@ -50,11 +50,22 @@ static void nxAppendCmdlineFile(char *cmdline, size_t size)
 // Route stdout/stderr somewhere the user can read after a crash: nxlink if the
 // title was launched from it, otherwise a log file on the SD card. Both are
 // unbuffered so nothing is lost when the process aborts.
+//
+// Both streams open the file in append mode, after one truncating open. They
+// used to share it through dup2, but each kept its own write position, so
+// whichever wrote second overwrote the other -- and when one position ran
+// past the end of the file, the gap came back as whatever the SD card held
+// there: the stray binary in front of some lines, and a GL renderer string
+// that never reached the log. Append mode makes newlib seek to the current
+// end before every write, so the two can interleave but never overlap.
 static void nxSetupLogging(void)
 {
     if (nxlinkStdio() < 0) {
-        freopen(NX_GAME_DIR "/kisakblack.log", "w", stdout);
-        dup2(fileno(stdout), fileno(stderr));
+        FILE *f = fopen(NX_GAME_DIR "/kisakblack.log", "w");
+        if (f)
+            fclose(f);
+        freopen(NX_GAME_DIR "/kisakblack.log", "a", stdout);
+        freopen(NX_GAME_DIR "/kisakblack.log", "a", stderr);
     }
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
@@ -80,8 +91,14 @@ static void nxReportMemory(void)
 // libnx runs __libnx_exception_handler on the stack below when a thread
 // faults. It logs where, as offsets into the module -- the ELF is linked at 0,
 // so they go straight to addr2line against the ELF from the same build -- and
-// then hands the exception back unhandled, so Atmosphere still writes its own
-// crash report.
+// then ends the process.
+//
+// It does not hand the exception back. svcReturnFromException is not among
+// the syscalls this process may make -- the title it runs under does not
+// grant it -- so calling it raised a bad-SVC exception, which came straight
+// back here, forever: the console froze and had to be forced off.
+// svcExitProcess is always allowed, and a second entry, from another thread
+// or from a fault in here, goes straight to it.
 //
 // The build omits frame pointers (-O2), so there is no frame chain to walk.
 // Instead the faulting thread's stack is scanned for words that point into the
@@ -121,6 +138,10 @@ static const char *nxExceptionName(u32 desc)
 
 extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
 {
+    static int s_entered;
+    if (__atomic_fetch_add(&s_entered, 1, __ATOMIC_SEQ_CST))
+        svcExitProcess();
+
     MemoryInfo text = {};
     u32 pageInfo;
     svcQueryMemory(&text, &pageInfo, (u64)&__libnx_exception_handler);
@@ -163,8 +184,9 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         }
     }
     nxCrashWrite("[nx-crash] resolve with: aarch64-none-elf-addr2line -f -C -e build-nx/KisakBlack.elf <elf+ offsets>\n");
+    nxCrashWrite("[nx-crash] exiting\n");
 
-    svcReturnFromException(MAKERESULT(Module_Kernel, KernelError_UnhandledUserInterrupt));
+    svcExitProcess();
 }
 
 int main(int argc, char **argv)

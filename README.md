@@ -23,7 +23,7 @@ devkitPro; a small converter that runs on the PC is built with MSYS2.
 | --- | --- | --- |
 | 1 | [devkitPro](https://devkitpro.org/wiki/Getting_Started) with **Switch Development** (devkitA64, libnx, switch-tools) | compiler, system library, `.nro` packaging |
 | 2 | devkitPro packages `switch-libexpat`, `switch-libzstd`, `switch-zlib`, `cmake`, `make` | libraries Mesa links against, and the build tools |
-| 3 | **Mesa for Switch**, the unified SDK (OpenGL + EGL + Vulkan) | the OpenGL driver the renderer runs on — [mesa-switch](https://github.com/danfromtico/mesa-switch) |
+| 3 | **Mesa for Switch**, the unified SDK (OpenGL + EGL + Vulkan) | the OpenGL driver the renderer runs on — mesa-switch |
 | 4 | [MSYS2](https://www.msys2.org/) with the **UCRT64** `gcc` and `zlib` | builds `tools/ffconv`, the zone converter that runs on the PC |
 | 5 | Git | to clone this repository |
 | 6 | Black Ops (PC, Steam) | the game data |
@@ -184,9 +184,9 @@ lines with `KisakBlack.elf`.
   [BO3Enhanced](https://github.com/shiversoftdev/BO3Enhanced) and
   [RAD Game Tools](https://www.radgametools.com/) for Bink.
   Development blog: <https://lwss.github.io/Kisak-Black/>.
-- [NaGa](https://github.com/) — the original devkitPro scaffolding.
-- [mesa-switch](https://github.com/danfromtico/mesa-switch) — OpenGL on the
-  Tegra X1.
+- [NaGa](https://github.com/NaGaa95) — the original devkitPro scaffolding and mesa-switch.
+- [FemboyValve/OpenBLOPS](https://github.com/femboyvalve)
+  — the SinglePlayer / Zombies decompilation files.
 - [riicchhaarrd/KisakBlack](https://github.com/riicchhaarrd/KisakBlack/tree/web-port)
   — the WebGL port whose shader translator this port's renderer adapts.
 

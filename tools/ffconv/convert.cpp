@@ -2259,8 +2259,13 @@ static Prelink::Loc tMenuDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t f
     if (onEventTag != TAG_NULL) tEventHandler(r, z, m, 288, true);
     if (onKeyTag   != TAG_NULL) tEventHandler(r, z, m, 296, false);
 
+    // visibleExp is {filename 304, line 312, numRpn 316, rpn 320}; showBits
+    // starts at 328. The rpn pointer used to be written at 328, over showBits,
+    // which hid every menu with a 'visible when' -- all the popups -- through
+    // Menu_IsVisible's show-bits test, and left the expression without its
+    // program.
     putXStringFromTag(r, z, m, 304, visFileTag);
-    tExprRpnArray(r, z, m, 328, visRpnTag, visNumRpn);
+    tExprRpnArray(r, z, m, 320, visRpnTag, visNumRpn);
 
     putXStringFromTag(r, z, m, 344, allowedTag);
     putXStringFromTag(r, z, m, 352, soundTag);

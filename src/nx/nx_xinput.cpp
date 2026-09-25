@@ -113,3 +113,21 @@ DWORD XInputGetCapabilities(DWORD userIndex, DWORD, XINPUT_CAPABILITIES *caps)
 }
 
 void XInputEnable(BOOL) {}
+
+// The first finger on the touchscreen, in screen pixels -- 1280x720, the same
+// space as the game window -- for the menu cursor (IN_Frame, win_input.cpp).
+// False when nothing touches it, which is always the case docked.
+extern "C" bool NX_TouchPoint(int *x, int *y)
+{
+    static bool s_touchInit;
+    if (!s_touchInit) {
+        hidInitializeTouchScreen();
+        s_touchInit = true;
+    }
+    HidTouchScreenState state = {};
+    if (!hidGetTouchScreenStates(&state, 1) || state.count <= 0)
+        return false;
+    *x = (int)state.touches[0].x;
+    *y = (int)state.touches[0].y;
+    return true;
+}

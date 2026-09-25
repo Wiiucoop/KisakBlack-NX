@@ -9,6 +9,11 @@
 #include <gfx_d3d/rb_backend.h>
 #include "win_shared.h"
 #include <client_mp/cl_input_mp.h>
+#ifdef KISAK_NX
+#include <cgame_mp/cg_newDraw_mp.h>   // CL_GetLocalClientUIGlobals, for NX_VirtualMouse
+#include <client/client.h>
+#include <cmath>
+#endif
 
 GamePadButton buttonList[32] =
 {
@@ -199,6 +204,79 @@ void __cdecl IN_Activate(int active)
         IN_DeactivateMouse();
 }
 
+#ifdef KISAK_NX
+extern "C" bool NX_TouchPoint(int *x, int *y);   // nx_xinput.cpp
+
+// The Switch has no mouse, and the PC menus are built for one. The D-pad can
+// only move focus between items with focus scripts (Menu_SetNextCursorItem's
+// usedKeyboard path), and a button only takes focus with the cursor over it
+// (Item_SetFocus), so buttons such as the graphics menu's save were out of
+// reach. This gives the menus a mouse: the right stick moves the cursor they
+// already draw, the touchscreen puts it under the finger, and ZR or the
+// finger clicks. It feeds the engine's own mouse path -- SetCursorPos for
+// IN_MouseMove to read, IN_MouseEvent for the button -- and only while a
+// menu has the keys, so in game the right stick stays the look stick.
+static void NX_VirtualMouse(void)
+{
+    static int s_lastMsec;
+    static float s_x = 640.0f, s_y = 360.0f;   // nx_winuser.cpp's starting cursor
+    static bool s_touchWasDown;
+    static int s_buttons;
+
+    int now = Sys_Milliseconds();
+    float dt = s_lastMsec ? (float)(now - s_lastMsec) * 0.001f : 0.0f;
+    if (dt > 0.1f)
+        dt = 0.1f;
+    s_lastMsec = now;
+
+    int want = 0;
+    clientUIActive_t *ui = CL_GetLocalClientUIGlobals(0);
+    if (ui && (ui->keyCatchers & 0x10) != 0)
+    {
+        // Squared response: fine control near the centre, a screen width in
+        // about a second and a half at full deflection. Stick y is up, screen
+        // y is down.
+        const float speed = 900.0f;
+        float sx = (float)GPad_GetStick(0, GPAD_RX);
+        float sy = (float)GPad_GetStick(0, GPAD_RY);
+        bool moved = sx != 0.0f || sy != 0.0f;
+        s_x += sx * fabsf(sx) * speed * dt;
+        s_y -= sy * fabsf(sy) * speed * dt;
+
+        int tx, ty;
+        bool touch = NX_TouchPoint(&tx, &ty);
+        if (touch)
+        {
+            s_x = (float)tx;
+            s_y = (float)ty;
+            moved = true;
+        }
+        s_x = s_x < 0.0f ? 0.0f : s_x > 1279.0f ? 1279.0f : s_x;
+        s_y = s_y < 0.0f ? 0.0f : s_y > 719.0f ? 719.0f : s_y;
+        if (moved)
+            SetCursorPos((int)s_x, (int)s_y);
+
+        // A finger presses one frame after it lands, so the menu has taken
+        // the new cursor position -- and focused what is under it -- before
+        // the click arrives.
+        bool touchPress = touch && s_touchWasDown;
+        s_touchWasDown = touch;
+        if (GPad_GetButton(0, GPAD_R_TRIG) > 0.5 || touchPress)
+            want = 1;
+    }
+    else
+    {
+        s_touchWasDown = false;
+    }
+    // Leaving the menu with the button held releases it, as a mouse would.
+    if (want != s_buttons)
+    {
+        IN_MouseEvent(want);
+        s_buttons = want;
+    }
+}
+#endif
+
 void __cdecl IN_Frame()
 {
     if ( Dvar_GetBool("ClickToContinue") )
@@ -208,6 +286,9 @@ void __cdecl IN_Frame()
         if ( in_appactive )
         {
             IN_ActivateMouse(0);
+#ifdef KISAK_NX
+            NX_VirtualMouse();
+#endif
             IN_MouseMove();
             if ( IN_IsForegroundWindow() )
                 IN_GamepadsMove();

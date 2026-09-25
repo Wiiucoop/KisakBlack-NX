@@ -887,10 +887,12 @@ void __cdecl CG_DrawSoundOverlay(const ScreenPlacement *scrPlace)
     y = 82.0f;
     string = va(
                          "%s sounds    reverb: %s    channels in use %d    sort by %s",
-                         *(const char **)(snd_drawInfo->domain.integer.max + 4 * type),
+                         // nx-port: both were *(const char **)(domain.integer.max + 4 * type),
+                         // the x86 overlay of the enum's strings pointer.
+                         snd_drawInfo->domain.enumeration.strings[type],
                          "",
                          v6,
-                         *(const char **)(snd_drawSort->domain.integer.max + 4 * type));
+                         snd_drawSort->domain.enumeration.strings[type]);
     CG_DrawStringExt(scrPlace, x, y, string, colorWhite, 0, 1, 14.0);
     y = y + 10.0;
     for ( i = 0; i < (int)num; ++i )

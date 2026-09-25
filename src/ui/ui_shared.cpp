@@ -5971,7 +5971,10 @@ int __cdecl Item_DvarEnum_EnumIndex(itemDef_s *item)
     }
     for ( enumIndexa = 0; enumIndexa < enumDvar->domain.enumeration.stringCount; ++enumIndexa )
     {
-        if ( !I_stricmp(enumString, *(const char **)(enumDvar->domain.integer.max + 4 * enumIndexa)) )
+        // nx-port: was *(const char **)(domain.integer.max + 4 * i) -- the x86
+        // layout, where integer.max overlays the 32-bit strings pointer. On
+        // LP64 it reads padding, and the graphics menu faulted on null.
+        if ( !I_stricmp(enumString, enumDvar->domain.enumeration.strings[enumIndexa]) )
             return enumIndexa;
     }
     return 0;
@@ -9426,7 +9429,7 @@ const char *__cdecl Item_DvarEnum_Setting(itemDef_s *item)
                         v2) )
             __debugbreak();
     }
-    return *(const char **)(enumDvar->domain.integer.max + 4 * enumIndex);
+    return enumDvar->domain.enumeration.strings[enumIndex];   // nx-port: see Item_DvarEnum_EnumIndex
 }
 
 void __cdecl Item_Slider_Paint(UiContext *dc, itemDef_s *item)

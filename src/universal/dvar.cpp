@@ -2087,7 +2087,9 @@ int __cdecl Dvar_StringToEnum(const DvarLimits *domain, const char *string)
     v3 = strlen(string);
     for ( stringIndexb = 0; stringIndexb < domain->enumeration.stringCount; ++stringIndexb )
     {
-        if ( !I_strnicmp(string, *(const char **)(domain->integer.max + 4 * stringIndexb), v3) )
+        // nx-port: was *(const char **)(domain->integer.max + 4 * i), the x86
+        // overlay of the strings pointer; the loop above already reads it right.
+        if ( !I_strnicmp(string, domain->enumeration.strings[stringIndexb], v3) )
             return stringIndexb;
     }
     return -1337;

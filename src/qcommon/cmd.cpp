@@ -783,7 +783,9 @@ void __cdecl Cmd_EvaluateExpression(const char **text_in, CmdArgs *argsPriv)
     itemDef_s *v2; // eax
     int v3; // [esp+0h] [ebp-C24h]
     int v4; // [esp+4h] [ebp-C20h]
-    char compileBuffer[3072]; // [esp+1Ch] [ebp-C08h] BYREF
+    // nx-port: twice the x86 3072 -- every entry Expression_Parse carves out
+    // of it doubles in size on LP64.
+    char compileBuffer[6144]; // [esp+1Ch] [ebp-C08h] BYREF
     const char *result; // [esp+C20h] [ebp-4h]
 
     if ( !text_in && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\qcommon\\cmd.cpp", 1084, 0, "%s", "text_in") )
@@ -791,7 +793,7 @@ void __cdecl Cmd_EvaluateExpression(const char **text_in, CmdArgs *argsPriv)
     if ( !*text_in && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\qcommon\\cmd.cpp", 1085, 0, "%s", "*text_in") )
         __debugbreak();
     v2 = Cmd_ItemDef();
-    for ( result = GetExpressionResultStringCompile(0, v2, text_in, compileBuffer, 3072); *result; ++result )
+    for ( result = GetExpressionResultStringCompile(0, v2, text_in, compileBuffer, sizeof(compileBuffer)); *result; ++result )
     {
         argsPriv->textPool[argsPriv->totalUsedTextPool] = *result;
         if ( argsPriv->totalUsedTextPool + 1 < 8190 )

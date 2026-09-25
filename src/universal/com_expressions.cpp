@@ -546,8 +546,6 @@ void __cdecl Expression_Free(ExpressionStatement *statement)
 
 expressionRpn *__cdecl MakeRPN(expressionEntry *entry, int *length)
 {
-    operandInternalDataUnion v2; // edx
-    int v3; // eax
     unsigned int idxOper; // [esp+0h] [ebp-260h]
     int idxProg; // [esp+4h] [ebp-25Ch]
     expressionEntry *oper[150]; // [esp+8h] [ebp-258h]
@@ -569,10 +567,12 @@ expressionRpn *__cdecl MakeRPN(expressionEntry *entry, int *length)
                 __debugbreak();
             }
             prog[idxProg].type = 0;
-            v2.intVal = entry->data.operand.internals.intVal;
-            v3 = idxProg;
-            prog[v3].data.cmdIdx = entry->data.op;
-            prog[v3].data.constant.internals = v2;
+            // The op doubles as the operand's dataType: OP_NOOP, OP_RIGHTPAREN
+            // and OP_MULTIPLY are VAL_INT, VAL_FLOAT and VAL_STRING. nx-port:
+            // the whole internals union is copied, not its int -- the decompile
+            // went through intVal, which drops half of a string's pointer here.
+            prog[idxProg].data.cmdIdx = entry->data.op;
+            prog[idxProg].data.constant.internals = entry->data.operand.internals;
             ++idxProg;
         }
         else
@@ -809,9 +809,11 @@ char __cdecl Expression_Parse(
                 case PARSE_TOKEN_NUMBER:
                     fl = atof(token->token);
                     i = atoi(token->token);
+                    // nx-port: sizeof(expressionEntry) in place of the x86
+                    // 16 here and below; it is 32 on LP64.
                     if ( fl == (float)i )
                     {
-                        v6 = Expression_Alloc(allocState, 16);
+                        v6 = Expression_Alloc(allocState, sizeof(expressionEntry));
                         v6->next = 0;
                         v6->type = 1;
                         v6->data.op = OP_NOOP;
@@ -820,7 +822,7 @@ char __cdecl Expression_Parse(
                     }
                     else
                     {
-                        v7 = Expression_Alloc(allocState, 16);
+                        v7 = Expression_Alloc(allocState, sizeof(expressionEntry));
                         v7->next = 0;
                         v7->type = 1;
                         v7->data.op = OP_RIGHTPAREN;
@@ -892,7 +894,7 @@ LABEL_39:
                     break;
             }
 LABEL_31:
-            v8 = Expression_Alloc(allocState, 16);
+            v8 = Expression_Alloc(allocState, sizeof(expressionEntry));
             v8->next = 0;
             v8->type = 0;
             v8->data.op = op;
@@ -918,8 +920,11 @@ LABEL_40:
     }
     Com_EndParseSession();
     rpn = MakeRPN(head, &statement->numRpn);
-    statement->rpn = (expressionRpn *)Expression_Alloc(allocState, 12 * statement->numRpn);
-    memcpy((unsigned __int8 *)statement->rpn, (unsigned __int8 *)rpn, 12 * statement->numRpn);
+    // nx-port: sizeof(expressionRpn), which the decompile spelled 12 -- its x86
+    // size. It is 24 on LP64, so only half the program was copied and
+    // EvaluateExpression ran off into whatever followed it in the buffer.
+    statement->rpn = (expressionRpn *)Expression_Alloc(allocState, sizeof(expressionRpn) * statement->numRpn);
+    memcpy((unsigned __int8 *)statement->rpn, (unsigned __int8 *)rpn, sizeof(expressionRpn) * statement->numRpn);
     return 1;
 }
 
@@ -945,7 +950,10 @@ expressionEntry *__cdecl Expression_Alloc(ExpressionAllocState *allocState, int 
 
     if ( allocState )
     {
-        sizea = (size + 3) & 0xFFFFFFFC;
+        // nx-port: rounded to pointer alignment, not to 4. The entries carved
+        // out of this buffer hold pointers, and a string operand's odd length
+        // would otherwise leave every entry after it misaligned.
+        sizea = (size + (int)sizeof(void *) - 1) & ~((int)sizeof(void *) - 1);
         if ( allocState->size < sizea
             && !Assert_MyHandler(
                         "C:\\projects_pc\\cod\\codsrc\\src\\universal\\com_expressions.cpp",
@@ -1007,7 +1015,7 @@ expressionEntry *__cdecl Expression_HashOperand(const char *str, ExpressionAlloc
 {
     expressionEntry *entry; // [esp+Ch] [ebp-4h]
 
-    entry = Expression_Alloc(alloc, 16);
+    entry = Expression_Alloc(alloc, sizeof(expressionEntry));   // nx-port: was 16
     entry->next = 0;
     entry->type = 1;
     entry->data.op = OP_NOOP;
@@ -1022,13 +1030,17 @@ expressionEntry *__cdecl Expression_StringOperand(const char *str, ExpressionAll
     const char *v5; // [esp+Ch] [ebp-18h]
     expressionEntry *entry; // [esp+20h] [ebp-4h]
 
-    entry = Expression_Alloc(alloc, strlen(str) + 17);
+    // nx-port: the string lives right after the entry. The decompile sized
+    // that as strlen + 17 (x86 entry + NUL) and kept its address in intVal,
+    // an int: on LP64 the pointer lost its top half and the copy below wrote
+    // through what was left.
+    entry = Expression_Alloc(alloc, sizeof(expressionEntry) + strlen(str) + 1);
     entry->next = 0;
     entry->type = 1;
     entry->data.op = OP_MULTIPLY;
-    entry->data.operand.internals.intVal = (int)&entry[1];
+    entry->data.operand.internals.string = (const char *)&entry[1];
     v5 = str;
-    intVal = (_BYTE *)entry->data.operand.internals.intVal;
+    intVal = (_BYTE *)&entry[1];
     do
     {
         v2 = *v5;

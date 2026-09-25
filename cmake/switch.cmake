@@ -120,6 +120,7 @@ list(APPEND NX_SANITIZED_SOURCES
     "${SRC_DIR}/gfx_d3d/r_rendercmds.cpp"            # front end: command list, SMP frame toggle
     "${SRC_DIR}/gfx_d3d/rb_backend.cpp"              # back end: render thread, command execution
     "${SRC_DIR}/qcommon/threads.cpp"                 # thread layer, incl. the SMP handoff slot
+    "${SRC_DIR}/universal/com_expressions.cpp"       # menu expression parser / RPN compiler
 )
 
 get_target_property(NX_UNSANITIZED_SOURCES ${BIN_NAME} SOURCES)

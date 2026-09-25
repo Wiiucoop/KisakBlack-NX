@@ -730,7 +730,7 @@ void __cdecl formatStringWithCommas(char *outputString, int stringLength, unsign
 bool __cdecl LiveNews_EvaluateExpression(const char *expr, char *outputString, int stringLength)
 {
     float v4; // [esp+8h] [ebp-42Ch]
-    char compileBuffer[1024]; // [esp+Ch] [ebp-428h] BYREF
+    char compileBuffer[2048]; // [esp+Ch] [ebp-428h] BYREF -- nx-port: x86 1024, doubled for LP64 entries
     ExpressionStatement statement; // [esp+410h] [ebp-24h] BYREF
     float floatValue; // [esp+420h] [ebp-14h]
     bool validNumber; // [esp+427h] [ebp-Dh]
@@ -757,7 +757,7 @@ bool __cdecl LiveNews_EvaluateExpression(const char *expr, char *outputString, i
         return 0;
     validNumber = 0;
     floatValue = 0.0f;
-    Expression_Parse(&expr, &statement, compileBuffer, 1024);
+    Expression_Parse(&expr, &statement, compileBuffer, sizeof(compileBuffer));
     expressionResult = GetExpressionResultString(0, 0, &statement);
     value = I_atoi64(expressionResult);
     if ( value < 0xA )

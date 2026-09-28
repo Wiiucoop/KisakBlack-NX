@@ -1,0 +1,30 @@
+# Structs behind the script field tables, for the layoutgen loose dump
+# (tools/nx/fieldmap.pl). Not the converter's list: that is
+# tools/ffconv/layout/structs.txt.
+include game_mp/g_main_mp.h
+include bgame/bg_public.h
+include bgame/bg_local.h
+include game/g_vehicle_path.h
+include game/pathnode.h
+gentity_s
+entityShared_t
+entityState_s
+gclient_s
+playerState_s
+clientSession_t
+centity_s
+vehicle_node_t
+pathnode_t
+pathnode_constant_t
+include client_mp/g_client_mp.h
+clientState_s
+usercmd_s
+trigger_ent_t
+item_ent_t
+mover_ent_t
+corpse_ent_t
+missile_ent_t
+spawner_ent_t
+cpose_t
+vehicle_spline_node_t
+vehicle_path_node_t

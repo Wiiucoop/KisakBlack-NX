@@ -35,8 +35,14 @@ repository and none ever should be.
   and links, and every menu draw runs the game's own vertex and pixel shaders —
   including the settings menu's blurred background.
 - **The menus work with a controller**: the D-pad or left stick moves focus,
-  and the settings and graphics menus open, and change values, without
-  crashing.
+  the right stick drives a cursor (ZR / touch click), popups show, and Play
+  opens offline. Private match still crashes (not yet looked at).
+- **A multiplayer map loads.** With `+devmap mp_nuked` in `cmdline.txt` the
+  engine loads every zone including the map's own (converted: GfxWorld,
+  clipMap, GameWorldMp, ComWorld, destructibles, glass), shows the load
+  screen, spawns the server, compiles the gametype scripts and runs
+  `G_InitGame` into weapon registration. Each device run so far has moved
+  the crash further down that path; the fixes are LP64 ones (section 4).
 
 Hardware and driver, as the log reports them: Mesa 26.2.1, OpenGL 4.3 core,
 renderer `NV12B` — Mesa's native nvc0 driver on the Tegra X1, not Zink.
@@ -285,6 +291,25 @@ An Atmosphère report in `sdmc:/atmosphere/crash_reports/` (a text `.log`)
 resolves the same way: subtract nothing, the `KisakBlack + 0x...` offsets are
 ELF addresses already.
 
+A trap with an `ASSERTBEGIN` block right before it is an engine assert, not a
+fault: `__debugbreak` is `__builtin_trap`, so read the assert first.
+
+### Workflow
+
+- **Boot straight into a map:** `sdmc:/switch/kisakblack/cmdline.txt` is
+  appended to the command line; `+devmap mp_nuked` in it skips the menus.
+  Remove it to get the menus back.
+- **Zones:** `GAME=/f/pluto_t5_full_game sh tools/nx/convert-zones.sh` (UCRT64
+  shell, after `tools/ffconv/build.sh`) converts every zone the port uses,
+  `mp_nuked` included, into `<game>/kbz/` and validates each. The whole game
+  folder then goes to the SD card as is.
+- **LP64 checks:** `sh tools/nx/lp64check.sh <file.cpp>` and
+  `sh tools/nx/lp64scan.sh <src subdirs>` (devkitPro shell, configured
+  `build-nx/`) list pointer truncations the way a sanitised build would.
+  A file that comes out clean can join `NX_SANITIZED_SOURCES`.
+- **Push:** Git Credential Manager holds the GitHub login on the dev machine,
+  so `git push origin switch-port` works non-interactively there.
+
 ---
 
 ## 4. Findings worth remembering
@@ -305,9 +330,61 @@ ELF addresses already.
 - **One image, `tv_lookup`, still holds a load def** after a picmip reload;
   `Image_Release` names it and skips it. Not yet explained.
 - **Diagnostics in the log:** `[nx-trace]` (one frame's draws in order, with
-  target and state), `[nx-paint]` (what `Menu_PaintAll` painted and why an
-  open menu was not), `[nx-kbz] audit` (materials whose images are not
-  textures), `[nx-crash]`.
+  target and state), `[nx-paint]` (why an open menu was not painted),
+  `[nx-kbz] audit` (materials whose images are not textures),
+  `R_NxCreateShaderLate` (a shader the KBZ build step missed, created at
+  first use -- so far only `loadscreen_mp_nuked`'s, not yet explained),
+  the frame report's `depth-tested / stencil / culled` counts, `[nx-crash]`.
+- **Culling:** with the y flip, GL window coordinates equal D3D9 screen
+  coordinates, but D3D9 (y down) calls positive area clockwise and GL
+  calls it counter-clockwise. So `D3DCULL_CCW` is `GL_BACK`. Getting this
+  backwards culled every menu quad (black screen with the menu "drawing").
+- **Offline sign-in:** the Steam stub reports signed in while there is no
+  DemonWare user, so XUID is 0 -- anything that looks the local player up
+  in the player cache must check for that (`Dvar_InfoString` did not; devmap
+  died building the connect string).
+
+### LP64 bug classes met on the map path
+
+Beyond the ones in "The LP64 ratchet", in the order the device found them.
+The compiler flags the first three kinds (`tools/nx/lp64check.sh`); the rest
+are silent and need reading:
+
+- **Pointer arithmetic through `unsigned int`**, e.g. the hunk allocator's
+  `(unsigned int)ptr & 0xFFFFF000` (`HUNK_PAGE_DOWN` now), or a function
+  returning an address as `unsigned int` (`Hunk_AllocateTempMemoryHigh`).
+- **Pointers stored in 32-bit slots**: script bytecode operands, the
+  builtin function table (`func_table`), static-model draw streams
+  (`R_PRIM_PTR_WORDS`), a VM stack buffer's entries.
+- **Structs filled at x86 offsets** (`*((_DWORD *)p + 3)`, `stackValue + 13`,
+  `(int)localFs.top + 12`): rewrite by field name.
+- **Pointer arrays read as 32-bit words**: `*((unsigned int *)w->worldModel
+  + 1)` is the *high half of element 0* on LP64, not element 1.
+- **Whole-value copies spelled through a 4-byte member**:
+  `a.u.intValue = b.u.intValue` copied a script value on x86; on LP64 the
+  union holds 8-byte pointers. Silent -- grep for them.
+- **Literal x86 sizes**: `MT_Alloc(112, ...)` for a struct with pointers,
+  `Hunk_UserAlloc(..., 4 * size, ...)` for sval_u nodes, `2048` for 512
+  pointers. Use `sizeof`.
+- **Script field tables with x86 offsets** (`{ "classname", 356, ... }`).
+  Map each literal to its member with the layoutgen loose dump:
+  `LAYOUTGEN_LOOSE=1 STRUCTS=tools/nx/fields_structs.txt OUT=fields_gen.h
+  sh tools/ffconv/layout/layout.sh`, then `perl tools/nx/fieldmap.pl
+  fields_gen.h gentity_s src/game_mp/g_spawn_mp.cpp`. Where a whole tail of
+  a struct shifts by a constant (gclient_s +256 from `sess`, centity_s +4
+  after `pose.actor`) a rebase macro is enough; otherwise `offsetof`.
+- **Reads past the end of an array** that were harmless on x86 because of
+  what happened to follow it (`itemTable[256]` in bg_unlockable_items) and
+  are not on LP64.
+- **Decompiler types**: ints typed as pointers (`EmitObject`'s classnum),
+  unions whose meaning depends on another field (`cLeafBrushNode_s.data`).
+
+Still open, known: the AVL maps in `g_mover.cpp` and `pathnode.cpp` key by
+a pointer truncated to `unsigned int`; `actor_fields.cpp` and
+`sentient_fields.cpp` still hold x86 offsets (mostly SP); word-stride
+reads in `rb_backend.cpp` (render cmd), `fx_convert.cpp` / `fx_system.cpp`
+(`anonymous + 59`), physics (~490 flagged sites); the script debugger
+(`cscr_evaluate`, `cscr_debugger`).
 
 ## 5. Plan
 
@@ -376,9 +453,14 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    `src/EffectsCore/fx_beam.cpp:378` and `:1008` index past the end of a
    four-element `unitVec[0].array` to reach `unitVec[1]` — undefined
    everywhere, and on the map path.
-4. **Boot straight into a map.** `sdmc:/switch/kisakblack/cmdline.txt` is
-   appended to the command line (`nx_main.cpp`), so a file holding
-   `+devmap mp_nuked` skips the menus.
+4. ~~Boot straight into a map~~ — `cmdline.txt` (section 3, Workflow).
+5. **Get through `G_InitGame` and into the first frame.** The loop is: run
+   `+devmap mp_nuked`, read the crash or assert, fix it and its whole class
+   (section 4, "LP64 bug classes"), rebuild. Fixed on this path so far, in
+   order: the connect string's XUID lookup, a shader the KBZ build missed,
+   hunk page arithmetic, the script compiler and VM, weapon model arrays,
+   the unlockables table overrun, the script field tables and entity links.
+   Then the 3D renderer meets its first world frame.
 
 ---
 

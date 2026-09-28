@@ -355,21 +355,22 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
 1. ~~Convert the map zones~~ — done: `mp_nuked` and `en_mp_nuked` convert
    and validate, and `kBuildSteps` builds the world vertex buffers.
 2. ~~Depth, stencil and culling in the renderer~~ — done (stage 3).
-3. **Finish the LP64 work in the render path.** `rb_postfx.cpp` still has 42
-   pointer-truncation sites — 3 hard errors and 39 `int-to-pointer` warnings —
-   measured by compiling it with the build's own flags minus `-w`:
-
-   ```sh
-   aarch64-none-elf-g++ $(flags from build-nx/CMakeFiles/KisakBlack.dir/flags.make, without -w) \
-       -fsyntax-only -fmax-errors=0 src/gfx_d3d/rb_postfx.cpp
-   ```
-
-   `r_draw_staticmodel.cpp` indexes its draw stream as 32-bit words
-   (`*((unsigned int *)&drawStream + 10)`), the first shape in the table
-   above, and it is in code a map will run. Separately,
-   `src/gfx_d3d/r_water_sim.cpp:3336` and `src/EffectsCore/fx_beam.cpp:378` and
-   `:1008` index past the end of a four-element `unitVec[0].array` to reach
-   `unitVec[1]` — undefined everywhere, and on the map path.
+3. **Finish the LP64 work on the map path.** `rb_postfx.cpp`,
+   `r_draw_staticmodel.cpp`, `r_add_staticmodel.cpp` and `r_light.cpp` are
+   done and graduated. A scan of `gfx_d3d`, `EffectsCore`, `qcommon`,
+   `DynEntity`, `physics`, `glass` and `xanim` (the build's flags without
+   `-w`, plus `-Wint-to-pointer-cast`, one file at a time) still flags ~490
+   sites outside the `*_load_obj.cpp` BSP loaders, which fastfile maps never
+   run. Most are in `src/physics/` (`physics_system_internal.cpp` 89,
+   `phys_contact_manifold.cpp` 53, `phys_broad_phase.cpp` 37, `phys_main.cpp`
+   36), where the decompiler addressed structs as arrays of free-list nodes at
+   x86 offsets; fixing those means rewriting functions against the real
+   structs. Physics runs when dynamic entities move, ragdolls spawn or
+   destructibles break, not to load a map, so it waits for a crash to point at
+   it. Separately, `src/gfx_d3d/r_water_sim.cpp:3336` and
+   `src/EffectsCore/fx_beam.cpp:378` and `:1008` index past the end of a
+   four-element `unitVec[0].array` to reach `unitVec[1]` — undefined
+   everywhere, and on the map path.
 4. **Boot straight into a map.** `sdmc:/switch/kisakblack/cmdline.txt` is
    appended to the command line (`nx_main.cpp`), so a file holding
    `+devmap mp_nuked` skips the menus.

@@ -14,6 +14,7 @@
 // deferred offset ref. Correctness is self-checking: the final emulated block-4
 // cursor must equal XFileHeader.blockSize[4] exactly.
 #include "prelink.h"
+#include "layout_gen.h"   // x86 -> LP64 field maps, from layout/layout.sh
 #include <zlib.h>
 #include <unordered_map>
 #include <map>
@@ -73,6 +74,39 @@ static uint32_t b4Reserve(uint32_t param, uint32_t size, Prelink::Loc out,
                            g_curAsset, off, size, line);
     g_x86b4 += size;
     return off;
+}
+
+// Offset pointers (DB_ConvertOffsetToPointer) may name a place *inside* an
+// array: a portal's cell, an aabb tree's run of smodel indexes. g_b4map only
+// knows where each reservation starts, so reservations made through
+// b4ReserveRange also record how their x86 bytes map onto the output: a run
+// of records, x86 size xs each and LP64 size ls, or plain bytes (xs = ls = 1).
+// A reference into the middle of a record whose layout changed stays
+// unresolved rather than landing on the wrong field.
+struct B4Range { uint32_t size; Prelink::Loc out; uint32_t xs, ls; };
+static std::map<uint32_t, B4Range> g_b4ranges;   // x86 start -> range
+
+static uint32_t b4ReserveRange(uint32_t param, uint32_t size, Prelink::Loc out,
+                               uint32_t xs = 1, uint32_t ls = 1,
+                               int line = __builtin_LINE()) {
+    uint32_t off = b4Reserve(param, size, out, line);
+    if (out.valid() && size) g_b4ranges[off] = {size, out, xs, ls};
+    return off;
+}
+
+static bool resolveB4(uint32_t off, Prelink::Loc &out) {
+    auto it = g_b4map.find(off);
+    if (it != g_b4map.end()) { out = it->second; return true; }
+    auto r = g_b4ranges.upper_bound(off);
+    if (r == g_b4ranges.begin()) return false;
+    --r;
+    const B4Range &b = r->second;
+    uint32_t rel = off - r->first;
+    if (rel >= b.size) return false;
+    uint32_t i = rel / b.xs, w = rel % b.xs;
+    if (w && b.xs != b.ls) return false;
+    out = Prelink::Loc{b.out.blk, b.out.off + i * b.ls + w};
+    return true;
 }
 
 // ...but an asset's OWN struct never lands in block 4. Every Load_<T>Ptr
@@ -3673,6 +3707,941 @@ static void tEmblemSet(Reader &r, Prelink &z, Prelink::Loc obj) {
     }
 }
 
+// ---- map assets -------------------------------------------------------------
+// LP64 sizes and offsets from here on are the layout oracle's
+// (tools/ffconv/layout: layout.sh prints what the Switch compiler lays out).
+
+// Load_PhysPresetPtr / Load_PhysConstraintsPtr (db_load.cpp:2826/2905), for
+// callers other than XModel, which inlines the same thing.
+static void tPhysPresetHandle(Reader &r, Prelink &z, Prelink::Loc obj,
+                              uint32_t field, uint32_t tag, uint32_t x86slot = 0) {
+    if (tag == TAG_INLINE || tag == TAG_ALIAS) {
+        Prelink::Loc p = z.alloc(OUT, SZ_PHYSPRESET, 8);
+        tempReserve(84);
+        if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = p;
+        noteAliasSlot(x86slot, p);
+        tPhysPreset(r, z, p);
+        z.addAsset(AT_PHYSPRESET, p);
+        z.putPtr(obj, field, p);
+    } else if (tag != TAG_NULL) {
+        noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
+    }
+}
+
+static void tPhysConstraintsHandle(Reader &r, Prelink &z, Prelink::Loc obj,
+                                   uint32_t field, uint32_t tag, uint32_t x86slot = 0) {
+    if (tag == TAG_INLINE || tag == TAG_ALIAS) {
+        Prelink::Loc p = z.alloc(OUT, SZ_PHYSCONSTRAINTS, 8);
+        tempReserve(2696);
+        if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = p;
+        noteAliasSlot(x86slot, p);
+        tPhysConstraints(r, z, p);
+        z.addAsset(AT_PHYSCONSTRAINTS, p);
+        z.putPtr(obj, field, p);
+    } else if (tag != TAG_NULL) {
+        noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
+    }
+}
+
+// DestructibleDef: 24 -> 48, pieces[] 312 -> 496, stages[5] 48 -> 80.
+// Load_DestructibleDef (db_load.cpp:6307): name, model, pristineModel, then the
+// whole pieces[] block, then each piece's references -- its five stages' first,
+// stage by stage, then the piece's own.
+enum { AT_DESTRUCTIBLEDEF = 3, SZ_DESTRUCTIBLEDEF = 48, SZ_DPIECE = 496, SZ_DSTAGE = 80 };
+
+struct DStageTags { uint32_t fx, snd, notify, loop, model[3], preset; };
+struct DPieceTags { DStageTags stage[5]; uint32_t constraints, damageSnd, burnFx, burnSnd; };
+
+static void tDestructibleStageFixed(Reader &r, uint8_t *o, DStageTags &t) {
+    r.bytes(o, 16);                     // showBone, pad, breakHealth, maxTime, flags
+    t.fx = r.u32();
+    t.snd = r.u32();
+    t.notify = r.u32();
+    t.loop = r.u32();
+    for (int k = 0; k < 3; ++k) t.model[k] = r.u32();
+    t.preset = r.u32();
+}
+
+static void tDestructibleDef(Reader &r, Prelink &z, Prelink::Loc obj) {
+    uint32_t nameTag = r.u32(), modelTag = r.u32(), pristineTag = r.u32();
+    int32_t  numPieces = r.i32();
+    uint32_t piecesTag = r.u32();
+    int32_t  clientOnly = r.i32();
+    z.putI32(obj, 24, numPieces);
+    z.putI32(obj, 40, clientOnly);
+
+    putXStringFromTag(r, z, obj, 0, nameTag);
+    tXModelHandle(r, z, obj, 8, modelTag);
+    tXModelHandle(r, z, obj, 16, pristineTag);
+    if (piecesTag == TAG_NULL || numPieces <= 0) return;
+
+    const uint32_t n = (uint32_t)numPieces;
+    Prelink::Loc tbl = z.alloc(OUT, (size_t)n * SZ_DPIECE, 8);
+    const uint32_t x86 = b4Reserve(3, n * 312, tbl);
+    z.putPtr(obj, 32, tbl);
+
+    std::vector<DPieceTags> tags(n);
+    for (uint32_t p = 0; p < n; ++p) {
+        uint8_t *o = z.at(tbl) + p * SZ_DPIECE;
+        for (int s = 0; s < 5; ++s)
+            tDestructibleStageFixed(r, o + s * SZ_DSTAGE, tags[p].stage[s]);
+        r.bytes(o + 400, 28);           // parentPiece .. entityDamageTransfer
+        tags[p].constraints = r.u32();
+        r.bytes(o + 440, 4);            // health
+        tags[p].damageSnd = r.u32();
+        tags[p].burnFx = r.u32();
+        tags[p].burnSnd = r.u32();
+        r.bytes(o + 472, 24);           // enableLabel, pad, hideBones[5]
+    }
+
+    for (uint32_t p = 0; p < n; ++p) {
+        Prelink::Loc pc{tbl.blk, tbl.off + p * SZ_DPIECE};
+        const uint32_t px86 = x86 + p * 312;
+        for (int s = 0; s < 5; ++s) {
+            const DStageTags &t = tags[p].stage[s];
+            Prelink::Loc st{pc.blk, pc.off + (uint32_t)s * SZ_DSTAGE};
+            const uint32_t sx86 = px86 + (uint32_t)s * 48;
+            tFxEffectDefHandle(r, z, st, 16, t.fx, sx86 + 16);
+            putXStringFromTag(r, z, st, 24, t.snd);
+            putXStringFromTag(r, z, st, 32, t.notify);
+            putXStringFromTag(r, z, st, 40, t.loop);
+            for (int k = 0; k < 3; ++k)
+                tXModelHandle(r, z, st, 48 + 8 * k, t.model[k], sx86 + 32 + 4 * k);
+            tPhysPresetHandle(r, z, st, 72, t.preset, sx86 + 44);
+        }
+        tPhysConstraintsHandle(r, z, pc, 432, tags[p].constraints, px86 + 268);
+        putXStringFromTag(r, z, pc, 448, tags[p].damageSnd);
+        tFxEffectDefHandle(r, z, pc, 456, tags[p].burnFx, px86 + 280);
+        putXStringFromTag(r, z, pc, 464, tags[p].burnSnd);
+    }
+}
+
+// ComWorld: 64 -> 88. Load_ComWorld (db_load.cpp:4972): name, primaryLights[]
+// (220 -> 224, a trailing defName string each), waterCells[] (8, flat),
+// burnableCells[] (12 -> 16, each with 32 bytes of samples).
+enum { AT_COMWORLD = 13, SZ_COMWORLD = 88, SZ_COMPRIMARYLIGHT = 224, SZ_COMBURNCELL = 16 };
+
+static void tComWorld(Reader &r, Prelink &z, Prelink::Loc obj) {
+    uint32_t nameTag = r.u32();
+    uint8_t  inUseCount[8];             // isInUse, primaryLightCount
+    r.bytes(inUseCount, 8);
+    uint32_t lightsTag = r.u32();
+    uint8_t  water[20];                 // waterHeader, numWaterCells
+    r.bytes(water, 20);
+    uint32_t waterTag = r.u32();
+    uint8_t  burn[20];                  // burnableHeader, numBurnableCells
+    r.bytes(burn, 20);
+    uint32_t burnTag = r.u32();
+
+    uint8_t *o = z.at(obj);
+    memcpy(o + 8, inUseCount, 8);
+    memcpy(o + 24, water, 20);
+    memcpy(o + 56, burn, 20);
+    uint32_t nLights, nWater, nBurn;
+    memcpy(&nLights, inUseCount + 4, 4);
+    memcpy(&nWater, water + 16, 4);
+    memcpy(&nBurn, burn + 16, 4);
+
+    putXStringFromTag(r, z, obj, 0, nameTag);
+
+    if (lightsTag != TAG_NULL) {
+        Prelink::Loc tbl = z.alloc(OUT, (size_t)nLights * SZ_COMPRIMARYLIGHT + 1, 8);
+        b4Reserve(3, nLights * 220, tbl);
+        z.putPtr(obj, 16, tbl);
+        std::vector<uint32_t> defTags(nLights);
+        for (uint32_t i = 0; i < nLights; ++i) {
+            r.bytes(z.at(tbl) + i * SZ_COMPRIMARYLIGHT, 216);
+            defTags[i] = r.u32();
+        }
+        for (uint32_t i = 0; i < nLights; ++i)
+            putXStringFromTag(r, z, Prelink::Loc{tbl.blk, tbl.off + i * SZ_COMPRIMARYLIGHT},
+                              216, defTags[i]);
+    }
+
+    if (waterTag != TAG_NULL)
+        tFlatArray(r, z, obj, 48, nWater * 8, 3);
+
+    if (burnTag != TAG_NULL) {
+        Prelink::Loc tbl = z.alloc(OUT, (size_t)nBurn * SZ_COMBURNCELL + 1, 8);
+        b4Reserve(3, nBurn * 12, tbl);
+        z.putPtr(obj, 80, tbl);
+        std::vector<uint32_t> dataTags(nBurn);
+        for (uint32_t i = 0; i < nBurn; ++i) {
+            r.bytes(z.at(tbl) + i * SZ_COMBURNCELL, 8);     // x, y
+            dataTags[i] = r.u32();
+        }
+        for (uint32_t i = 0; i < nBurn; ++i) {
+            if (!dataTags[i]) continue;                     // AllocLoad_raw_byte, 32
+            Prelink::Loc d = z.alloc(OUT, 32, 1);
+            r.bytes(z.at(d), 32);
+            b4Reserve(0, 32, d);
+            z.putPtr(Prelink::Loc{tbl.blk, tbl.off + i * SZ_COMBURNCELL}, 8, d);
+        }
+    }
+}
+
+// ---- table-driven records ---------------------------------------------------
+// From here on struct layouts come from layout_gen.h: X_ offsets into the x86
+// record as the stream holds it, L_ offsets into the LP64 one, SPANS_ for the
+// pointer-free bytes. A transcoder reads a record raw, copies the spans, then
+// deals with each pointer by reading its tag at the X_ offset.
+
+static inline uint32_t rdX(const uint8_t *rec, uint32_t off) {
+    uint32_t v; memcpy(&v, rec + off, 4); return v;
+}
+static inline uint16_t rdX16(const uint8_t *rec, uint32_t off) {
+    uint16_t v; memcpy(&v, rec + off, 2); return v;
+}
+
+template <size_t N>
+static void remap(const LayoutSpan (&sp)[N], const uint8_t *src, uint8_t *dst) {
+    for (const LayoutSpan &s : sp)
+        if (s.n) memcpy(dst + s.l, src + s.x, s.n);
+}
+
+// An array of records read with one Load_Stream: the LP64 table, where its
+// x86 copy starts in block 4, and the raw x86 bytes for the pointer tags.
+struct RecArray {
+    Prelink::Loc tbl = Prelink::none();
+    uint32_t x86 = 0, n = 0, xs = 0, ls = 0;
+    std::vector<uint8_t> raw;
+    const uint8_t *x(uint32_t i) const { return raw.data() + (size_t)i * xs; }
+    Prelink::Loc at(uint32_t i) const { return Prelink::Loc{tbl.blk, tbl.off + i * ls}; }
+    uint32_t slot(uint32_t i, uint32_t xoff) const { return x86 + i * xs + xoff; }
+};
+
+template <size_t N>
+static RecArray tRecords(Reader &r, Prelink &z, uint32_t n, uint32_t xs, uint32_t ls,
+                         const LayoutSpan (&sp)[N], uint32_t allocParam, size_t align,
+                         int line = __builtin_LINE()) {
+    RecArray a;
+    a.n = n; a.xs = xs; a.ls = ls;
+    a.tbl = z.alloc(OUT, n ? (size_t)n * ls : 1, align);
+    a.x86 = b4ReserveRange(allocParam, n * xs, a.tbl, xs, ls, line);
+    a.raw.resize((size_t)n * xs);
+    if (n) r.bytes(a.raw.data(), a.raw.size());
+    for (uint32_t i = 0; i < n; ++i) remap(sp, a.x(i), z.at(a.at(i)));
+    return a;
+}
+#define RECS(T, n, param, align) \
+    tRecords(r, z, (n), X_sizeof_##T, L_sizeof_##T, SPANS_##T, (param), (align))
+
+// The same array hooked into obj.field (when its tag is non-null).
+#define RECS_AT(obj, field, tag, T, n, param, align)                        \
+    ([&]() {                                                                \
+        RecArray a_;                                                        \
+        if (tag) { a_ = RECS(T, n, param, align); z.putPtr(obj, field, a_.tbl); } \
+        return a_;                                                          \
+    }())
+
+// Pointer-free data, identical on both sides: bytes straight across.
+static Prelink::Loc tBytes(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
+                           uint32_t tag, uint32_t nbytes, uint32_t param, size_t align = 4,
+                           int line = __builtin_LINE()) {
+    if (!tag) return Prelink::none();
+    Prelink::Loc b = z.alloc(OUT, nbytes ? nbytes : 1, align);
+    if (nbytes) r.bytes(z.at(b), nbytes);
+    b4ReserveRange(param, nbytes, b, 1, 1, line);
+    z.putPtr(obj, field, b);
+    return b;
+}
+
+// -1 means the data follows; anything else non-null is an offset to data
+// already loaded (DB_ConvertOffsetToPointer).
+static void tBytesOrOffset(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
+                           uint32_t tag, uint32_t nbytes, uint32_t param, size_t align = 4) {
+    if (tag == TAG_INLINE) tBytes(r, z, obj, field, tag, nbytes, param, align);
+    else if (tag) putStructOffsetRef(z, obj, field, tag);
+}
+
+// Runtime-block data (DB_PushStreamPos(1)): nothing in the stream, nothing in
+// block 4; the loader hands it out zeroed. Sized for LP64.
+static void tRuntime(Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag,
+                     size_t lbytes, size_t align = 8) {
+    if (!tag) return;
+    z.putPtr(obj, field, z.alloc(ZEROBLK, lbytes ? lbytes : 1, align));
+}
+
+// Load_GfxLightDefPtr (db_load.cpp:2649).
+static void tGfxLightDefHandle(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
+                               uint32_t tag, uint32_t x86slot = 0) {
+    if (tag == TAG_INLINE || tag == TAG_ALIAS) {
+        Prelink::Loc p = z.alloc(OUT, SZ_LIGHTDEF, 8);
+        tempReserve(16);
+        if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = p;
+        noteAliasSlot(x86slot, p);
+        tGfxLightDef(r, z, p);
+        z.addAsset(AT_LIGHTDEF, p);
+        z.putPtr(obj, field, p);
+    } else if (tag) {
+        noteAliasSlot(x86slot, putAssetHandleRef(z, obj, field, tag));
+    }
+}
+
+// ---- gfx_map (17) -----------------------------------------------------------
+// GfxWorld: 1084 -> 1672. Load_GfxWorld (db_load.cpp:8525) and the loaders
+// it calls, in their order. GfxWorld's nested structs (draw, lightGrid, dpvs,
+// dpvsDyn, ...) come in with its own 1084 bytes; only what they point at is
+// read later. Vertex and layer buffers (Load_VertexBuffer) are device objects,
+// built on the Switch from vd.vertices / vld.data.
+enum { AT_GFXWORLD = 17 };
+
+static void tGfxCellRefs(Reader &r, Prelink &z, Prelink::Loc c, const uint8_t *cx);
+
+// Load_GfxPortal / Load_GfxPortalArray (db_load.cpp:7897).
+static void tGfxPortals(Reader &r, Prelink &z, Prelink::Loc cell, const uint8_t *cx) {
+    const uint32_t n = rdX(cx, X_GfxCell__portalCount);
+    RecArray a = RECS_AT(cell, L_GfxCell__portals, rdX(cx, X_GfxCell__portals),
+                         GfxPortal, n, 3, 8);
+    for (uint32_t i = 0; i < a.n; ++i) {
+        Prelink::Loc p = a.at(i);
+        const uint8_t *px = a.x(i);
+        uint32_t cellTag = rdX(px, X_GfxPortal__cell);
+        if (cellTag == TAG_INLINE) {                    // Load_GfxCell(1), one cell
+            RecArray one = RECS(GfxCell, 1, 3, 8);
+            z.putPtr(p, L_GfxPortal__cell, one.tbl);
+            tGfxCellRefs(r, z, one.at(0), one.x(0));
+        } else if (cellTag) {
+            putStructOffsetRef(z, p, L_GfxPortal__cell, cellTag);
+        }
+        tBytes(r, z, p, L_GfxPortal__vertices, rdX(px, X_GfxPortal__vertices),
+               12u * px[X_GfxPortal__vertexCount], 3);
+    }
+}
+
+// Load_GfxCell (db_load.cpp:7853), after the cell itself has been read.
+static void tGfxCellRefs(Reader &r, Prelink &z, Prelink::Loc c, const uint8_t *cx) {
+    RecArray trees = RECS_AT(c, L_GfxCell__aabbTree, rdX(cx, X_GfxCell__aabbTree),
+                             GfxAabbTree, rdX(cx, X_GfxCell__aabbTreeCount), 3, 8);
+    for (uint32_t i = 0; i < trees.n; ++i) {
+        const uint8_t *tx = trees.x(i);
+        tBytesOrOffset(r, z, trees.at(i), L_GfxAabbTree__smodelIndexes,
+                       rdX(tx, X_GfxAabbTree__smodelIndexes),
+                       2u * rdX16(tx, X_GfxAabbTree__smodelIndexCount), 1, 2);
+    }
+    tGfxPortals(r, z, c, cx);
+    tBytes(r, z, c, L_GfxCell__cullGroups, rdX(cx, X_GfxCell__cullGroups),
+           4u * rdX(cx, X_GfxCell__cullGroupCount), 3);
+    tBytes(r, z, c, L_GfxCell__reflectionProbes, rdX(cx, X_GfxCell__reflectionProbes),
+           cx[X_GfxCell__reflectionProbeCount], 0, 1);
+}
+
+static void tGfxWorld(Reader &r, Prelink &z, Prelink::Loc o) {
+    static_assert(X_sizeof_GfxWorld == 1084, "Load_GfxWorld reads 1084 bytes");
+    uint8_t X[X_sizeof_GfxWorld];
+    r.bytes(X, sizeof(X));
+    remap(SPANS_GfxWorld, X, z.at(o));
+    auto T = [&](uint32_t xoff) { return rdX(X, xoff); };
+
+    putXStringFromTag(r, z, o, L_GfxWorld__name, T(X_GfxWorld__name));
+    putXStringFromTag(r, z, o, L_GfxWorld__baseName, T(X_GfxWorld__baseName));
+
+    // Load_GfxWorldStreamInfo
+    tBytes(r, z, o, L_GfxWorld__streamInfo__aabbTrees, T(X_GfxWorld__streamInfo__aabbTrees),
+           X_sizeof_GfxStreamingAabbTree * T(X_GfxWorld__streamInfo__aabbTreeCount), 3);
+    tBytes(r, z, o, L_GfxWorld__streamInfo__leafRefs, T(X_GfxWorld__streamInfo__leafRefs),
+           4u * T(X_GfxWorld__streamInfo__leafRefCount), 3);
+
+    tBytes(r, z, o, L_GfxWorld__skyStartSurfs, T(X_GfxWorld__skyStartSurfs),
+           4u * T(X_GfxWorld__skySurfCount), 3);
+    tGfxImagePtr(r, z, o, L_GfxWorld__skyImage, T(X_GfxWorld__skyImage));
+    putXStringFromTag(r, z, o, L_GfxWorld__skyBoxModel, T(X_GfxWorld__skyBoxModel));
+
+    if (uint32_t tag = T(X_GfxWorld__sunLight)) {
+        if (tag == TAG_INLINE) {                         // AllocLoad_GfxPackedVertex0
+            RecArray sun = RECS(GfxLight, 1, 15, 16);
+            z.putPtr(o, L_GfxWorld__sunLight, sun.tbl);
+            tGfxLightDefHandle(r, z, sun.at(0), L_GfxLight__def, rdX(sun.x(0), X_GfxLight__def),
+                               sun.slot(0, X_GfxLight__def));
+        } else {
+            putStructOffsetRef(z, o, L_GfxWorld__sunLight, tag);
+        }
+    }
+
+    tBytes(r, z, o, L_GfxWorld__coronas, T(X_GfxWorld__coronas),
+           X_sizeof_GfxLightCorona * T(X_GfxWorld__coronaCount), 3);
+    tBytes(r, z, o, L_GfxWorld__shadowMapVolumes, T(X_GfxWorld__shadowMapVolumes),
+           X_sizeof_GfxShadowMapVolume * T(X_GfxWorld__shadowMapVolumeCount), 3);
+    tBytes(r, z, o, L_GfxWorld__shadowMapVolumePlanes, T(X_GfxWorld__shadowMapVolumePlanes),
+           X_sizeof_GfxVolumePlane * T(X_GfxWorld__shadowMapVolumePlaneCount), 3);
+    tBytes(r, z, o, L_GfxWorld__exposureVolumes, T(X_GfxWorld__exposureVolumes),
+           X_sizeof_GfxExposureVolume * T(X_GfxWorld__exposureVolumeCount), 3);
+    tBytes(r, z, o, L_GfxWorld__exposureVolumePlanes, T(X_GfxWorld__exposureVolumePlanes),
+           X_sizeof_GfxVolumePlane * T(X_GfxWorld__exposureVolumePlaneCount), 3);
+
+    // Load_GfxWorldDpvsPlanes
+    const uint32_t cellCount = T(X_GfxWorld__dpvsPlanes__cellCount);
+    tBytesOrOffset(r, z, o, L_GfxWorld__dpvsPlanes__planes, T(X_GfxWorld__dpvsPlanes__planes),
+                   X_sizeof_cplane_s * T(X_GfxWorld__planeCount), 3);
+    tBytes(r, z, o, L_GfxWorld__dpvsPlanes__nodes, T(X_GfxWorld__dpvsPlanes__nodes),
+           2u * T(X_GfxWorld__nodeCount), 1, 2);
+    tRuntime(z, o, L_GfxWorld__dpvsPlanes__sceneEntCellBits,
+             T(X_GfxWorld__dpvsPlanes__sceneEntCellBits), 4u * (cellCount << 9), 4);
+
+    {
+        RecArray cells = RECS_AT(o, L_GfxWorld__cells, T(X_GfxWorld__cells), GfxCell,
+                                 cellCount, 3, 8);
+        for (uint32_t i = 0; i < cells.n; ++i) tGfxCellRefs(r, z, cells.at(i), cells.x(i));
+    }
+
+    // Load_GfxWorldDraw
+    const uint32_t probeCount = T(X_GfxWorld__draw__reflectionProbeCount);
+    {
+        RecArray probes = RECS_AT(o, L_GfxWorld__draw__reflectionProbes,
+                                  T(X_GfxWorld__draw__reflectionProbes), GfxReflectionProbe,
+                                  probeCount, 3, 8);
+        for (uint32_t i = 0; i < probes.n; ++i) {
+            const uint8_t *px = probes.x(i);
+            tGfxImagePtr(r, z, probes.at(i), L_GfxReflectionProbe__reflectionImage,
+                         rdX(px, X_GfxReflectionProbe__reflectionImage),
+                         probes.slot(i, X_GfxReflectionProbe__reflectionImage));
+            tBytes(r, z, probes.at(i), L_GfxReflectionProbe__probeVolumes,
+                   rdX(px, X_GfxReflectionProbe__probeVolumes),
+                   X_sizeof_GfxReflectionProbeVolumeData *
+                       rdX(px, X_GfxReflectionProbe__probeVolumeCount), 3);
+        }
+    }
+    tRuntime(z, o, L_GfxWorld__draw__reflectionProbeTextures,
+             T(X_GfxWorld__draw__reflectionProbeTextures), (size_t)L_sizeof_GfxTexture * probeCount);
+    const uint32_t lightmapCount = T(X_GfxWorld__draw__lightmapCount);
+    {
+        RecArray lm = RECS_AT(o, L_GfxWorld__draw__lightmaps, T(X_GfxWorld__draw__lightmaps),
+                              GfxLightmapArray, lightmapCount, 3, 8);
+        for (uint32_t i = 0; i < lm.n; ++i) {
+            const uint8_t *lx = lm.x(i);
+            tGfxImagePtr(r, z, lm.at(i), L_GfxLightmapArray__primary,
+                         rdX(lx, X_GfxLightmapArray__primary), lm.slot(i, X_GfxLightmapArray__primary));
+            tGfxImagePtr(r, z, lm.at(i), L_GfxLightmapArray__secondary,
+                         rdX(lx, X_GfxLightmapArray__secondary), lm.slot(i, X_GfxLightmapArray__secondary));
+            tGfxImagePtr(r, z, lm.at(i), L_GfxLightmapArray__secondaryB,
+                         rdX(lx, X_GfxLightmapArray__secondaryB), lm.slot(i, X_GfxLightmapArray__secondaryB));
+        }
+    }
+    tRuntime(z, o, L_GfxWorld__draw__lightmapPrimaryTextures,
+             T(X_GfxWorld__draw__lightmapPrimaryTextures), (size_t)L_sizeof_GfxTexture * lightmapCount);
+    tRuntime(z, o, L_GfxWorld__draw__lightmapSecondaryTextures,
+             T(X_GfxWorld__draw__lightmapSecondaryTextures), (size_t)L_sizeof_GfxTexture * lightmapCount);
+    tRuntime(z, o, L_GfxWorld__draw__lightmapSecondaryTexturesB,
+             T(X_GfxWorld__draw__lightmapSecondaryTexturesB), (size_t)L_sizeof_GfxTexture * lightmapCount);
+    for (uint32_t i = 0; i < 31; ++i)                    // Load_GfxImagePtrArray(0, 31)
+        tGfxImagePtr(r, z, o, L_GfxWorld__draw__terrainScorchImages + 8 * i,
+                     T(X_GfxWorld__draw__terrainScorchImages + 4 * i));
+    tBytes(r, z, o, L_GfxWorld__draw__vd__vertices, T(X_GfxWorld__draw__vd__vertices),
+           X_sizeof_GfxWorldVertex * T(X_GfxWorld__draw__vertexCount), 3);
+    tBytes(r, z, o, L_GfxWorld__draw__vld__data, T(X_GfxWorld__draw__vld__data),
+           T(X_GfxWorld__draw__vertexLayerDataSize), 0, 1);
+    tBytes(r, z, o, L_GfxWorld__draw__indices, T(X_GfxWorld__draw__indices),
+           2u * T(X_GfxWorld__draw__indexCount), 1, 2);
+
+    // Load_GfxLightGrid
+    {
+        uint32_t axis = T(X_GfxWorld__lightGrid__rowAxis);
+        uint32_t rows = 0;
+        if (axis < 3)
+            rows = rdX16(X, X_GfxWorld__lightGrid__maxs + 2 * axis) -
+                   rdX16(X, X_GfxWorld__lightGrid__mins + 2 * axis) + 1u;
+        tBytes(r, z, o, L_GfxWorld__lightGrid__rowDataStart, T(X_GfxWorld__lightGrid__rowDataStart),
+               2u * rows, 1, 2);
+        tBytes(r, z, o, L_GfxWorld__lightGrid__rawRowData, T(X_GfxWorld__lightGrid__rawRowData),
+               T(X_GfxWorld__lightGrid__rawRowDataSize), 3);
+        tBytes(r, z, o, L_GfxWorld__lightGrid__entries, T(X_GfxWorld__lightGrid__entries),
+               X_sizeof_GfxLightGridEntry * T(X_GfxWorld__lightGrid__entryCount), 3);
+        tBytes(r, z, o, L_GfxWorld__lightGrid__colors, T(X_GfxWorld__lightGrid__colors),
+               X_sizeof_GfxCompressedLightGridColors * T(X_GfxWorld__lightGrid__colorCount), 3);
+    }
+
+    tBytes(r, z, o, L_GfxWorld__models, T(X_GfxWorld__models),
+           X_sizeof_GfxBrushModel * T(X_GfxWorld__modelCount), 3);
+    {
+        RecArray mm = RECS_AT(o, L_GfxWorld__materialMemory, T(X_GfxWorld__materialMemory),
+                              MaterialMemory, T(X_GfxWorld__materialMemoryCount), 3, 8);
+        for (uint32_t i = 0; i < mm.n; ++i)
+            tMaterialHandle(r, z, mm.at(i), L_MaterialMemory__material,
+                            rdX(mm.x(i), X_MaterialMemory__material),
+                            mm.slot(i, X_MaterialMemory__material));
+    }
+    tMaterialHandle(r, z, o, L_GfxWorld__sun__spriteMaterial, T(X_GfxWorld__sun__spriteMaterial));
+    tMaterialHandle(r, z, o, L_GfxWorld__sun__flareMaterial, T(X_GfxWorld__sun__flareMaterial));
+    tGfxImagePtr(r, z, o, L_GfxWorld__outdoorImage, T(X_GfxWorld__outdoorImage));
+
+    // Runtime scratch, all block 1.
+    const uint32_t dynModels = T(X_GfxWorld__dpvsDyn__dynEntClientCount);
+    const uint32_t dynBrushes = T(X_GfxWorld__dpvsDyn__dynEntClientCount + 4);
+    const uint32_t lightCount = T(X_GfxWorld__primaryLightCount);
+    const uint32_t nonSunLights = lightCount - (T(X_GfxWorld__sunPrimaryLightIndex) + 1);
+    tRuntime(z, o, L_GfxWorld__cellCasterBits, T(X_GfxWorld__cellCasterBits),
+             4u * cellCount * ((cellCount + 31) >> 5), 4);
+    tRuntime(z, o, L_GfxWorld__sceneDynModel, T(X_GfxWorld__sceneDynModel),
+             (size_t)L_sizeof_GfxSceneDynModel * dynModels, 4);
+    tRuntime(z, o, L_GfxWorld__sceneDynBrush, T(X_GfxWorld__sceneDynBrush),
+             (size_t)L_sizeof_GfxSceneDynBrush * dynBrushes, 4);
+    tRuntime(z, o, L_GfxWorld__primaryLightEntityShadowVis,
+             T(X_GfxWorld__primaryLightEntityShadowVis), 4u * (nonSunLights << 13), 4);
+    tRuntime(z, o, L_GfxWorld__primaryLightDynEntShadowVis,
+             T(X_GfxWorld__primaryLightDynEntShadowVis), 4u * dynModels * nonSunLights, 4);
+    tRuntime(z, o, L_GfxWorld__primaryLightDynEntShadowVis + 8,
+             T(X_GfxWorld__primaryLightDynEntShadowVis + 4), 4u * dynBrushes * nonSunLights, 4);
+    tRuntime(z, o, L_GfxWorld__nonSunPrimaryLightForModelDynEnt,
+             T(X_GfxWorld__nonSunPrimaryLightForModelDynEnt), dynModels, 1);
+
+    {
+        RecArray sg = RECS_AT(o, L_GfxWorld__shadowGeom, T(X_GfxWorld__shadowGeom),
+                              GfxShadowGeometry, lightCount, 3, 8);
+        for (uint32_t i = 0; i < sg.n; ++i) {
+            const uint8_t *gx = sg.x(i);
+            tBytes(r, z, sg.at(i), L_GfxShadowGeometry__sortedSurfIndex,
+                   rdX(gx, X_GfxShadowGeometry__sortedSurfIndex),
+                   2u * rdX16(gx, X_GfxShadowGeometry__surfaceCount), 1, 2);
+            tBytes(r, z, sg.at(i), L_GfxShadowGeometry__smodelIndex,
+                   rdX(gx, X_GfxShadowGeometry__smodelIndex),
+                   2u * rdX16(gx, X_GfxShadowGeometry__smodelCount), 1, 2);
+        }
+    }
+    {
+        RecArray lr = RECS_AT(o, L_GfxWorld__lightRegion, T(X_GfxWorld__lightRegion),
+                              GfxLightRegion, lightCount, 3, 8);
+        for (uint32_t i = 0; i < lr.n; ++i) {
+            const uint8_t *rx = lr.x(i);
+            RecArray hulls = RECS_AT(lr.at(i), L_GfxLightRegion__hulls,
+                                     rdX(rx, X_GfxLightRegion__hulls), GfxLightRegionHull,
+                                     rdX(rx, X_GfxLightRegion__hullCount), 3, 8);
+            for (uint32_t h = 0; h < hulls.n; ++h)
+                tBytes(r, z, hulls.at(h), L_GfxLightRegionHull__axis,
+                       rdX(hulls.x(h), X_GfxLightRegionHull__axis),
+                       X_sizeof_GfxLightRegionAxis * rdX(hulls.x(h), X_GfxLightRegionHull__axisCount), 3);
+        }
+    }
+
+    // Load_GfxWorldDpvsStatic
+    {
+        const uint32_t smodels = T(X_GfxWorld__dpvs__smodelCount);
+        const uint32_t surfs = T(X_GfxWorld__dpvs__staticSurfaceCount);
+        for (int k = 0; k < 3; ++k) {
+            tRuntime(z, o, L_GfxWorld__dpvs__smodelVisData + 8 * k,
+                     T(X_GfxWorld__dpvs__smodelVisData + 4 * k), smodels, 1);
+        }
+        for (int k = 0; k < 3; ++k) {
+            tRuntime(z, o, L_GfxWorld__dpvs__surfaceVisData + 8 * k,
+                     T(X_GfxWorld__dpvs__surfaceVisData + 4 * k), surfs, 1);
+        }
+        tRuntime(z, o, L_GfxWorld__dpvs__smodelVisDataCameraSaved,
+                 T(X_GfxWorld__dpvs__smodelVisDataCameraSaved), smodels, 1);
+        tRuntime(z, o, L_GfxWorld__dpvs__surfaceVisDataCameraSaved,
+                 T(X_GfxWorld__dpvs__surfaceVisDataCameraSaved), surfs, 1);
+        tRuntime(z, o, L_GfxWorld__dpvs__lodData, T(X_GfxWorld__dpvs__lodData),
+                 4u * 2u * T(X_GfxWorld__dpvs__smodelVisDataCount), 128);
+        tBytes(r, z, o, L_GfxWorld__dpvs__sortedSurfIndex, T(X_GfxWorld__dpvs__sortedSurfIndex),
+               2u * surfs, 1, 2);
+        tBytes(r, z, o, L_GfxWorld__dpvs__smodelInsts, T(X_GfxWorld__dpvs__smodelInsts),
+               X_sizeof_GfxStaticModelInst * smodels, 3);
+        {
+            RecArray sf = RECS_AT(o, L_GfxWorld__dpvs__surfaces, T(X_GfxWorld__dpvs__surfaces),
+                                  GfxSurface, T(X_GfxWorld__surfaceCount), 15, 16);
+            for (uint32_t i = 0; i < sf.n; ++i)
+                tMaterialHandle(r, z, sf.at(i), L_GfxSurface__material,
+                                rdX(sf.x(i), X_GfxSurface__material),
+                                sf.slot(i, X_GfxSurface__material));
+        }
+        tBytes(r, z, o, L_GfxWorld__dpvs__cullGroups, T(X_GfxWorld__dpvs__cullGroups),
+               X_sizeof_GfxCullGroup * T(X_GfxWorld__cullGroupCount), 3);
+        {
+            RecArray di = RECS_AT(o, L_GfxWorld__dpvs__smodelDrawInsts,
+                                  T(X_GfxWorld__dpvs__smodelDrawInsts), GfxStaticModelDrawInst,
+                                  smodels, 3, 8);
+            for (uint32_t i = 0; i < di.n; ++i)
+                tXModelHandle(r, z, di.at(i), L_GfxStaticModelDrawInst__model,
+                              rdX(di.x(i), X_GfxStaticModelDrawInst__model),
+                              di.slot(i, X_GfxStaticModelDrawInst__model));
+        }
+        tRuntime(z, o, L_GfxWorld__dpvs__surfaceMaterials, T(X_GfxWorld__dpvs__surfaceMaterials),
+                 (size_t)L_sizeof_GfxDrawSurf * surfs, 8);
+        tRuntime(z, o, L_GfxWorld__dpvs__surfaceCastsSunShadow,
+                 T(X_GfxWorld__dpvs__surfaceCastsSunShadow),
+                 4u * T(X_GfxWorld__dpvs__surfaceVisDataCount), 128);
+    }
+
+    // Load_GfxWorldDpvsDynamic
+    {
+        const uint32_t wc0 = T(X_GfxWorld__dpvsDyn__dynEntClientWordCount);
+        const uint32_t wc1 = T(X_GfxWorld__dpvsDyn__dynEntClientWordCount + 4);
+        tRuntime(z, o, L_GfxWorld__dpvsDyn__dynEntCellBits,
+                 T(X_GfxWorld__dpvsDyn__dynEntCellBits), 4u * cellCount * wc0, 4);
+        tRuntime(z, o, L_GfxWorld__dpvsDyn__dynEntCellBits + 8,
+                 T(X_GfxWorld__dpvsDyn__dynEntCellBits + 4), 4u * cellCount * wc1, 4);
+        // dynEntVisData[2][3]: [i][k] at (i * 3 + k)
+        for (int i = 0; i < 2; ++i)
+            for (int k = 0; k < 3; ++k)
+                tRuntime(z, o, L_GfxWorld__dpvsDyn__dynEntVisData + 8 * (i * 3 + k),
+                         T(X_GfxWorld__dpvsDyn__dynEntVisData + 4 * (i * 3 + k)),
+                         32u * (i ? wc1 : wc0), 16);
+    }
+
+    tBytes(r, z, o, L_GfxWorld__worldLodChains, T(X_GfxWorld__worldLodChains),
+           X_sizeof_GfxWorldLodChain * T(X_GfxWorld__worldLodChainCount), 3);
+    tBytes(r, z, o, L_GfxWorld__worldLodInfos, T(X_GfxWorld__worldLodInfos),
+           X_sizeof_GfxWorldLodInfo * T(X_GfxWorld__worldLodInfoCount), 3);
+    tBytes(r, z, o, L_GfxWorld__worldLodSurfaces, T(X_GfxWorld__worldLodSurfaces),
+           4u * T(X_GfxWorld__worldLodSurfaceCount), 3);
+    for (uint32_t i = 0; i < 2; ++i) {                   // Load_GfxWaterBufferArray(0, 2)
+        uint32_t size = T(X_GfxWorld__waterBuffers__bufferSize + i * X_sizeof_GfxWaterBuffer);
+        tBytes(r, z, o, L_GfxWorld__waterBuffers__buffer + i * L_sizeof_GfxWaterBuffer,
+               T(X_GfxWorld__waterBuffers__buffer + i * X_sizeof_GfxWaterBuffer),
+               16u * (size >> 4), 3);
+    }
+    tMaterialHandle(r, z, o, L_GfxWorld__waterMaterial, T(X_GfxWorld__waterMaterial));
+    tMaterialHandle(r, z, o, L_GfxWorld__coronaMaterial, T(X_GfxWorld__coronaMaterial));
+    tMaterialHandle(r, z, o, L_GfxWorld__ropeMaterial, T(X_GfxWorld__ropeMaterial));
+    tBytes(r, z, o, L_GfxWorld__occluders, T(X_GfxWorld__occluders),
+           X_sizeof_Occluder * T(X_GfxWorld__numOccluders), 3);
+    tBytes(r, z, o, L_GfxWorld__outdoorBounds, T(X_GfxWorld__outdoorBounds),
+           X_sizeof_GfxOutdoorBounds * T(X_GfxWorld__numOutdoorBounds), 3);
+    tBytes(r, z, o, L_GfxWorld__heroLights, T(X_GfxWorld__heroLights),
+           X_sizeof_GfxHeroLight * T(X_GfxWorld__heroLightCount), 3);
+    tBytes(r, z, o, L_GfxWorld__heroLightTree, T(X_GfxWorld__heroLightTree),
+           X_sizeof_GfxHeroLightTree * T(X_GfxWorld__heroLightTreeCount), 3);
+}
+
+// ---- game_map_mp (15) -------------------------------------------------------
+// GameWorldMp: 44 -> 88, a name and a PathData (Load_GameWorldMp,
+// db_load.cpp:3700). The node tree is a union per node: node indexes when
+// axis < 0, two child pointers otherwise (Load_pathnode_tree_info_t).
+enum { AT_GAMEWORLD_MP = 15 };
+
+static void tPathnodeTreeInfo(Reader &r, Prelink &z, Prelink::Loc t, const uint8_t *tx);
+
+// Load_pathnode_tree_t(1): one node, read where it stands.
+static Prelink::Loc tPathnodeTreeOne(Reader &r, Prelink &z) {
+    RecArray one = RECS(pathnode_tree_t, 1, 3, 8);
+    tPathnodeTreeInfo(r, z, one.at(0), one.x(0));
+    return one.tbl;
+}
+
+static void tPathnodeTreeInfo(Reader &r, Prelink &z, Prelink::Loc t, const uint8_t *tx) {
+    const uint32_t u = X_pathnode_tree_t__u, lu = L_pathnode_tree_t__u;
+    Prelink::Loc info{t.blk, t.off + lu};
+    if ((int32_t)rdX(tx, X_pathnode_tree_t__axis) < 0) {
+        uint32_t count = rdX(tx, u + X_pathnode_tree_nodes_t__nodeCount);
+        z.putU32(info, L_pathnode_tree_nodes_t__nodeCount, count);
+        tBytes(r, z, info, L_pathnode_tree_nodes_t__nodes,
+               rdX(tx, u + X_pathnode_tree_nodes_t__nodes), 2u * count, 1, 2);
+        return;
+    }
+    for (uint32_t k = 0; k < 2; ++k) {                   // Load_pathnode_tree_ptrArray(0, 2)
+        uint32_t tag = rdX(tx, u + 4 * k);
+        if (tag == TAG_INLINE) z.putPtr(info, 8 * k, tPathnodeTreeOne(r, z));
+        else if (tag) putStructOffsetRef(z, info, 8 * k, tag);
+    }
+}
+
+static void tGameWorldMp(Reader &r, Prelink &z, Prelink::Loc o) {
+    uint8_t X[X_sizeof_GameWorldMp];
+    r.bytes(X, sizeof(X));
+    remap(SPANS_GameWorldMp, X, z.at(o));
+    auto T = [&](uint32_t xoff) { return rdX(X, xoff); };
+
+    putXStringFromTag(r, z, o, L_GameWorldMp__name, T(X_GameWorldMp__name));
+
+    // Load_PathData (db_load.cpp:3631)
+    const uint32_t nodeCount = T(X_GameWorldMp__path__nodeCount);
+    {
+        RecArray nodes = RECS_AT(o, L_GameWorldMp__path__nodes, T(X_GameWorldMp__path__nodes),
+                                 pathnode_t, nodeCount + 128, 3, 8);
+        for (uint32_t i = 0; i < nodes.n; ++i) {
+            const uint8_t *nx = nodes.x(i);
+            tBytes(r, z, nodes.at(i), L_pathnode_t__constant__Links,
+                   rdX(nx, X_pathnode_t__constant__Links),
+                   X_sizeof_pathlink_s * rdX16(nx, X_pathnode_t__constant__totalLinkCount), 3);
+        }
+    }
+    tRuntime(z, o, L_GameWorldMp__path__basenodes, T(X_GameWorldMp__path__basenodes),
+             (size_t)L_sizeof_pathbasenode_t * (nodeCount + 128), 16);
+    tBytes(r, z, o, L_GameWorldMp__path__chainNodeForNode, T(X_GameWorldMp__path__chainNodeForNode),
+           2u * nodeCount, 1, 2);
+    tBytes(r, z, o, L_GameWorldMp__path__nodeForChainNode, T(X_GameWorldMp__path__nodeForChainNode),
+           2u * nodeCount, 1, 2);
+    tBytes(r, z, o, L_GameWorldMp__path__pathVis, T(X_GameWorldMp__path__pathVis),
+           T(X_GameWorldMp__path__visBytes), 0, 1);
+    {
+        RecArray trees = RECS_AT(o, L_GameWorldMp__path__nodeTree, T(X_GameWorldMp__path__nodeTree),
+                                 pathnode_tree_t, T(X_GameWorldMp__path__nodeTreeCount), 3, 8);
+        for (uint32_t i = 0; i < trees.n; ++i) tPathnodeTreeInfo(r, z, trees.at(i), trees.x(i));
+    }
+}
+
+// ---- col_map_mp (12) --------------------------------------------------------
+// clipMap_t: 332 -> 568. Load_clipMap_t (db_load.cpp:4570). Many of its
+// pointers are -1 for "one record follows" and otherwise an offset into an
+// array loaded before it (a brush's sides into brushsides, its verts into
+// brushVerts), which resolveB4 maps record by record.
+enum { AT_CLIPMAP_PVS = 12, AT_MAP_ENTS = 16 };
+
+// One cplane_s inline, or an offset to one (Load_cbrushside_t, Load_cNode_t).
+static void tPlaneRef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag) {
+    tBytesOrOffset(r, z, obj, field, tag, X_sizeof_cplane_s, 3);
+}
+
+static void tBrushSideRefs(Reader &r, Prelink &z, const RecArray &a) {
+    for (uint32_t i = 0; i < a.n; ++i)
+        tPlaneRef(r, z, a.at(i), L_cbrushside_t__plane, rdX(a.x(i), X_cbrushside_t__plane));
+}
+
+// Load_cbrush_t, after the brush records: sides and verts, each one record
+// inline or an offset.
+static void tBrushRefs(Reader &r, Prelink &z, const RecArray &a) {
+    for (uint32_t i = 0; i < a.n; ++i) {
+        const uint8_t *bx = a.x(i);
+        uint32_t sides = rdX(bx, X_cbrush_t__sides);
+        if (sides == TAG_INLINE) {
+            RecArray one = RECS(cbrushside_t, 1, 3, 8);
+            z.putPtr(a.at(i), L_cbrush_t__sides, one.tbl);
+            tBrushSideRefs(r, z, one);
+        } else if (sides) {
+            putStructOffsetRef(z, a.at(i), L_cbrush_t__sides, sides);
+        }
+        tBytesOrOffset(r, z, a.at(i), L_cbrush_t__verts, rdX(bx, X_cbrush_t__verts), 12, 3);
+    }
+}
+
+// Load_XModelPiecesPtr (db_load.cpp:3381).
+static void tXModelPiecesPtr(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag) {
+    if (tag != TAG_INLINE) {
+        if (tag) putStructOffsetRef(z, obj, field, tag);
+        return;
+    }
+    RecArray one = RECS(XModelPieces, 1, 3, 8);
+    z.putPtr(obj, field, one.tbl);
+    const uint8_t *px = one.x(0);
+    putXStringFromTag(r, z, one.at(0), L_XModelPieces__name, rdX(px, X_XModelPieces__name));
+    RecArray pieces = RECS_AT(one.at(0), L_XModelPieces__pieces, rdX(px, X_XModelPieces__pieces),
+                              XModelPiece, rdX(px, X_XModelPieces__numpieces), 3, 8);
+    for (uint32_t i = 0; i < pieces.n; ++i)
+        tXModelHandle(r, z, pieces.at(i), L_XModelPiece__model,
+                      rdX(pieces.x(i), X_XModelPiece__model), pieces.slot(i, X_XModelPiece__model));
+}
+
+// Load_MapEntsPtr (db_load.cpp:4318): an asset of its own.
+static void tMapEntsHandle(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag) {
+    if (tag == TAG_INLINE || tag == TAG_ALIAS) {
+        Prelink::Loc m = z.alloc(OUT, L_sizeof_MapEnts, 8);
+        tempReserve(X_sizeof_MapEnts);
+        if (tag == TAG_ALIAS) g_aliasMap[insertPointerSlot()] = m;
+        uint8_t X[X_sizeof_MapEnts];
+        r.bytes(X, sizeof(X));
+        remap(SPANS_MapEnts, X, z.at(m));
+        putXStringFromTag(r, z, m, L_MapEnts__name, rdX(X, X_MapEnts__name));
+        tBytes(r, z, m, L_MapEnts__entityString, rdX(X, X_MapEnts__entityString),
+               rdX(X, X_MapEnts__numEntityChars), 0, 1);
+        z.addAsset(AT_MAP_ENTS, m);
+        z.putPtr(obj, field, m);
+    } else if (tag) {
+        putAssetHandleRef(z, obj, field, tag);
+    }
+}
+
+static void tClipMap(Reader &r, Prelink &z, Prelink::Loc o) {
+    uint8_t X[X_sizeof_clipMap_t];
+    r.bytes(X, sizeof(X));
+    remap(SPANS_clipMap_t, X, z.at(o));
+    auto T = [&](uint32_t xoff) { return rdX(X, xoff); };
+    auto dynCount = [&](int k) { return (uint32_t)rdX16(X, X_clipMap_t__dynEntCount + 2 * k); };
+
+    putXStringFromTag(r, z, o, L_clipMap_t__name, T(X_clipMap_t__name));
+    tBytesOrOffset(r, z, o, L_clipMap_t__planes, T(X_clipMap_t__planes),
+                   X_sizeof_cplane_s * T(X_clipMap_t__planeCount), 3);
+    {
+        RecArray sm = RECS_AT(o, L_clipMap_t__staticModelList, T(X_clipMap_t__staticModelList),
+                              cStaticModel_s, T(X_clipMap_t__numStaticModels), 3, 8);
+        for (uint32_t i = 0; i < sm.n; ++i)
+            tXModelHandle(r, z, sm.at(i), L_cStaticModel_s__xmodel,
+                          rdX(sm.x(i), X_cStaticModel_s__xmodel), sm.slot(i, X_cStaticModel_s__xmodel));
+    }
+    tBytes(r, z, o, L_clipMap_t__materials, T(X_clipMap_t__materials),
+           X_sizeof_dmaterial_t * T(X_clipMap_t__numMaterials), 3);
+    tBrushSideRefs(r, z, RECS_AT(o, L_clipMap_t__brushsides, T(X_clipMap_t__brushsides),
+                                 cbrushside_t, T(X_clipMap_t__numBrushSides), 3, 8));
+    {
+        RecArray nodes = RECS_AT(o, L_clipMap_t__nodes, T(X_clipMap_t__nodes), cNode_t,
+                                 T(X_clipMap_t__numNodes), 3, 8);
+        for (uint32_t i = 0; i < nodes.n; ++i)
+            tPlaneRef(r, z, nodes.at(i), L_cNode_t__plane, rdX(nodes.x(i), X_cNode_t__plane));
+    }
+    tBytes(r, z, o, L_clipMap_t__leafs, T(X_clipMap_t__leafs),
+           X_sizeof_cLeaf_s * T(X_clipMap_t__numLeafs), 3);
+    tBytes(r, z, o, L_clipMap_t__leafbrushes, T(X_clipMap_t__leafbrushes),
+           2u * T(X_clipMap_t__numLeafBrushes), 1, 2);
+    {
+        // Load_cLeafBrushNode_t: data is the brush list's pointer when there
+        // are brushes, 12 bytes of child planes otherwise.
+        RecArray bn = RECS_AT(o, L_clipMap_t__leafbrushNodes, T(X_clipMap_t__leafbrushNodes),
+                              cLeafBrushNode_s, T(X_clipMap_t__leafbrushNodesCount), 3, 8);
+        for (uint32_t i = 0; i < bn.n; ++i) {
+            const uint8_t *nx = bn.x(i);
+            int16_t count = (int16_t)rdX16(nx, X_cLeafBrushNode_s__leafBrushCount);
+            if (count > 0)
+                tBytesOrOffset(r, z, bn.at(i), L_cLeafBrushNode_s__data,
+                               rdX(nx, X_cLeafBrushNode_s__data), 2u * count, 1, 2);
+            else
+                memcpy(z.at(bn.at(i)) + L_cLeafBrushNode_s__data, nx + X_cLeafBrushNode_s__data,
+                       XN_cLeafBrushNode_s__data);
+        }
+    }
+    tBytes(r, z, o, L_clipMap_t__leafsurfaces, T(X_clipMap_t__leafsurfaces),
+           4u * T(X_clipMap_t__numLeafSurfaces), 3);
+    tBytes(r, z, o, L_clipMap_t__verts, T(X_clipMap_t__verts), 12u * T(X_clipMap_t__vertCount), 3);
+    tBytes(r, z, o, L_clipMap_t__brushVerts, T(X_clipMap_t__brushVerts),
+           12u * T(X_clipMap_t__numBrushVerts), 3);
+    tBytes(r, z, o, L_clipMap_t__uinds, T(X_clipMap_t__uinds), 2u * T(X_clipMap_t__nuinds), 1, 2);
+    const uint32_t triCount = T(X_clipMap_t__triCount);
+    tBytes(r, z, o, L_clipMap_t__triIndices, T(X_clipMap_t__triIndices), 2u * 3u * triCount, 1, 2);
+    tBytes(r, z, o, L_clipMap_t__triEdgeIsWalkable, T(X_clipMap_t__triEdgeIsWalkable),
+           4u * ((3u * triCount + 31) >> 5), 0, 1);
+    tBytes(r, z, o, L_clipMap_t__borders, T(X_clipMap_t__borders),
+           X_sizeof_CollisionBorder * T(X_clipMap_t__borderCount), 3);
+    {
+        RecArray parts = RECS_AT(o, L_clipMap_t__partitions, T(X_clipMap_t__partitions),
+                                 CollisionPartition, T(X_clipMap_t__partitionCount), 3, 8);
+        for (uint32_t i = 0; i < parts.n; ++i)
+            tBytesOrOffset(r, z, parts.at(i), L_CollisionPartition__borders,
+                           rdX(parts.x(i), X_CollisionPartition__borders),
+                           X_sizeof_CollisionBorder, 3);
+    }
+    tBytes(r, z, o, L_clipMap_t__aabbTrees, T(X_clipMap_t__aabbTrees),
+           X_sizeof_CollisionAabbTree * T(X_clipMap_t__aabbTreeCount), 15, 16);
+    tBytes(r, z, o, L_clipMap_t__cmodels, T(X_clipMap_t__cmodels),
+           X_sizeof_cmodel_t * T(X_clipMap_t__numSubModels), 3);
+    tBrushRefs(r, z, RECS_AT(o, L_clipMap_t__brushes, T(X_clipMap_t__brushes), cbrush_t,
+                             T(X_clipMap_t__numBrushes), 15, 16));
+    tBytes(r, z, o, L_clipMap_t__visibility, T(X_clipMap_t__visibility),
+           T(X_clipMap_t__numClusters) * T(X_clipMap_t__clusterBytes), 0, 1);
+    tMapEntsHandle(r, z, o, L_clipMap_t__mapEnts, T(X_clipMap_t__mapEnts));
+    if (uint32_t tag = T(X_clipMap_t__box_brush)) {
+        if (tag == TAG_INLINE) {
+            RecArray one = RECS(cbrush_t, 1, 15, 16);
+            z.putPtr(o, L_clipMap_t__box_brush, one.tbl);
+            tBrushRefs(r, z, one);
+        } else {
+            putStructOffsetRef(z, o, L_clipMap_t__box_brush, tag);
+        }
+    }
+    for (uint32_t k = 0; k < 2; ++k) {
+        RecArray defs = RECS_AT(o, L_clipMap_t__dynEntDefList + 8 * k,
+                                T(X_clipMap_t__dynEntDefList + 4 * k), DynEntityDef,
+                                dynCount(k), 3, 8);
+        for (uint32_t i = 0; i < defs.n; ++i) {             // Load_DynEntityDef
+            const uint8_t *dx = defs.x(i);
+            Prelink::Loc d = defs.at(i);
+            tXModelHandle(r, z, d, L_DynEntityDef__xModel, rdX(dx, X_DynEntityDef__xModel),
+                          defs.slot(i, X_DynEntityDef__xModel));
+            tXModelHandle(r, z, d, L_DynEntityDef__destroyedxModel,
+                          rdX(dx, X_DynEntityDef__destroyedxModel),
+                          defs.slot(i, X_DynEntityDef__destroyedxModel));
+            tFxEffectDefHandle(r, z, d, L_DynEntityDef__destroyFx, rdX(dx, X_DynEntityDef__destroyFx),
+                               defs.slot(i, X_DynEntityDef__destroyFx));
+            tXModelPiecesPtr(r, z, d, L_DynEntityDef__destroyPieces,
+                             rdX(dx, X_DynEntityDef__destroyPieces));
+            tPhysPresetHandle(r, z, d, L_DynEntityDef__physPreset, rdX(dx, X_DynEntityDef__physPreset),
+                              defs.slot(i, X_DynEntityDef__physPreset));
+        }
+    }
+    for (uint32_t k = 0; k < 2; ++k) {
+        tRuntime(z, o, L_clipMap_t__dynEntPoseList + 8 * k, T(X_clipMap_t__dynEntPoseList + 4 * k),
+                 (size_t)L_sizeof_DynEntityPose * dynCount(k), 8);
+        tRuntime(z, o, L_clipMap_t__dynEntClientList + 8 * k, T(X_clipMap_t__dynEntClientList + 4 * k),
+                 (size_t)L_sizeof_DynEntityClient * dynCount(k), 8);
+        tRuntime(z, o, L_clipMap_t__dynEntServerList + 8 * k, T(X_clipMap_t__dynEntServerList + 4 * k),
+                 (size_t)L_sizeof_DynEntityServer * dynCount(2 + k), 8);
+    }
+    for (uint32_t k = 0; k < 4; ++k)
+        tRuntime(z, o, L_clipMap_t__dynEntCollList + 8 * k, T(X_clipMap_t__dynEntCollList + 4 * k),
+                 (size_t)L_sizeof_DynEntityColl * dynCount(k), 8);
+    {
+        RecArray pc = RECS_AT(o, L_clipMap_t__constraints, T(X_clipMap_t__constraints),
+                              PhysConstraint, T(X_clipMap_t__num_constraints), 3, 8);
+        for (uint32_t i = 0; i < pc.n; ++i) {               // Load_PhysConstraint
+            const uint8_t *cx = pc.x(i);
+            putXStringFromTag(r, z, pc.at(i), L_PhysConstraint__target_bone1,
+                              rdX(cx, X_PhysConstraint__target_bone1));
+            putXStringFromTag(r, z, pc.at(i), L_PhysConstraint__target_bone2,
+                              rdX(cx, X_PhysConstraint__target_bone2));
+            tMaterialHandle(r, z, pc.at(i), L_PhysConstraint__material,
+                            rdX(cx, X_PhysConstraint__material), pc.slot(i, X_PhysConstraint__material));
+        }
+    }
+    tRuntime(z, o, L_clipMap_t__ropes, T(X_clipMap_t__ropes),
+             (size_t)L_sizeof_rope_t * T(X_clipMap_t__max_ropes), 8);
+}
+
+// ---- glasses (41) -----------------------------------------------------------
+// Glasses: 56 -> 72 (Load_Glasses, db_load.cpp:9010). Each glass has its
+// GlassDef inline the first time and as an offset after that.
+enum { AT_GLASSES = 41 };
+
+static void tGlasses(Reader &r, Prelink &z, Prelink::Loc o) {
+    uint8_t X[X_sizeof_Glasses];
+    r.bytes(X, sizeof(X));
+    remap(SPANS_Glasses, X, z.at(o));
+    putXStringFromTag(r, z, o, L_Glasses__name, rdX(X, X_Glasses__name));
+    RecArray gl = RECS_AT(o, L_Glasses__glasses, rdX(X, X_Glasses__glasses), Glass,
+                          rdX(X, X_Glasses__numGlasses), 3, 8);
+    for (uint32_t i = 0; i < gl.n; ++i) {
+        const uint8_t *gx = gl.x(i);
+        uint32_t defTag = rdX(gx, X_Glass__glassDef);
+        if (defTag == TAG_INLINE) {                        // Load_GlassDef(1)
+            RecArray one = RECS(GlassDef, 1, 3, 8);
+            z.putPtr(gl.at(i), L_Glass__glassDef, one.tbl);
+            const uint8_t *dx = one.x(0);
+            Prelink::Loc d = one.at(0);
+            putXStringFromTag(r, z, d, L_GlassDef__name, rdX(dx, X_GlassDef__name));
+            tMaterialHandle(r, z, d, L_GlassDef__pristineMaterial,
+                            rdX(dx, X_GlassDef__pristineMaterial), one.slot(0, X_GlassDef__pristineMaterial));
+            tMaterialHandle(r, z, d, L_GlassDef__crackedMaterial,
+                            rdX(dx, X_GlassDef__crackedMaterial), one.slot(0, X_GlassDef__crackedMaterial));
+            tMaterialHandle(r, z, d, L_GlassDef__shardMaterial,
+                            rdX(dx, X_GlassDef__shardMaterial), one.slot(0, X_GlassDef__shardMaterial));
+            putXStringFromTag(r, z, d, L_GlassDef__crackSound, rdX(dx, X_GlassDef__crackSound));
+            putXStringFromTag(r, z, d, L_GlassDef__shatterShound, rdX(dx, X_GlassDef__shatterShound));
+            putXStringFromTag(r, z, d, L_GlassDef__autoShatterShound,
+                              rdX(dx, X_GlassDef__autoShatterShound));
+            tFxEffectDefHandle(r, z, d, L_GlassDef__crackEffect, rdX(dx, X_GlassDef__crackEffect),
+                               one.slot(0, X_GlassDef__crackEffect));
+            tFxEffectDefHandle(r, z, d, L_GlassDef__shatterEffect, rdX(dx, X_GlassDef__shatterEffect),
+                               one.slot(0, X_GlassDef__shatterEffect));
+        } else if (defTag) {
+            putStructOffsetRef(z, gl.at(i), L_Glass__glassDef, defTag);
+        }
+        tBytes(r, z, gl.at(i), L_Glass__outline, rdX(gx, X_Glass__outline),
+               8u * gx[X_Glass__numOutlineVerts], 3);
+    }
+}
+
+// Pointer-free structs copied with tBytes must be the same on both sides.
+static_assert(X_sizeof_pathlink_s == L_sizeof_pathlink_s, "");
+static_assert(X_sizeof_dmaterial_t == L_sizeof_dmaterial_t, "");
+static_assert(X_sizeof_cLeaf_s == L_sizeof_cLeaf_s, "");
+static_assert(X_sizeof_CollisionBorder == L_sizeof_CollisionBorder, "");
+static_assert(X_sizeof_CollisionAabbTree == L_sizeof_CollisionAabbTree, "");
+static_assert(X_sizeof_cmodel_t == L_sizeof_cmodel_t, "");
+static_assert(X_sizeof_GfxStreamingAabbTree == L_sizeof_GfxStreamingAabbTree, "");
+static_assert(X_sizeof_GfxLightCorona == L_sizeof_GfxLightCorona, "");
+static_assert(X_sizeof_GfxShadowMapVolume == L_sizeof_GfxShadowMapVolume, "");
+static_assert(X_sizeof_GfxVolumePlane == L_sizeof_GfxVolumePlane, "");
+static_assert(X_sizeof_GfxExposureVolume == L_sizeof_GfxExposureVolume, "");
+static_assert(X_sizeof_cplane_s == L_sizeof_cplane_s, "");
+static_assert(X_sizeof_GfxReflectionProbeVolumeData == L_sizeof_GfxReflectionProbeVolumeData, "");
+static_assert(X_sizeof_GfxWorldVertex == L_sizeof_GfxWorldVertex, "");
+static_assert(X_sizeof_GfxLightGridEntry == L_sizeof_GfxLightGridEntry, "");
+static_assert(X_sizeof_GfxCompressedLightGridColors == L_sizeof_GfxCompressedLightGridColors, "");
+static_assert(X_sizeof_GfxBrushModel == L_sizeof_GfxBrushModel, "");
+static_assert(X_sizeof_GfxLightRegionAxis == L_sizeof_GfxLightRegionAxis, "");
+static_assert(X_sizeof_GfxStaticModelInst == L_sizeof_GfxStaticModelInst, "");
+static_assert(X_sizeof_GfxCullGroup == L_sizeof_GfxCullGroup, "");
+static_assert(X_sizeof_GfxWorldLodChain == L_sizeof_GfxWorldLodChain, "");
+static_assert(X_sizeof_GfxWorldLodInfo == L_sizeof_GfxWorldLodInfo, "");
+static_assert(X_sizeof_Occluder == L_sizeof_Occluder, "");
+static_assert(X_sizeof_GfxOutdoorBounds == L_sizeof_GfxOutdoorBounds, "");
+static_assert(X_sizeof_GfxHeroLight == L_sizeof_GfxHeroLight, "");
+static_assert(X_sizeof_GfxHeroLightTree == L_sizeof_GfxHeroLightTree, "");
+
 int main(int argc, char **argv) {
     if (argc < 3) { fprintf(stderr, "usage: convert <in.ff> <out.kbz>\n"); return 1; }
     std::vector<uint8_t> file = readFile(argv[1]);
@@ -3723,6 +4692,16 @@ int main(int argc, char **argv) {
         fprintf(stderr, "zone has %u assets:\n", assetCount);
         for (const auto &kv : hist)
             fprintf(stderr, "  type %2u  x%d\n", kv.first, kv.second);
+        // Stream order, as runs: where each type first stops the converter.
+        fprintf(stderr, "order:");
+        for (uint32_t i = 0; i < assetCount;) {
+            uint32_t j = i;
+            while (j < assetCount && types[j] == types[i]) ++j;
+            fprintf(stderr, " [%u]%u", i, types[i]);
+            if (j - i > 1) fprintf(stderr, "x%u", j - i);
+            i = j;
+        }
+        fprintf(stderr, "\n");
     }
 
     // The XAsset array follows the script strings in block 4, so reserve it
@@ -3757,6 +4736,12 @@ int main(int argc, char **argv) {
         case AT_SOUND:       { Prelink::Loc o = z.alloc(OUT, SZ_SNDBANK, 8); tSndBank(r, z, o); z.addAsset(AT_SOUND, o); break; }
         case AT_SOUND_PATCH: { Prelink::Loc o = z.alloc(OUT, SZ_SNDPATCH, 8); tSndPatch(r, z, o); z.addAsset(AT_SOUND_PATCH, o); break; }
         case AT_EMBLEMSET:   { Prelink::Loc o = z.alloc(OUT, SZ_EMBLEMSET, 8); tEmblemSet(r, z, o); z.addAsset(AT_EMBLEMSET, o); break; }
+        case AT_DESTRUCTIBLEDEF: { Prelink::Loc o = z.alloc(OUT, SZ_DESTRUCTIBLEDEF, 8); tDestructibleDef(r, z, o); z.addAsset(AT_DESTRUCTIBLEDEF, o); break; }
+        case AT_COMWORLD:    { Prelink::Loc o = z.alloc(OUT, SZ_COMWORLD, 8); tComWorld(r, z, o); z.addAsset(AT_COMWORLD, o); break; }
+        case AT_GFXWORLD:    { Prelink::Loc o = z.alloc(OUT, L_sizeof_GfxWorld, 8); tGfxWorld(r, z, o); z.addAsset(AT_GFXWORLD, o); break; }
+        case AT_GAMEWORLD_MP: { Prelink::Loc o = z.alloc(OUT, L_sizeof_GameWorldMp, 8); tGameWorldMp(r, z, o); z.addAsset(AT_GAMEWORLD_MP, o); break; }
+        case AT_CLIPMAP_PVS: { Prelink::Loc o = z.alloc(OUT, L_sizeof_clipMap_t, 8); tClipMap(r, z, o); z.addAsset(AT_CLIPMAP_PVS, o); break; }
+        case AT_GLASSES:     { Prelink::Loc o = z.alloc(OUT, L_sizeof_Glasses, 8); tGlasses(r, z, o); z.addAsset(AT_GLASSES, o); break; }
         default:
             fprintf(stderr, "unsupported asset type %u at index %u (Stage 1 = rawfile/stringtable/localize)\n", types[i], i);
             return 3;
@@ -3776,8 +4761,8 @@ int main(int argc, char **argv) {
     // pass 2: resolve deferred block-4 offset refs against the emulated map
     int resolved = 0, missing = 0, firstBad = -1;
     for (const Deferred &d : g_deferred) {
-        auto it = g_b4map.find(d.x86off);
-        if (it != g_b4map.end()) { z.putPtr(d.obj, d.field, it->second); ++resolved; }
+        Prelink::Loc tgt;
+        if (resolveB4(d.x86off, tgt)) { z.putPtr(d.obj, d.field, tgt); ++resolved; }
         else {
             ++missing;
             if (firstBad < 0) firstBad = d.asset;
@@ -3829,7 +4814,7 @@ void Prelink::write(const char *path) {
     fwrite(magic, 1, 4, f); fwrite(&ver, 4, 1, f); fwrite(&nblk, 4, 1, f);
     fwrite(blkSize, 4, NBLOCK, f);
     fwrite(&rc, 4, 1, f); fwrite(&ac, 4, 1, f);
-    for (int i = 0; i < NBLOCK; ++i) if (!block[i].empty()) fwrite(block[i].data(), 1, block[i].size(), f);
+    for (int i = 0; i < NBLOCK; ++i) if (i != ZEROBLK && !block[i].empty()) fwrite(block[i].data(), 1, block[i].size(), f);
     for (auto &rl : relocs) { fwrite(&rl.slotBlk,1,1,f); fwrite(&rl.slotOff,4,1,f); fwrite(&rl.tgtBlk,1,1,f); fwrite(&rl.tgtOff,4,1,f); }
     for (auto &a : assets)  { fwrite(&a.type,4,1,f); fwrite(&a.blk,1,1,f); fwrite(&a.off,4,1,f); }
     fclose(f);

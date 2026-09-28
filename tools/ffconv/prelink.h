@@ -53,6 +53,11 @@ static const uint32_t TAG_INLINE = 0xFFFFFFFFu; // -1: data follows inline
 static const uint32_t TAG_ALIAS  = 0xFFFFFFFEu; // -2: back-reference
 
 // ------------------------------------------------------------ prelinked builder
+// Output block 1 mirrors the fastfile's runtime block (Load_Stream memsets it
+// instead of reading): its size goes in the header, its bytes never do, and
+// the loader starts it zeroed. Only zero-initialised arrays may live there.
+static const int ZEROBLK = 1;
+
 struct Prelink {
     static const int NBLOCK = 8;
     std::vector<uint8_t> block[NBLOCK];

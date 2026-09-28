@@ -48,7 +48,9 @@ int main(int argc, char **argv) {
     std::vector<uint8_t *> block(nblk);
     for (uint32_t i = 0; i < nblk; ++i) {
         block[i] = blkSize[i] ? (uint8_t *)malloc(blkSize[i]) : nullptr;
-        if (blkSize[i]) { memcpy(block[i], cur, blkSize[i]); cur += blkSize[i]; }
+        // block 1 is the runtime block: sized, never stored (prelink.h ZEROBLK)
+        if (blkSize[i] && i == 1) memset(block[i], 0, blkSize[i]);
+        else if (blkSize[i]) { memcpy(block[i], cur, blkSize[i]); cur += blkSize[i]; }
         if (blkSize[i]) printf("  block[%u] = %u bytes\n", i, blkSize[i]);
     }
 

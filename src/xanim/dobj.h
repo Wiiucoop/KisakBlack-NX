@@ -111,6 +111,10 @@ struct DObj // sizeof=0x7C
         };
 };
 
+// localModels holds numModels model pointers followed by numModels parent
+// bone bytes. nx-port: was 5 * n (4-byte x86 pointers).
+#define DOBJ_MODELS_SIZE(n) ((int)((sizeof(struct XModel *) + 1) * (n)))
+
 struct __declspec(align(2)) DObjModel_s // sizeof=0x8
 {                                                                             // XREF: DObjModel/r
                                                                                 // ?DObjArchive@@YAXPAUDObj@@@Z/r ...

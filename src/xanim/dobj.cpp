@@ -275,23 +275,21 @@ void __cdecl DObjCreate(
     }
     if ( !buf && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\xanim\\dobj.cpp", 756, 0, "%s", "obj") )
         __debugbreak();
-    memset(buf + 20, 0, 0x44u);
-    buf[8] = 0;
-    *((_WORD *)buf + 2) = 0;
-    *((unsigned int *)buf + 3) = 0;
-    *((unsigned int *)buf + 4) = 0;
-    *((_WORD *)buf + 3) = entnum;
-    *((unsigned int *)buf + 23) = 0;
-    *((unsigned int *)buf + 24) = 0;
-    *((unsigned int *)buf + 25) = 0;
-    *((unsigned int *)buf + 26) = 0;
-    *((unsigned int *)buf + 27) = 0;
+    // nx-port: was filled at x86 offsets (buf + 20, (unsigned int *)buf + 23, ...)
+    DObj *obj = (DObj *)buf;
+    memset(&obj->skel, 0, sizeof(obj->skel));
+    obj->duplicatePartsSize = 0;
+    obj->duplicateParts = 0;
+    obj->ignoreCollision = 0;
+    obj->locked = 0;
+    obj->entnum = entnum;
+    memset(obj->hidePartBits, 0, sizeof(obj->hidePartBits));
     DObjCreateDuplicateParts((DObj *)buf, dobjModels, numModels);
     DObjComputeBounds((DObj *)buf);
     DObjSetTree((DObj *)buf, tree);
-    buf[112] = -1;
-    *((unsigned int *)buf + 29) = 0;
-    buf[113] = 0;
+    obj->localClientIndex = -1;
+    obj->ikState = 0;
+    obj->flags = 0;
 }
 
 void __cdecl DObjCreateDuplicateParts(DObj *obj, DObjModel_s *dobjModels, unsigned int numModels)
@@ -419,8 +417,8 @@ void __cdecl DObjCreateDuplicateParts(DObj *obj, DObjModel_s *dobjModels, unsign
     {
         __debugbreak();
     }
-    obj->localModels = (XModel **)MT_Alloc(5 * numModels, 13, SCRIPTINSTANCE_SERVER);
-    memcpy((unsigned __int8 *)obj->localModels, (unsigned __int8 *)models, 4 * numModels);
+    obj->localModels = (XModel **)MT_Alloc(DOBJ_MODELS_SIZE(numModels), 13, SCRIPTINSTANCE_SERVER);   // nx-port: was 5 * n
+    memcpy((unsigned __int8 *)obj->localModels, (unsigned __int8 *)models, sizeof(XModel *) * numModels);
     memcpy((unsigned __int8 *)&obj->localModels[numModels], modelParents, numModels);
     if (numModels != (unsigned __int8)numModels
         && !Assert_MyHandler(
@@ -561,10 +559,10 @@ void __cdecl DObjCreateExt(
         DObjSetFlag((DObj *)buf, 1u, 1);
     if ( isLocalPlayer )
         DObjSetFlag((DObj *)buf, 2u, 1);
-    buf[112] = localClientIndex;
+    ((DObj *)buf)->localClientIndex = localClientIndex;   // nx-port: was buf[112]
     if ( tree )
         tree->inst = !DObjIsServer((const DObj *)buf);
-    *((unsigned int *)buf + 29) = 0;
+    ((DObj *)buf)->ikState = 0;   // nx-port: was (unsigned int *)buf + 29
 }
 
 void __cdecl DObjFree(DObj *obj)
@@ -578,7 +576,7 @@ void __cdecl DObjFree(DObj *obj)
     models = obj->localModels;
     if ( models )
     {
-        MT_Free((unsigned char*)models, 5 * obj->numModels, SCRIPTINSTANCE_SERVER);
+        MT_Free((unsigned char*)models, DOBJ_MODELS_SIZE(obj->numModels), SCRIPTINSTANCE_SERVER);
         obj->localModels = 0;
     }
     obj->numModels = 0;
@@ -804,7 +802,7 @@ void __cdecl DObjUnarchive(DObj *obj)
         model->model = savedObj.models[modelIndex];
         model->ignoreCollision = (savedObj.ignoreCollision & (1 << modelIndex)) != 0;
     }
-    MT_Free((_BYTE *)savedObj.models, 5 * savedObj.numModels, SCRIPTINSTANCE_SERVER);
+    MT_Free((_BYTE *)savedObj.models, DOBJ_MODELS_SIZE(savedObj.numModels), SCRIPTINSTANCE_SERVER);
     DObjCreateExt(
         dobjModels,
         savedObj.numModels,

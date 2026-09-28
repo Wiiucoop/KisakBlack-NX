@@ -1,0 +1,129 @@
+# Structs layoutgen maps from x86 to LP64 (see layoutgen.cpp).
+#   include <header>        compiled into the probe
+#   opaque  Struct.member   not a pointer to the parser, but holds one
+#   Name                    a struct to parse, in the order layout_gen.h lists it
+include physics/destructible.h
+include qcommon/com_bsp.h
+include gfx_d3d/r_bsp.h
+include gfx_d3d/r_dpvs.h
+include gfx_d3d/r_scene.h
+include gfx_d3d/r_reflection_probe.h
+include gfx_d3d/r_pointlights.h
+include gfx_d3d/r_primarylights.h
+include gfx_d3d/r_material.h
+include game/g_bsp.h
+include qcommon/cm_trace.h
+include qcommon/cm_staticmodel.h
+include DynEntity/DynEntity_client.h
+include DynEntity/DynEntity_coll.h
+include DynEntity/DynEntity_pieces.h
+include physics/rope.h
+include glass/glass.h
+include xanim/xmodel.h
+include physics/physconstraints_load_obj.h
+include DynEntity/DynEntity_load_obj.h
+include qcommon/cm_load_obj.h
+
+opaque pathnode_tree_t.u
+opaque cLeafBrushNode_s.data
+
+# ---- destructibledef (3) ----
+DestructibleStage
+DestructiblePiece
+DestructibleDef
+
+# ---- com_map (13) ----
+ComPrimaryLight
+ComBurnableCell
+ComWorld
+
+# ---- gfx_map (17) ----
+GfxWorld
+GfxWorldStreamInfo
+GfxStreamingAabbTree
+GfxLight
+GfxLightCorona
+GfxShadowMapVolume
+GfxVolumePlane
+GfxExposureVolume
+GfxWorldDpvsPlanes
+cplane_s
+GfxCell
+GfxAabbTree
+GfxPortal
+GfxPortalWritable
+GfxWorldDraw
+GfxReflectionProbe
+GfxReflectionProbeVolumeData
+GfxTexture
+GfxLightmapArray
+GfxWorldVertexData
+GfxWorldVertexLayerData
+GfxWorldVertex
+GfxLightGrid
+GfxLightGridEntry
+GfxCompressedLightGridColors
+GfxBrushModel
+MaterialMemory
+sunflare_t
+GfxSceneDynModel
+GfxSceneDynBrush
+GfxShadowGeometry
+GfxLightRegion
+GfxLightRegionHull
+GfxLightRegionAxis
+GfxWorldDpvsStatic
+GfxStaticModelInst
+GfxSurface
+GfxCullGroup
+GfxStaticModelDrawInst
+GfxDrawSurf
+GfxWorldDpvsDynamic
+GfxWorldLodChain
+GfxWorldLodInfo
+GfxWaterBuffer
+Occluder
+GfxOutdoorBounds
+GfxHeroLight
+GfxHeroLightTree
+
+# ---- game_map_mp (15) ----
+GameWorldMp
+PathData
+pathnode_t
+pathnode_constant_t
+pathnode_dynamic_t
+pathnode_transient_t
+pathlink_s
+pathbasenode_t
+pathnode_tree_t
+pathnode_tree_nodes_t
+
+# ---- col_map_mp (12) ----
+clipMap_t
+cStaticModel_s
+dmaterial_t
+cbrushside_t
+cNode_t
+cLeaf_s
+cLeafBrushNode_s
+CollisionBorder
+CollisionPartition
+CollisionAabbTree
+cmodel_t
+cbrush_t
+MapEnts
+DynEntityDef
+DynEntityPose
+DynEntityClient
+DynEntityServer
+DynEntityColl
+PhysConstraint
+rope_t
+XModelPieces
+XModelPiece
+
+# ---- glasses (41) ----
+Glasses
+Glass
+GlassDef

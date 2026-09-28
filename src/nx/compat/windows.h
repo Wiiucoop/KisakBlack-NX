@@ -279,6 +279,9 @@ static inline LONGLONG InterlockedIncrement64(volatile LONGLONG *p) { return __a
 #ifdef __cplusplus
 // call sites also spell the argument as (volatile long*) / (volatile unsigned
 // int*); Win32 LONG semantics are 32-bit either way on this codebase.
+// Under ILP32 (the converter's layout oracle, tools/ffconv/layout) LONG *is*
+// long, and these would redefine the ones above.
+#ifdef __LP64__
 static inline LONG InterlockedIncrement(volatile long *p)  { return InterlockedIncrement((volatile LONG *)p); }
 static inline LONG InterlockedDecrement(volatile long *p)  { return InterlockedDecrement((volatile LONG *)p); }
 static inline LONG InterlockedExchange(volatile long *p, long v) { return InterlockedExchange((volatile LONG *)p, (LONG)v); }
@@ -287,6 +290,7 @@ static inline LONG InterlockedCompareExchange(volatile long *p, long exchange, l
 {
     return InterlockedCompareExchange((volatile LONG *)p, (LONG)exchange, (LONG)comparand);
 }
+#endif
 static inline LONG InterlockedIncrement(volatile unsigned int *p)  { return InterlockedIncrement((volatile LONG *)p); }
 static inline LONG InterlockedDecrement(volatile unsigned int *p)  { return InterlockedDecrement((volatile LONG *)p); }
 static inline LONG InterlockedExchange(volatile unsigned int *p, unsigned int v) { return InterlockedExchange((volatile LONG *)p, (LONG)v); }

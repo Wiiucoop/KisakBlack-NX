@@ -32,7 +32,9 @@ struct cplane_s // sizeof=0x14
 };
 
 
-struct float44 // sizeof=0x40
+// 16-byte aligned, as MSVC laid it out: GfxLight (its only user) pads 4 bytes
+// before viewMatrix, and the fastfiles store GfxLight that way.
+struct alignas(16) float44 // sizeof=0x40
 {                                                                             // XREF: GfxLight/r GfxLight/r
         //$ED5082F4EF9C51C3CAAE283CF5E38ECF ___u0;
         union// $ED5082F4EF9C51C3CAAE283CF5E38ECF // sizeof=0x40

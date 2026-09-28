@@ -36,15 +36,12 @@ void XAnimClientNotifyList::AddNotify(const ClientNotifyData *notifyData)
     if ( this->m_numNotifies < 64 )
     {
         for ( iInsertLoc = this->m_numNotifies - 1;
-                    iInsertLoc >= 0 && notifyData->timeFrac < *(float *)&this->m_clientNotifyMemory[24 * iInsertLoc + 20];
+                    iInsertLoc >= 0 && notifyData->timeFrac < Notify(iInsertLoc)->timeFrac;   // nx-port: was [24 * i + 20]
                     --iInsertLoc )
         {
-            //XAnimClientNotify::swap(
-            //    (XAnimClientNotify *)this + iInsertLoc,
-            //    (XAnimClientNotify *)&this->m_clientNotifyMemory[24 * iInsertLoc + 24]);
-            ((XAnimClientNotify *)this + iInsertLoc)->swap((XAnimClientNotify *)&this->m_clientNotifyMemory[24 * iInsertLoc + 24]);
+            Notify(iInsertLoc)->swap(Notify(iInsertLoc + 1));
         }
-        v3 = (XAnimClientNotify *)&this->m_clientNotifyMemory[24 * iInsertLoc + 24];
+        v3 = Notify(iInsertLoc + 1);
         if (v3)
         {
             //XAnimClientNotify::XAnimClientNotify(v3, notifyData);

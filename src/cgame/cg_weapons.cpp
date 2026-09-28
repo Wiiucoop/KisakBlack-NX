@@ -3555,7 +3555,7 @@ void __cdecl ProcessWeaponNoteTracks(int localClientNum, const playerState_s *pr
             for ( i = 0; i < noteListSize; ++i )
             {
                 //notify = (XAnimClientNotify *)((char *)XAnimClientNotifyList::GetNotifyList(pNotifyList) + 24 * i);
-                notify = (XAnimClientNotify *)((char *)pNotifyList->GetNotifyList() + 24 * i);
+                notify = pNotifyList->GetNotifyList()->Notify(i);   // nx-port: was + 24 * i (x86 size)
                 //NotifyStringName = XAnimClientNotify::GetNotifyStringName(notify);
                 NotifyStringName = notify->GetNotifyStringName();
                 if ( I_stricmp(NotifyStringName, "end") )

@@ -105,7 +105,7 @@ void __cdecl CG_RegisterVehicle(const char *name, __int16 index)
         sprintf(string, "vehicles/%s", name);
         pszBuffer = Com_LoadInfoString(string, "vehicle file", "VEHICLEFILE", loadBuffer);
         dst = (unsigned __int8 *)&bg_vehicleInfos[index];
-        memset(dst, 0, 0x1DD8u);
+        memset(dst, 0, sizeof(vehicle_info_t));   // nx-port: was 0x1DD8 (x86)
         v6 = name;
         v5 = dst;
         HIDWORD(v4) = (int)dst;

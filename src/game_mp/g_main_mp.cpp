@@ -553,7 +553,7 @@ gclient_s *__cdecl G_GetPlayerState(unsigned int clientNum)
 
 int __cdecl G_GetClientSize()
 {
-    return 10720;
+    return sizeof(gclient_s);   // nx-port: was 10720 (x86)
 }
 
 void __cdecl G_FreeEntities(bool clearTargets)
@@ -855,7 +855,7 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
     level.num_entities = 44;
     level.firstFreeEnt = 0;
     level.lastFreeEnt = 0;
-    SV_LocateGameData(level.gentities, level.num_entities, 760, &level.clients->ps, 10720);
+    SV_LocateGameData(level.gentities, level.num_entities, sizeof(gentity_s), &level.clients->ps, sizeof(gclient_s));   // nx-port: was 760, 10720 (x86)
 
     G_ParseHitLocDmgTable();
     BG_LoadPenetrationDepthTable();

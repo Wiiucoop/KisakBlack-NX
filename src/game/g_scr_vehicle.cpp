@@ -3037,7 +3037,7 @@ int __cdecl G_LoadVehicle(char *name)
         pszBuffer = Com_LoadInfoString(string, "vehicle file", "VEHICLEFILE", loadBuffer);
         index = bg_numVehicleInfos;
         dst = (unsigned __int8 *)BG_GetVehicleInfo(bg_numVehicleInfos);
-        memset(dst, 0, 0x1DD8u);
+        memset(dst, 0, sizeof(vehicle_info_t));   // nx-port: was 0x1DD8 (x86)
         v6 = name;
         v5 = dst;
         HIDWORD(v4) = dst;
@@ -3153,7 +3153,7 @@ int __cdecl G_LoadVehicle(char *name)
 
     vehicle = (unsigned char *)BG_GetVehicleInfo(index);
 
-    memset(vehicle, 0, 0x1DD8);
+    memset(vehicle, 0, sizeof(vehicle_info_t));   // nx-port: was 0x1DD8 (x86)
 
     /* first field is vehicle name string */
     strcpy((char *)vehicle, name);

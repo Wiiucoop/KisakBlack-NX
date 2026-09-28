@@ -374,8 +374,10 @@ are silent and need reading:
 - **Literal x86 sizes**: `MT_Alloc(112, ...)` for a struct with pointers,
   `Hunk_UserAlloc(..., 4 * size, ...)` for sval_u nodes, `2048` for 512
   pointers, `alloc(9)` / `alloc(strlen(name) + 10)` for a `fileData_s` header
-  (corrupted the hunk's file list; crashed at the next hunk clear). Use
-  `sizeof` / `offsetof`.
+  (corrupted the hunk's file list; crashed at the next hunk clear),
+  `SV_LocateGameData(..., 760, ..., 10720)` (entity lookups by number landed
+  mid-entity), `0x1DD8` for `vehicle_info_t`, `24 * i` over
+  `XAnimClientNotify`. Use `sizeof` / `offsetof`.
 - **Script field tables with x86 offsets** (`{ "classname", 356, ... }`).
   Map each literal to its member with the layoutgen loose dump:
   `LAYOUTGEN_LOOSE=1 STRUCTS=tools/nx/fields_structs.txt OUT=fields_gen.h
@@ -471,7 +473,7 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    hunk page arithmetic, the script compiler and VM, weapon model arrays,
    the unlockables table overrun, the script field tables and entity links,
    script strings in the KBZ (the map's traverse scripts), the hunk's
-   `fileData_s` headers. Then the 3D renderer meets its first world frame.
+   `fileData_s` headers, the game entity and client sizes. Then the 3D renderer meets its first world frame.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

@@ -8,6 +8,7 @@
 #include "r_model_lighting.h"
 #include "r_xsurface.h"
 #include "r_staticmodelcache.h"
+#include "r_add_staticmodel.h"   // R_ReadPrimDrawSurfPtr
 #include <xanim/xmodel_utils.h>
 
 void __cdecl R_DrawStaticModelSurfLit(
@@ -23,7 +24,7 @@ void __cdecl R_DrawStaticModelSurfLit(
     drawStream.dynSModelView = 0;
     drawStream.dynSModelState = 0;
     data = context.source->input.data;
-    *((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+    drawStream.viewInfoIndex = 0;   // nx-port: was word 10 &= ~3, the x86 offset of this bitfield
     drawStream.primDrawSurfPos = primDrawSurfPos;
     drawStream.reflectionProbeTexture = context.state->samplerTexture[15];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
@@ -53,9 +54,9 @@ int __cdecl R_GetNextStaticModelSurf(GfxStaticModelDrawStream *drawStream, XSurf
     if ( !drawStream->smodelCount )
         return 0;
     primDrawSurfPos = drawStream->primDrawSurfPos;
-    drawStream->primDrawSurfPos += ((drawStream->smodelCount + 1) >> 1) + 1;
-    xsurf = (XSurface *)*primDrawSurfPos;
-    drawStream->smodelList = (const unsigned __int16 *)(primDrawSurfPos + 1);
+    drawStream->primDrawSurfPos += ((drawStream->smodelCount + 1) >> 1) + R_PRIM_PTR_WORDS;
+    xsurf = (XSurface *)R_ReadPrimDrawSurfPtr(primDrawSurfPos);
+    drawStream->smodelList = (const unsigned __int16 *)(primDrawSurfPos + R_PRIM_PTR_WORDS);
     drawStream->localSurf = xsurf;
     if ( drawStream->primStats )
     {
@@ -89,7 +90,7 @@ void __cdecl R_DrawStaticModelSurf(
     drawStream.dynSModelView = 0;
     drawStream.dynSModelState = 0;
     data = context.source->input.data;
-    *((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+    drawStream.viewInfoIndex = 0;   // nx-port: was word 10 &= ~3, the x86 offset of this bitfield
     drawStream.primDrawSurfPos = primDrawSurfPos;
     drawStream.reflectionProbeTexture = context.state->samplerTexture[15];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
@@ -290,7 +291,7 @@ void __cdecl R_DrawStaticModelSkinnedSurfLit(
     drawStream.dynSModelState = 0;
     R_SetupPassPerObjectArgs(context);
     data = context.source->input.data;
-    *((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+    drawStream.viewInfoIndex = 0;   // nx-port: was word 10 &= ~3, the x86 offset of this bitfield
     drawStream.primDrawSurfPos = primDrawSurfPos;
     drawStream.reflectionProbeTexture = context.state->samplerTexture[15];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
@@ -397,7 +398,7 @@ void __cdecl R_DrawStaticModelSkinnedSurf(
     drawStream.dynSModelState = 0;
     R_SetupPassPerObjectArgs(context);
     data = context.source->input.data;
-    *((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+    drawStream.viewInfoIndex = 0;   // nx-port: was word 10 &= ~3, the x86 offset of this bitfield
     drawStream.primDrawSurfPos = primDrawSurfPos;
     drawStream.reflectionProbeTexture = context.state->samplerTexture[15];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
@@ -488,7 +489,7 @@ void __cdecl R_DrawStaticModelCachedSurfLit(const unsigned int *primDrawSurfPos,
     R_SetupCachedStaticModelLighting(context.source);
     R_SetupPassPerObjectArgs(context);
     data = context.source->input.data;
-    *((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+    drawStream.viewInfoIndex = 0;   // nx-port: was word 10 &= ~3, the x86 offset of this bitfield
     drawStream.primDrawSurfPos = primDrawSurfPos;
     drawStream.reflectionProbeTexture = context.state->samplerTexture[15];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
@@ -513,7 +514,8 @@ int __cdecl R_GetNextStaticModelCachedSurf(GfxStaticModelDrawStream *drawStream)
     ++drawStream->primDrawSurfPos;
     if ( !drawStream->smodelCount )
         return 0;
-    xsurf = (XSurface *)*drawStream->primDrawSurfPos++;
+    xsurf = (XSurface *)R_ReadPrimDrawSurfPtr(drawStream->primDrawSurfPos);
+    drawStream->primDrawSurfPos += R_PRIM_PTR_WORDS;
     drawStream->smodelList = (const unsigned __int16 *)drawStream->primDrawSurfPos;
     drawStream->primDrawSurfPos += (drawStream->smodelCount + 1) >> 1;
     smodelDrawInst = &rgp.world->dpvs.smodelDrawInsts[R_GetCachedSModelSurf(*drawStream->smodelList)->cachedSurf.smodelIndex];
@@ -636,7 +638,7 @@ void __cdecl R_DrawStaticModelCachedSurf(const unsigned int *primDrawSurfPos, Gf
     drawStream.dynSModelState = 0;
     R_SetupPassPerObjectArgs(context);
     data = context.source->input.data;
-    *((unsigned int *)&drawStream + 10) &= 0xFFFFFFFC;
+    drawStream.viewInfoIndex = 0;   // nx-port: was word 10 &= ~3, the x86 offset of this bitfield
     drawStream.primDrawSurfPos = primDrawSurfPos;
     drawStream.reflectionProbeTexture = context.state->samplerTexture[15];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;

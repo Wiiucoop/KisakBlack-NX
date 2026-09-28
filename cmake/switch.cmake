@@ -125,6 +125,10 @@ list(APPEND NX_SANITIZED_SOURCES
     "${SRC_DIR}/gfx_d3d/rb_backend.cpp"              # back end: render thread, command execution
     "${SRC_DIR}/qcommon/threads.cpp"                 # thread layer, incl. the SMP handoff slot
     "${SRC_DIR}/universal/com_expressions.cpp"       # menu expression parser / RPN compiler
+    "${SRC_DIR}/gfx_d3d/rb_postfx.cpp"               # post effects, superflare matrices
+    "${SRC_DIR}/gfx_d3d/r_draw_staticmodel.cpp"      # static model draw streams
+    "${SRC_DIR}/gfx_d3d/r_add_staticmodel.cpp"       # static model draw stream writer
+    "${SRC_DIR}/gfx_d3d/r_light.cpp"                 # light surface callbacks
 )
 
 get_target_property(NX_UNSANITIZED_SOURCES ${BIN_NAME} SOURCES)

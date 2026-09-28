@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string.h>
 #include "r_gfx.h"
 
 struct XModel;
@@ -28,6 +29,19 @@ void __cdecl R_AddDelayedStaticModelDrawSurf(
                 unsigned int which_lod);
 void __cdecl R_WritePrimDrawSurfInt(GfxDelayedCmdBuf *delayedCmdBuf, unsigned int value);
 void __cdecl R_WritePrimDrawSurfData(GfxDelayedCmdBuf *delayedCmdBuf, unsigned __int8 *data, unsigned int count);
+
+// nx-port: a static-model draw stream is an array of 32-bit words, and each
+// entry carries its XSurface pointer in it. On x86 that was one word; on LP64
+// it is two, written and read through these, and every size reserved for an
+// entry counts R_PRIM_PTR_WORDS for it.
+enum { R_PRIM_PTR_WORDS = sizeof(void *) / sizeof(unsigned int) };
+void __cdecl R_WritePrimDrawSurfPtr(GfxDelayedCmdBuf *delayedCmdBuf, const void *ptr);
+static inline const void *R_ReadPrimDrawSurfPtr(const unsigned int *pos)
+{
+    const void *ptr;
+    memcpy(&ptr, pos, sizeof(ptr));
+    return ptr;
+}
 GfxStaticModelId __cdecl R_GetStaticModelId(unsigned int smodelIndex, int lod);
 void __cdecl R_AddAllStaticModelSurfacesCamera(
                 int viewIndex,

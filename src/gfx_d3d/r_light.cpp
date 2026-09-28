@@ -535,7 +535,7 @@ int __cdecl R_AllowBspSpotLightShadows(int surfIndex, void *__formal)
 
 int __cdecl R_AllowBspSpotLight(int surfIndex, void *bspLightCallbackAsVoid)
 {
-    if (*(_BYTE *)(*(_DWORD *)bspLightCallbackAsVoid + surfIndex))
+    if (((const BspSpotLightCallback *)bspLightCallbackAsVoid)->surfaceVisData[surfIndex])
         return BoxInPlanes(
             scene.dynamicSpotLightPlanes,
             6u,
@@ -668,7 +668,7 @@ void __cdecl R_GetStaticModelLightSurfs(const GfxLight *visibleLights, int visib
                                                                          | (HIDWORD(v2) | HIDWORD(drawSurf.packed)) & 0xFF87FFFF;
                         if ( light->type == 2 && r_spotLightShadows->current.enabled && r_spotLightSModelShadows->current.enabled )
                         {
-                            if ( !R_AllocDrawSurf(&shadowSurfData.delayedCmdBuf, drawSurf, &shadowSurfData.drawSurfList, 3u) )
+                            if ( !R_AllocDrawSurf(&shadowSurfData.delayedCmdBuf, drawSurf, &shadowSurfData.drawSurfList, 2u + R_PRIM_PTR_WORDS) )
                                 break;
                             R_AddDelayedStaticModelDrawSurf(
                                 &shadowSurfData.delayedCmdBuf,

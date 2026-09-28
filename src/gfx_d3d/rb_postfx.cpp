@@ -1786,8 +1786,12 @@ void    RB_GenericFilterFX(const GfxViewInfo *viewInfo)
   //ProjMatrix = a1;
   //ViewMatrix = retaddr;
   p_genericFilter = &viewInfo->genericFilter;
-  *(unsigned int *)&iPass[72] = (unsigned int)viewInfo;
-  *(unsigned int *)&iPass[68] = (unsigned int)&viewInfo->cullViewInfo.viewParms.projectionMatrix;
+  // nx-port: these two matrices lived as 32-bit words in iPass[72] and
+  // iPass[68], past the view-projection product; kept as pointers instead.
+  // viewInfo is also the address of its view matrix (cullViewInfo.viewParms
+  // .viewMatrix leads the struct), which is what iPass[72] was given.
+  const float *viewM = viewInfo->cullViewInfo.viewParms.viewMatrix.m[0];
+  const float *projM = viewInfo->cullViewInfo.viewParms.projectionMatrix.m[0];
   MatrixMultiply44(
     viewInfo->cullViewInfo.viewParms.viewMatrix.m,
     viewInfo->cullViewInfo.viewParms.projectionMatrix.m,
@@ -1819,9 +1823,9 @@ void    RB_GenericFilterFX(const GfxViewInfo *viewInfo)
 LABEL_18:
             v108 = 0;
             v107 = 0;
-            imageSurface = (IDirect3DSurface9 *)p_genericFilter->passSampler0[i][j];
-            imageSurface = (IDirect3DSurface9 *)((char *)imageSurface - 1);
-            switch ( (unsigned int)imageSurface )
+            // nx-port: the decompiler routed this sampler index through a
+            // pointer variable; it is an int.
+            switch ( (unsigned int)(p_genericFilter->passSampler0[i][j] - 1) )
             {
               case 0u:
                 v108 = 12;
@@ -1953,27 +1957,27 @@ LABEL_18:
                 v99 = p_genericFilter->sunPosition[1];
                 v100 = p_genericFilter->sunPosition[2];
               }
-              v97 = **(float **)&iPass[72];
-              v96 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 16);
-              v95 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 32);
+              v97 = viewM[0];
+              v96 = *(const unsigned int *)&viewM[4];
+              v95 = *(const unsigned int *)&viewM[8];
               v94 = gfxCmdBufSourceState.input.consts[182];
               gfxCmdBufSourceState.input.consts[182][0] = v97;
               *((unsigned int *)v94 + 1) = v96;
               *((unsigned int *)v94 + 2) = v95;
               v94[3] = 0.0f;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_CAMERA_SIDE);
-              v93 = *(float *)(*(unsigned int *)&iPass[72] + 4);
-              v92 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 20);
-              v91 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 36);
+              v93 = viewM[1];
+              v92 = *(const unsigned int *)&viewM[5];
+              v91 = *(const unsigned int *)&viewM[9];
               v90 = gfxCmdBufSourceState.input.consts[181];
               gfxCmdBufSourceState.input.consts[181][0] = v93;
               *((unsigned int *)v90 + 1) = v92;
               *((unsigned int *)v90 + 2) = v91;
               v90[3] = 0.0f;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_CAMERA_UP);
-              v89 = *(float *)(*(unsigned int *)&iPass[72] + 8);
-              v88 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 24);
-              v87 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 40);
+              v89 = viewM[2];
+              v88 = *(const unsigned int *)&viewM[6];
+              v87 = *(const unsigned int *)&viewM[10];
               v86 = gfxCmdBufSourceState.input.consts[180];
               gfxCmdBufSourceState.input.consts[180][0] = v89;
               *((unsigned int *)v86 + 1) = v88;
@@ -2029,80 +2033,80 @@ LABEL_18:
               *((unsigned int *)v62 + 2) = v64;
               *((unsigned int *)v62 + 3) = v63;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_DLIGHT_SPOT_MATRIX_3);
-              v61 = **(float **)&iPass[72];
-              v60 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 4);
-              v59 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 8);
-              v58 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 12);
+              v61 = viewM[0];
+              v60 = *(const unsigned int *)&viewM[1];
+              v59 = *(const unsigned int *)&viewM[2];
+              v58 = *(const unsigned int *)&viewM[3];
               v57 = gfxCmdBufSourceState.input.consts[157];
               gfxCmdBufSourceState.input.consts[157][0] = v61;
               *((unsigned int *)v57 + 1) = v60;
               *((unsigned int *)v57 + 2) = v59;
               *((unsigned int *)v57 + 3) = v58;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_DLIGHT_SHADOW_LOOKUP_MATRIX_0);
-              v56 = *(float *)(*(unsigned int *)&iPass[72] + 16);
-              v55 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 20);
-              v54 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 24);
-              v53 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 28);
+              v56 = viewM[4];
+              v55 = *(const unsigned int *)&viewM[5];
+              v54 = *(const unsigned int *)&viewM[6];
+              v53 = *(const unsigned int *)&viewM[7];
               v52 = gfxCmdBufSourceState.input.consts[158];
               gfxCmdBufSourceState.input.consts[158][0] = v56;
               *((unsigned int *)v52 + 1) = v55;
               *((unsigned int *)v52 + 2) = v54;
               *((unsigned int *)v52 + 3) = v53;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_DLIGHT_SHADOW_LOOKUP_MATRIX_1);
-              v51 = *(float *)(*(unsigned int *)&iPass[72] + 32);
-              v50 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 36);
-              v49 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 40);
-              v48 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 44);
+              v51 = viewM[8];
+              v50 = *(const unsigned int *)&viewM[9];
+              v49 = *(const unsigned int *)&viewM[10];
+              v48 = *(const unsigned int *)&viewM[11];
               v47 = gfxCmdBufSourceState.input.consts[159];
               gfxCmdBufSourceState.input.consts[159][0] = v51;
               *((unsigned int *)v47 + 1) = v50;
               *((unsigned int *)v47 + 2) = v49;
               *((unsigned int *)v47 + 3) = v48;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_DLIGHT_SHADOW_LOOKUP_MATRIX_2);
-              v46 = *(float *)(*(unsigned int *)&iPass[72] + 48);
-              v45 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 52);
-              v44 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 56);
-              v43 = *(unsigned int *)(*(unsigned int *)&iPass[72] + 60);
+              v46 = viewM[12];
+              v45 = *(const unsigned int *)&viewM[13];
+              v44 = *(const unsigned int *)&viewM[14];
+              v43 = *(const unsigned int *)&viewM[15];
               v42 = gfxCmdBufSourceState.input.consts[160];
               gfxCmdBufSourceState.input.consts[160][0] = v46;
               *((unsigned int *)v42 + 1) = v45;
               *((unsigned int *)v42 + 2) = v44;
               *((unsigned int *)v42 + 3) = v43;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_DLIGHT_SHADOW_LOOKUP_MATRIX_3);
-              v41 = **(float **)&iPass[68];
-              v40 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 4);
-              v39 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 8);
-              v38 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 12);
+              v41 = projM[0];
+              v40 = *(const unsigned int *)&projM[1];
+              v39 = *(const unsigned int *)&projM[2];
+              v38 = *(const unsigned int *)&projM[3];
               v37 = gfxCmdBufSourceState.input.consts[146];
               gfxCmdBufSourceState.input.consts[146][0] = v41;
               *((unsigned int *)v37 + 1) = v40;
               *((unsigned int *)v37 + 2) = v39;
               *((unsigned int *)v37 + 3) = v38;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_DLIGHT_POSITION);
-              v36 = *(float *)(*(unsigned int *)&iPass[68] + 16);
-              v35 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 20);
-              v34 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 24);
-              v33 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 28);
+              v36 = projM[4];
+              v35 = *(const unsigned int *)&projM[5];
+              v34 = *(const unsigned int *)&projM[6];
+              v33 = *(const unsigned int *)&projM[7];
               v32 = gfxCmdBufSourceState.input.consts[147];
               gfxCmdBufSourceState.input.consts[147][0] = v36;
               *((unsigned int *)v32 + 1) = v35;
               *((unsigned int *)v32 + 2) = v34;
               *((unsigned int *)v32 + 3) = v33;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_DLIGHT_DIFFUSE);
-              v31 = *(float *)(*(unsigned int *)&iPass[68] + 32);
-              v30 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 36);
-              v29 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 40);
-              v28 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 44);
+              v31 = projM[8];
+              v30 = *(const unsigned int *)&projM[9];
+              v29 = *(const unsigned int *)&projM[10];
+              v28 = *(const unsigned int *)&projM[11];
               v27 = gfxCmdBufSourceState.input.consts[148];
               gfxCmdBufSourceState.input.consts[148][0] = v31;
               *((unsigned int *)v27 + 1) = v30;
               *((unsigned int *)v27 + 2) = v29;
               *((unsigned int *)v27 + 3) = v28;
               R_DirtyCodeConstant(&gfxCmdBufSourceState, CONST_SRC_CODE_DLIGHT_SPECULAR);
-              v26 = *(float *)(*(unsigned int *)&iPass[68] + 48);
-              v25 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 52);
-              v24 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 56);
-              v23 = *(unsigned int *)(*(unsigned int *)&iPass[68] + 60);
+              v26 = projM[12];
+              v25 = *(const unsigned int *)&projM[13];
+              v24 = *(const unsigned int *)&projM[14];
+              v23 = *(const unsigned int *)&projM[15];
               v22 = gfxCmdBufSourceState.input.consts[149];
               gfxCmdBufSourceState.input.consts[149][0] = v26;
               *((unsigned int *)v22 + 1) = v25;

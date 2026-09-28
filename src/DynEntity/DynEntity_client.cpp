@@ -1109,7 +1109,7 @@ void    DynEnt_SetupConstraints(const DynEntityDef *dynEntDef)
                         {
                             //rigid_body_constraint_point::set(constraint, &b1loc, &b2loc);
                             constraint->set(&b1loc, &b2loc);
-                            c->constraintHandle = (int)constraint;
+                            c->constraintHandle = (intptr_t)constraint;
                         }
                         else
                         {
@@ -1123,7 +1123,7 @@ void    DynEnt_SetupConstraints(const DynEntityDef *dynEntDef)
                         {
                             //rigid_body_constraint_distance::set(rbc_dist, &b1loc, &b2loc, 0.0, c->distance);
                             rbc_dist->set(&b1loc, &b2loc, 0.0, c->distance);
-                            c->constraintHandle = (int)rbc_dist;
+                            c->constraintHandle = (intptr_t)rbc_dist;
                         }
                         else
                         {
@@ -1302,7 +1302,7 @@ int __cdecl DynEntCl_CreatePhysObj(
     //collision_visitor.__vftable = (create_gjk_geom_collision_visitor_vtbl *)&create_gjk_geom_collision_visitor::`vftable';
     collision_visitor.gjk_geom_list = &gjk_geom_list;
     create_gjk_geom(dynEntDef, &collision_visitor, 0x280EC93u);
-    physId = (int)Phys_ObjCreate(0, pose->origin, pose->quat, vec3_origin, dynEntDef->physPreset, &gjk_geom_list, 1, -1);
+    physId = (intptr_t)Phys_ObjCreate(0, pose->origin, pose->quat, vec3_origin, dynEntDef->physPreset, &gjk_geom_list, 1, -1);
     dynEntClient->physObjId = physId;
     if ( physId )
     {

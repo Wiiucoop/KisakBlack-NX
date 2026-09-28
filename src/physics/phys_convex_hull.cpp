@@ -4,7 +4,7 @@
 
 chull_t *chull_list;
 phys_convex_hull g_hull;
-phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t> entities_map;
+phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> entities_map;
 
 void phys_convex_hull::compute_convex_hull(
     int max_verts,

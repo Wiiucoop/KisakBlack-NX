@@ -131,8 +131,8 @@ void __thiscall Allocator::Init(void *buf, int size)
     Allocator::Memory *end; // [esp+Ch] [ebp-4h]
 
     this->buffer = buf;
-    end = (Allocator::Memory *)(((int)this->buffer + size - 21) & 0xFFFFFFF0);
-    this->head = (Allocator::Memory *)(((int)this->buffer + 15) & 0xFFFFFFF0);
+    end = (Allocator::Memory *)(((uintptr_t)this->buffer + size - 21) & ~(uintptr_t)15);
+    this->head = (Allocator::Memory *)(((uintptr_t)this->buffer + 15) & ~(uintptr_t)15);
     //Allocator::Memory::Init(this->head);
     this->head->Init();
     this->tail = end;

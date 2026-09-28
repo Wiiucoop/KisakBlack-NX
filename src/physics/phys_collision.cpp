@@ -387,7 +387,7 @@ void __thiscall phys_contact_manifold::set_get_feature_params(
 {
     phys_memory_heap *m_allocator; // edi
     const char *v7; // ecx
-    unsigned int v8; // eax
+    uintptr_t v8; // eax
 
     this->m_feature_hitp.x = hitp->x;
     this->m_feature_hitp.y = hitp->y;
@@ -399,7 +399,7 @@ void __thiscall phys_contact_manifold::set_get_feature_params(
     this->m_feature_distance_eps = feature_distance_eps;
     this->m_sin_feautre_angular_eps_sq = sin_feautre_angular_eps_sq;
     v7 = g_contact_manifold_error_msg;
-    v8 = (int)(m_allocator->m_buffer_cur + 15) & 0xFFFFFFF0;
+    v8 = ((uintptr_t)(m_allocator->m_buffer_cur + 15) & ~(uintptr_t)15);
     m_allocator->m_buffer_cur = (char *)v8;
     if ( (char *)v8 >= m_allocator->m_buffer_end
         && _tlAssert(
@@ -607,7 +607,7 @@ void phys_contact_manifold_process::process(
         bpi1->m_cg_to_world_xform);   // rb1 is used here as cg1_to_world
  
     // -----------------------------------------------------------------------
-    // Compute penetration_t – how far along the translation we are
+    // Compute penetration_t ï¿½ how far along the translation we are
     //
     //   displacement = p1_orig - p2_orig   (before the 0.34 nudge)
     //   dist_p1_p2_n = dot(n, displacement)
@@ -1469,9 +1469,9 @@ void broad_phase_info::set_bpi_env(phys_auto_activate_callback *auto_activate_ca
 }
 
 generic_avl_map_node_t *__cdecl generic_avl_map_add(
-    phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t> *gam,
+    phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> *gam,
     void *data,
-    unsigned int avl_key)
+    uintptr_t avl_key)
 {
     //generic_avl_map_node_t *m_tree_root; // [esp+15Ch] [ebp-8h]
     generic_avl_map_node_t *gamn; // [esp+160h] [ebp-4h]
@@ -1504,7 +1504,7 @@ generic_avl_map_node_t *__cdecl generic_avl_map_add(
     iassert(gamn);
 
     gamn->m_data = data;
-    //phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t>::add(gam, &avl_key, gamn);
+    //phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t>::add(gam, &avl_key, gamn);
     gam->add(avl_key, gamn);
 
     iassert(gam->find(avl_key) != NULL); // lwss add
@@ -1513,8 +1513,8 @@ generic_avl_map_node_t *__cdecl generic_avl_map_add(
 }
 
 void *__cdecl generic_avl_map_destroy(
-    phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t> *gam,
-    unsigned int avl_key)
+    phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> *gam,
+    uintptr_t avl_key)
 {
     generic_avl_map_node_t *m_tree_root; // [esp+144h] [ebp-Ch]
     void *data; // [esp+148h] [ebp-8h]
@@ -1530,7 +1530,7 @@ void *__cdecl generic_avl_map_destroy(
     if (!m_tree_root)
         return 0;
     data = m_tree_root->m_data;
-    //phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t>::remove(gam, &avl_key);
+    //phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t>::remove(gam, &avl_key);
     gam->remove(avl_key);
     //phys_simple_allocator<generic_avl_map_node_t>::free(&g_generic_avl_map_node_allocator, m_tree_root);
     g_generic_avl_map_node_allocator.free(m_tree_root);
@@ -1538,7 +1538,7 @@ void *__cdecl generic_avl_map_destroy(
 }
 
 // LWSS: yes, convert the int directly to a pointer to a struct. 
-PhysObjUserData *__cdecl Phys_GetUserData(int id)
+PhysObjUserData *__cdecl Phys_GetUserData(intptr_t id)
 {
     iassert(id);
 
@@ -1559,30 +1559,23 @@ int __cdecl get_physics_contents_mask(char phys_env_collision_flags)
 
 broad_phase_info *__cdecl allocate_bpi_env()
 {
-    signed __int32 v1; // [esp+0h] [ebp-4Ch]
-    void *v2; // [esp+40h] [ebp-Ch]
+    broad_phase_info *bpi; // [esp+0h] [ebp-4Ch]
     broad_phase_info *first; // [esp+44h] [ebp-8h]
 
+    // nx-port: was mt_allocate(112) and a push through x86 offset 56
+    // (m_list_bpb_cluster_next) with a 32-bit compare-exchange.
     _InterlockedExchangeAdd(&G_BPM->m_bpi_env_count, 1u);
-    //v2 = phys_transient_allocator::mt_allocate(
-    v2 = G_BPM->g_collision_memory_buffer.mt_allocate(
-        112,
+    bpi = (broad_phase_info *)G_BPM->g_collision_memory_buffer.mt_allocate(
+        sizeof(broad_phase_info),
         16,
         0,
         "broad phase collision out of memory.");
-    if (v2)
-        v1 = (signed __int32)v2;
-    else
-        v1 = 0;
     do
     {
         first = G_BPM->m_list_bpi_env;
-        *(_DWORD *)(v1 + 56) = (DWORD)first;
-    } while ((broad_phase_info *)_InterlockedCompareExchange(
-        (volatile unsigned __int32 *)&G_BPM->m_list_bpi_env,
-        v1,
-        (signed __int32)first) != first);
-    return (broad_phase_info *)v1;
+        bpi->m_list_bpb_cluster_next = first;
+    } while (__sync_val_compare_and_swap(&G_BPM->m_list_bpi_env, first, bpi) != first);
+    return bpi;
 }
 
 char are_intersecting(

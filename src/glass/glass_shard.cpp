@@ -3332,7 +3332,7 @@ void __thiscall GlassShard::GenerateVerts(
     tangent.array[2] = (int)(this->axis[0][2] * 127.0f + 127.5f);
     tangent.array[3] = 63;
 
-    // Mesh data pointer — indexes into positions/normals/uvs arrays
+    // Mesh data pointer ï¿½ indexes into positions/normals/uvs arrays
     // Each mesh vertex entry is 2 bytes: [positionIndex, normalIndex]
     const unsigned char *meshVerts = (const unsigned char *)clGlasses->renderer->vertexList[this->outline.numVerts - 1];
 
@@ -3880,7 +3880,7 @@ bool __thiscall GlassShard::InitPhysicsObj(bool enableCollisions)
     GlassShard::GetLocalBBox(localBBoxMin, localBBoxMax);
     if ( enableCollisions )
     {
-        Com_Memset((unsigned int *)&physPreset, 0, 84);
+        Com_Memset((unsigned int *)&physPreset, 0, sizeof(physPreset));   // nx-port: was 84 (x86)
         physPreset.mass = GlassShard::GetMass();
         physPreset.friction = 0.5f;
         AxisToQuat(this->axis, quat);
@@ -3896,7 +3896,13 @@ bool __thiscall GlassShard::InitPhysicsObj(bool enableCollisions)
         //gjk_geom_list_t::add_geom(&gjk_geom_list, aabb_gjk_geom);
         gjk_geom_list.add_geom(aabb_gjk_geom);
         PhysObjUserData *obj = Phys_ObjCreate(1, this->origin, quat, vec3_origin, &physPreset, &gjk_geom_list, 1, -1);
-        this->physObjId = (int)obj;
+        this->physObjId = (intptr_t)obj;
+        if (!obj)   // nx-port: Phys_ObjCreate returns NULL while physics is off
+        {
+            Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
+            Sys_LeaveCriticalSection(CRITSECT_PHYSICS_UPDATE);
+            return 0;
+        }
 
         broad_phase_base *bpb = obj->m_bpb;
         aasap_list_remove(bpb);

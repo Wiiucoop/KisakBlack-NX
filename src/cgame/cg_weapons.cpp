@@ -4786,7 +4786,7 @@ void __cdecl CG_VehicleJolt(centity_s *cent, float *origin, float *dir)
         {
             __debugbreak();
         }
-        Phys_ObjAddForce((int)cent->nitrousVeh->m_phys_user_data, origin, dir, 0);
+        Phys_ObjAddForce((intptr_t)cent->nitrousVeh->m_phys_user_data, origin, dir, 0);
     }
 }
 

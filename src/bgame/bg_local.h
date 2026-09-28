@@ -158,9 +158,9 @@ struct cpose_t // sizeof=0x174
         // padding byte
         int ragdollHandle;
         int killcamRagdollHandle;
-        int physObjId;
-        int physUserBody;
-        int physUserBodyProneFeet;
+        intptr_t physObjId;   // nx-port: holds a PhysObjUserData pointer
+        intptr_t physUserBody;   // nx-port: holds a PhysObjUserData pointer
+        intptr_t physUserBodyProneFeet;   // nx-port: holds a PhysObjUserData pointer
         unsigned __int8 destructiblePose;
         // padding byte
         // padding byte

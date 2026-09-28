@@ -127,3 +127,6 @@ XModelPiece
 Glasses
 Glass
 GlassDef
+# nx-port: runtime handles widened to intptr_t (they hold pointers); always 0 in the zone.
+opaque DynEntityClient.physObjId
+opaque PhysConstraint.constraintHandle

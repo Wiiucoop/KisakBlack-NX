@@ -428,7 +428,7 @@ struct FxElem // sizeof=0x2C
     union //$A58BA6DA60295001BBA5E9F807131CF1 // sizeof=0xC
     {                                       // XREF: FxElem/r
                                             // FX_UpdateElement/r
-        int physObjId;
+        intptr_t physObjId;   // nx-port: holds a PhysObjUserData pointer
         float origin[3];
     };
     //FxElem::<unnamed_type_u> u;

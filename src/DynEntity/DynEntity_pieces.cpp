@@ -81,7 +81,7 @@ char __cdecl DynEntPieces_SpawnPhysicsModel(
     float forceDir[3]; // [esp+18h] [ebp-64h] BYREF
     float velocity[3]; // [esp+24h] [ebp-58h] BYREF
     float angularVelocity[3]; // [esp+30h] [ebp-4Ch] BYREF
-    int physObjId; // [esp+3Ch] [ebp-40h]
+    intptr_t physObjId; // [esp+3Ch] [ebp-40h]
     float mins[3]; // [esp+40h] [ebp-3Ch] BYREF
     float quat[4]; // [esp+4Ch] [ebp-30h] BYREF
     int stype; // [esp+5Ch] [ebp-20h]
@@ -125,7 +125,7 @@ char __cdecl DynEntPieces_SpawnPhysicsModel(
         else
             surfFlags = 13631488;
         stype = (surfFlags & 0x3F00000) >> 20;
-        physObjId = (int)DynEntPieces_SpawnPhysObj(
+        physObjId = (intptr_t)DynEntPieces_SpawnPhysObj(
                                              model->name,
                                              stype,
                                              mins,
@@ -184,7 +184,7 @@ PhysObjUserData *__cdecl DynEntPieces_SpawnPhysObj(
         physObjId = Phys_ObjCreate(0, position, quat, velocity, physPreset, &gjk_geom_list, 1, -1);
         if ( physObjId )
         {
-            Phys_ObjSetAngularVelocity( (int)physObjId, angularVelocity);
+            Phys_ObjSetAngularVelocity((intptr_t)physObjId, angularVelocity);
             return physObjId;
         }
         else

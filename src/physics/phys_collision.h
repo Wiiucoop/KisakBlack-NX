@@ -73,12 +73,12 @@ void create_entity_bpi(gjk_physics_collision_visitor *collision_visitor, int mas
 
 struct generic_avl_map_node_t;
 generic_avl_map_node_t *__cdecl generic_avl_map_add(
-    phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t> *gam,
+    phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> *gam,
     void *data,
-    unsigned int avl_key);
+    uintptr_t avl_key);
 
 void *__cdecl generic_avl_map_destroy(
-    phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t> *gam,
-    unsigned int avl_key);
+    phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> *gam,
+    uintptr_t avl_key);
 
-struct PhysObjUserData *__cdecl Phys_GetUserData(int id);
+struct PhysObjUserData *__cdecl Phys_GetUserData(intptr_t id);

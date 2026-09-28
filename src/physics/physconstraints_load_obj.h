@@ -59,7 +59,7 @@ struct PhysConstraint // sizeof=0xA8
     float minAngle;
     float maxAngle;
     struct Material *material;
-    int constraintHandle;
+    intptr_t constraintHandle;   // nx-port: holds a rigid_body_constraint pointer
     int rope_index;
     int centity_num[4];
 };

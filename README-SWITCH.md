@@ -399,8 +399,14 @@ are silent and need reading:
   `FL_OBSTACLE` (0x4000000) -- the value happened to fall inside objBuf in the
   PC binary. Wrong on every build; breaks outright once the array resizes.
 
-Still open, known: the AVL maps in `g_mover.cpp` and `pathnode.cpp` key by
-a pointer truncated to `unsigned int`; `actor_fields.cpp` and
+**Physics is off on the Switch** (`nx_physics 0`): `Phys_ObjCreateAxis`
+returns NULL, which every caller treats as "no physics" (dynents stay put).
+The handles around it are LP64 now (`physObjId`, `physUserBody`,
+`constraintHandle` are `intptr_t`, the generic AVL map keys `uintptr_t`), but
+the solver in `physics_system_internal.cpp` still walks its free lists by x86
+word index (`m_ptr_list[87]`, `+296`) and needs porting against the structs.
+
+Still open, known: `actor_fields.cpp` and
 `sentient_fields.cpp` still hold x86 offsets (mostly SP); word-stride
 reads in `rb_backend.cpp` (render cmd), `fx_convert.cpp` / `fx_system.cpp`
 (`anonymous + 59`), physics (~490 flagged sites); the script debugger
@@ -481,7 +487,7 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    hunk page arithmetic, the script compiler and VM, weapon model arrays,
    the unlockables table overrun, the script field tables and entity links,
    script strings in the KBZ (the map's traverse scripts), the hunk's
-   `fileData_s` headers, the game entity and client sizes, DObj creation and storage, struct-sized allocations (the client now reaches `CG_Init`). Then the 3D renderer meets its first world frame.
+   `fileData_s` headers, the game entity and client sizes, DObj creation and storage, struct-sized allocations (the client now reaches `CG_Init`), physics handles (physics off). Then the 3D renderer meets its first world frame.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

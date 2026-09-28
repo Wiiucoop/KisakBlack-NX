@@ -65,6 +65,10 @@ minspec_mutex g_render_mutex;
 void *G_PHYSICS_TOTAL_MEMORY_BUFFER;
 
 const dvar_t *phys_gravity;
+#ifdef KISAK_NX
+const dvar_t *nx_physics;   // nx-port: see Phys_ObjCreateAxis
+#define nx_physicsEnabled (nx_physics && nx_physics->current.enabled)
+#endif
 const dvar_t *phys_gravity_dir;
 const dvar_t *phys_vehicleGravityMultiplier;
 const dvar_t *phys_vehicleDamageFroceScale;
@@ -247,6 +251,9 @@ void __cdecl Phys_Init()
                                                                              0,
                                                                              "Print info about the nitrous vehicle wheel effects");
         phys_entityCollision = _Dvar_RegisterBool("phys_entityCollision", 1, 0, "Enable to turn on entity collision.");
+#ifdef KISAK_NX
+        nx_physics = _Dvar_RegisterBool("nx_physics", 0, 0, "Create rigid-body physics objects (the solver is not LP64-ported yet)");
+#endif
         phys_vehicleWheelEntityCollision = _Dvar_RegisterBool(
                                                                                  "phys_vehicleWheelEntityCollision",
                                                                                  1,
@@ -854,7 +861,7 @@ PhysObjUserData * Phys_CreateUserBody(float *position, int id, PhysicsGeomType g
     float rot_[3][3]; // [esp+12Ch] [ebp-104h] BYREF
     float trans_[4]; // [esp+158h] [ebp-D8h] BYREF
     user_rigid_body *body; // [esp+168h] [ebp-C8h]
-    int bodyId; // [esp+16Ch] [ebp-C4h]
+    intptr_t bodyId; // [esp+16Ch] [ebp-C4h]
     PhysObjUserData *userData; // [esp+170h] [ebp-C0h]
     PhysGlob *v31; // [esp+174h] [ebp-BCh]
     phys_free_list<PhysObjUserData>::iterator i; // [esp+178h] [ebp-B8h]
@@ -1054,7 +1061,7 @@ PhysObjUserData * Phys_CreateUserBody(float *position, int id, PhysicsGeomType g
             userData->body = body;
             userData->refcount = 1;
             userData->id = (int)id;
-            bodyId = (int)userData;
+            bodyId = (intptr_t)userData;
             for (j = 0; j < 16; ++j)
             {
                 if (!physGlob.userRigidBodies[j])
@@ -1128,7 +1135,7 @@ PhysObjUserData * Phys_CreateBodyFromState(
     float volume; // [esp+324h] [ebp-70h] BYREF
     phys_vec3 dim; // [esp+328h] [ebp-6Ch] BYREF
     rigid_body *body; // [esp+340h] [ebp-54h]
-    int bodyId; // [esp+344h] [ebp-50h]
+    intptr_t bodyId; // [esp+344h] [ebp-50h]
     PhysObjUserData *userData; // [esp+348h] [ebp-4Ch]
     PhysGlob *v100; // [esp+34Ch] [ebp-48h]
     phys_free_list<PhysObjUserData>::iterator i; // [esp+350h] [ebp-44h]
@@ -1228,7 +1235,7 @@ PhysObjUserData * Phys_CreateBodyFromState(
     m2w.w.y = state->position[1];
     m2w.w.z = state->position[2];
 
-    bodyId = (int)userData;
+    bodyId = (intptr_t)userData;
 
     userData->m_gjk_geom_list.m_first_geom = gjk_geom_list->m_first_geom;
     userData->m_gjk_geom_list.m_geom_count = gjk_geom_list->m_geom_count;
@@ -1427,6 +1434,15 @@ PhysObjUserData *__cdecl Phys_ObjCreateAxis(
 {
     BodyState state; // [esp+24h] [ebp-90h] BYREF
 
+#ifdef KISAK_NX
+    // nx-port: the rigid-body solver (physics_system_internal.cpp and
+    // friends) still walks its free lists at x86 word offsets. Until it is
+    // ported, no physics objects are created; every caller treats NULL as
+    // "no physics" (dynents stay put, debris and shards are not simulated).
+    if (!nx_physicsEnabled)
+        return NULL;
+#endif
+
     nanassertvec3(position);
     nanassertvec3(velocity);
     iassert(physInited);
@@ -1457,7 +1473,7 @@ PhysObjUserData *__cdecl Phys_ObjCreateAxis(
     return Phys_CreateBodyFromState(worldIndex, &state, gjk_geom_list, do_collision_test);
 }
 
-void    Phys_ObjSetPosition(int id, float *newPosition)
+void    Phys_ObjSetPosition(intptr_t id, float *newPosition)
 {
     phys_mat44 *v3; // [esp-B8h] [ebp-DCh]
     phys_vec3 newPos; // [esp-38h] [ebp-5Ch] BYREF
@@ -1512,7 +1528,7 @@ void    Phys_ObjSetPosition(int id, float *newPosition)
     }
 }
 
-void __cdecl Phys_ObjSetOrientation(int id, const float *newPosition, const float *newOrientation)
+void __cdecl Phys_ObjSetOrientation(intptr_t id, const float *newPosition, const float *newOrientation)
 {
     float *v3; // esi
     phys_mat44 *p_m_mat; // [esp+Ch] [ebp-CCh]
@@ -1569,7 +1585,7 @@ void __cdecl Phys_ObjSetOrientation(int id, const float *newPosition, const floa
     }
 }
 
-void    Phys_ObjSetAngularVelocity(int id, float *angularVel)
+void    Phys_ObjSetAngularVelocity(intptr_t id, float *angularVel)
 {
     rigid_body *body = Phys_GetUserData(id)->body;
 
@@ -1594,7 +1610,7 @@ void __thiscall rigid_body::dangerous_set_a_vel(const phys_vec3 *a_vel)
     }
 }
 
-void Phys_ObjSetVelocity(int id, float *velocity)
+void Phys_ObjSetVelocity(intptr_t id, float *velocity)
 {
     rigid_body *body = Phys_GetUserData(id)->body;
 
@@ -1619,7 +1635,7 @@ void __thiscall rigid_body::dangerous_set_t_vel(const phys_vec3 *t_vel)
     }
 }
 
-void    Phys_ObjSetAngularVelocityRaw(int id, float *angularVel)
+void    Phys_ObjSetAngularVelocityRaw(intptr_t id, float *angularVel)
 {
     phys_vec3 v3; // [esp-20h] [ebp-2Ch] BYREF
     float v4; // [esp-10h] [ebp-1Ch]
@@ -1643,7 +1659,7 @@ void    Phys_ObjSetAngularVelocityRaw(int id, float *angularVel)
     body->dangerous_set_a_vel(&v3);
 }
 
-void    Phys_ObjGetPosition(int id, float *outPosition, float (*outRotation)[3])
+void    Phys_ObjGetPosition(intptr_t id, float *outPosition, float (*outRotation)[3])
 {
     phys_mat44 m2w; // [esp-Ch] [ebp-5Ch] BYREF
     const phys_mat44 *rb2w; // [esp+3Ch] [ebp-14h]
@@ -1661,7 +1677,7 @@ void    Phys_ObjGetPosition(int id, float *outPosition, float (*outRotation)[3])
     Phys_NitrousMat44ToVec33(&m2w, outRotation);
 }
 
-void __cdecl Phys_ObjGetVelocities(int id, float *tvel, float *avel)
+void __cdecl Phys_ObjGetVelocities(intptr_t id, float *tvel, float *avel)
 {
     rigid_body *body; // [esp+0h] [ebp-4h]
 
@@ -1675,7 +1691,7 @@ void __cdecl Phys_ObjGetVelocities(int id, float *tvel, float *avel)
     Phys_NitrousVecToVec3(&body->m_a_vel, avel);
 }
 
-void __cdecl Phys_ObjGetCenterOfMass(int id, float *outPosition)
+void __cdecl Phys_ObjGetCenterOfMass(intptr_t id, float *outPosition)
 {
     PhysObjUserData *UserData; // eax
 
@@ -1688,7 +1704,7 @@ void __cdecl Phys_ObjGetCenterOfMass(int id, float *outPosition)
     Phys_NitrousVecToVec3(&UserData->body->m_mat.w, outPosition);
 }
 
-void __cdecl Phys_ObjAddCollFlags(int physObjId, int collFlags)
+void __cdecl Phys_ObjAddCollFlags(intptr_t physObjId, int collFlags)
 {
     if (!physObjId
         && !Assert_MyHandler(
@@ -1717,7 +1733,7 @@ void __cdecl Phys_ObjAddCollFlags(int physObjId, int collFlags)
     }
 }
 
-void __cdecl Phys_ObjRemoveCollFlags(int physObjId, int collFlags)
+void __cdecl Phys_ObjRemoveCollFlags(intptr_t physObjId, int collFlags)
 {
     if (!physObjId
         && !Assert_MyHandler(
@@ -1868,7 +1884,7 @@ void    Phys_AddCacheImpulses()
 }
 
 void __cdecl Phys_ObjAddCustomForce(
-                int physObjId,
+                intptr_t physObjId,
                 const float *hitPos,
                 const float *hitDir,
                 int mod,
@@ -1941,7 +1957,7 @@ void __cdecl Phys_ObjAddCustomForce(
     }
 }
 
-void    Phys_ObjAddForce(int id, float *worldPos, float *impulse, bool relative)
+void    Phys_ObjAddForce(intptr_t id, float *worldPos, float *impulse, bool relative)
 {
     phys_vec3 v7; // [esp+4h] [ebp-BCh] BYREF
     phys_vec3 v11; // [esp+24h] [ebp-9Ch] BYREF
@@ -1996,7 +2012,7 @@ void    Phys_ObjAddForce(int id, float *worldPos, float *impulse, bool relative)
     }
 }
 
-void    Phys_ObjAddTorque(int id, float *torque)
+void    Phys_ObjAddTorque(intptr_t id, float *torque)
 {
     phys_vec3 torq; // [esp-2Ch] [ebp-4Ch] BYREF
     phys_vec3 _torque; // [esp-Ch] [ebp-2Ch] BYREF
@@ -2029,7 +2045,7 @@ void __thiscall rigid_body::add_torque(const phys_vec3 *torque)
 }
 
 void __cdecl Phys_ObjBulletImpact(
-                int id,
+                intptr_t id,
                 const float *worldPosRaw,
                 const float *bulletDirRaw,
                 float bulletSpeed,
@@ -2093,7 +2109,7 @@ void __cdecl Phys_TweakBulletImpact(float *worldPos, float *bulletDir, const flo
     worldPos[2] = worldPos[2] + offset_8;
 }
 
-int __cdecl Phys_ObjGetSnapshot(int id, float *outPos, float (*outMat)[3])
+int __cdecl Phys_ObjGetSnapshot(intptr_t id, float *outPos, float (*outMat)[3])
 {
     PhysObjUserData *userData; // [esp+Ch] [ebp-4h]
 
@@ -3014,11 +3030,8 @@ int __cdecl buoyancy_worker()
 
     for ( i = g_pop_iter.m_ptr; g_pop_iter_end.m_ptr != i; i = g_pop_iter.m_ptr )
     {
-        if ( (phys_free_list<PhysObjUserData>::T_internal_base *)_InterlockedCompareExchange(
-                                                                                                                             (volatile unsigned __int32 *)&g_pop_iter,
-                                                                                                                             (signed __int32)i->m_next_T_internal,
-                                                                                                                             (signed __int32)i) == i )
-            Phys_BodyGrabSnapshotNitrous((PhysObjUserData *)&i[2], g_delta_t);
+        if (__sync_val_compare_and_swap(&g_pop_iter.m_ptr, i, i->m_next_T_internal) == i)   // nx-port: was a 32-bit CAS and &i[2]
+            Phys_BodyGrabSnapshotNitrous(&((phys_free_list<PhysObjUserData>::T_internal *)i)->m_data, g_delta_t);
     }
     return 0;
 }
@@ -3514,11 +3527,8 @@ int __cdecl wheel_collision_worker(jqBatch *__)
 
     for (i = g_wpop_iter.m_ptr; g_wpop_iter_end.m_ptr != i; i = g_wpop_iter.m_ptr)
     {
-        if ((phys_free_list<PhysObjUserData>::T_internal_base *)_InterlockedCompareExchange(
-            (volatile unsigned __int32 *)&g_wpop_iter,
-            (signed __int32)i->m_next_T_internal,
-            (signed __int32)i) == i)
-            collide_vehicle_wheels((PhysObjUserData *)&i[2]);
+        if (__sync_val_compare_and_swap(&g_wpop_iter.m_ptr, i, i->m_next_T_internal) == i)   // nx-port: was a 32-bit CAS and &i[2]
+            collide_vehicle_wheels(&((phys_free_list<PhysObjUserData>::T_internal *)i)->m_data);
     }
     return 0;
 }
@@ -3743,7 +3753,7 @@ void __cdecl Phys_RunToTime(int timeNow)
     }
 }
 
-void __cdecl Phys_ObjGetInterpolatedState(int id, float *outPos, float *outQuat)
+void __cdecl Phys_ObjGetInterpolatedState(intptr_t id, float *outPos, float *outQuat)
 {
     float oldMat[3][3]; // [esp+10h] [ebp-84h] BYREF
     float newPos[3]; // [esp+34h] [ebp-60h] BYREF
@@ -3772,7 +3782,7 @@ void __cdecl Phys_ObjGetInterpolatedState(int id, float *outPos, float *outQuat)
     }
 }
 
-void    Phys_SetUserBody(int id, float *position)
+void    Phys_SetUserBody(intptr_t id, float *position)
 {
     phys_mat44 dictator; // [esp-Ch] [ebp-7Ch] BYREF
     float dictator_52; // [esp+34h] [ebp-3Ch]
@@ -3813,7 +3823,7 @@ void    Phys_SetUserBody(int id, float *position)
 }
 
 
-bool __cdecl Phys_ObjIsAsleep(int id)
+bool __cdecl Phys_ObjIsAsleep(intptr_t id)
 {
     const char *v1; // eax
     float _p1[3]; // [esp+2Ch] [ebp-1Ch] BYREF
@@ -3849,7 +3859,7 @@ unsigned int __thiscall rigid_body::is_dangerous()
     return this->m_flags & 0x80;
 }
 
-bool __cdecl Phys_ObjIsAsleepSingle(int id)
+bool __cdecl Phys_ObjIsAsleepSingle(intptr_t id)
 {
     const char *v1; // eax
     float _p1[3]; // [esp+2Ch] [ebp-1Ch] BYREF

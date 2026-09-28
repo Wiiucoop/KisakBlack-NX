@@ -754,15 +754,15 @@ struct __declspec(align(16)) gjk_trace_input_t // sizeof=0xB0
 struct generic_avl_map_node_t // sizeof=0x14
 {
     void *m_data;
-    unsigned int m_avl_key;
+    uintptr_t m_avl_key;   // nx-port: keys are pointers (was unsigned int)
     phys_inplace_avl_tree_node<generic_avl_map_node_t> m_avl_tree_node;
 
-    static inline bool less(unsigned int key, const generic_avl_map_node_t *node)
+    static inline bool less(uintptr_t key, const generic_avl_map_node_t *node)
     {
         return key < node->m_avl_key;
     }
 
-    static inline bool less(const generic_avl_map_node_t *node, unsigned int key)
+    static inline bool less(const generic_avl_map_node_t *node, uintptr_t key)
     {
         return node->m_avl_key < key;
     }
@@ -773,12 +773,12 @@ struct generic_avl_map_node_t // sizeof=0x14
     }
 
     // aislop hacky shit
-    static inline bool equals(const generic_avl_map_node_t *node, unsigned int key)
+    static inline bool equals(const generic_avl_map_node_t *node, uintptr_t key)
     {
         return node->m_avl_key == key;
     }
 
-    static inline void set_key(generic_avl_map_node_t *node, unsigned int key)
+    static inline void set_key(generic_avl_map_node_t *node, uintptr_t key)
     {
         node->m_avl_key = key;
     }
@@ -787,7 +787,7 @@ struct generic_avl_map_node_t // sizeof=0x14
 struct __declspec(align(4)) gjkcc_info_database_t // sizeof=0x10
 {                                       // XREF: .data:gjkcc_info_database_t g_gjkcc_info_client_database/r
                                         // .data:gjkcc_info_database_t g_gjkcc_info_server_database/r
-    phys_inplace_avl_tree<unsigned int,generic_avl_map_node_t,generic_avl_map_node_t> m_map;
+    phys_inplace_avl_tree<uintptr_t,generic_avl_map_node_t,generic_avl_map_node_t> m_map;
                                         // XREF: _dynamic_initializer_for__g_gjkcc_info_client_database__+3/w
                                         // _dynamic_initializer_for__g_gjkcc_info_server_database__+3/w
     volatile unsigned int m_token;                        // XREF: _dynamic_initializer_for__g_gjkcc_info_client_database__+D/w

@@ -11,7 +11,7 @@ struct __declspec(align(2)) BreakablePiece // sizeof=0xC
 {                                       // XREF: .data:g_breakablePieces/r
     const XModel *model;                // XREF: DynEntPieces_AddDrawSurfs(int)+8D/r
                                         // DynEntPieces_SpawnPhysicsModel(int,XModel const *,float const * const,float const * const,float const (* const)[3],float const * const,float const * const,PhysPreset *)+268/w
-    int physObjId;                      // XREF: DynEntPieces_AddDrawSurfs(int)+4C/r
+    intptr_t physObjId;   // nx-port: holds a PhysObjUserData pointer                      // XREF: DynEntPieces_AddDrawSurfs(int)+4C/r
                                         // DynEntPieces_SpawnPhysicsModel(int,XModel const *,float const * const,float const * const,float const (* const)[3],float const * const,float const * const,PhysPreset *)+256/w
     unsigned __int16 lightingHandle;    // XREF: DynEntPieces_AddDrawSurfs(int)+7A/o
                                         // DynEntPieces_SpawnPhysicsModel(int,XModel const *,float const * const,float const * const,float const (* const)[3],float const * const,float const * const,PhysPreset *)+278/w

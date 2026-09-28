@@ -5137,8 +5137,8 @@ void __cdecl VEH_UpdateNitrousPosition(gentity_s *pSelf)
     nitrousVeh = veh->nitrousVehicle;
     memset(zero, 0, sizeof(zero));
     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
-    Phys_ObjGetPosition((int)nitrousVeh->m_phys_user_data, absPos, absAxis);
-    Phys_ObjGetVelocities((int)nitrousVeh->m_phys_user_data, tvel, avel);
+    Phys_ObjGetPosition((intptr_t)nitrousVeh->m_phys_user_data, absPos, absAxis);
+    Phys_ObjGetVelocities((intptr_t)nitrousVeh->m_phys_user_data, tvel, avel);
     notifyFlags = nitrousVeh->m_server_notify_flags;
     nitrousVeh->m_server_notify_flags = 0;
     intensity = nitrousVeh->m_collision_intensity;

@@ -412,9 +412,9 @@ void __cdecl CG_PredictPlayerState(int localClientNum)
             if ( vehicle->nitrousVeh->m_phys_user_data )
             {
                 Sys_EnterCriticalSection(CRITSECT_PHYSICS);
-                Phys_ObjGetPosition((int)vehicle->nitrousVeh->m_phys_user_data, origin, absAxis);
-                Phys_ObjGetVelocities((int)vehicle->nitrousVeh->m_phys_user_data, tVelocity, aVelocity);
-                Phys_ObjGetCenterOfMass((int)vehicle->nitrousVeh->m_phys_user_data, origin);
+                Phys_ObjGetPosition((intptr_t)vehicle->nitrousVeh->m_phys_user_data, origin, absAxis);
+                Phys_ObjGetVelocities((intptr_t)vehicle->nitrousVeh->m_phys_user_data, tVelocity, aVelocity);
+                Phys_ObjGetCenterOfMass((intptr_t)vehicle->nitrousVeh->m_phys_user_data, origin);
                 Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
                 AxisToAngles(absAxis, angles);
                 inVehicle = 1;

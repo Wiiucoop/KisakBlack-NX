@@ -311,7 +311,7 @@ struct gentity_s // sizeof=0x2F8
     // padding byte
     int iDisconnectTime;
     int useCount;
-    int physObjId;
+    intptr_t physObjId;   // nx-port: holds a PhysObjUserData pointer
     gentity_s *nextFree;
     int birthTime;
     int ikPlayerclipTerrainTime;

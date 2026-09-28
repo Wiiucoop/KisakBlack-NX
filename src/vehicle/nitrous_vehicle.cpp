@@ -522,7 +522,7 @@ void __thiscall NitrousVehicle::pause_physics(bool shutdown)
         }
         NitrousVehicle::cleanup_path();
         this->m_flags |= 1u;
-        Phys_ObjDestroy(0, (int)this->m_phys_user_data);
+        Phys_ObjDestroy(0, (intptr_t)this->m_phys_user_data);
         this->m_phys_user_data = 0;
         Sys_LeaveCriticalSection(CRITSECT_PHYSICS_UPDATE);
     }
@@ -3412,7 +3412,7 @@ void __thiscall NitrousVehicle::GetEntityPose(
     {
         if ( isDriver )
         {
-            Phys_ObjGetInterpolatedState((int)this->m_phys_user_data, rbPosition, rbRotation);
+            Phys_ObjGetInterpolatedState((intptr_t)this->m_phys_user_data, rbPosition, rbRotation);
             UnitQuatToAngles(rbRotation, rbAngles);
             *origin = rbPosition[0];
             origin[1] = rbPosition[1];
@@ -3456,7 +3456,7 @@ void __thiscall NitrousVehicle::GetEntityPose(
                 AnglesSubtract(this->m_networkErrorAngles, reduction, this->m_networkErrorAngles);
             }
             this->m_lastErrorReductionTime = curTime;
-            Phys_ObjGetInterpolatedState((int)this->m_phys_user_data, rbPosition, rbRotation);
+            Phys_ObjGetInterpolatedState((intptr_t)this->m_phys_user_data, rbPosition, rbRotation);
             UnitQuatToAngles(rbRotation, rbAngles);
             rbPosition[0] = rbPosition[0] + this->m_networkErrorOrigin[0];
             rbPosition[1] = rbPosition[1] + this->m_networkErrorOrigin[1];
@@ -3638,7 +3638,7 @@ void __cdecl Vehicle_Launch(int localClientNum, centity_s *cent, float *hitp, co
             scaledForce[0] = value * *force;
             scaledForce[1] = value * force[1];
             scaledForce[2] = value * force[2];
-            Phys_ObjAddForce((int)cent->nitrousVeh->m_phys_user_data, hitp, scaledForce, relative);
+            Phys_ObjAddForce((intptr_t)cent->nitrousVeh->m_phys_user_data, hitp, scaledForce, relative);
         }
     }
 }

@@ -71,7 +71,7 @@ struct DynEntityDef // sizeof=0x54
 
 struct DynEntityClient // sizeof=0x14
 {
-    int physObjId;
+    intptr_t physObjId;   // nx-port: holds a PhysObjUserData pointer
     unsigned __int16 flags;
     unsigned __int16 lightingHandle;
     int health;

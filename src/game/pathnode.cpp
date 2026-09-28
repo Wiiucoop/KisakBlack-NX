@@ -93,10 +93,10 @@ const float nodeColorTable[21][4] =
 pathlocal_t g_path;
 path_t *debugPath;
 path_t debugPathBuf;
-phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t> g_pathnode_resized_links_map;
+phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> g_pathnode_resized_links_map;
 phys_simple_allocator<pathnode_parent_t> g_pathnode_parent_allocator;
-phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t> g_parented_pathnode_list_map;
-phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t> g_pathnode_parent_map;
+phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> g_parented_pathnode_list_map;
+phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> g_pathnode_parent_map;
 
 pathnode_parent_t node_parent_world;
 
@@ -231,7 +231,7 @@ void    parented_pathnode_list_update(gentity_s *gent, const phys_mat44 *mat)
     pathnode_parent_t *node_parent; // [esp+4h] [ebp-1Ch]
     generic_avl_map_node_t *gamn; // [esp+8h] [ebp-18h]
     generic_avl_map_node_t *m_tree_root; // [esp+Ch] [ebp-14h]
-    unsigned int avl_key; // [esp+10h] [ebp-10h]
+    uintptr_t avl_key; // [esp+10h] [ebp-10h]
     //_UNKNOWN *v10[2]; // [esp+14h] [ebp-Ch] BYREF
     //const float *__formal; // [esp+20h] [ebp+0h]
     //
@@ -284,7 +284,7 @@ const pathnode_parent_t *__cdecl get_pathnode_parent(const pathnode_t *node)
     m_tree_root = g_pathnode_parent_map.m_tree_root;
     while ( m_tree_root && node != (const pathnode_t *)m_tree_root->m_avl_key )
     {
-        if ( (unsigned int)node >= m_tree_root->m_avl_key )
+        if ( (uintptr_t)node >= m_tree_root->m_avl_key )
             m_tree_root = m_tree_root->m_avl_tree_node.m_right;
         else
             m_tree_root = m_tree_root->m_avl_tree_node.m_left;
@@ -473,7 +473,7 @@ void __cdecl setup_pathnode_parent(pathnode_t *node, int entnum, const float *or
     node_parent->entnum = entnum;
     node_parent->m_node = node;
     node_parent->m_next = 0;
-    generic_avl_map_add(&g_pathnode_parent_map, node_parent, (unsigned int)node);
+    generic_avl_map_add(&g_pathnode_parent_map, node_parent, (uintptr_t)node);
 }
 
 bool __cdecl is_moving_entity(gentity_s *gent)

@@ -954,9 +954,9 @@ void broad_phase_process_object_environment_collision(bpi_environment_collision_
     double v45; // st1
     double v46; // st1
     char *m_cur; // edx
-    unsigned int v48; // eax
-    unsigned int v49; // ecx
-    unsigned int v50; // eax
+    uintptr_t v48; // eax
+    uintptr_t v49; // ecx
+    uintptr_t v50; // eax
     float v51; // esi
     double v52; // st7
     double v53; // st6
@@ -1256,17 +1256,17 @@ void broad_phase_process_object_environment_collision(bpi_environment_collision_
         }
         transient_allocator_update_largest_size();
         m_cur = transient_buffer.m_cur;
-        v48 = (int)(transient_buffer.m_cur + 15) & 0xFFFFFFF0;
+        v48 = ((uintptr_t)(transient_buffer.m_cur + 15) & ~(uintptr_t)15);
         if ((char *)(v48 + 80) <= transient_buffer.m_end)
         {
             transient_buffer.m_cur = (char *)(v48 + 80);
-            v49 = (unsigned int)(m_cur + 15) & 0xFFFFFFF0;
+            v49 = ((uintptr_t)(m_cur + 15) & ~(uintptr_t)15);
             if (v48)
                 goto LABEL_70;
         }
         //phys_transient_allocator::resize(&transient_buffer);
         transient_buffer.resize();
-        v50 = (int)(transient_buffer.m_cur + 15) & 0xFFFFFFF0;
+        v50 = ((uintptr_t)(transient_buffer.m_cur + 15) & ~(uintptr_t)15);
         if ((char *)(v50 + 80) <= transient_buffer.m_end)
         {
             transient_buffer.m_cur = (char *)(v50 + 80);

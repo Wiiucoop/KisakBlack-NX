@@ -34,7 +34,7 @@ const char *hintStrings[8] =
   "HINT_TEAMPOT"
 };
 
-phys_inplace_avl_tree<unsigned int, generic_avl_map_node_t, generic_avl_map_node_t> g_mover_info_map;
+phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> g_mover_info_map;
 phys_simple_allocator<mover_info_t> g_mover_info_allocator;
 
 mover_info_t *__cdecl get_mover_info(gentity_s *ent)
@@ -44,7 +44,7 @@ mover_info_t *__cdecl get_mover_info(gentity_s *ent)
     m_tree_root = g_mover_info_map.m_tree_root;
     while ( m_tree_root && ent != (gentity_s *)m_tree_root->m_avl_key )
     {
-        if ( (unsigned int)ent >= m_tree_root->m_avl_key )
+        if ( (uintptr_t)ent >= m_tree_root->m_avl_key )
             m_tree_root = m_tree_root->m_avl_tree_node.m_right;
         else
             m_tree_root = m_tree_root->m_avl_tree_node.m_left;
@@ -61,7 +61,7 @@ mover_info_t *__cdecl create_mover_info(gentity_s *ent)
 
     //mi = phys_simple_allocator<mover_info_t>::allocate(&g_mover_info_allocator);
     mi = g_mover_info_allocator.allocate();
-    generic_avl_map_add(&g_mover_info_map, mi, (unsigned int)ent);
+    generic_avl_map_add(&g_mover_info_map, mi, (uintptr_t)ent);
     return mi;
 }
 
@@ -303,7 +303,7 @@ void    CreateConstraint(PhysConstraint *constraint)
                 &rb2_anchor_loc_,
                 0.0,
                 constraint->distance);
-            constraint->constraintHandle = (int)phys_constraint;
+            constraint->constraintHandle = (intptr_t)phys_constraint;
         }
     }
 }
@@ -636,7 +636,7 @@ void __cdecl G_CreatePhysicsObject(gentity_s *ent)
         //collision_visitor.__vftable = (create_gjk_geom_collision_visitor_vtbl *)&create_gjk_geom_collision_visitor::`vftable';
         collision_visitor.gjk_geom_list = &gjk_geom_list;
         create_gjk_geom(ent, &collision_visitor, 0, 0x280EC93, 1);
-        physObjId = (int)Phys_ObjCreate(0, position, quat, velocity, physPreset, &gjk_geom_list, 1, ent->s.number);
+        physObjId = (intptr_t)Phys_ObjCreate(0, position, quat, velocity, physPreset, &gjk_geom_list, 1, ent->s.number);
         ent->physObjId = physObjId;
         if ( physObjId )
         {

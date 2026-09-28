@@ -794,7 +794,7 @@ char __cdecl Ragdoll_CreatePhysJoint(RagdollBody *body, JointDef *jointDef, Join
     type = jointDef->type;
     if ( type == RAGDOLL_JOINT_HINGE )
     {
-        joint->joint = (int)Phys_CreateHinge(
+        joint->joint = (intptr_t)Phys_CreateHinge(
                                                     bone->rigidBody,
                                                     parentBone->rigidBody,
                                                     anchor,
@@ -807,7 +807,7 @@ char __cdecl Ragdoll_CreatePhysJoint(RagdollBody *body, JointDef *jointDef, Join
     }
     else if ( type == RAGDOLL_JOINT_SWIVEL )
     {
-        joint->joint = (int)Phys_CreateSwivel(
+        joint->joint = (intptr_t)Phys_CreateSwivel(
                                                     bone->rigidBody,
                                                     parentBone->rigidBody,
                                                     anchor,
@@ -1018,7 +1018,7 @@ char __cdecl Ragdoll_CreatePhysObj(RagdollBody *body, BoneDef *boneDef, Bone *bo
                                              &g_empty_collision_visitor);
     //gjk_geom_list_t::add_geom(&gjk_geom_list, capsule_gjk_geom);
     gjk_geom_list.add_geom(capsule_gjk_geom);
-    bone->rigidBody = (int)Phys_ObjCreate(2, b0Origin, b0Quat, vec3_origin, &preset, &gjk_geom_list, 0, -1);
+    bone->rigidBody = (intptr_t)Phys_ObjCreate(2, b0Origin, b0Quat, vec3_origin, &preset, &gjk_geom_list, 0, -1);
     cent = CG_GetEntity(body->localClientNum, body->dobj);
     if ( bone->rigidBody )
     {

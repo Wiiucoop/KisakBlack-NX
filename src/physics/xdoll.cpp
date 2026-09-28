@@ -433,7 +433,7 @@ char __cdecl XDoll_CreatePhysObj(
         }
         Sys_EnterCriticalSection(CRITSECT_PHYSICS);
         bone->physPreset = physPreset;
-        bone->rigidBody = (int)Phys_ObjCreate(0, origin, quat, vec3_origin, physPreset, &gjk_geom_list, 1, -1);
+        bone->rigidBody = (intptr_t)Phys_ObjCreate(0, origin, quat, vec3_origin, physPreset, &gjk_geom_list, 1, -1);
         userData = (PhysObjUserData *)bone->rigidBody;
         if ( !userData->m_bpb
             && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\physics\\xdoll.cpp", 327, 0, "%s", "userData->m_bpb") )

@@ -230,36 +230,36 @@ PhysObjUserData *__cdecl Phys_ObjCreateAxis(
                 gjk_geom_list_t *gjk_geom_list,
                 int id,
                 bool do_collision_test);
-void    Phys_ObjSetPosition(int id, float *newPosition);
-void __cdecl Phys_ObjSetOrientation(int id, const float *newPosition, const float *newOrientation);
-void    Phys_ObjSetAngularVelocity(int id, float *angularVel);
-void    Phys_ObjSetVelocity(int id, float *velocity);
-void    Phys_ObjSetAngularVelocityRaw(int id, float *angularVel);
-void    Phys_ObjGetPosition(int id, float *outPosition, float (*outRotation)[3]);
-void __cdecl Phys_ObjGetVelocities(int id, float *tvel, float *avel);
-void __cdecl Phys_ObjGetCenterOfMass(int id, float *outPosition);
-void __cdecl Phys_ObjAddCollFlags(int physObjId, int collFlags);
-void __cdecl Phys_ObjRemoveCollFlags(int physObjId, int collFlags);
+void    Phys_ObjSetPosition(intptr_t id, float *newPosition);
+void __cdecl Phys_ObjSetOrientation(intptr_t id, const float *newPosition, const float *newOrientation);
+void    Phys_ObjSetAngularVelocity(intptr_t id, float *angularVel);
+void    Phys_ObjSetVelocity(intptr_t id, float *velocity);
+void    Phys_ObjSetAngularVelocityRaw(intptr_t id, float *angularVel);
+void    Phys_ObjGetPosition(intptr_t id, float *outPosition, float (*outRotation)[3]);
+void __cdecl Phys_ObjGetVelocities(intptr_t id, float *tvel, float *avel);
+void __cdecl Phys_ObjGetCenterOfMass(intptr_t id, float *outPosition);
+void __cdecl Phys_ObjAddCollFlags(intptr_t physObjId, int collFlags);
+void __cdecl Phys_ObjRemoveCollFlags(intptr_t physObjId, int collFlags);
 void __cdecl fixup_wheel_constraints(rigid_body *rb);
 void __cdecl Phys_ObjDestroy(int worldIndex, int id);
 void __cdecl Phys_DestroyUserData(int worldIndex, PhysObjUserData *userData);
 void    Phys_AddCacheImpulses();
 void __cdecl Phys_ObjAddCustomForce(
-                int physObjId,
+                intptr_t physObjId,
                 const float *hitPos,
                 const float *hitDir,
                 int mod,
                 PhysPreset *physPreset);
-void    Phys_ObjAddForce(int id, float *worldPos, float *impulse, bool relative);
-void    Phys_ObjAddTorque(int id, float *torque);
+void    Phys_ObjAddForce(intptr_t id, float *worldPos, float *impulse, bool relative);
+void    Phys_ObjAddTorque(intptr_t id, float *torque);
 void __cdecl Phys_ObjBulletImpact(
-                int id,
+                intptr_t id,
                 const float *worldPosRaw,
                 const float *bulletDirRaw,
                 float bulletSpeed,
                 float scale);
 void __cdecl Phys_TweakBulletImpact(float *worldPos, float *bulletDir, const float *centerOfMass);
-int __cdecl Phys_ObjGetSnapshot(int id, float *outPos, float (*outMat)[3]);
+int __cdecl Phys_ObjGetSnapshot(intptr_t id, float *outPos, float (*outMat)[3]);
 void __cdecl Phys_RenderBulletMeshInfo(
                 float *pos,
                 const XModel *model,
@@ -288,10 +288,10 @@ void    Phys_CollisionCallback();
 bool __cdecl Phys_ShouldCollideCallback(const broad_phase_base *bpi1, const broad_phase_base *bpi2);
 void __cdecl PhysicsSystem_Update();
 void __cdecl Phys_RunToTime(int timeNow);
-void __cdecl Phys_ObjGetInterpolatedState(int id, float *outPos, float *outQuat);
-void    Phys_SetUserBody(int id, float *position);
-bool __cdecl Phys_ObjIsAsleep(int id);
-bool __cdecl Phys_ObjIsAsleepSingle(int id);
+void __cdecl Phys_ObjGetInterpolatedState(intptr_t id, float *outPos, float *outQuat);
+void    Phys_SetUserBody(intptr_t id, float *position);
+bool __cdecl Phys_ObjIsAsleep(intptr_t id);
+bool __cdecl Phys_ObjIsAsleepSingle(intptr_t id);
 
 void __cdecl Phys_SetHingeParams(rigid_body_constraint_ragdoll *id, float motorSpeed, float damp);
 struct rigid_body_constraint_ragdoll * Phys_CreateHinge(

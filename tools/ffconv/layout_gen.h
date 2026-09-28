@@ -1087,15 +1087,15 @@ enum : uint32_t { X_DynEntityPose__radius = 28, L_DynEntityPose__radius = 28 };
 static const LayoutSpan SPANS_DynEntityPose[] = {{0,0,32}};
 
 // DynEntityClient
-enum : uint32_t { X_sizeof_DynEntityClient = 20, L_sizeof_DynEntityClient = 20 };
-enum : uint32_t { X_DynEntityClient__physObjId = 0, L_DynEntityClient__physObjId = 0 };
-enum : uint32_t { X_DynEntityClient__flags = 4, L_DynEntityClient__flags = 4 };
-enum : uint32_t { X_DynEntityClient__lightingHandle = 6, L_DynEntityClient__lightingHandle = 6 };
-enum : uint32_t { X_DynEntityClient__health = 8, L_DynEntityClient__health = 8 };
-enum : uint32_t { X_DynEntityClient__burnTime = 12, L_DynEntityClient__burnTime = 12 };
-enum : uint32_t { X_DynEntityClient__fadeTime = 14, L_DynEntityClient__fadeTime = 14 };
-enum : uint32_t { X_DynEntityClient__physicsStartTime = 16, L_DynEntityClient__physicsStartTime = 16 };
-static const LayoutSpan SPANS_DynEntityClient[] = {{0,0,20}};
+enum : uint32_t { X_sizeof_DynEntityClient = 20, L_sizeof_DynEntityClient = 24 };
+enum : uint32_t { X_DynEntityClient__flags = 4, L_DynEntityClient__flags = 8 };
+enum : uint32_t { X_DynEntityClient__lightingHandle = 6, L_DynEntityClient__lightingHandle = 10 };
+enum : uint32_t { X_DynEntityClient__health = 8, L_DynEntityClient__health = 12 };
+enum : uint32_t { X_DynEntityClient__burnTime = 12, L_DynEntityClient__burnTime = 16 };
+enum : uint32_t { X_DynEntityClient__fadeTime = 14, L_DynEntityClient__fadeTime = 18 };
+enum : uint32_t { X_DynEntityClient__physicsStartTime = 16, L_DynEntityClient__physicsStartTime = 20 };
+enum : uint32_t { X_DynEntityClient__physObjId = 0, L_DynEntityClient__physObjId = 0, XN_DynEntityClient__physObjId = 4, LN_DynEntityClient__physObjId = 8 };
+static const LayoutSpan SPANS_DynEntityClient[] = {{4,8,16}};
 
 // DynEntityServer
 enum : uint32_t { X_sizeof_DynEntityServer = 8, L_sizeof_DynEntityServer = 8 };
@@ -1113,7 +1113,7 @@ enum : uint32_t { X_DynEntityColl__contents = 28, L_DynEntityColl__contents = 28
 static const LayoutSpan SPANS_DynEntityColl[] = {{0,0,32}};
 
 // PhysConstraint
-enum : uint32_t { X_sizeof_PhysConstraint = 168, L_sizeof_PhysConstraint = 192 };
+enum : uint32_t { X_sizeof_PhysConstraint = 168, L_sizeof_PhysConstraint = 200 };
 enum : uint32_t { X_PhysConstraint__targetname = 0, L_PhysConstraint__targetname = 0 };
 enum : uint32_t { X_PhysConstraint__type = 4, L_PhysConstraint__type = 4 };
 enum : uint32_t { X_PhysConstraint__attach_point_type1 = 8, L_PhysConstraint__attach_point_type1 = 8 };
@@ -1140,10 +1140,10 @@ enum : uint32_t { X_PhysConstraint__spin_scale = 128, L_PhysConstraint__spin_sca
 enum : uint32_t { X_PhysConstraint__minAngle = 132, L_PhysConstraint__minAngle = 148 };
 enum : uint32_t { X_PhysConstraint__maxAngle = 136, L_PhysConstraint__maxAngle = 152 };
 enum : uint32_t { X_PhysConstraint__material = 140, L_PhysConstraint__material = 160 };
-enum : uint32_t { X_PhysConstraint__constraintHandle = 144, L_PhysConstraint__constraintHandle = 168 };
-enum : uint32_t { X_PhysConstraint__rope_index = 148, L_PhysConstraint__rope_index = 172 };
-enum : uint32_t { X_PhysConstraint__centity_num = 152, L_PhysConstraint__centity_num = 176 };
-static const LayoutSpan SPANS_PhysConstraint[] = {{0,0,2},{4,4,14},{24,32,10},{40,56,100},{144,168,24}};
+enum : uint32_t { X_PhysConstraint__rope_index = 148, L_PhysConstraint__rope_index = 176 };
+enum : uint32_t { X_PhysConstraint__centity_num = 152, L_PhysConstraint__centity_num = 180 };
+enum : uint32_t { X_PhysConstraint__constraintHandle = 144, L_PhysConstraint__constraintHandle = 168, XN_PhysConstraint__constraintHandle = 4, LN_PhysConstraint__constraintHandle = 8 };
+static const LayoutSpan SPANS_PhysConstraint[] = {{0,0,2},{4,4,14},{24,32,10},{40,56,100},{148,176,20}};
 
 // rope_t
 enum : uint32_t { X_sizeof_rope_t = 3188, L_sizeof_rope_t = 3192 };

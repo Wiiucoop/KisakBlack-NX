@@ -3284,7 +3284,7 @@ bool __cdecl FX_SpawnModelPhysics(
     {
         __debugbreak();
     }
-    elem->physObjId = (int)Phys_ObjCreate(
+    elem->physObjId = (intptr_t)Phys_ObjCreate(
         1,
         worldOrigin,
         quat,

@@ -1326,7 +1326,7 @@ void __cdecl CG_PlayerUpdateUserRigidBody(int localClientNum, centity_s *cent)
     if ( use_rigid_body )
     {
         if ( !cent->pose.physUserBody )
-            cent->pose.physUserBody = (int)Phys_CreateUserBody(cent->pose.origin, cent->nextState.number, PHYS_GEOM_CYLINDER);
+            cent->pose.physUserBody = (intptr_t)Phys_CreateUserBody(cent->pose.origin, cent->nextState.number, PHYS_GEOM_CYLINDER);
         if ( cent->pose.physUserBody )
             Phys_SetUserBody(cent->pose.physUserBody, cent->pose.origin);
         if ( (p_nextState->lerp.eFlags & 8) != 0 )
@@ -1364,7 +1364,7 @@ void __cdecl CG_PlayerUpdateUserRigidBody(int localClientNum, centity_s *cent)
         proneFeetPos[1] = (float)(proneFeetDist * dir[1]) + cent->pose.origin[1];
         proneFeetPos[2] = (float)(proneFeetDist * dir[2]) + cent->pose.origin[2];
         if ( !cent->pose.physUserBodyProneFeet )
-            cent->pose.physUserBodyProneFeet = (int)Phys_CreateUserBody(proneFeetPos, cent->nextState.number + 0x10000, PHYS_GEOM_CYLINDER_LARGE);
+            cent->pose.physUserBodyProneFeet = (intptr_t)Phys_CreateUserBody(proneFeetPos, cent->nextState.number + 0x10000, PHYS_GEOM_CYLINDER_LARGE);
         if ( cent->pose.physUserBodyProneFeet )
             Phys_SetUserBody(cent->pose.physUserBodyProneFeet, proneFeetPos);
     }

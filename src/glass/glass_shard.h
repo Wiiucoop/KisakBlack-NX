@@ -262,7 +262,7 @@ struct GlassShard // sizeof=0x90
     GlassShard::Mesh mesh;
     float axis[3][3];
     float origin[3];
-    int physObjId;
+    intptr_t physObjId;   // nx-port: holds a PhysObjUserData pointer
     GlassPhysics *glassPhysics;
     float timeUntilAction;
     float worldBBoxMin[3];

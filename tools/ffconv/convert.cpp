@@ -654,7 +654,7 @@ static void tMaterial(Reader &r, Prelink &z, Prelink::Loc obj) {
 
 enum { AT_PHYSPRESET = 1, AT_LIGHTDEF = 18, AT_XGLOBALS = 39 };
 enum { SZ_PHYSPRESET = 96, SZ_XGLOBALS = 48, SZ_LIGHTDEF = 32 };
-enum { AT_PHYSCONSTRAINTS = 2, SZ_PHYSCONSTRAINT = 192, SZ_PHYSCONSTRAINTS = 3088 };
+enum { AT_PHYSCONSTRAINTS = 2, SZ_PHYSCONSTRAINT = 200, SZ_PHYSCONSTRAINTS = 3216 };
 
 // PhysPreset: 84 -> 96. Two strings, everything else scalar.
 static void tPhysPreset(Reader &r, Prelink &z, Prelink::Loc obj) {
@@ -802,8 +802,8 @@ static void tMenuList(Reader &r, Prelink &z, Prelink::Loc obj) {
     }
 }
 
-// PhysConstraint: 168 -> 192. Three pointers (target_bone1, target_bone2,
-// material) push everything after them along. The uint16 targetname and
+// PhysConstraint: 168 -> 200. Three pointers (target_bone1, target_bone2,
+// material) and the runtime constraintHandle push everything after them along. The uint16 targetname and
 // target_ent fields are script string indices; Load_ScriptString reads
 // nothing from the stream; markScrStr records them.
 // Reads one 168-byte fixed record and returns its three pointer tags; the
@@ -830,7 +830,8 @@ static PhysConstraintTags tPhysConstraintFixed(Reader &r, Prelink &z,
     memcpy(o,       head, 20);
     memcpy(o + 32,  mid,  12);
     memcpy(o + 56,  body, 100);
-    memcpy(o + 168, tail, 24);
+    memcpy(o + 168, tail, 4);       // constraintHandle, 8 bytes on LP64 (runtime; 0 here)
+    memcpy(o + 176, tail + 4, 20);  // rope_index, centity_num[4]
     return t;
 }
 

@@ -915,7 +915,7 @@ void __thiscall UIViewer::DrawDobj::Set(
 {
     this->weaponOptions.i = weapParam->weaponOptions.i;
     this->weaponOptions.i = (playerParams->facePatternIndex << 26)
-                                                | ((unsigned int)&objBuf[1758][1] + 3) & this->weaponOptions.i;
+                                                | 0x3FFFFFF /* nx-port: decompiled as &objBuf[1758][1] + 3 */ & this->weaponOptions.i;
     this->heroLighting = hero;
     this->startTime = cls.realtime;
     this->weaponVariantDef = wvd;

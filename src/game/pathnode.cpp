@@ -3089,7 +3089,7 @@ void __cdecl Path_ConnectPathsForEntity(gentity_s *ent)
     {
         __debugbreak();
     }
-    ent->flags |= (unsigned int)&objBuf[1758][2];
+    ent->flags |= FL_OBSTACLE /* nx-port: decompiled as &objBuf[1758][2] */;
     oldInfoIndex = ent->disconnectedLinks;
     if ( oldInfoIndex )
     {

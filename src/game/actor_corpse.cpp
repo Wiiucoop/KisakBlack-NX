@@ -704,7 +704,7 @@ int __cdecl Actor_BecomeCorpse(gentity_s *self)
     //body->s.un2 = self->s.un2;
     body->s.animState = self->s.animState;
     body->clipmask = 65537;
-    body->r.contents = (int)&objBuf[1890][6];
+    body->r.contents = 0x4004000 /* nx-port: decompiled as (int)&objBuf[1890][6] */;
     body->nextthink = level.time + 300;
     body->handler = 3;
     body->model = self->model;

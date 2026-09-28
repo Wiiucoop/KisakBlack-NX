@@ -755,7 +755,7 @@ void __cdecl Actor_SetDefaults(actor_s *actor)
     Actor_SetDefaultState(actor);
     actor->species = AI_SPECIES_DOG;
     actor->talkToSpecies = -1;
-    actor->deathContents = (int)&objBuf[1824][4];
+    actor->deathContents = 0x4002000 /* nx-port: decompiled as (int)&objBuf[1824][4] */;
     actor->fovDot = ACTOR_DEFAULT_FOV_COS;
     actor->fMaxSightDistSqrd = 6.7108864e7f;
     actor->eTraverseMode = AI_TRAVERSE_NOGRAVITY;
@@ -2727,7 +2727,7 @@ bool __cdecl Actor_IsDodgeEntity(actor_s *self, int entnum)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
-    if ( ((unsigned int)&objBuf[1758][2] & level.gentities[1023].flags) == 0
+    if ( (FL_OBSTACLE /* nx-port: decompiled as &objBuf[1758][2] */ & level.gentities[1023].flags) == 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp",
                     2598,
@@ -2740,7 +2740,7 @@ bool __cdecl Actor_IsDodgeEntity(actor_s *self, int entnum)
     ent = &level.gentities[entnum];
     if ( ent->sentient )
         return level.time < self->iTeamMoveDodgeTime;
-    if ( ((unsigned int)&objBuf[1758][2] & ent->flags) != 0 )
+    if ( (FL_OBSTACLE /* nx-port: decompiled as &objBuf[1758][2] */ & ent->flags) != 0 )
         return 0;
     return self->Path.iPathTime > ent->iDisconnectTime;
 }

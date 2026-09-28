@@ -1753,7 +1753,7 @@ int    MenuParse_blurWorld(menuDef_t *menu, int handle)
 
 int __cdecl MenuParse_legacySplitScreenScale(menuDef_t *menu, int handle)
 {
-    return SetItemStaticFlag(menu, handle, (int)&objBuf[1758][2]);
+    return SetItemStaticFlag(menu, handle, 0x4000000 /* nx-port: decompiled as &objBuf[1758][2] */);
 }
 
 int __cdecl SetItemStaticFlag(menuDef_t *menu, int handle, int flag)

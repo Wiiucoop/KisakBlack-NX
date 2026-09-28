@@ -1568,7 +1568,7 @@ void __cdecl Actor_GetEntType(int entnum)
     }
     else
     {
-        if ( ((unsigned int)&objBuf[1758][2] & level.gentities[entnum].flags) != 0 )
+        if ( (FL_OBSTACLE /* nx-port: decompiled as &objBuf[1758][2] */ & level.gentities[entnum].flags) != 0 )
             obstacle = scr_const.obstacle;
         else
             obstacle = scr_const.world;

@@ -377,7 +377,8 @@ are silent and need reading:
   (corrupted the hunk's file list; crashed at the next hunk clear),
   `SV_LocateGameData(..., 760, ..., 10720)` (entity lookups by number landed
   mid-entity), `0x1DD8` for `vehicle_info_t`, `24 * i` over
-  `XAnimClientNotify`, `5 * numModels` for a DObj's model list. Use
+  `XAnimClientNotify`, `5 * numModels` for a DObj's model list, `objBuf[3072][31]` (124-byte DObjs,
+  so neighbours overlapped). Use
   `sizeof` / `offsetof`.
 - **Script field tables with x86 offsets** (`{ "classname", 356, ... }`).
   Map each literal to its member with the layoutgen loose dump:
@@ -391,6 +392,9 @@ are silent and need reading:
   are not on LP64.
 - **Decompiler types**: ints typed as pointers (`EmitObject`'s classnum),
   unions whose meaning depends on another field (`cLeafBrushNode_s.data`).
+- **Constants decompiled as addresses**: `(int)&objBuf[1758][2]` is
+  `FL_OBSTACLE` (0x4000000) -- the value happened to fall inside objBuf in the
+  PC binary. Wrong on every build; breaks outright once the array resizes.
 
 Still open, known: the AVL maps in `g_mover.cpp` and `pathnode.cpp` key by
 a pointer truncated to `unsigned int`; `actor_fields.cpp` and
@@ -474,7 +478,7 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    hunk page arithmetic, the script compiler and VM, weapon model arrays,
    the unlockables table overrun, the script field tables and entity links,
    script strings in the KBZ (the map's traverse scripts), the hunk's
-   `fileData_s` headers, the game entity and client sizes, DObj creation. Then the 3D renderer meets its first world frame.
+   `fileData_s` headers, the game entity and client sizes, DObj creation and storage. Then the 3D renderer meets its first world frame.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

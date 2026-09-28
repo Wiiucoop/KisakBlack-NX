@@ -4,7 +4,7 @@
 int objFreeCount;
 __int16 clientObjMap[1537];
 __int16 serverObjMap[1024];
-unsigned int objBuf[3072][31];
+DObj objBuf[3072];
 bool objAlloced[3072];
 
 int com_lastDObjIndex;
@@ -36,7 +36,7 @@ DObj *__cdecl Com_GetServerDObj(unsigned int handle)
         __debugbreak();
     }
     if ( serverObjMap[handle] )
-        return (DObj *)objBuf[serverObjMap[handle]];
+        return (DObj *)&objBuf[serverObjMap[handle]];
     else
         return 0;
 }
@@ -115,7 +115,7 @@ DObj *__cdecl Com_ClientDObjCreate(
         dobjModels,
         numModels,
         tree,
-        (unsigned __int8 *)objBuf[index],
+        (unsigned __int8 *)&objBuf[index],
         handle + 1,
         0,
         isLocalPlayer,
@@ -133,7 +133,7 @@ DObj *__cdecl Com_ClientDObjCreate(
     }
     if ( !objFreeCount )
         Com_Error(ERR_DROP, "No free DObjs");
-    return (DObj *)objBuf[index];
+    return (DObj *)&objBuf[index];
 }
 
 int __cdecl Com_GetFreeDObjIndex()
@@ -218,7 +218,7 @@ void __cdecl Com_ClientDObjClearAllSkel()
     for ( handleOffset = 0; handleOffset < 1537; ++handleOffset )
     {
         if ( clientObjMap[handleOffset] )
-            DObjSkelClear((const DObj *)objBuf[clientObjMap[handleOffset]]);
+            DObjSkelClear((const DObj *)&objBuf[clientObjMap[handleOffset]]);
     }
 }
 
@@ -278,10 +278,10 @@ DObj *__cdecl Com_ServerDObjCreate(
     {
         __debugbreak();
     }
-    DObjCreateExt(dobjModels, numModels, tree, (unsigned __int8 *)objBuf[index], handle + 1, 1, 0, 0xFFu);
+    DObjCreateExt(dobjModels, numModels, tree, (unsigned __int8 *)&objBuf[index], handle + 1, 1, 0, 0xFFu);
     if ( !objFreeCount )
         Com_Error(ERR_DROP, "No free DObjs");
-    return (DObj *)objBuf[index];
+    return (DObj *)&objBuf[index];
 }
 
 void __cdecl Com_SafeClientDObjFree(unsigned int handle, int localClientNum)
@@ -339,7 +339,7 @@ void __cdecl Com_SafeClientDObjFree(unsigned int handle, int localClientNum)
         Sys_EnterCriticalSection(CRITSECT_DOBJ_ALLOC);
         objAlloced[index] = 0;
         ++objFreeCount;
-        DObjFree((DObj *)objBuf[index]);
+        DObjFree((DObj *)&objBuf[index]);
         Sys_LeaveCriticalSection(CRITSECT_DOBJ_ALLOC);
     }
 }
@@ -376,7 +376,7 @@ void __cdecl Com_SafeServerDObjFree(unsigned int handle)
         Sys_EnterCriticalSection(CRITSECT_DOBJ_ALLOC);
         objAlloced[index] = 0;
         ++objFreeCount;
-        DObjFree((DObj *)objBuf[index]);
+        DObjFree((DObj *)&objBuf[index]);
         Sys_LeaveCriticalSection(CRITSECT_DOBJ_ALLOC);
     }
 }
@@ -562,7 +562,7 @@ DObj *__cdecl Com_GetClientDObj(unsigned int handle, int localClientNum)
         __debugbreak();
     }
     if ( clientObjMap[handlea] )
-        return (DObj *)objBuf[clientObjMap[handlea]];
+        return (DObj *)&objBuf[clientObjMap[handlea]];
     else
         return 0;
 }

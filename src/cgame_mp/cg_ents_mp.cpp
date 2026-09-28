@@ -3882,7 +3882,7 @@ void __cdecl CG_Item(int localClientNum, centity_s *cent)
             weapVariantDef = BG_GetWeaponVariantDef(weapIdx);
             weapDef = BG_GetWeaponDef(weapIdx);
             if ( weapDef->bUseDroppedModelAsStowed
-                && *((unsigned int *)weapDef->worldModel + 1)
+                && weapDef->worldModel[1]
                 && weapDef->weapClass != WEAPCLASS_GRENADE
                 && weapDef->weapClass != WEAPCLASS_KILLSTREAK_ALT_STORED_WEAPON )
             {
@@ -4000,7 +4000,7 @@ void __cdecl CG_mg42(int localClientNum, centity_s *cent)
             clTeam = client->team;
             team = (team_t)(cent->nextState.faction.iHeadIconTeam & 3);
             isOwner = cgameGlob->clientNum == (int)cent->nextState.faction.iHeadIconTeam >> 2;
-            if ( !*((unsigned int *)weapDef->worldModel + 1)
+            if ( !weapDef->worldModel[1]
                 || (ps->perks[1] & 0x800) == 0
                 || (cent->nextState.lerp.u.turret.flags & 8) != 0
                 || clTeam == team && (clTeam || isOwner) )
@@ -4257,7 +4257,7 @@ bool __cdecl IsWeaponRetrieveable(
 
     if ( !weapDef->bRetrievable )
         return 0;
-    if ( !*((unsigned int *)weapDef->worldModel + 2) )
+    if ( !weapDef->worldModel[2] )
         return 0;
     cgameGlob = CG_GetLocalClientGlobals(localClientNum);
     ps = CG_GetPredictedPlayerState(localClientNum);

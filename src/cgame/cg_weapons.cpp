@@ -1083,9 +1083,9 @@ void __cdecl CG_CreateWeaponViewModelXAnim(ViewModelInfo *viewModelInfo, const W
         }
     }
     if ( **((_BYTE **)weapVariantDef->szXAnims + 64) && XAnimIsLooped(pAnimsa, 0x40u) )
-        Com_Error(ERR_DROP, "CG_RegisterWeapon: ADS anim [%s] cannot be looping", *((unsigned int *)weapVariantDef->szXAnims + 64));
+        Com_Error(ERR_DROP, "CG_RegisterWeapon: ADS anim [%s] cannot be looping", weapVariantDef->szXAnims[64]);
     if ( **((_BYTE **)weapVariantDef->szXAnims + 65) && XAnimIsLooped(pAnimsa, 0x41u) )
-        Com_Error(ERR_DROP, "CG_RegisterWeapon: ADS anim [%s] cannot be looping", *((unsigned int *)weapVariantDef->szXAnims + 65));
+        Com_Error(ERR_DROP, "CG_RegisterWeapon: ADS anim [%s] cannot be looping", weapVariantDef->szXAnims[65]);
     for ( animIndexa = 53; animIndexa <= 57; ++animIndexa )
     {
         if ( *weapVariantDef->szXAnims[animIndexa] )
@@ -1112,7 +1112,7 @@ void __cdecl CG_CreateWeaponViewModelXAnim(ViewModelInfo *viewModelInfo, const W
 
 bool __cdecl CG_NonDualWieldAnimsValid(const WeaponVariantDef *weapVariantDef)
 {
-    return *((unsigned int *)weapVariantDef->szXAnims + 1) && **((_BYTE **)weapVariantDef->szXAnims + 1);
+    return weapVariantDef->szXAnims[1] && **((_BYTE **)weapVariantDef->szXAnims + 1);
 }
 
 void __cdecl CG_UpdateHandViewmodels(int localClientNum)

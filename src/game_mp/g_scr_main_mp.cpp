@@ -1522,7 +1522,7 @@ void Scr_GetWeaponStowedModel()
     weapDef = BG_GetWeaponDef(iWeaponIndex);
     if ( iWeaponIndex )
     {
-        if ( *((unsigned int *)weapDef->worldModel + 1)
+        if ( weapDef->worldModel[1]
             && weapDef->weapClass != WEAPCLASS_GRENADE
             && weapDef->weapClass != WEAPCLASS_KILLSTREAK_ALT_STORED_WEAPON )
         {

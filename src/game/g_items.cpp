@@ -816,7 +816,7 @@ gentity_s *__cdecl LaunchItem(const gitem_s *item, float *origin, float *angles,
     if ( !weapDef && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game\\g_items.cpp", 776, 0, "%s", "weapDef") )
         __debugbreak();
     if ( weapDef->bUseDroppedModelAsStowed
-        && *((unsigned int *)weapDef->worldModel + 1)
+        && weapDef->worldModel[1]
         && weapDef->weapClass != WEAPCLASS_GRENADE
         && weapDef->weapClass != WEAPCLASS_KILLSTREAK_ALT_STORED_WEAPON )
     {
@@ -1500,7 +1500,7 @@ void __cdecl G_RegisterWeapon(unsigned int weapIndex)
         v2 = (char *)XModelGetName(weapDef->projectileModel);
         G_ModelIndex(v2);
     }
-    if ( *((unsigned int *)weapDef->worldModel + 1) )
+    if ( weapDef->worldModel[1] )
     {
         v3 = (char *)XModelGetName(*((const XModel **)weapDef->worldModel + 1));
         G_ModelIndex(v3);

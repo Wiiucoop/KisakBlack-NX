@@ -24,7 +24,7 @@ g++ -O1 -std=c++17 -static "$here/layoutgen.cpp" -o "$tmp/layoutgen.exe"
 
 find "$root/src" -name '*.h' -not -path '*/libs/*' -not -path '*/DemonWare/*' |
     cygpath -m -f - > "$tmp/headers.txt"
-"$tmp/layoutgen.exe" probe "$(cygpath -m "$here/structs.txt")" "$(cygpath -m "$tmp/probe.cpp")" \
+"$tmp/layoutgen.exe" probe "$(cygpath -m "${STRUCTS:-$here/structs.txt}")" "$(cygpath -m "$tmp/probe.cpp")" \
     "$(cygpath -m "$tmp/members.tsv")" "@$(cygpath -m "$tmp/headers.txt")"
 
 for abi in lp64 ilp32; do
@@ -43,5 +43,5 @@ for abi in lp64 ilp32; do
 done
 
 "$tmp/layoutgen.exe" emit "$(cygpath -m "$tmp/members.tsv")" "$(cygpath -m "$tmp/lp64.txt")" \
-    "$(cygpath -m "$tmp/ilp32.txt")" "$(cygpath -m "$root/tools/ffconv/layout_gen.h")"
-echo "wrote tools/ffconv/layout_gen.h ($(grep -c '^// ' "$root/tools/ffconv/layout_gen.h") structs)"
+    "$(cygpath -m "$tmp/ilp32.txt")" "$(cygpath -m "${OUT:-$root/tools/ffconv/layout_gen.h}")"
+echo "wrote ${OUT:-tools/ffconv/layout_gen.h}"

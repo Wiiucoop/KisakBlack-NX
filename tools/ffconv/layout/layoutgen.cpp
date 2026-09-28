@@ -123,6 +123,56 @@ static bool parseMember(std::string st, Member &m) {
     m.type = cc == std::string::npos ? last : last.substr(cc + 2);
     return !m.name.empty();
 }
+// Parse one aggregate body (the text between its braces) into data members.
+// Members of an anonymous struct or union are the enclosing type's own in
+// C++ (ent->index reaches into gentity_s's anonymous union), so they are
+// parsed in place; a named nested aggregate is one blob member; a method's
+// body is skipped with it.
+static void parseBody(const std::string &body, const std::string &name, StructDef &out) {
+    int depth = 0;
+    std::string cur, nested;
+    for (size_t i = 0; i < body.size(); ++i) {
+        char c = body[i];
+        if (c == '{') {
+            if (depth == 0) nested.clear();
+            else nested.push_back(c);
+            ++depth;
+            continue;
+        }
+        if (c == '}') {
+            --depth;
+            if (depth > 0) { nested.push_back(c); continue; }
+            if (cur.find('(') != std::string::npos) { cur.clear(); nested.clear(); continue; }  // method
+            cur += " __NESTED__ ";
+            continue;
+        }
+        if (depth > 0) { nested.push_back(c); continue; }
+        if (c == ';') {
+            std::string st = trim(cur);
+            cur.clear();
+            if (st.find("__NESTED__") != std::string::npos) {
+                std::string tail = trim(st.substr(st.find("__NESTED__") + 10));
+                if (!tail.empty()) {
+                    Member m;
+                    m.name = tail;
+                    out.members.push_back(m);
+                } else {
+                    parseBody(nested, name, out);   // anonymous: its members are ours
+                }
+                nested.clear();
+                continue;
+            }
+            Member m;
+            if (parseMember(st, m)) out.members.push_back(m);
+            continue;
+        }
+        if (c == ':' && i + 1 < body.size() && body[i + 1] != ':' && i > 0 && body[i - 1] != ':') {
+            std::string w = trim(cur);   // access specifier ("public:")
+            if (w == "public" || w == "private" || w == "protected") { cur.clear(); continue; }
+        }
+        cur.push_back(c);
+    }
+}
 
 // Find `struct|union [__declspec(...)] Name` followed by a body, and parse
 // the body's data members.
@@ -130,57 +180,16 @@ static bool findStruct(const std::string &src, const std::string &name, StructDe
     std::regex re("(struct|union)\\s+(__declspec\\s*\\(\\s*align\\s*\\(\\s*\\d+\\s*\\)\\s*\\)\\s+)?" +
                   name + "\\b[^;{()]*\\{");
     std::smatch mm;
-    std::string::const_iterator from = src.begin();
-    if (!std::regex_search(from, src.end(), mm, re)) return false;
+    if (!std::regex_search(src.begin(), src.end(), mm, re)) return false;
     size_t pos = (size_t)(mm[0].second - src.begin());   // just past '{'
     int depth = 1;
-    std::string cur;
-    out.name = name;
-    for (size_t i = pos; i < src.size() && depth > 0; ++i) {
-        char c = src[i];
-        if (c == '{') {
-            ++depth;
-            if (depth == 2) cur += " __NESTED__ ";
-            continue;
-        }
-        if (c == '}') {
-            --depth;
-            if (depth == 1) {
-                // A method body ends the statement; a nested struct/union is
-                // followed by its member name, up to ';'.
-                if (cur.find('(') != std::string::npos) cur.clear();
-            }
-            continue;
-        }
-        if (depth > 1) continue;
-        if (c == ';') {
-            std::string st = trim(cur);
-            cur.clear();
-            if (st.find("__NESTED__") != std::string::npos) {
-                // anonymous nested aggregate: a blob member if it has a name
-                std::string tail = trim(st.substr(st.find("__NESTED__") + 10));
-                if (!tail.empty()) {
-                    Member m;
-                    m.name = tail;
-                    out.members.push_back(m);
-                } else {
-                    fprintf(stderr, "layoutgen: %s has an anonymous struct/union member;"
-                            " list it as opaque\n", name.c_str());
-                    exit(2);
-                }
-                continue;
-            }
-            Member m;
-            if (parseMember(st, m)) out.members.push_back(m);
-            continue;
-        }
-        if (c == ':' && i + 1 < src.size() && src[i + 1] != ':' && i > 0 && src[i - 1] != ':') {
-            // access specifier ("public:") -- drop what came before it
-            std::string w = trim(cur);
-            if (w == "public" || w == "private" || w == "protected") { cur.clear(); continue; }
-        }
-        cur.push_back(c);
+    size_t end = pos;
+    for (; end < src.size() && depth > 0; ++end) {
+        if (src[end] == '{') ++depth;
+        else if (src[end] == '}') --depth;
     }
+    out.name = name;
+    parseBody(src.substr(pos, end - 1 - pos), name, out);
     return true;
 }
 
@@ -320,6 +329,12 @@ static void flatten(const std::string &sname, long bx, long bl, const std::strin
             continue;
         }
         if (sz.il != sz.lp) {
+            // LAYOUTGEN_LOOSE: an offset dump (layout.sh with STRUCTS/OUT), not
+            // a converter map -- name the member and move on.
+            if (getenv("LAYOUTGEN_LOOSE")) {
+                if (first) ptrs.push_back({p, bx + off.il, bl + off.lp});
+                continue;
+            }
             fprintf(stderr, "layoutgen: %s.%s (%s) is %ld bytes on x86 but %ld on LP64 --"
                     " it hides a pointer; add its type to structs.txt or mark it opaque\n",
                     sname.c_str(), m.name.c_str(), m.type.c_str(), sz.il, sz.lp);

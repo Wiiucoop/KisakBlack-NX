@@ -866,6 +866,22 @@ int __cdecl R_SetIndexData(GfxCmdBufPrimState *state, unsigned __int8 *indices, 
     return baseIndex;
 }
 
+#ifdef KISAK_NX
+// nx-port: shaders from a KBZ zone are created by nx_kbz.cpp's build step, one
+// technique set at a time. A pass it never reached (the first map load hit
+// one: pimp_shader_vertcolorsimple, drawing a 2D pic) would assert below and
+// trap, so a shader that still holds its load def is created at first use
+// instead, and named so the gap can be found.
+static void R_NxCreateShaderLate(const GfxCmdBufState *state, const char *kind, const char *name)
+{
+    static unsigned s_count;
+    if (++s_count <= 32)
+        Com_PrintWarning(8, "R_NxCreateShaderLate: %s shader '%s' created at first use (material '%s')\n",
+                         kind, name ? name : "?",
+                         state->material && state->material->info.name ? state->material->info.name : "?");
+}
+#endif
+
 void __cdecl R_SetPixelShader(GfxCmdBufState *state, const MaterialPixelShader *pixelShader)
 {
     if ( !pixelShader
@@ -873,6 +889,14 @@ void __cdecl R_SetPixelShader(GfxCmdBufState *state, const MaterialPixelShader *
     {
         __debugbreak();
     }
+#ifdef KISAK_NX
+    if ( !pixelShader->prog.ps && pixelShader->prog.loadDef.program )
+    {
+        MaterialPixelShader *mutableShader = (MaterialPixelShader *)pixelShader;
+        Load_CreateMaterialPixelShader(&mutableShader->prog.loadDef, mutableShader);
+        R_NxCreateShaderLate(state, "pixel", pixelShader->name);
+    }
+#endif
     if ( !pixelShader->prog.ps
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_shade.cpp",
@@ -908,6 +932,14 @@ void __cdecl R_UpdateVertexDecl(GfxCmdBufState *state)
     {
         __debugbreak();
     }
+#ifdef KISAK_NX
+    if ( pass->vertexDecl && !pass->vertexDecl->isLoaded )   // see R_NxCreateShaderLate
+    {
+        MaterialPass *mutablePass = (MaterialPass *)pass;
+        Load_BuildVertexDecl(&mutablePass->vertexDecl);
+        R_NxCreateShaderLate(state, "vertex decl for", vertexShader ? vertexShader->name : 0);
+    }
+#endif
     R_SetVertexDecl(&state->prim, pass->vertexDecl);
     if ( !pass->pixelShader
         && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_shade.cpp", 1337, 0, "%s", "pass->pixelShader") )
@@ -943,6 +975,14 @@ void __cdecl R_SetVertexShader(GfxCmdBufState *state, const MaterialVertexShader
         {
             __debugbreak();
         }
+#ifdef KISAK_NX
+        if ( !vertexShader->prog.vs && vertexShader->prog.loadDef.program )
+        {
+            MaterialVertexShader *mutableShader = (MaterialVertexShader *)vertexShader;
+            Load_CreateMaterialVertexShader(&mutableShader->prog.loadDef, mutableShader);
+            R_NxCreateShaderLate(state, "vertex", vertexShader->name);
+        }
+#endif
         if ( !vertexShader->prog.vs
             && !Assert_MyHandler(
                         "C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_shade.cpp",

@@ -41,7 +41,7 @@ repository and none ever should be.
   engine loads every zone including the map's own (converted: GfxWorld,
   clipMap, GameWorldMp, ComWorld, destructibles, glass), shows the load
   screen, spawns the server, compiles the gametype scripts and runs
-  `G_InitGame` into weapon registration. Each device run so far has moved
+  `G_InitGame` into the level scripts. Each device run so far has moved
   the crash further down that path; the fixes are LP64 ones (section 4).
 
 Hardware and driver, as the log reports them: Mesa 26.2.1, OpenGL 4.3 core,
@@ -94,6 +94,14 @@ The answer is to transcode offline:
 - **`src/nx/nx_kbz.cpp`** loads it on device in four steps: allocate blocks and
   copy their images, apply relocations, register each asset, then build the
   runtime objects the `.ff` loader would have built.
+- **Script strings (KBZ version 2).** Bone names, notetracks, pathnode and
+  dynent names, weapon hide tags are `u16` indices into the zone's own string
+  list, which `Load_ScriptStringCustom` swaps for engine string ids. The KBZ
+  carries that list and every slot holding one (`markScrStr` in the
+  converter, one call per `Load_ScriptString` in `db_load.cpp`), and the
+  loader remaps them before registration. Before this every such field named
+  an arbitrary string (a pathnode asked for `animscripts/traverse/ground`).
+  A new `Load_ScriptString` site in a transcoder needs a `markScrStr` too.
 
 The `.ff` files must still be on the SD card: the zone loader opens the file
 before the KBZ path takes over, and a zone with no `.kbz` is skipped
@@ -365,7 +373,9 @@ are silent and need reading:
   union holds 8-byte pointers. Silent -- grep for them.
 - **Literal x86 sizes**: `MT_Alloc(112, ...)` for a struct with pointers,
   `Hunk_UserAlloc(..., 4 * size, ...)` for sval_u nodes, `2048` for 512
-  pointers. Use `sizeof`.
+  pointers, `alloc(9)` / `alloc(strlen(name) + 10)` for a `fileData_s` header
+  (corrupted the hunk's file list; crashed at the next hunk clear). Use
+  `sizeof` / `offsetof`.
 - **Script field tables with x86 offsets** (`{ "classname", 356, ... }`).
   Map each literal to its member with the layoutgen loose dump:
   `LAYOUTGEN_LOOSE=1 STRUCTS=tools/nx/fields_structs.txt OUT=fields_gen.h
@@ -459,8 +469,10 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    (section 4, "LP64 bug classes"), rebuild. Fixed on this path so far, in
    order: the connect string's XUID lookup, a shader the KBZ build missed,
    hunk page arithmetic, the script compiler and VM, weapon model arrays,
-   the unlockables table overrun, the script field tables and entity links.
-   Then the 3D renderer meets its first world frame.
+   the unlockables table overrun, the script field tables and entity links,
+   script strings in the KBZ (the map's traverse scripts), the hunk's
+   `fileData_s` headers. Then the 3D renderer meets its first world frame.
+   After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---
 

@@ -143,6 +143,19 @@ static void putXStringFromTag(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t 
     else { ++g_cntOffOther; z.putPtr(obj, field, Prelink::none()); }
 }
 
+// Script strings are u16 indices into the zone's string list, which
+// Load_ScriptStringCustom swaps for SL ids at load time. The converter keeps
+// the indices and records every slot holding one; the device loader maps them
+// (NX_KbzRemapScriptStrings, nx_kbz.cpp). Arrays reached by an offset ref are
+// already marked where they were loaded.
+static std::vector<std::string> g_zoneStrings;   // index -> string ("" = null)
+static void markScrStr(Prelink &z, Prelink::Loc obj, uint32_t field,
+                       uint32_t count = 1, uint32_t stride = 2) {
+    if (!obj.valid()) return;
+    for (uint32_t i = 0; i < count; ++i)
+        z.scriptStrings.push_back({(uint8_t)obj.blk, obj.off + field + i * stride});
+}
+
 // ---- per-asset transcoders --------------------------------------------------
 // Load_RawFile: x86 {char* name; int len; char* buffer} (12) -> LP64 (24).
 static void tRawFile(Reader &r, Prelink &z, Prelink::Loc obj) {
@@ -792,7 +805,7 @@ static void tMenuList(Reader &r, Prelink &z, Prelink::Loc obj) {
 // PhysConstraint: 168 -> 192. Three pointers (target_bone1, target_bone2,
 // material) push everything after them along. The uint16 targetname and
 // target_ent fields are script string indices; Load_ScriptString reads
-// nothing from the stream, so they carry over as-is.
+// nothing from the stream; markScrStr records them.
 // Reads one 168-byte fixed record and returns its three pointer tags; the
 // referenced strings come later, after the whole block (Load_PhysConstraints
 // reads all 2696 bytes, then the name, then each constraint's data).
@@ -830,6 +843,9 @@ static void tPhysConstraints(Reader &r, Prelink &z, Prelink::Loc obj) {
     for (int i = 0; i < 16; ++i) {
         Prelink::Loc c{obj.blk, obj.off + 16 + (uint32_t)i * SZ_PHYSCONSTRAINT};
         tags[i] = tPhysConstraintFixed(r, z, c);
+        markScrStr(z, c, L_PhysConstraint__targetname);
+        markScrStr(z, c, L_PhysConstraint__target_ent1);
+        markScrStr(z, c, L_PhysConstraint__target_ent2);
     }
 
     putXStringFromTag(r, z, obj, 0, nameTag);
@@ -854,15 +870,16 @@ static void tPhysConstraints(Reader &r, Prelink &z, Prelink::Loc obj) {
 
 enum { AT_XANIM = 4, SZ_XANIM = 152 };
 
-static void tSimpleArray(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
+static Prelink::Loc tSimpleArray(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
                          uint32_t tag, uint32_t count, uint32_t elemSize,
                          uint32_t allocParam) {
-    if (tag == TAG_NULL) { z.putPtr(obj, field, Prelink::none()); return; }
+    if (tag == TAG_NULL) { z.putPtr(obj, field, Prelink::none()); return Prelink::none(); }
     const uint32_t n = count * elemSize;
     Prelink::Loc buf = z.alloc(OUT, n ? n : 1, elemSize);
     if (n) r.bytes(z.at(buf), n);
     b4Reserve(allocParam, n, buf);
     z.putPtr(obj, field, buf);
+    return buf;
 }
 
 // Array loaders come in two flavours. tSimpleArray is for the ones that take
@@ -871,12 +888,12 @@ static void tSimpleArray(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field
 // every other non-zero value as an offset that consumes no stream, so they go
 // through here instead. Getting the two mixed up silently eats or leaves
 // behind a whole array.
-static void tOffsetOrArray(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
+static Prelink::Loc tOffsetOrArray(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
                            uint32_t tag, uint32_t count, uint32_t elemSize,
                            uint32_t allocParam) {
-    if (tag == TAG_NULL)   { z.putPtr(obj, field, Prelink::none()); return; }
-    if (tag != TAG_INLINE) { putStructOffsetRef(z, obj, field, tag); return; }
-    tSimpleArray(r, z, obj, field, tag, count, elemSize, allocParam);
+    if (tag == TAG_NULL)   { z.putPtr(obj, field, Prelink::none()); return Prelink::none(); }
+    if (tag != TAG_INLINE) { putStructOffsetRef(z, obj, field, tag); return Prelink::none(); }
+    return tSimpleArray(r, z, obj, field, tag, count, elemSize, allocParam);
 }
 
 // XAnimDeltaPart and friends. The `indices` field in XAnimPartTransFrames and
@@ -1055,12 +1072,12 @@ static void tXAnimParts(Reader &r, Prelink &z, Prelink::Loc obj) {
     putXStringFromTag(r, z, obj, 0, nameTag);
 
     // names: ScriptString array, boneCount[9] entries of 2 bytes
-    tSimpleArray(r, z, obj, 72, namesTag, bones[9], 2, 1);
+    markScrStr(z, tSimpleArray(r, z, obj, 72, namesTag, bones[9], 2, 1), 0, bones[9]);
 
     if (notifyTag != TAG_NULL) {
         // XAnimNotifyInfo is 8 bytes: {ScriptString name; float time}. No
         // pointers, so it keeps its size.
-        tSimpleArray(r, z, obj, 136, notifyTag, bones[10], 8, 3);
+        markScrStr(z, tSimpleArray(r, z, obj, 136, notifyTag, bones[10], 8, 3), 0, bones[10], 8);
     }
 
     if (deltaTag != TAG_NULL)
@@ -1439,7 +1456,7 @@ static void tXModel(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     putXStringFromTag(r, z, obj, 0, nameTag);
 
-    tOffsetOrArray(r, z, obj, 16, boneNamesTag, nBones, 2, 1);
+    markScrStr(z, tOffsetOrArray(r, z, obj, 16, boneNamesTag, nBones, 2, 1), 0, nBones);
 
     tOffsetOrArray(r, z, obj, 24, parentTag, nDiff, 1, 0);
 
@@ -2958,8 +2975,8 @@ static void tWeaponDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
     putXStringFromTag(r, z, w, 24, fb.at(24));               // szModeName
 
     // notetrackSoundMapKeys / Values: 20 script strings, AllocLoad_XBlendInfo.
-    tOffsetOrArray(r, z, w, 32, fb.at(32), 20, 2, 1);
-    tOffsetOrArray(r, z, w, 40, fb.at(40), 20, 2, 1);
+    markScrStr(z, tOffsetOrArray(r, z, w, 32, fb.at(32), 20, 2, 1), 0, 20);
+    markScrStr(z, tOffsetOrArray(r, z, w, 40, fb.at(40), 20, 2, 1), 0, 20);
 
     putXStringFromTag(r, z, w, 88, fb.at(88));               // parentWeaponName
     tFxEffectDefHandle(r, z, w, 152, fb.at(152), fb.slot(152));            // viewFlashEffect
@@ -2985,7 +3002,7 @@ static void tWeaponDef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
     tMaterialHandle(r, z, w, 1160, fb.at(1160), fb.slot(1160));             // hudIcon
     tMaterialHandle(r, z, w, 1192, fb.at(1192), fb.slot(1192));             // ammoCounterIcon
     putXStringFromTag(r, z, w, 1224, fb.at(1224));           // szSharedAmmoCapName
-    // explosionTag is a script string inside the fixed block; it loads nothing.
+    markScrStr(z, w, 1268);                                   // explosionTag
 
     for (uint32_t o = 1304; o <= 1344; o += 8)               // the six spin sounds
         putXStringFromTag(r, z, w, o, fb.at(o));
@@ -3044,7 +3061,7 @@ static void tWeaponVariantDef(Reader &r, Prelink &z, Prelink::Loc obj) {
     putXStringFromTag(r, z, obj, 24, fb.at(24));             // szDisplayName
     putXStringFromTag(r, z, obj, 40, fb.at(40));             // szAltWeaponName
     tXStringArrayPtr(r, z, obj, 32, fb.at(32), 66);          // szXAnims[66]
-    tOffsetOrArray(r, z, obj, 48, fb.at(48), 32, 2, 1);      // hideTags[32]
+    markScrStr(z, tOffsetOrArray(r, z, obj, 48, fb.at(48), 32, 2, 1), 0, 32);  // hideTags[32]
     putXStringFromTag(r, z, obj, 96, fb.at(96));             // szAmmoName
     putXStringFromTag(r, z, obj, 112, fb.at(112));           // szClipName
     tMaterialHandle(r, z, obj, 184, fb.at(184));             // overlayMaterial
@@ -3797,10 +3814,12 @@ static void tDestructibleDef(Reader &r, Prelink &z, Prelink::Loc obj) {
     for (uint32_t p = 0; p < n; ++p) {
         Prelink::Loc pc{tbl.blk, tbl.off + p * SZ_DPIECE};
         const uint32_t px86 = x86 + p * 312;
+        markScrStr(z, pc, L_DestructiblePiece__enableLabel);
         for (int s = 0; s < 5; ++s) {
             const DStageTags &t = tags[p].stage[s];
             Prelink::Loc st{pc.blk, pc.off + (uint32_t)s * SZ_DSTAGE};
             const uint32_t sx86 = px86 + (uint32_t)s * 48;
+            markScrStr(z, st, L_DestructibleStage__showBone);
             tFxEffectDefHandle(r, z, st, 16, t.fx, sx86 + 16);
             putXStringFromTag(r, z, st, 24, t.snd);
             putXStringFromTag(r, z, st, 32, t.notify);
@@ -4348,6 +4367,10 @@ static void tGameWorldMp(Reader &r, Prelink &z, Prelink::Loc o) {
                                  pathnode_t, nodeCount + 128, 3, 8);
         for (uint32_t i = 0; i < nodes.n; ++i) {
             const uint8_t *nx = nodes.x(i);
+            for (uint32_t f : std::initializer_list<uint32_t>{L_pathnode_t__constant__targetname, L_pathnode_t__constant__script_linkName,
+                               L_pathnode_t__constant__script_noteworthy, L_pathnode_t__constant__target,
+                               L_pathnode_t__constant__animscript})
+                markScrStr(z, nodes.at(i), f);
             tBytes(r, z, nodes.at(i), L_pathnode_t__constant__Links,
                    rdX(nx, X_pathnode_t__constant__Links),
                    X_sizeof_pathlink_s * rdX16(nx, X_pathnode_t__constant__totalLinkCount), 3);
@@ -4530,6 +4553,8 @@ static void tClipMap(Reader &r, Prelink &z, Prelink::Loc o) {
         for (uint32_t i = 0; i < defs.n; ++i) {             // Load_DynEntityDef
             const uint8_t *dx = defs.x(i);
             Prelink::Loc d = defs.at(i);
+            markScrStr(z, d, L_DynEntityDef__targetname);
+            markScrStr(z, d, L_DynEntityDef__target);
             tXModelHandle(r, z, d, L_DynEntityDef__xModel, rdX(dx, X_DynEntityDef__xModel),
                           defs.slot(i, X_DynEntityDef__xModel));
             tXModelHandle(r, z, d, L_DynEntityDef__destroyedxModel,
@@ -4670,8 +4695,7 @@ int main(int argc, char **argv) {
     //
     // We parse them so the stream stays in sync and their block-4 offsets land
     // in the dedup map -- assets reference these strings by offset. They are
-    // NOT yet carried into the KBZ nor registered on device: prelink.h has a
-    // scriptStrings field but nothing writes or reads it yet.
+    // g_zoneStrings keeps them for the KBZ script-string section.
     if (stringCount != 0 && stringsTag != 0) {
         Prelink::Loc arr = z.alloc(OUT, (size_t)stringCount * 8, 8);
         b4Reserve(3, stringCount * 4, arr);   // DB_AllocStreamPos(3) -> align 4
@@ -4679,8 +4703,14 @@ int main(int argc, char **argv) {
         std::vector<uint32_t> strTags(stringCount);
         for (uint32_t i = 0; i < stringCount; ++i) strTags[i] = r.u32();
 
-        for (uint32_t i = 0; i < stringCount; ++i)
+        g_zoneStrings.assign(stringCount, std::string());
+        for (uint32_t i = 0; i < stringCount; ++i) {
+            if (strTags[i] == TAG_INLINE) g_zoneStrings[i] = (const char *)r.p;
+            else if (strTags[i] != TAG_NULL)
+                fprintf(stderr, "warning: script string %u is not inline (tag %08x); it maps to null\n",
+                        i, strTags[i]);
             putXStringFromTag(r, z, arr, i * 8, strTags[i]);
+        }
     }
 
     std::vector<uint32_t> types(assetCount), hdrTag(assetCount);
@@ -4809,7 +4839,7 @@ void Prelink::write(const char *path) {
     uint32_t blkSize[NBLOCK];
     for (int i = 0; i < NBLOCK; ++i) blkSize[i] = (uint32_t)block[i].size();
     char magic[4] = {'K','B','Z','1'};
-    uint32_t ver = 1, nblk = NBLOCK;
+    uint32_t ver = 2, nblk = NBLOCK;   // 2: script-string section after the assets
     uint32_t rc = (uint32_t)relocs.size(), ac = (uint32_t)assets.size();
     fwrite(magic, 1, 4, f); fwrite(&ver, 4, 1, f); fwrite(&nblk, 4, 1, f);
     fwrite(blkSize, 4, NBLOCK, f);
@@ -4817,5 +4847,12 @@ void Prelink::write(const char *path) {
     for (int i = 0; i < NBLOCK; ++i) if (i != ZEROBLK && !block[i].empty()) fwrite(block[i].data(), 1, block[i].size(), f);
     for (auto &rl : relocs) { fwrite(&rl.slotBlk,1,1,f); fwrite(&rl.slotOff,4,1,f); fwrite(&rl.tgtBlk,1,1,f); fwrite(&rl.tgtOff,4,1,f); }
     for (auto &a : assets)  { fwrite(&a.type,4,1,f); fwrite(&a.blk,1,1,f); fwrite(&a.off,4,1,f); }
+    // Script strings: {u32 count; count x (u16 len, chars)} then
+    // {u32 count; count x (u8 blk, u32 off)} -- the u16 slots holding an index.
+    uint32_t sc = (uint32_t)g_zoneStrings.size(), fc = (uint32_t)scriptStrings.size();
+    fwrite(&sc, 4, 1, f);
+    for (auto &s : g_zoneStrings) { uint16_t l = (uint16_t)s.size(); fwrite(&l, 2, 1, f); fwrite(s.data(), 1, l, f); }
+    fwrite(&fc, 4, 1, f);
+    for (auto &ss : scriptStrings) { fwrite(&ss.first, 1, 1, f); fwrite(&ss.second, 4, 1, f); }
     fclose(f);
 }

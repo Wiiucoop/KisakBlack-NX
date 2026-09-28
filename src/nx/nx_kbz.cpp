@@ -41,6 +41,7 @@
 #include <ui/ui_shared.h>
 #include <gfx_d3d/r_bsp.h>
 #include <gfx_d3d/r_buffers.h>
+#include <clientscript/cscr_stringlist.h>
 
 // Written by tools/ffconv (prelink.h ZEROBLK): sized in the header, no bytes in the file.
 static const uint32_t KBZ_RUNTIME_BLOCK = 1;
@@ -52,7 +53,7 @@ namespace {
 
 struct KbzHeader {
     char     magic[4];   // "KBZ1"
-    uint32_t version;    // 1
+    uint32_t version;    // 1; 2 adds the script-string section
     uint32_t blockCount; // 8
 };
 
@@ -509,6 +510,48 @@ private:
     std::vector<std::pair<const void *, uint8_t *>> m_slots; // asset header -> slot
 };
 
+// Version 2 section after the asset table: the zone's script string list, then
+// every u16 slot holding an index into it. Load_TempStringCustom and
+// Load_ScriptStringCustom (db_stream_load.cpp, db_stringtable_load.cpp) turn
+// each list entry into an SL id and each slot's index into that id; this does
+// both. Runs before registration: some slots sit inside asset headers
+// (PhysConstraints) that DB_AddXAsset copies into the pool.
+static void remapScriptStrings(const char *path, const uint8_t *p, const uint8_t *end,
+                               uint8_t **block, const uint32_t *blockSize, uint32_t nblk)
+{
+    uint32_t count;
+    if (p + 4 > end) return;
+    memcpy(&count, p, 4); p += 4;
+    std::vector<uint16_t> ids(count, 0);
+    char buf[1024];
+    for (uint32_t i = 0; i < count; ++i) {
+        uint16_t len;
+        if (p + 2 > end) return;
+        memcpy(&len, p, 2); p += 2;
+        if (p + len > end) return;
+        if (len) {
+            uint32_t n = len < sizeof(buf) - 1 ? len : (uint32_t)sizeof(buf) - 1;
+            memcpy(buf, p, n);
+            buf[n] = 0;
+            ids[i] = (uint16_t)SL_GetString(buf, 4u, SCRIPTINSTANCE_SERVER);
+        }
+        p += len;
+    }
+    uint32_t slots, bad = 0;
+    if (p + 4 > end) return;
+    memcpy(&slots, p, 4); p += 4;
+    for (uint32_t i = 0; i < slots && p + 5 <= end; ++i) {
+        uint8_t b = *p++; uint32_t off; memcpy(&off, p, 4); p += 4;
+        if (b >= nblk || !block[b] || off + 2 > blockSize[b]) { ++bad; continue; }
+        uint16_t v; memcpy(&v, block[b] + off, 2);
+        if (v >= count) { ++bad; v = 0; }
+        else v = ids[v];
+        memcpy(block[b] + off, &v, 2);
+    }
+    Com_Printf(16, "NX_KBZ: '%s' %u script strings, %u slots remapped (%u out of range)\n",
+               path, count, slots, bad);
+}
+
 // Parse + relocate + register a KBZ1 image already read into `file`.
 // Returns 1 on success, -1 if malformed. `path` is for logging only.
 static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
@@ -584,9 +627,13 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
     }
     Com_Printf(16, "NX_KBZ: relocs applied, registering %u assets\n", assetCount);
 
+    // 2b. script strings (version 2 on), before anything reads them.
+    const uint8_t *assetTable = p;
+    if (hdr.version >= 2 && assetTable + (size_t)assetCount * 9 <= end)
+        remapScriptStrings(path, assetTable + (size_t)assetCount * 9, end, block, blockSize, nblk);
+
     // 3. register each asset. The header struct is already native LP64 layout,
     // so we hand DB_AddXAsset a direct pointer into the relocated block.
-    const uint8_t *assetTable = p;
     AssetSlots slots;
     slots.collect(assetTable, end, assetCount, relocTable, relocCount, block, blockSize, nblk);
     // Kept for step 4, which has to build the entry the database returned and

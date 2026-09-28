@@ -340,7 +340,7 @@ char *__cdecl Hunk_SetDataForFile(int type, const char *name, void *data, void *
     {
         __debugbreak();
     }
-    fileData = (fileData_s *)alloc(strlen(name) + 10);
+    fileData = (fileData_s *)alloc((int)(offsetof(fileData_s, name) + strlen(name) + 1)); // nx-port: was strlen + 10 (x86 header 9)
     if ( !Hunk_DataOnHunk((unsigned __int8 *)fileData)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\universal\\com_memory.cpp",
@@ -390,7 +390,7 @@ void __cdecl Hunk_AddData(int type, void *data, void *(__cdecl *alloc)(int))
     {
         __debugbreak();
     }
-    fileData = (fileData_s *)alloc(9);
+    fileData = (fileData_s *)alloc((int)offsetof(fileData_s, name)); // nx-port: was 9 (x86 header)
     if ( !Hunk_DataOnHunk((unsigned __int8 *)fileData)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\universal\\com_memory.cpp",

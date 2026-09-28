@@ -111,10 +111,24 @@ Two parts of `nx_kbz.cpp` are load-bearing and easy to get wrong again:
   - `TECHNIQUE_SET` → `Load_CreateMaterialVertexShader`,
     `Load_CreateMaterialPixelShader`, `Load_BuildVertexDecl`;
   - `IMAGE` → `Load_Texture`, which turns the `GfxImageLoadDef` sitting in
-    `GfxImage::texture` into a real texture.
+    `GfxImage::texture` into a real texture;
+  - `GFXWORLD` → `Load_VertexBuffer` for the world and layer vertex buffers.
 
-  Still missing: `GFXWORLD` → `Load_VertexBuffer` (`db_load.cpp:7984`, `:8001`)
-  and `MATERIAL` → `Load_PicmipWater` (`db_load.cpp:2334`).
+  Still missing: `MATERIAL` → `Load_PicmipWater` (`db_load.cpp:2334`).
+
+- **Map assets and `layout_gen.h`.** The six types a map adds (`gfx_map`,
+  `col_map_mp`, `com_map`, `game_map_mp`, `destructibledef`, `glasses`) are
+  too big to lay out by hand, so their offsets come from the compiler.
+  `tools/ffconv/layout/layout.sh` (UCRT64 shell) parses the structs listed in
+  `structs.txt` from the engine headers, compiles a probe of `offsetof` /
+  `sizeof` twice with the Switch compiler — LP64, and `-mabi=ilp32`, which
+  lays structs out as MSVC x86 did — and writes `tools/ffconv/layout_gen.h`:
+  `X_`/`L_` offsets for every member and the pointer-free spans that copy
+  across. A member that is not a pointer but changes size stops it (a union
+  of pointers, say: list it as `opaque`). Regenerate after changing any
+  listed struct. Two KBZ details came with it: output block 1 is the
+  fastfile's runtime block (sized, never stored, zeroed on load), and offset
+  pointers into the middle of an array resolve record by record.
 
 Device resources are created **inline**, not queued.
 `Sys_CanCreateDeviceResourcesInline()` returns true for every thread here,
@@ -298,16 +312,17 @@ ELF addresses already.
 ## 5. Plan
 
 **Renderer stages.** 1, render targets: done. 2, the engine's shaders
-translated to GLSL: done (every menu draw). 3, depth, stencil, culling (with
-`glFrontFace` answering the y flip), depth bias, `DrawPrimitive` /
-`DrawPrimitiveUP`, sRGB, MRT -- needed before any 3D. 4, performance: a
-program cache on the SD card, per-draw constant uploads trimmed, batching (the
-web port solved the same problems).
+translated to GLSL: done (every menu draw). 3, depth, stencil, culling, depth
+bias, fill mode: done (`nxGlApplyDepthStencil`; the y flip makes GL's winding
+equal D3D9's, so `D3DCULL_CCW` is `GL_FRONT`). Not needed: MRT (only target 0
+is ever set) and `DrawPrimitive(UP)` (only the RESZ hack, skipped without
+INTZ). Still open: sRGB reads and writes. 4, performance: a program cache on
+the SD card, per-draw constant uploads trimmed, batching (the web port solved
+the same problems).
 
-**Order.** Offline menus -> map-zone converters (`mp_nuked`: `gfx_map`,
-`col_map_mp`, `com_map`, `game_map_mp`, `destructibledef`, `glasses` are the
-six missing types) -> renderer stage 3 -> first 3D map via `devmap`, fixing the
-LP64 crashes on that path -> SP / Zombies.
+**Order.** Offline menus (done) -> map-zone converters (done: `mp_nuked`
+converts and validates) -> renderer stage 3 (done) -> first 3D map via
+`devmap`, fixing the LP64 crashes on that path -> SP / Zombies.
 
 **Zombies goes through OpenBLOPS.** OpenBLOPS (GPL-3.0, no history available)
 is the same KisakBlack tree with SP and Zombies built from it under `KISAK_SP`:
@@ -337,15 +352,9 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
 
 ## 7. What is missing to reach a map
 
-1. **Convert the map zones.** `GfxWorld`, `clipMap`, `comWorld`, `gameWorld`
-   and `mapEnts` have no transcoder in `tools/ffconv/convert.cpp` yet, and
-   `Load_VertexBuffer` has no builder in `kBuildSteps`. Until both exist,
-   nothing can load a level.
-2. **Depth, stencil and culling in the renderer.** The state is recorded; it
-   has to be applied together — with `glFrontFace` answering the y flip's
-   reversed winding — before any 3D can draw correctly. The web port's
-   `src/gfx_gl/gl_d3d9_draw.cpp` and `gl_state.cpp` (cloned next to this tree
-   for reference) map the same states.
+1. ~~Convert the map zones~~ — done: `mp_nuked` and `en_mp_nuked` convert
+   and validate, and `kBuildSteps` builds the world vertex buffers.
+2. ~~Depth, stencil and culling in the renderer~~ — done (stage 3).
 3. **Finish the LP64 work in the render path.** `rb_postfx.cpp` still has 42
    pointer-truncation sites — 3 hard errors and 39 `int-to-pointer` warnings —
    measured by compiling it with the build's own flags minus `-w`:
@@ -361,8 +370,9 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    `src/gfx_d3d/r_water_sim.cpp:3336` and `src/EffectsCore/fx_beam.cpp:378` and
    `:1008` index past the end of a four-element `unitVec[0].array` to reach
    `unitVec[1]` — undefined everywhere, and on the map path.
-4. **Boot straight into a map.** Put an `autoexec_dev_mp.cfg` in `main/` with a
-   `devmap` line, so a test run does not have to go through the menus.
+4. **Boot straight into a map.** `sdmc:/switch/kisakblack/cmdline.txt` is
+   appended to the command line (`nx_main.cpp`), so a file holding
+   `+devmap mp_nuked` skips the menus.
 
 ---
 

@@ -2,6 +2,7 @@
 
 #include "cscr_main.h"
 #include <universal/mem_userhunk.h>
+#include <stddef.h>
 
 #undef GetObject // windows aids
 
@@ -119,6 +120,17 @@ union VariableUnion // sizeof=0x4
     unsigned int pointerValue;
     VariableStackBuffer *stackValue;
     unsigned int entityOffset;
+};
+
+// nx-port: the archived stack after a VariableStackBuffer's header is packed,
+// one entry per stack value: a type byte, then the whole VariableUnion. On x86
+// that was 1 + 4 bytes after a 13-byte header, and the VM spelled both as
+// literals (5 * size + 13, stackValue + 4, + 13 ...); on LP64 the union holds
+// 8-byte pointers -- vectors, code positions, stack buffers -- and the header
+// is the struct's own. Entries are unaligned: read and write them with memcpy.
+enum {
+    SCR_STACKBUF_HEADER = offsetof(VariableStackBuffer, buf),
+    SCR_STACKBUF_ENTRY  = 1 + sizeof(VariableUnion),
 };
 
 union VariableValueInternal_u // sizeof=0x8

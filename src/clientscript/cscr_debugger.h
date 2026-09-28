@@ -25,16 +25,20 @@ enum ParseToken_t : __int32;
 union sval_u // sizeof=0x4
 {                                       // XREF: GetExpressionCount(sval_u)+D/r
                                         // Scr_GetBuiltin(scriptInstance_t,sval_u)+3/r ...
+    // nx-port: the union is pointer-sized on LP64; the integer forms zero all
+    // of it first, so a node read through .node never sees stale high bytes.
     sval_u()
     {
-        intValue = 0;
+        node = 0;
     }
     sval_u(int val)
     {
+        node = 0;
         intValue = val;
     }
     sval_u(unsigned int val)
     {
+        node = 0;
         sourcePosValue = val;
     }
     //unsigned __int8 type;
@@ -168,7 +172,7 @@ public:
 class Scr_ScriptWindow : public UI_LinesComponent // sizeof=0x20
 {
 public:
-    void *operator new(unsigned int size)
+    void *operator new(size_t size)
     {
         return Hunk_UserAlloc(g_DebugHunkUser, size, 4, "Scr_ScriptWindow");
     }

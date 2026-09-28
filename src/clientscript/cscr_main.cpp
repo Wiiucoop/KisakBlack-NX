@@ -114,7 +114,7 @@ int __cdecl Scr_GetFunctionHandle(scriptInstance_t inst, const char *filename, c
     }
     if ( !Scr_IsInOpcodeMemory(inst, pos.u.codePosValue) )
         return 0;
-    result = pos.u.intValue - (unsigned int)gScrVarPub[inst].programBuffer;
+    result = (unsigned int)(pos.u.codePosValue - gScrVarPub[inst].programBuffer);   // nx-port: pointer difference
     if ( !result
         && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\clientscript\\cscr_main.cpp", 105, 0, "%s", "result") )
     {
@@ -240,7 +240,7 @@ void __cdecl Scr_BeginLoadScripts(scriptInstance_t inst, int user)
     gScrVarPub[inst].programHunkUser = Hunk_UserCreate(0x100000, HU_SCHEME_DEFAULT, 4u, 0, "Scr_BeginLoadScripts", 7);
     TempMemoryReset(gScrVarPub[inst].programHunkUser);
     gScrVarPub[inst].programBuffer = TempMallocAlignStrict(0);
-    if ( ((int)gScrVarPub[inst].programBuffer & 0x1F) != 0
+    if ( ((uintptr_t)gScrVarPub[inst].programBuffer & 0x1F) != 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\clientscript\\cscr_main.cpp",
                     242,

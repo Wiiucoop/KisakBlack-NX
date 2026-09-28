@@ -482,7 +482,7 @@ int __cdecl yyparse()
             if (yylen > 0)
             {
                 pos = yyvsp[1 - yylen].pos;
-                yyval.val.stringValue = yyvsp[1 - yylen].val.stringValue;
+                yyval.val = yyvsp[1 - yylen].val;   // nx-port: the whole value ($$ = $1); it is often a node pointer
                 yyval.pos = pos;
             }
             //v18 = yyn - 1; // assuming this is jumptable asm prep
@@ -659,7 +659,7 @@ int __cdecl yyparse()
             case 29:
                 v4.stringValue = LowerCase(yyvsp->val.stringValue);
                 yyvsp->val = v4;
-                yyval.val.stringValue = yyvsp->val.stringValue;
+                yyval.val = yyvsp->val;   // nx-port: the whole value
                 break;
             case 30:
                 v5.stringValue = LowerCase(yyvsp->val.stringValue);

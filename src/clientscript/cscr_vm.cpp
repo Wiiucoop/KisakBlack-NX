@@ -1,4 +1,5 @@
 #include "cscr_vm.h"
+#include "cscr_codepos.h"   // nx-port: pointer-sized code positions
 #include "cscr_stringlist.h"
 #include "cscr_compiler.h"
 #include <qcommon/cmd.h>
@@ -275,7 +276,7 @@ char *__cdecl Scr_GetNextCodepos(
                 if (top->type != 9 || gScrVmPub[inst].function_count >= 32)
                     goto LABEL_23;
                 *localId = 0;
-                result = (char *)top->u.intValue;
+                result = (char *)top->u.codePosValue;   // nx-port: a code position
                 break;
             default:
                 goto LABEL_23;
@@ -389,14 +390,16 @@ char *__cdecl Scr_GetNextCodepos(
                 pos += 2;
                 goto LABEL_76;
             case 8:
+            case 85:
+            case 87:
+                pos += 4;   // nx-port: integer operands
+                goto LABEL_76;
             case 19:
             case 21:
             case 79:
             case 80:
             case 82:
-            case 85:
-            case 87:
-                pos += 4;
+                pos += SCR_CODEPOS_SIZE;   // nx-port: a code position (or its slot), was 4
                 goto LABEL_76;
             case 9:
                 pos += 4;
@@ -431,13 +434,15 @@ char *__cdecl Scr_GetNextCodepos(
                 goto LABEL_76;
             case 84:
             case 86:
+                pos += SCR_CODEPOS_SIZE + 4;   // nx-port: a code position and a parameter count, was 8
+                goto LABEL_76;
             case 129:
-                pos += 8;
+                pos += 8;   // OP_object: two integers
                 goto LABEL_76;
             case 94:
             case 96:
                 type = top->type;
-                value.u.intValue = top->u.intValue;
+                value.u = top->u;  // nx-port: whole value
                 value.type = type;
                 AddRefToValue(inst, type, value.u);
                 Scr_CastBool(inst, &value);
@@ -462,7 +467,7 @@ char *__cdecl Scr_GetNextCodepos(
             case 95:
             case 97:
                 v8 = top->type;
-                value.u.intValue = top->u.intValue;
+                value.u = top->u;  // nx-port: whole value
                 value.type = v8;
                 AddRefToValue(inst, v8, value.u);
                 Scr_CastBool(inst, &value);
@@ -501,9 +506,9 @@ char *__cdecl Scr_GetNextCodepos(
                 else
                 {
                     if (v10 != 6)
-                        return (char *)&posa[8 * v13];
+                        return (char *)&posa[SCR_CASE_ENTRY_SIZE * v13];
                     if (!IsValidArrayIndex(inst, top->u.intValue))
-                        return (char *)&posa[8 * v13];
+                        return (char *)&posa[SCR_CASE_ENTRY_SIZE * v13];
                     caseValue = GetInternalVariableIndex(inst, top->u.intValue);
                 }
                 if (!v13)
@@ -520,7 +525,7 @@ char *__cdecl Scr_GetNextCodepos(
                 }
                 break;
             case 125:
-                return (char *)&pos[8 * *(unsigned __int16 *)pos + 2];
+                return (char *)&pos[SCR_CASE_ENTRY_SIZE * *(unsigned __int16 *)pos + 2];   // nx-port: was 8 per entry
             default:
                 v9 = va("unknown opcode %d", opcode);
                 if (!Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\clientscript\\cscr_vm.cpp", 3269, 0, v9))
@@ -534,10 +539,10 @@ char *__cdecl Scr_GetNextCodepos(
             }
             do
             {
-                v12 = *(_DWORD *)posa;
+                v12 = Scr_CaseEntryName(posa);   // nx-port: SCR_CASE_ENTRY_SIZE entries, unaligned
                 posc = posa + 4;
-                v11 = *(const char **)posc;
-                posa = posc + 4;
+                v11 = Scr_ReadCodePosAt(posc);
+                posa = posc + SCR_CODEPOS_SIZE;
                 if (v12 == caseValue)
                 {
                     if (!v11
@@ -852,7 +857,7 @@ const char *__cdecl Scr_GetStackThreadPos(
             {
                 __debugbreak();
             }
-            pos = (const char *)u.intValue;
+            pos = u.codePosValue;
         }
     }
     if (killThread)
@@ -1118,10 +1123,10 @@ void __cdecl VM_Notify(
                         __debugbreak();
                     }
                     tempValue = (VariableUnion *)GetVariableValueAddress(inst, notifyListEntry);
-                    stackValue.intValue = tempValue->intValue;
-                    if (*(_BYTE *)(*(_DWORD *)tempValue->intValue - 1) == 119)
+                    stackValue = *tempValue;   // nx-port: the buffer pointer, whole
+                    if (*(tempValue->stackValue->pos - 1) == 119)
                     {
-                        size = **(char **)stackValue.intValue;
+                        size = *stackValue.stackValue->pos;
                         if (size < 0
                             && !Assert_MyHandler(
                                 "C:\\projects_pc\\cod\\codsrc\\src\\clientscript\\cscr_vm.cpp",
@@ -1132,18 +1137,18 @@ void __cdecl VM_Notify(
                         {
                             __debugbreak();
                         }
-                        if (size > *(unsigned __int16 *)(stackValue.intValue + 4)
+                        if (size > stackValue.stackValue->size
                             && !Assert_MyHandler(
                                 "C:\\projects_pc\\cod\\codsrc\\src\\clientscript\\cscr_vm.cpp",
                                 4084,
                                 0,
                                 "size <= stackValue->size\n\t%i, %i",
                                 size,
-                                *(unsigned __int16 *)(stackValue.intValue + 4)))
+                                stackValue.stackValue->size))
                         {
                             __debugbreak();
                         }
-                        buf = (char *)(stackValue.intValue + 5 * (*(unsigned __int16 *)(stackValue.intValue + 4) - size) + 13);
+                        buf = stackValue.stackValue->buf + SCR_STACKBUF_ENTRY * (stackValue.stackValue->size - size);
                         for (currentValue = top; size; --currentValue)
                         {
                             if (currentValue->type == 7
@@ -1175,11 +1180,12 @@ void __cdecl VM_Notify(
                             }
                             if (tempValue3.type == 8)
                                 break;
-                            tempValue3.u.intValue = *(_DWORD *)++buf;
-                            buf += 4;
+                            ++buf;
+                            memcpy(&tempValue3.u, buf, sizeof(VariableUnion));   // nx-port: the whole value
+                            buf += sizeof(VariableUnion);
                             AddRefToValue(inst, tempValue3.type, tempValue3.u);
                             type = currentValue->type;
-                            tempValue2.u.intValue = currentValue->u.intValue;
+                            tempValue2.u = currentValue->u;  // nx-port: whole value
                             tempValue2.type = type;
                             AddRefToValue(inst, type, tempValue2.u);
                             Scr_EvalEquality(inst, &tempValue3, &tempValue2);
@@ -1187,8 +1193,8 @@ void __cdecl VM_Notify(
                             {
                                 RuntimeError(
                                     inst,
-                                    *(char **)stackValue.intValue,
-                                    **(char **)stackValue.intValue - size + 3,
+                                    (char *)stackValue.stackValue->pos,
+                                    *stackValue.stackValue->pos - size + 3,
                                     gScrVarPub[inst].error_message,
                                     gScrVmGlob[inst].dialog_error_message);
                                 Scr_ClearErrorMessage(inst);
@@ -1211,7 +1217,7 @@ void __cdecl VM_Notify(
                                 goto next;
                             }
                         }
-                        ++ * (_DWORD *)stackValue.intValue;
+                        ++stackValue.stackValue->pos;
                         bNoStack = 1;
                     }
                     else
@@ -1269,7 +1275,7 @@ void __cdecl VM_Notify(
                         {
                             __debugbreak();
                         }
-                        size = *(unsigned __int16 *)(stackValue.intValue + 4);
+                        size = stackValue.stackValue->size;
                         newSize = size;
                         currentValue = top;
                         do
@@ -1298,21 +1304,21 @@ void __cdecl VM_Notify(
                         {
                             __debugbreak();
                         }
-                        len = 5 * size;
-                        bufLen = 5 * newSize + 13;
-                        if (!MT_Realloc(inst, *(unsigned __int16 *)(stackValue.intValue + 6), bufLen))
+                        len = SCR_STACKBUF_ENTRY * size;   // nx-port: was 5 * size
+                        bufLen = SCR_STACKBUF_ENTRY * newSize + SCR_STACKBUF_HEADER;   // nx-port: was 5 * newSize + 13
+                        if (!MT_Realloc(inst, stackValue.stackValue->bufLen, bufLen))
                         {
                             newStackValue = (VariableStackBuffer *)MT_Alloc(bufLen, 1, inst);
                             newStackValue->bufLen = bufLen;
-                            newStackValue->pos = *(const char **)stackValue.intValue;
-                            newStackValue->localId = *(_DWORD *)(stackValue.intValue + 8);
-                            memcpy((unsigned __int8 *)newStackValue->buf, (unsigned __int8 *)(stackValue.intValue + 13), len);
-                            MT_Free((uint8*)stackValue.intValue, *(unsigned __int16 *)(stackValue.intValue + 6), inst);
-                            stackValue.intValue = (int)newStackValue;
-                            tempValue->intValue = (int)newStackValue;
+                            newStackValue->pos = stackValue.stackValue->pos;
+                            newStackValue->localId = stackValue.stackValue->localId;
+                            memcpy((unsigned __int8 *)newStackValue->buf, (unsigned __int8 *)stackValue.stackValue->buf, len);
+                            MT_Free((uint8*)stackValue.stackValue, stackValue.stackValue->bufLen, inst);
+                            stackValue.stackValue = newStackValue;
+                            tempValue->stackValue = newStackValue;
                         }
-                        *(_WORD *)(stackValue.intValue + 4) = newSize;
-                        buf = (char *)(stackValue.intValue + len + 13);
+                        stackValue.stackValue->size = newSize;
+                        buf = stackValue.stackValue->buf + len;
                         newSize -= size;
                         if (!newSize
                             && !Assert_MyHandler(
@@ -1339,11 +1345,11 @@ void __cdecl VM_Notify(
                                 __debugbreak();
                             }
                             *buf++ = currentValue->type;
-                            *(_DWORD *)buf = currentValue->u.intValue;
-                            buf += 4;
+                            memcpy(buf, &currentValue->u, sizeof(VariableUnion));   // nx-port: the whole value
+                            buf += sizeof(VariableUnion);
                             --newSize;
                         } while (newSize);
-                        if (&buf[-stackValue.intValue] != (char *)bufLen
+                        if (buf - (char *)stackValue.stackValue != bufLen
                             && !Assert_MyHandler(
                                 "C:\\projects_pc\\cod\\codsrc\\src\\clientscript\\cscr_vm.cpp",
                                 4217,
@@ -1483,7 +1489,7 @@ void __cdecl Scr_TerminateWaitThread(scriptInstance_t inst, unsigned int localId
     {
         __debugbreak();
     }
-    stackValue = (VariableStackBuffer *)GetVariableValueAddress(inst, stackId)->next;
+    stackValue = GetVariableValueAddress(inst, stackId)->u.stackValue;   // nx-port: a pointer, whole
     if (gScrVarPub[inst].developer)
         Scr_GetStackThreadPos(inst, localId, stackValue, 1);
     RemoveObjectVariable(inst, id, startLocalId);
@@ -1609,7 +1615,7 @@ void __cdecl Scr_TerminateWaittillThread(scriptInstance_t inst, unsigned int loc
         {
             __debugbreak();
         }
-        stackValue = (VariableStackBuffer *)GetVariableValueAddress(inst, stackId)->next;
+        stackValue = GetVariableValueAddress(inst, stackId)->u.stackValue;   // nx-port: a pointer, whole
         if (gScrVarPub[inst].developer)
             Scr_GetStackThreadPos(inst, localId, stackValue, 1);
         VM_CancelNotifyInternal(inst, notifyListOwnerId, startLocalId, notifyListId, notifyNameListId, stringValue);
@@ -1635,7 +1641,7 @@ void __cdecl Scr_TerminateWaittillThread(scriptInstance_t inst, unsigned int loc
         {
             __debugbreak();
         }
-        stackValue = (VariableStackBuffer *)GetVariableValueAddress(inst, stackIda)->next;
+        stackValue = GetVariableValueAddress(inst, stackIda)->u.stackValue;   // nx-port: a pointer, whole
         if (gScrVarPub[inst].developer)
             Scr_GetStackThreadPos(inst, localId, stackValue, 1);
         RemoveVariable(inst, startLocalId, 0x17FFFu);
@@ -1723,7 +1729,7 @@ void __cdecl Scr_CancelNotifyList(scriptInstance_t inst, unsigned int notifyList
         }
         if ( GetValueType(inst, stackId) == 10 )
         {
-            stackValuea = (VariableStackBuffer *)GetVariableValueAddress(inst, stackId)->next;
+            stackValuea = GetVariableValueAddress(inst, stackId)->u.stackValue;   // nx-port: a pointer, whole
             Scr_CancelWaittill(inst, startLocalId);
             VM_TrimStack(inst, startLocalId, stackValuea, 0);
         }
@@ -1757,8 +1763,8 @@ void __cdecl Scr_CancelNotifyList(scriptInstance_t inst, unsigned int notifyList
                     __debugbreak();
                 }
                 VariableValueAddress = GetVariableValueAddress(inst, stackIda);
-                stackValue = (VariableStackBuffer *)VariableValueAddress->next;
-                if ( *(unsigned int *)VariableValueAddress->next )
+                stackValue = VariableValueAddress->u.stackValue;   // nx-port: a pointer, whole
+                if ( VariableValueAddress->u.stackValue->pos )
                 {
                     if ( !Assert_MyHandler(
                                     "C:\\projects_pc\\cod\\codsrc\\src\\clientscript\\cscr_vm.cpp",
@@ -1827,7 +1833,7 @@ void __cdecl VM_TrimStack(
                     Scr_SetThreadNotifyName(inst, startLocalId, 0);
                     stackValue->pos = 0;
                     tempValue.type = 10;
-                    tempValue.u.intValue = (int)stackValue;
+                    tempValue.u.stackValue = stackValue;
                     NewVariable = GetNewVariable(inst, startLocalId, 0x17FFFu);
                     SetNewVariableValue(inst, NewVariable, &tempValue);
                 }
@@ -2111,11 +2117,10 @@ const unsigned int *Scr_ReadIntArray(const char **pos, int count)
 
 const char *__cdecl Scr_ReadCodePos(scriptInstance_t inst, const char **pos)
 {
-    int v3; // [esp+0h] [ebp-8h]
-
-    v3 = *(unsigned int *)*pos;
-    *pos += 4;
-    return (const char *)v3;
+    // nx-port: pointer-sized (cscr_codepos.h); was a 4-byte word
+    const char *codePos = Scr_ReadCodePosAt(*pos);
+    *pos += SCR_CODEPOS_SIZE;
+    return codePos;
 }
 
 unsigned int __cdecl GetDummyObject(scriptInstance_t inst)
@@ -2172,7 +2177,7 @@ VariableStackBuffer *__cdecl VM_ArchiveStack(scriptInstance_t inst, function_sta
     {
         __debugbreak();
     }
-    bufLen = 5 * size + 13;
+    bufLen = SCR_STACKBUF_ENTRY * size + SCR_STACKBUF_HEADER;   // nx-port: was 5 * size + 13
     if (bufLen != (unsigned __int16)bufLen
         && !Assert_MyHandler(
             "C:\\projects_pc\\cod\\codsrc\\src\\clientscript\\cscr_vm.cpp",
@@ -2186,27 +2191,34 @@ VariableStackBuffer *__cdecl VM_ArchiveStack(scriptInstance_t inst, function_sta
     stackValue = MT_Alloc(bufLen, 1, inst);
     ++gScrVarPub[inst].numScriptThreads;
     localId = stack->localId;
-    *((_DWORD *)stackValue + 2) = localId;
-    *((_WORD *)stackValue + 2) = size;
-    *((_WORD *)stackValue + 3) = bufLen;
-    *(_DWORD *)stackValue = (DWORD)stack->pos;
-    stackValue[12] = gScrVarPub[inst].time;
+    // nx-port: the header through its struct, the entries at their LP64 size
+    // (cscr_variable.h, SCR_STACKBUF_*); these were x86 word offsets
+    {
+        VariableStackBuffer *header = (VariableStackBuffer *)stackValue;
+        header->localId = localId;
+        header->size = size;
+        header->bufLen = bufLen;
+        header->pos = stack->pos;
+        header->time = gScrVarPub[inst].time;
+    }
     gScrVmPub[inst].localVars -= stack->localVarCount;
-    buf = &stackValue[5 * size + 13];
+    buf = &stackValue[SCR_STACKBUF_ENTRY * size + SCR_STACKBUF_HEADER];
     while (size)
     {
-        bufa = buf - 4;
+        bufa = buf - sizeof(VariableUnion);
         if (top->type == 7)
         {
             --gScrVmPub[inst].function_count;
             --gScrVmPub[inst].function_frame;
-            *(_DWORD *)bufa = (DWORD)gScrVmPub[inst].function_frame->fs.pos;
+            VariableUnion framePos;
+            framePos.codePosValue = gScrVmPub[inst].function_frame->fs.pos;
+            memcpy(bufa, &framePos, sizeof(framePos));
             gScrVmPub[inst].localVars -= gScrVmPub[inst].function_frame->fs.localVarCount;
             localId = GetParentLocalId(inst, localId);
         }
         else
         {
-            *(_DWORD *)bufa = top->u.intValue;
+            memcpy(bufa, &top->u, sizeof(VariableUnion));
         }
         buf = bufa - 1;
         if (top->type >= 0x100u
@@ -2837,7 +2849,7 @@ void __cdecl VM_TerminateTime(scriptInstance_t inst, unsigned int timeId)
         {
             __debugbreak();
         }
-        stackValue = (VariableStackBuffer *)GetVariableValueAddress(inst, stackId)->next;
+        stackValue = GetVariableValueAddress(inst, stackId)->u.stackValue;   // nx-port: a pointer, whole
         RemoveObjectVariable(inst, timeId, startLocalId);
         Scr_ClearWaitTime(inst, startLocalId);
         VM_TerminateStack(inst, startLocalId, startLocalId, stackValue);
@@ -3104,8 +3116,8 @@ void __cdecl Scr_GetVector(unsigned int index, float *vectorValue, scriptInstanc
         value = &gScrVmPub[inst].top[-(int)index];
         if (value->type == 4)
         {
-            intValue = (float *)value->u.intValue;
-            *vectorValue = *(float *)value->u.intValue;
+            intValue = (float *)value->u.vectorValue;   // nx-port: a pointer
+            *vectorValue = intValue[0];
             vectorValue[1] = intValue[1];
             vectorValue[2] = intValue[2];
             return;
@@ -3147,7 +3159,7 @@ unsigned int __cdecl Scr_GetFunc(unsigned int index, scriptInstance_t inst)
     {
         __debugbreak();
     }
-    return value->u.intValue - (unsigned int)gScrVarPub[inst].programBuffer;
+    return (unsigned int)(value->u.codePosValue - gScrVarPub[inst].programBuffer);   // nx-port: pointer difference
 }
 
 scr_entref_t __cdecl Scr_GetEntityRef(unsigned int index, scriptInstance_t inst)
@@ -3295,7 +3307,7 @@ void __cdecl Scr_AddAnim(scr_anim_s value, scriptInstance_t inst)
 {
     IncInParam(inst);
     gScrVmPub[inst].top->type = 11;
-    gScrVmPub[inst].top->u.intValue = (int)value.linkPointer;
+    memcpy(&gScrVmPub[inst].top->u.intValue, &value, sizeof(int));   // nx-port: index and tree, the union's low four bytes
 }
 
 void __cdecl Scr_AddUndefined(scriptInstance_t inst)
@@ -3427,7 +3439,7 @@ void __cdecl Scr_AddVector(float *value, scriptInstance_t inst)
 {
     IncInParam(inst);
     gScrVmPub[inst].top->type = 4;
-    gScrVmPub[inst].top->u.intValue = (int)Scr_AllocVector(inst, value);
+    gScrVmPub[inst].top->u.vectorValue = Scr_AllocVector(inst, value);   // nx-port: a pointer
 }
 
 void __cdecl Scr_MakeArray(scriptInstance_t inst)
@@ -3706,7 +3718,7 @@ VariableValue __cdecl GetEntityFieldValue(
     iassert(gScrVmPub[inst].top - gScrVmPub[inst].inparamcount == gScrVmGlob[inst].eval_stack - 1);
 
     gScrVmPub[inst].inparamcount = 0;
-    result.u.intValue = gScrVmGlob[inst].eval_stack[0].u.intValue;
+    result.u = gScrVmGlob[inst].eval_stack[0].u;  // nx-port: whole value
     result.type = gScrVmGlob[inst].eval_stack[0].type;
     return result;
 }
@@ -4084,7 +4096,7 @@ void __cdecl VM_Resume(scriptInstance_t inst, unsigned int timeId)
         {
             __debugbreak();
         }
-        stackValue = (VariableStackBuffer *)GetVariableValueAddress(inst, stackId)->next;
+        stackValue = GetVariableValueAddress(inst, stackId)->u.stackValue;   // nx-port: a pointer, whole
         RemoveObjectVariable(inst, timeId, startLocalId);
         VM_UnarchiveStack(inst, startLocalId, stackValue);
         v2 = VM_Execute_0(inst);
@@ -4160,15 +4172,17 @@ void __cdecl VM_UnarchiveStack(scriptInstance_t inst, unsigned int startLocalId,
             {
                 __debugbreak();
             }
-            gScrVmPub[inst].function_frame->fs.pos = *bufa;
+            VariableUnion framePos;   // nx-port: unaligned, pointer-sized (SCR_STACKBUF_ENTRY)
+            memcpy(&framePos, bufa, sizeof(framePos));
+            gScrVmPub[inst].function_frame->fs.pos = framePos.codePosValue;
             ++gScrVmPub[inst].function_count;
             ++gScrVmPub[inst].function_frame;
         }
         else
         {
-            top->u.intValue = (int)*bufa;
+            memcpy(&top->u, bufa, sizeof(VariableUnion));   // nx-port: the whole value
         }
-        buf = (char *)(bufa + 1);
+        buf = (char *)bufa + sizeof(VariableUnion);
     }
     gFs[inst].pos = stackValue->pos;
     gFs[inst].top = top;
@@ -4565,7 +4579,7 @@ methodcallpointer:
         case OP_ScriptThreadCallPointer:
         case OP_ScriptMethodThreadCallPointer:
 scriptmethodthreadcallpointer:
-            for (paramcount = Scr_ReadUnsigned(&localFs.pos); paramcount; --paramcount)
+            for (paramcount = Scr_ReadInt(&localFs.pos); paramcount; --paramcount)   // nx-port: a 4-byte count (EmitCodeInt)
             {
                 RemoveRefToValue(inst, localFs.top--);
             }
@@ -4645,7 +4659,7 @@ scriptmethodthreadcallpointer:
             {
                 do
                 {
-                    currentCaseValue = Scr_ReadUnsigned(&localFs.pos);
+                    currentCaseValue = Scr_ReadInt(&localFs.pos);   // nx-port: a 4-byte case name (EmitCodeInt)
                     currentCodePos = Scr_ReadCodePos(inst, &localFs.pos);
                     --gCaseCount[inst];
                 } while (gCaseCount[inst]);
@@ -4719,7 +4733,7 @@ thread_end:
             Scr_KillThread(inst, localFs.localId);
             gScrVmPub[inst].localVars -= localFs.localVarCount;
             v1 = localFs.top->type;
-            tempValue.u.intValue = localFs.top->u.intValue;
+            tempValue.u = localFs.top->u;  // nx-port: whole value
             tempValue.type = v1;
             --localFs.top;
             iassert(localFs.top->type != VAR_PRECODEPOS);
@@ -4918,7 +4932,10 @@ thread_return:
             iassert(localFs.top + 1 <= gScrVmPub[inst].maxstack);
 
             localFs.top[1].type = VAR_ANIMATION;
-            localFs.top[1].u.intValue = Scr_ReadInt(&localFs.pos);
+            // nx-port: the operand is a pointer-sized slot (the placeholder chain
+            // ran through it); the animation is its low four bytes
+            memcpy(&localFs.top[1].u.intValue, localFs.pos, sizeof(int));
+            localFs.pos += SCR_CODEPOS_SIZE;
             ++localFs.top;
             continue;
 
@@ -4932,7 +4949,7 @@ thread_return:
             iassert(localFs.top + 1 <= gScrVmPub[inst].maxstack);
 
             localFs.top[1].type = VAR_FUNCTION;
-            localFs.top[1].u.intValue = Scr_ReadInt(&localFs.pos);
+            localFs.top[1].u.codePosValue = Scr_ReadCodePos(inst, &localFs.pos);   // nx-port: a code position
             ++localFs.top;
             continue;
 
@@ -5007,9 +5024,8 @@ thread_return:
 
             v3 = Scr_EvalVariable(inst, gScrVmPub[inst].localVars[-(unsigned __int8)*localFs.pos]);
             v97 = v3;
-            v3.type = (int)localFs.top;
-            localFs.top[1].u.intValue = v3.u.intValue;
-            *(_DWORD *)(v3.type + 12) = v97.type;
+            localFs.top[1].u = v3.u;  // nx-port: whole value
+            localFs.top[1].type = v97.type;   // nx-port: was (int)localFs.top + 12, its x86 offset
             ++localFs.top;
             ++localFs.pos;
             continue;
@@ -5190,9 +5206,8 @@ thread_return:
             localFs.pos += 2;
             VariableField = Scr_FindVariableField(inst, objectId, v77);
             v94 = VariableField;
-            VariableField.type = (int)localFs.top;
-            localFs.top[1].u.intValue = VariableField.u.intValue;
-            *(_DWORD *)(VariableField.type + 12) = v94.type;
+            localFs.top[1].u = VariableField.u;  // nx-port: whole value
+            localFs.top[1].type = v94.type;   // nx-port: was (int)localFs.top + 12, its x86 offset
             ++localFs.top;
             continue;
         case OP_EvalLevelFieldVariableRef:
@@ -5612,8 +5627,7 @@ $LN205_0:
                 localFs.localId = AllocChildThread(inst, selfId, localFs.localId);
                 gScrVmPub[inst].function_frame->fs.pos = localFs.pos;
                 function_frame = gScrVmPub[inst].function_frame;
-                v68 = *(const char **)function_frame->fs.pos;
-                function_frame->fs.pos += 4;
+                v68 = Scr_ReadCodePos(inst, &function_frame->fs.pos);   // nx-port: pointer-sized
                 localFs.pos = v68;
                 goto function_call;
             }
@@ -6037,7 +6051,7 @@ function_call:
                 goto not_an_object2;
             if (!IsFieldObject(inst, localFs.top->u.stringValue))
                 goto not_an_object2a;
-            tempValue.u.intValue = localFs.top->u.intValue;
+            tempValue.u = localFs.top->u;  // nx-port: whole value
             --localFs.top;
             if (localFs.top->type != VAR_STRING)
             {
@@ -6063,7 +6077,7 @@ function_call:
             iassert(GetObjectType(inst, tempValue.u.pointerValue) != VAR_DEAD_THREAD);
 
             stackValue.type = VAR_STACK;
-            stackValue.u.intValue = (int)VM_ArchiveStack(inst, &localFs);
+            stackValue.u.stackValue = VM_ArchiveStack(inst, &localFs);
             v64 = stringValue;
             v34 = GetVariable(inst, tempValue.u.stringValue, 0x17FFEu);
             Array = GetArray(inst, v34);
@@ -6138,7 +6152,7 @@ function_call:
                 GetObjectVariable(inst, v44, v65);
                 RemoveRefToObject(inst, threadId);
                 tempValue.type = 1;
-                tempValue.u.intValue = localFs.top->u.intValue;
+                tempValue.u = localFs.top->u;  // nx-port: whole value
                 v60 = threadId;
                 v45 = GetObjectVariable(inst, gScrVarPub[inst].pauseArrayId, localFs.localId);
                 v46 = GetArray(inst, v45);
@@ -6217,7 +6231,7 @@ function_call:
 
         case OP_endswitch:
             gCaseCount[inst] = Scr_ReadUnsignedShort(&localFs.pos);
-            Scr_ReadIntArray(&localFs.pos, 2 * gCaseCount[inst]);
+            localFs.pos += SCR_CASE_ENTRY_SIZE * gCaseCount[inst];   // nx-port: was 2 * count words
             //R_ReadPrimDrawSurfData((GfxReadCmdBuf *)&localFs, 2 * gCaseCount[inst]);
             continue;
 

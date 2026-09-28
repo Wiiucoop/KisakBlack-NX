@@ -3926,7 +3926,7 @@ void __cdecl SetNewVariableValue(scriptInstance_t inst, unsigned int id, Variabl
         __debugbreak();
     }
     entryValue->w.status |= value->type;
-    entryValue->u.next = value->u.intValue;
+    entryValue->u.u = value->u;  // nx-port: whole value
 }
 
 VariableValueInternal_u *__cdecl GetVariableValueAddress(scriptInstance_t inst, unsigned int id)
@@ -4055,7 +4055,7 @@ void __cdecl SetVariableEntityFieldValue(
             __debugbreak();
         }
         entryValue->w.status |= value->type;
-        entryValue->u.next = value->u.intValue;
+        entryValue->u.u = value->u;  // nx-port: whole value
     }
 }
 
@@ -4553,7 +4553,7 @@ char __cdecl Scr_CastString(scriptInstance_t inst, VariableValue *value)
         return 1;
     case 4:
         value->type = 2;
-        constTempVector = (const float *)value->u.intValue;
+        constTempVector = value->u.vectorValue;
         value->u.intValue = SL_GetStringForVector(inst, value->u.vectorValue);
         RemoveRefToVector(inst, constTempVector);
         return 1;
@@ -4673,7 +4673,7 @@ void __cdecl Scr_CastVector(scriptInstance_t inst, VariableValue *value)
         }
     }
     value->type = 4;
-    value->u.intValue = (int)Scr_AllocVector(inst, vec);
+    value->u.vectorValue = Scr_AllocVector(inst, vec);   // nx-port: a pointer
 }
 
 unsigned int __cdecl Scr_EvalFieldObject(scriptInstance_t inst, unsigned int tempVariable, VariableValue *value)
@@ -4695,7 +4695,7 @@ unsigned int __cdecl Scr_EvalFieldObject(scriptInstance_t inst, unsigned int tem
             __debugbreak();
         }
         tempValue.type = 1;
-        tempValue.u.intValue = value->u.intValue;
+        tempValue.u = value->u;  // nx-port: whole value
         SetVariableValue(inst, tempVariable, &tempValue);
         return tempValue.u.pointerValue;
     }
@@ -4830,9 +4830,9 @@ void __cdecl Scr_EvalEquality(scriptInstance_t inst, VariableValue *value1, Vari
             break;
         case 4:
             value1->type = 6;
-            v3 = *(float *)value1->u.intValue == *(float *)value2->u.intValue
-                && *(float *)(value1->u.intValue + 4) == *(float *)(value2->u.intValue + 4)
-                && *(float *)(value1->u.intValue + 8) == *(float *)(value2->u.intValue + 8);
+            v3 = value1->u.vectorValue[0] == value2->u.vectorValue[0]
+                && value1->u.vectorValue[1] == value2->u.vectorValue[1]
+                && value1->u.vectorValue[2] == value2->u.vectorValue[2];
             RemoveRefToVector(inst, value1->u.vectorValue);
             RemoveRefToVector(inst, value2->u.vectorValue);
             value1->u.intValue = v3;
@@ -4892,7 +4892,7 @@ void __cdecl Scr_CastWeakerPair(scriptInstance_t inst, VariableValue *value1, Va
                 *tempVector = value2->u.floatValue;
                 tempVector[1] = value2->u.floatValue;
                 tempVector[2] = value2->u.floatValue;
-                value2->u.intValue = (int)tempVector;
+                value2->u.vectorValue = tempVector;   // nx-port: a pointer
                 value2->type = 4;
                 return;
             }
@@ -4902,7 +4902,7 @@ void __cdecl Scr_CastWeakerPair(scriptInstance_t inst, VariableValue *value1, Va
                 *v3 = (float)value2->u.intValue;
                 v3[1] = (float)value2->u.intValue;
                 v3[2] = (float)value2->u.intValue;
-                value2->u.intValue = (int)v3;
+                value2->u.vectorValue = v3;   // nx-port: a pointer
                 value2->type = 4;
                 return;
             }
@@ -4915,7 +4915,7 @@ void __cdecl Scr_CastWeakerPair(scriptInstance_t inst, VariableValue *value1, Va
             *tempVectora = value1->u.floatValue;
             tempVectora[1] = value1->u.floatValue;
             tempVectora[2] = value1->u.floatValue;
-            value1->u.intValue = (int)tempVectora;
+            value1->u.vectorValue = tempVectora;   // nx-port: a pointer
             value1->type = 4;
             return;
         }
@@ -4925,7 +4925,7 @@ void __cdecl Scr_CastWeakerPair(scriptInstance_t inst, VariableValue *value1, Va
             *tempVectorb = (float)value1->u.intValue;
             tempVectorb[1] = (float)value1->u.intValue;
             tempVectorb[2] = (float)value1->u.intValue;
-            value1->u.intValue = (int)tempVectorb;
+            value1->u.vectorValue = tempVectorb;   // nx-port: a pointer
             value1->type = 4;
         }
         else
@@ -5135,12 +5135,12 @@ void __cdecl Scr_EvalPlus(scriptInstance_t inst, VariableValue *value1, Variable
             break;
         case 4:
             v12 = Scr_AllocVector(inst);
-            *v12 = *(float *)value1->u.intValue + *(float *)value2->u.intValue;
-            v12[1] = *(float *)(value1->u.intValue + 4) + *(float *)(value2->u.intValue + 4);
-            v12[2] = *(float *)(value1->u.intValue + 8) + *(float *)(value2->u.intValue + 8);
+            *v12 = value1->u.vectorValue[0] + value2->u.vectorValue[0];
+            v12[1] = value1->u.vectorValue[1] + value2->u.vectorValue[1];
+            v12[2] = value1->u.vectorValue[2] + value2->u.vectorValue[2];
             RemoveRefToVector(inst, value1->u.vectorValue);
             RemoveRefToVector(inst, value2->u.vectorValue);
-            value1->u.intValue = (int)v12;
+            value1->u.vectorValue = v12;   // nx-port: a pointer
             break;
         case 5:
             value1->u.floatValue = value1->u.floatValue + value2->u.floatValue;
@@ -5173,7 +5173,7 @@ void __cdecl Scr_CastWeakerStringPair(scriptInstance_t inst, VariableValue *valu
                 {
                     case 4:
                         value2->type = 2;
-                        constTempVector = (const float *)value2->u.intValue;
+                        constTempVector = value2->u.vectorValue;
                         value2->u.intValue = SL_GetStringForVector(inst, value2->u.vectorValue);
                         RemoveRefToVector(inst, constTempVector);
                         return;
@@ -5207,7 +5207,7 @@ LABEL_28:
             {
                 case 4:
                     value1->type = 2;
-                    constTempVectora = (const float *)value1->u.intValue;
+                    constTempVectora = value1->u.vectorValue;
                     value1->u.intValue = SL_GetStringForVector(inst, value1->u.vectorValue);
                     RemoveRefToVector(inst, constTempVectora);
                     return;
@@ -5256,12 +5256,12 @@ void __cdecl Scr_EvalMinus(scriptInstance_t inst, VariableValue *value1, Variabl
     {
         case 4:
             tempVector = Scr_AllocVector(inst);
-            *tempVector = *(float *)value1->u.intValue - *(float *)value2->u.intValue;
-            tempVector[1] = *(float *)(value1->u.intValue + 4) - *(float *)(value2->u.intValue + 4);
-            tempVector[2] = *(float *)(value1->u.intValue + 8) - *(float *)(value2->u.intValue + 8);
+            *tempVector = value1->u.vectorValue[0] - value2->u.vectorValue[0];
+            tempVector[1] = value1->u.vectorValue[1] - value2->u.vectorValue[1];
+            tempVector[2] = value1->u.vectorValue[2] - value2->u.vectorValue[2];
             RemoveRefToVector(inst, value1->u.vectorValue);
             RemoveRefToVector(inst, value2->u.vectorValue);
-            value1->u.intValue = (int)tempVector;
+            value1->u.vectorValue = tempVector;   // nx-port: a pointer
             break;
         case 5:
             value1->u.floatValue = value1->u.floatValue - value2->u.floatValue;
@@ -5296,12 +5296,12 @@ void __cdecl Scr_EvalMultiply(scriptInstance_t inst, VariableValue *value1, Vari
     {
         case 4:
             tempVector = Scr_AllocVector(inst);
-            *tempVector = *(float *)value1->u.intValue * *(float *)value2->u.intValue;
-            tempVector[1] = *(float *)(value1->u.intValue + 4) * *(float *)(value2->u.intValue + 4);
-            tempVector[2] = *(float *)(value1->u.intValue + 8) * *(float *)(value2->u.intValue + 8);
+            *tempVector = value1->u.vectorValue[0] * value2->u.vectorValue[0];
+            tempVector[1] = value1->u.vectorValue[1] * value2->u.vectorValue[1];
+            tempVector[2] = value1->u.vectorValue[2] * value2->u.vectorValue[2];
             RemoveRefToVector(inst, value1->u.vectorValue);
             RemoveRefToVector(inst, value2->u.vectorValue);
-            value1->u.intValue = (int)tempVector;
+            value1->u.vectorValue = tempVector;   // nx-port: a pointer
             break;
         case 5:
             value1->u.floatValue = value1->u.floatValue * value2->u.floatValue;
@@ -5336,26 +5336,26 @@ void __cdecl Scr_EvalDivide(scriptInstance_t inst, VariableValue *value1, Variab
     {
         case 4:
             tempVector = Scr_AllocVector(inst);
-            if ( *(float *)value2->u.intValue == 0.0
-                || *(float *)(value2->u.intValue + 4) == 0.0
-                || *(float *)(value2->u.intValue + 8) == 0.0 )
+            if ( value2->u.vectorValue[0] == 0.0
+                || value2->u.vectorValue[1] == 0.0
+                || value2->u.vectorValue[2] == 0.0 )
             {
                 *tempVector = 0.0f;
                 tempVector[1] = 0.0f;
                 tempVector[2] = 0.0f;
                 RemoveRefToVector(inst, value1->u.vectorValue);
                 RemoveRefToVector(inst, value2->u.vectorValue);
-                value1->u.intValue = (int)tempVector;
+                value1->u.vectorValue = tempVector;   // nx-port: a pointer
                 Scr_Error(inst, "divide by 0", 0);
             }
             else
             {
-                *tempVector = *(float *)value1->u.intValue / *(float *)value2->u.intValue;
-                tempVector[1] = *(float *)(value1->u.intValue + 4) / *(float *)(value2->u.intValue + 4);
-                tempVector[2] = *(float *)(value1->u.intValue + 8) / *(float *)(value2->u.intValue + 8);
+                *tempVector = value1->u.vectorValue[0] / value2->u.vectorValue[0];
+                tempVector[1] = value1->u.vectorValue[1] / value2->u.vectorValue[1];
+                tempVector[2] = value1->u.vectorValue[2] / value2->u.vectorValue[2];
                 RemoveRefToVector(inst, value1->u.vectorValue);
                 RemoveRefToVector(inst, value2->u.vectorValue);
-                value1->u.intValue = (int)tempVector;
+                value1->u.vectorValue = tempVector;   // nx-port: a pointer
             }
             break;
         case 5:
@@ -6042,7 +6042,7 @@ void __cdecl Scr_EvalArray(scriptInstance_t inst, VariableValue *value, Variable
             else
             {
                 index->type = 5;
-                index->u.floatValue = *(float *)(value->u.intValue + 4 * index->u.intValue);
+                index->u.floatValue = value->u.vectorValue[index->u.intValue];
                 RemoveRefToVector(inst, value->u.vectorValue);
             }
         }
@@ -6132,7 +6132,7 @@ unsigned int __cdecl Scr_EvalArrayRef(scriptInstance_t inst, unsigned int parent
         varValue.type = parentValue->w.status & 0x1F;
         if (varValue.type)
         {
-            varValue.u.intValue = parentValue->u.u.intValue;
+            varValue.u = parentValue->u.u;  // nx-port: whole value
         add_array:
             if (varValue.type == 1)
             {
@@ -6176,7 +6176,7 @@ unsigned int __cdecl Scr_EvalArrayRef(scriptInstance_t inst, unsigned int parent
                         varValue.u.intValue = Scr_AllocArray(inst);
                         CopyArray(inst, id.stringValue, varValue.u.stringValue);
                         iassert(parentValue);
-                        parentValue->u.next = varValue.u.intValue;
+                        parentValue->u.u = varValue.u;  // nx-port: whole value
                     }
                     return varValue.u.pointerValue;
                 }
@@ -6466,7 +6466,7 @@ void __cdecl ClearArray(scriptInstance_t inst, unsigned int parentId, VariableVa
             __debugbreak();
         }
         varValue.type = parentValue->w.status & 0x1F;
-        varValue.u.intValue = parentValue->u.u.intValue;
+        varValue.u = parentValue->u.u;  // nx-port: whole value
     }
     else
     {
@@ -6593,7 +6593,7 @@ void __cdecl ClearArray(scriptInstance_t inst, unsigned int parentId, VariableVa
             {
                 __debugbreak();
             }
-            parentValue->u.next = varValue.u.intValue;
+            parentValue->u.u = varValue.u;  // nx-port: whole value
         }
         if (value->type == 6)
         {
@@ -7657,7 +7657,7 @@ int __cdecl Scr_FindAllThreads(scriptInstance_t inst, unsigned int selfId, unsig
         entryValue = &gScrVarGlob[inst].variableList[id + 0x8000];
         if ( (entryValue->w.status & 0x60) != 0 && (entryValue->w.status & 0x1F) == 0xA )
         {
-            for ( threadId = *(unsigned int *)(entryValue->u.next + 8); threadId; threadId = GetSafeParentLocalId(inst, threadId) )
+            for ( threadId = entryValue->u.u.stackValue->localId; threadId; threadId = GetSafeParentLocalId(inst, threadId) )
             {
                 if ( selfId == Scr_GetSelf(inst, threadId) )
                 {
@@ -7692,7 +7692,7 @@ int __cdecl Scr_FindAllThreads(scriptInstance_t inst, unsigned int selfId, unsig
             {
                 if ( GetValueType(inst, stackId) == 10 )
                 {
-                    for ( threadIda = *(unsigned int *)(GetVariableValueAddress(inst, stackId)->next + 8);
+                    for ( threadIda = GetVariableValueAddress(inst, stackId)->u.stackValue->localId;
                                 threadIda;
                                 threadIda = GetSafeParentLocalId(inst, threadIda) )
                     {

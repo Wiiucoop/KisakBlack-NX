@@ -712,9 +712,14 @@ char *__cdecl Dvar_InfoString(int localClientNum, int bit)
         if ( Live_IsSignedInToLive() )
         {
             PCache_Lock();
-            LODWORD(v3) = Live_GetXuid(index);
-            profile = (PCachePublicProfile *)PCache_GetComponent(index, v3, 0);
-            if ( PCache_TouchComponent(&profile->c) )
+            // nx-port: all 64 bits (this was LODWORD(v3) =, leaving the top
+            // half unset), and no lookup without one: offline the Steam stub
+            // reports signed in with no DemonWare user behind it, the XUID is
+            // 0, and PCache_GetComponent asserts on that -- the client's
+            // connect info string for a devmap died here.
+            v3 = Live_GetXuid(index);
+            profile = v3 ? (PCachePublicProfile *)PCache_GetComponent(index, v3, 0) : NULL;
+            if ( profile && PCache_TouchComponent(&profile->c) )
             {
                 PCache_GetProfileEmblem(profile, layers, 12, &backgroundID);
                 v4 = BG_EmblemsWriteString(backgroundID, layers, 12);

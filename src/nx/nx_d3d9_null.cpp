@@ -2846,12 +2846,15 @@ static void nxTraceNote(const char *fmt, ...)
 //
 // Winding. Every vertex stage here -- translated shaders and the built-in
 // program alike -- negates y, because targets are stored top row first (see
-// "Render targets"). D3D9 judges winding in screen space, y down; GL judges
-// it in window space, y up. The flip makes the two agree: a triangle that is
-// counter-clockwise on the D3D9 screen is counter-clockwise in GL's window
-// too. So with GL's default front face (CCW), D3DCULL_CCW -- "cull what is
-// counter-clockwise" -- is GL_FRONT, and D3DCULL_CW is GL_BACK. The CCW
-// stencil ops of two-sided stencil apply to those same front faces.
+// "Render targets"). With the flip, GL's window coordinates are numerically
+// D3D9's screen coordinates. But the two name the same numbers' winding
+// oppositely: D3D9 screen space runs y down, so the triangle it calls
+// clockwise has positive area, and positive area is what GL, y up, calls
+// counter-clockwise. D3D9 clockwise is therefore GL CCW, GL's default front
+// face: D3DCULL_CCW -- "cull what is counter-clockwise" -- is GL_BACK, and
+// D3DCULL_CW is GL_FRONT. Two-sided stencil's CCW ops go to GL's back faces.
+// (Mapping it the other way round culled every menu quad: the UI draws with
+// D3D9's default D3DCULL_CCW and clockwise quads.)
 //
 // Depth bias. D3D9 adds DEPTHBIAS in depth-buffer units of [0,1] plus
 // SLOPESCALEDEPTHBIAS times the slope; glPolygonOffset's factor is the same
@@ -2877,14 +2880,14 @@ static void nxGlApplyDepthStencil(void)
         ++s_frame.drawsStencil;
         GLint  ref  = (GLint)(s_rs[D3DRS_STENCILREF] & 0xFFu);
         GLuint mask = (GLuint)s_rs[D3DRS_STENCILMASK];
-        GLenum face = s_rs[D3DRS_TWOSIDEDSTENCILMODE] ? GL_BACK : GL_FRONT_AND_BACK;
+        GLenum face = s_rs[D3DRS_TWOSIDEDSTENCILMODE] ? GL_FRONT : GL_FRONT_AND_BACK;
         glStencilFuncSeparate(face, nxCmpToGl(s_rs[D3DRS_STENCILFUNC]), ref, mask);
         glStencilOpSeparate(face, nxStencilOpToGl(s_rs[D3DRS_STENCILFAIL]),
                             nxStencilOpToGl(s_rs[D3DRS_STENCILZFAIL]),
                             nxStencilOpToGl(s_rs[D3DRS_STENCILPASS]));
         if (s_rs[D3DRS_TWOSIDEDSTENCILMODE]) {
-            glStencilFuncSeparate(GL_FRONT, nxCmpToGl(s_rs[D3DRS_CCW_STENCILFUNC]), ref, mask);
-            glStencilOpSeparate(GL_FRONT, nxStencilOpToGl(s_rs[D3DRS_CCW_STENCILFAIL]),
+            glStencilFuncSeparate(GL_BACK, nxCmpToGl(s_rs[D3DRS_CCW_STENCILFUNC]), ref, mask);
+            glStencilOpSeparate(GL_BACK, nxStencilOpToGl(s_rs[D3DRS_CCW_STENCILFAIL]),
                                 nxStencilOpToGl(s_rs[D3DRS_CCW_STENCILZFAIL]),
                                 nxStencilOpToGl(s_rs[D3DRS_CCW_STENCILPASS]));
         }
@@ -2896,12 +2899,12 @@ static void nxGlApplyDepthStencil(void)
     switch (s_rs[D3DRS_CULLMODE]) {
     case D3DCULL_CCW:
         glEnable(GL_CULL_FACE);
-        glCullFace(GL_FRONT);
+        glCullFace(GL_BACK);
         ++s_frame.drawsCulled;
         break;
     case D3DCULL_CW:
         glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
+        glCullFace(GL_FRONT);
         ++s_frame.drawsCulled;
         break;
     default:

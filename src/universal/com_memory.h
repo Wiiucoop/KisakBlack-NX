@@ -70,7 +70,7 @@ void Hunk_Clear();
 int __cdecl Hunk_Used();
 unsigned __int8 *__cdecl Hunk_Alloc(unsigned int size, const char *name, int type);
 unsigned __int8 *__cdecl Hunk_AllocAlign(unsigned int size, int alignment, const char *name, int type);
-unsigned int __cdecl Hunk_AllocateTempMemoryHigh(int size, const char *name);
+void *__cdecl Hunk_AllocateTempMemoryHigh(int size, const char *name);
 void Hunk_ClearTempMemoryHigh();
 unsigned __int8 *__cdecl Hunk_AllocLow(unsigned int size, const char *name, int type);
 unsigned __int8 *__cdecl Hunk_AllocLowAlign(unsigned int size, int alignment, const char *name, int type);

@@ -17,7 +17,7 @@ void __cdecl CM_ModelBounds(unsigned int model, float *mins, float *maxs);
 int __cdecl CM_ModelSurfaceFlags(unsigned int model);
 unsigned __int8 *__cdecl CM_Hunk_Alloc(unsigned int size, const char *name, int type);
 void __cdecl CM_Hunk_CheckTempMemoryHighClear();
-unsigned int __cdecl CM_Hunk_AllocateTempMemoryHigh(int size, const char *name);
+void *__cdecl CM_Hunk_AllocateTempMemoryHigh(int size, const char *name);
 void __cdecl CM_Hunk_ClearTempMemoryHigh();
 
 

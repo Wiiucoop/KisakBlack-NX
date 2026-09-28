@@ -129,6 +129,8 @@ list(APPEND NX_SANITIZED_SOURCES
     "${SRC_DIR}/gfx_d3d/r_draw_staticmodel.cpp"      # static model draw streams
     "${SRC_DIR}/gfx_d3d/r_add_staticmodel.cpp"       # static model draw stream writer
     "${SRC_DIR}/gfx_d3d/r_light.cpp"                 # light surface callbacks
+    "${SRC_DIR}/universal/com_memory.cpp"            # hunk and virtual memory
+    "${SRC_DIR}/qcommon/cm_load.cpp"                 # collision map load
 )
 
 get_target_property(NX_UNSANITIZED_SOURCES ${BIN_NAME} SOURCES)

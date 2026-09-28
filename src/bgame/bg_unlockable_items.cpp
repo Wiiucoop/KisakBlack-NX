@@ -3024,7 +3024,7 @@ int __cdecl BG_UnlockablesBuildItemListForGroup(itemGroup_t group)
     s_unlockableItems.numItemsInSlot = 0;
     if ( group != ITEMGROUP_COUNT )
     {
-        for ( itemNum = 0; itemNum <= 256; ++itemNum )
+        for ( itemNum = 0; itemNum < 256; ++itemNum )   // nx-port: itemTable has 256 entries; <= 256 read one past it
         {
             if ( s_unlockableItems.itemTable[itemNum].isValid
                 && s_unlockableItems.itemTable[itemNum].group == group
@@ -3046,7 +3046,7 @@ int __cdecl BG_UnlockablesBuildItemListForGroupForWeaponTable(itemGroup_t group)
     s_unlockableItems.numItemsInSlot = 0;
     if ( group != ITEMGROUP_COUNT )
     {
-        for ( itemNum = 0; itemNum <= 256; ++itemNum )
+        for ( itemNum = 0; itemNum < 256; ++itemNum )   // nx-port: itemTable has 256 entries; <= 256 read one past it
         {
             if ( s_unlockableItems.itemTable[itemNum].isValid && s_unlockableItems.itemTable[itemNum].group == group )
             {
@@ -4927,7 +4927,7 @@ int __cdecl BG_UnlockablesBuildItemListForSlotName(int controllerIndex, const ch
         }
         if ( loadoutSlot != -1 )
         {
-            for ( itemNum = 0; itemNum <= 256; ++itemNum )
+            for ( itemNum = 0; itemNum < 256; ++itemNum )   // nx-port: itemTable has 256 entries; <= 256 read one past it
             {
                 itemInfo = &s_unlockableItems.itemTable[itemNum];
                 if ( itemInfo->isValid && itemInfo->loadoutSlot == loadoutSlot && itemInfo->cost >= 0 )
@@ -5010,7 +5010,7 @@ int __cdecl BG_UnlockablesBuildItemListForChallengesPerks(int controllerIndex, c
         }
         if ( loadoutSlot != -1 )
         {
-            for ( itemNum = 0; itemNum <= 256; ++itemNum )
+            for ( itemNum = 0; itemNum < 256; ++itemNum )   // nx-port: itemTable has 256 entries; <= 256 read one past it
             {
                 itemInfo = &s_unlockableItems.itemTable[itemNum];
                 if ( itemInfo->isValid
@@ -5193,7 +5193,7 @@ int __cdecl BG_UnlockablesBuildItemListForSlotNameAndGroup(
         }
         if ( loadoutSlot != -1 && group != -1 )
         {
-            for ( itemNum = 0; itemNum <= 256; ++itemNum )
+            for ( itemNum = 0; itemNum < 256; ++itemNum )   // nx-port: itemTable has 256 entries; <= 256 read one past it
             {
                 if ( s_unlockableItems.itemTable[itemNum].isValid
                     && s_unlockableItems.itemTable[itemNum].loadoutSlot == loadoutSlot

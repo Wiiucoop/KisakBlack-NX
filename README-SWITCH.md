@@ -356,8 +356,13 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    and validate, and `kBuildSteps` builds the world vertex buffers.
 2. ~~Depth, stencil and culling in the renderer~~ — done (stage 3).
 3. **Finish the LP64 work on the map path.** `rb_postfx.cpp`,
-   `r_draw_staticmodel.cpp`, `r_add_staticmodel.cpp` and `r_light.cpp` are
-   done and graduated. A scan of `gfx_d3d`, `EffectsCore`, `qcommon`,
+   `r_draw_staticmodel.cpp`, `r_add_staticmodel.cpp`, `r_light.cpp`, the hunk
+   allocator (`com_memory.cpp`) and the script compiler and VM are done and
+   graduated. The script port changed the bytecode: code positions are
+   pointer-sized (`src/clientscript/cscr_codepos.h`, 12-byte switch-table
+   entries) and a waiting thread's saved stack stores 1 + 8-byte entries
+   (`SCR_STACKBUF_*` in `cscr_variable.h`); anything that walks either has to
+   use those constants. A scan of `gfx_d3d`, `EffectsCore`, `qcommon`,
    `DynEntity`, `physics`, `glass` and `xanim` (the build's flags without
    `-w`, plus `-Wint-to-pointer-cast`, one file at a time) still flags ~490
    sites outside the `*_load_obj.cpp` BSP loaders, which fastfile maps never

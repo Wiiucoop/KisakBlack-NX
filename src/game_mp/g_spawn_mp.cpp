@@ -29,21 +29,21 @@ struct ent_field_t // sizeof=0x14
 
 const ent_field_t fields_1[16] =
 {
-  { "classname", 356, { 2 }, F_STRING, Scr_ReadOnlyField },
-  { "origin", 292, { 12 }, F_VECTOR, Scr_SetOrigin },
-  { "model", 348, { 2 }, F_MODEL, Scr_ReadOnlyField },
-  { "spawnflags", 368, { 4 }, F_INT, Scr_ReadOnlyField },
-  { "target", 358, { 2 }, F_STRING, NULL },
-  { "targetname", 360, { 2 }, F_STRING, NULL },
-  { "script_noteworthy", 362, { 2 }, F_STRING, NULL },
-  { "count", 532, { 4 }, F_INT, NULL },
-  { "health", 404, { 4 }, F_INT, Scr_SetHealth },
-  { "dmg", 412, { 4 }, F_INT, NULL },
-  { "angles", 304, { 12 }, F_VECTOR, Scr_SetAngles },
-  { "birthtime", 748, { 4 }, F_INT, Scr_ReadOnlyField },
-  { "index", 560, { 4 }, F_INT, Scr_SetExposureIndex },
-  { "lerp_to_lighter", 564, { 4 }, F_FLOAT, Scr_SetExposureLerpToLighter },
-  { "lerp_to_darker", 568, { 4 }, F_FLOAT, Scr_SetExposureLerpToDarker },
+  { "classname", (int)offsetof(gentity_s, classname), { 2 }, F_STRING, Scr_ReadOnlyField },
+  { "origin", (int)offsetof(gentity_s, r.currentOrigin), { 12 }, F_VECTOR, Scr_SetOrigin },
+  { "model", (int)offsetof(gentity_s, model), { 2 }, F_MODEL, Scr_ReadOnlyField },
+  { "spawnflags", (int)offsetof(gentity_s, spawnflags), { 4 }, F_INT, Scr_ReadOnlyField },
+  { "target", (int)offsetof(gentity_s, target), { 2 }, F_STRING, NULL },
+  { "targetname", (int)offsetof(gentity_s, targetname), { 2 }, F_STRING, NULL },
+  { "script_noteworthy", (int)offsetof(gentity_s, script_noteworthy), { 2 }, F_STRING, NULL },
+  { "count", (int)offsetof(gentity_s, count), { 4 }, F_INT, NULL },
+  { "health", (int)offsetof(gentity_s, health), { 4 }, F_INT, Scr_SetHealth },
+  { "dmg", (int)offsetof(gentity_s, damage), { 4 }, F_INT, NULL },
+  { "angles", (int)offsetof(gentity_s, r.currentAngles), { 12 }, F_VECTOR, Scr_SetAngles },
+  { "birthtime", (int)offsetof(gentity_s, birthTime), { 4 }, F_INT, Scr_ReadOnlyField },
+  { "index", (int)offsetof(gentity_s, trigger.exposureIndex), { 4 }, F_INT, Scr_SetExposureIndex },
+  { "lerp_to_lighter", (int)offsetof(gentity_s, trigger.exposureLerpToLighter), { 4 }, F_FLOAT, Scr_SetExposureLerpToLighter },
+  { "lerp_to_darker", (int)offsetof(gentity_s, trigger.exposureLerpToDarker), { 4 }, F_FLOAT, Scr_SetExposureLerpToDarker },
   { NULL, 0, { 0 }, F_INT, NULL }
 };
 
@@ -670,16 +670,16 @@ void __cdecl GScr_SetGenericField(unsigned __int8 *b, fieldtype_t type, int ofs,
         case F_ACTOR:
             ent = Scr_GetEntityAllowNull(0, SCRIPTINSTANCE_SERVER);
             if ( ent )
-                *(unsigned int *)&b[ofs] = (unsigned int)ent->actor;
+                *(void **)&b[ofs] = ent->actor;   // nx-port: a pointer field, whole
             else
-                *(unsigned int *)&b[ofs] = 0;
+                *(void **)&b[ofs] = 0;
             break;
         case F_SENTIENT:
             enta = Scr_GetEntityAllowNull(0, SCRIPTINSTANCE_SERVER);
             if ( enta )
-                *(unsigned int *)&b[ofs] = (unsigned int)enta->sentient;
+                *(void **)&b[ofs] = enta->sentient;   // nx-port: a pointer field, whole
             else
-                *(unsigned int *)&b[ofs] = 0;
+                *(void **)&b[ofs] = 0;
             break;
         case F_SENTIENTHANDLE:
             entb = Scr_GetEntityAllowNull(0, SCRIPTINSTANCE_SERVER);
@@ -689,7 +689,7 @@ void __cdecl GScr_SetGenericField(unsigned __int8 *b, fieldtype_t type, int ofs,
                 ((SentientHandle *)&b[ofs])->setSentient(0);
             break;
         case F_PATHNODE:
-            *(unsigned int *)&b[ofs] = (unsigned int)Scr_GetPathnode(0, SCRIPTINSTANCE_SERVER);
+            *(void **)&b[ofs] = Scr_GetPathnode(0, SCRIPTINSTANCE_SERVER);   // nx-port: a pointer field, whole
             break;
         default:
             Scr_SetGenericField(b, type, ofs, SCRIPTINSTANCE_SERVER, whichbits);
@@ -869,7 +869,7 @@ void __cdecl GScr_GetGenericField(unsigned __int8 *b, fieldtype_t type, int ofs,
     switch ( type )
     {
         case F_ENTITY:
-            if ( *(unsigned int *)&b[ofs] )
+            if ( *(void **)&b[ofs] )   // nx-port: a pointer field, whole
                 Scr_AddEntity(*(gentity_s **)&b[ofs], SCRIPTINSTANCE_SERVER);
             break;
         case F_ENTHANDLE:
@@ -880,11 +880,11 @@ void __cdecl GScr_GetGenericField(unsigned __int8 *b, fieldtype_t type, int ofs,
             }
             break;
         case F_ACTOR:
-            if ( *(unsigned int *)&b[ofs] )
+            if ( *(void **)&b[ofs] )   // nx-port: a pointer field, whole
                 Scr_AddEntity(**(gentity_s ***)&b[ofs], SCRIPTINSTANCE_SERVER);
             break;
         case F_SENTIENT:
-            if ( *(unsigned int *)&b[ofs] )
+            if ( *(void **)&b[ofs] )   // nx-port: a pointer field, whole
                 Scr_AddEntity(**(gentity_s ***)&b[ofs], SCRIPTINSTANCE_SERVER);
             break;
         case F_SENTIENTHANDLE:
@@ -895,7 +895,7 @@ void __cdecl GScr_GetGenericField(unsigned __int8 *b, fieldtype_t type, int ofs,
             }
             break;
         case F_PATHNODE:
-            if ( *(unsigned int *)&b[ofs] )
+            if ( *(void **)&b[ofs] )   // nx-port: a pointer field, whole
                 Scr_AddPathnode(*(pathnode_t **)&b[ofs]);
             break;
         case F_OBJECT:

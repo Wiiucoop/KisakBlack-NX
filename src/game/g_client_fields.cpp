@@ -30,6 +30,12 @@ const char *g_scoreboardColumnNames[18] =
   "headshots"
 };
 
+// nx-port: the offsets in this table are x86 byte offsets into gclient_s.
+// Everything from sess on lies 256 bytes later on LP64 -- playerState_s in
+// front of it holds pointers -- with the same layout inside, so those are
+// rebased on offsetof(gclient_s, sess) (sess.sessionState was at 9896).
+#define GCLIENT_X86(x86) ((int)((x86) - 9896 + offsetof(gclient_s, sess)))
+
 const client_fields_s fields[42] =
 {
   {
@@ -51,7 +57,7 @@ const client_fields_s fields[42] =
     ClientScr_GetFFATeam
   },
   { "name", 0, { 0 }, F_LSTRING, 0u, ClientScr_ReadOnly, ClientScr_GetName },
-  { "maxhealth", 10068, { 4 }, F_INT, 0u, ClientScr_SetMaxHealth, NULL },
+  { "maxhealth", GCLIENT_X86(10068), { 4 }, F_INT, 0u, ClientScr_SetMaxHealth, NULL },
   {
     "headiconteam",
     0,
@@ -61,35 +67,35 @@ const client_fields_s fields[42] =
     ClientScr_SetHeadIconTeam,
     ClientScr_GetHeadIconTeam
   },
-  { "hasspyplane", 10692, { 4 }, F_INT, 0u, NULL, NULL },
-  { "hassatellite", 10696, { 4 }, F_INT, 0u, NULL, NULL },
-  { "disallowvehicleusage", 10708, { 4 }, F_INT, 0u, NULL, NULL },
-  { "kills", 10280, { 4 }, F_INT, 0u, ClientScr_SetKills, NULL },
-  { "deaths", 10288, { 4 }, F_INT, 0u, ClientScr_SetDeaths, NULL },
-  { "assists", 10284, { 4 }, F_INT, 0u, ClientScr_SetAssists, NULL },
-  { "defends", 10336, { 4 }, F_INT, 0u, ClientScr_SetDefends, NULL },
-  { "plants", 10340, { 4 }, F_INT, 0u, ClientScr_SetPlants, NULL },
-  { "defuses", 10344, { 4 }, F_INT, 0u, ClientScr_SetDefuses, NULL },
-  { "returns", 10348, { 4 }, F_INT, 0u, ClientScr_SetReturns, NULL },
-  { "captures", 10352, { 4 }, F_INT, 0u, ClientScr_SetCaptures, NULL },
-  { "destructions", 10356, { 4 }, F_INT, 0u, ClientScr_SetDestructions, NULL },
-  { "survived", 10364, { 4 }, F_INT, 0u, ClientScr_SetSurvived, NULL },
-  { "stabs", 10368, { 4 }, F_INT, 0u, ClientScr_SetStabs, NULL },
-  { "tomahawks", 10372, { 4 }, F_INT, 0u, ClientScr_SetTomahawks, NULL },
-  { "humiliated", 10376, { 4 }, F_INT, 0u, ClientScr_SetHumiliated, NULL },
-  { "x2score", 10380, { 4 }, F_INT, 0u, ClientScr_SetX2Score, NULL },
-  { "headshots", 10384, { 4 }, F_INT, 0u, ClientScr_SetHeadshots, NULL },
-  { "killcamentity", 9904, { 4 }, F_INT, 0u, ClientScr_SetKillCamEntity, NULL },
+  { "hasspyplane", GCLIENT_X86(10692), { 4 }, F_INT, 0u, NULL, NULL },
+  { "hassatellite", GCLIENT_X86(10696), { 4 }, F_INT, 0u, NULL, NULL },
+  { "disallowvehicleusage", GCLIENT_X86(10708), { 4 }, F_INT, 0u, NULL, NULL },
+  { "kills", GCLIENT_X86(10280), { 4 }, F_INT, 0u, ClientScr_SetKills, NULL },
+  { "deaths", GCLIENT_X86(10288), { 4 }, F_INT, 0u, ClientScr_SetDeaths, NULL },
+  { "assists", GCLIENT_X86(10284), { 4 }, F_INT, 0u, ClientScr_SetAssists, NULL },
+  { "defends", GCLIENT_X86(10336), { 4 }, F_INT, 0u, ClientScr_SetDefends, NULL },
+  { "plants", GCLIENT_X86(10340), { 4 }, F_INT, 0u, ClientScr_SetPlants, NULL },
+  { "defuses", GCLIENT_X86(10344), { 4 }, F_INT, 0u, ClientScr_SetDefuses, NULL },
+  { "returns", GCLIENT_X86(10348), { 4 }, F_INT, 0u, ClientScr_SetReturns, NULL },
+  { "captures", GCLIENT_X86(10352), { 4 }, F_INT, 0u, ClientScr_SetCaptures, NULL },
+  { "destructions", GCLIENT_X86(10356), { 4 }, F_INT, 0u, ClientScr_SetDestructions, NULL },
+  { "survived", GCLIENT_X86(10364), { 4 }, F_INT, 0u, ClientScr_SetSurvived, NULL },
+  { "stabs", GCLIENT_X86(10368), { 4 }, F_INT, 0u, ClientScr_SetStabs, NULL },
+  { "tomahawks", GCLIENT_X86(10372), { 4 }, F_INT, 0u, ClientScr_SetTomahawks, NULL },
+  { "humiliated", GCLIENT_X86(10376), { 4 }, F_INT, 0u, ClientScr_SetHumiliated, NULL },
+  { "x2score", GCLIENT_X86(10380), { 4 }, F_INT, 0u, ClientScr_SetX2Score, NULL },
+  { "headshots", GCLIENT_X86(10384), { 4 }, F_INT, 0u, ClientScr_SetHeadshots, NULL },
+  { "killcamentity", GCLIENT_X86(9904), { 4 }, F_INT, 0u, ClientScr_SetKillCamEntity, NULL },
   {
     "killcamtargetentity",
-    9908,
+    GCLIENT_X86(9908),
     { 4 },
     F_INT,
     0u,
     ClientScr_SetKillCamTargetEntity,
     NULL
   },
-  { "score", 10276, { 4 }, F_INT, 0u, ClientScr_SetScore, NULL },
+  { "score", GCLIENT_X86(10276), { 4 }, F_INT, 0u, ClientScr_SetScore, NULL },
   {
     "sessionstate",
     0,
@@ -110,7 +116,7 @@ const client_fields_s fields[42] =
   },
   {
     "spectatorclient",
-    9900,
+    GCLIENT_X86(9900),
     { 4 },
     F_INT,
     0u,
@@ -119,7 +125,7 @@ const client_fields_s fields[42] =
   },
   {
     "archivetime",
-    9912,
+    GCLIENT_X86(9912),
     { 4 },
     F_FLOAT,
     0u,
@@ -128,14 +134,14 @@ const client_fields_s fields[42] =
   },
   {
     "psoffsettime",
-    10312,
+    GCLIENT_X86(10312),
     { 4 },
     F_INT,
     0u,
     ClientScr_SetPSOffsetTime,
     ClientScr_GetPSOffsetTime
   },
-  { "pers", 9916, { 4 }, F_OBJECT, 0u, ClientScr_ReadOnly, NULL },
+  { "pers", GCLIENT_X86(9916), { 4 }, F_OBJECT, 0u, ClientScr_ReadOnly, NULL },
   { "usingturret", 224, { 4 }, F_BITFLAG, 768u, ClientScr_ReadOnly, NULL },
   { "usingvehicle", 224, { 4 }, F_BITFLAG, 16384u, ClientScr_ReadOnly, NULL },
   { "vehicleposition", 1092, { 4 }, F_INT, 0u, ClientScr_ReadOnly, NULL },

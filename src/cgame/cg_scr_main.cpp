@@ -351,16 +351,22 @@ BuiltinFunctionDef client_functions[154] =
   { "isxenon", &CScr_PrecacheRumble, 0 }
 };
 
+// nx-port: x86 byte offsets into centity_s. From x86 112 (after pose.actor)
+// to 736 the LP64 layout is the same, 4 bytes later; see CENTITY_X86.
+#ifndef CENTITY_X86
+#define CENTITY_X86(x86) ((int)((x86) - 112 + offsetof(centity_s, pose.actor) + sizeof(void *)))
+#endif
+
 const cent_field_s cent_fields[25] =
 {
   { "origin", 48, { 12 }, F_VECTOR, &CScr_SetOrigin, NULL },
   { "angles", 60, { 12 }, F_VECTOR, &CScr_SetAngles, NULL },
-  { "weapon", 690, { 2 }, F_STRING, &CScr_ReadOnly, &CScr_GetWeaponName },
-  { "targetname", 694, { 2 }, F_STRING, NULL, NULL },
-  { "species", 576, { 4 }, F_STRING, &CScr_ReadOnly, &CScr_GetSpecies },
-  { "isdog", 576, { 4 }, F_INT, &CScr_ReadOnly, &CScr_GetIsDog },
-  { "type", 678, { 2 }, F_STRING, &CScr_ReadOnly, &CScr_GetType },
-  { "model", 678, { 2 }, F_STRING, &CScr_ReadOnly, &CScr_GetModel },
+  { "weapon", CENTITY_X86(690), { 2 }, F_STRING, &CScr_ReadOnly, &CScr_GetWeaponName },
+  { "targetname", CENTITY_X86(694), { 2 }, F_STRING, NULL, NULL },
+  { "species", CENTITY_X86(576), { 4 }, F_STRING, &CScr_ReadOnly, &CScr_GetSpecies },
+  { "isdog", CENTITY_X86(576), { 4 }, F_INT, &CScr_ReadOnly, &CScr_GetIsDog },
+  { "type", CENTITY_X86(678), { 2 }, F_STRING, &CScr_ReadOnly, &CScr_GetType },
+  { "model", CENTITY_X86(678), { 2 }, F_STRING, &CScr_ReadOnly, &CScr_GetModel },
   {
     "vehicletype",
     0,
@@ -473,8 +479,8 @@ const cent_field_s cent_fields[25] =
     &CScr_ReadOnly,
     &VehicleCScr_GetVehicleInfoField
   },
-  { "enemy", 584, { 4 }, F_ENTITY, &CScr_ReadOnly, &CScr_GetEntityByIndex },
-  { "team", 703, { 1 }, F_STRING, &CScr_ReadOnly, &CScr_GetTeamName },
+  { "enemy", CENTITY_X86(584), { 4 }, F_ENTITY, &CScr_ReadOnly, &CScr_GetEntityByIndex },
+  { "team", CENTITY_X86(703), { 1 }, F_STRING, &CScr_ReadOnly, &CScr_GetTeamName },
   { NULL, 0, { 0 }, F_INT, NULL, NULL }
 };
 

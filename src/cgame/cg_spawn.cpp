@@ -14,12 +14,18 @@
 #include <qcommon/cm_load.h>
 #include <client/splitscreen.h>
 
+// nx-port: x86 byte offsets into centity_s. From x86 112 (after pose.actor)
+// to 736 the LP64 layout is the same, 4 bytes later; see CENTITY_X86.
+#ifndef CENTITY_X86
+#define CENTITY_X86(x86) ((int)((x86) - 112 + offsetof(centity_s, pose.actor) + sizeof(void *)))
+#endif
+
 const cent_field_t client_spawn_fields[5] =
 {
   { "origin", 48, F_VECTOR },
   { "angles", 60, F_VECTOR },
-  { "model", 682, F_MODEL },
-  { "targetname", 694, F_STRING },
+  { "model", CENTITY_X86(682), F_MODEL },
+  { "targetname", CENTITY_X86(694), F_STRING },
   { NULL, 0, F_INT }
 };
 

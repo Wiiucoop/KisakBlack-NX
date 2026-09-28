@@ -1019,13 +1019,11 @@ static NxSurface *nxTextureSurface(NxTexture *t, UINT face, UINT level)
 // built out of stacked translucent panels showed only its topmost layer.
 //
 // The whole D3DRS file is recorded here -- it is one small array and the cost
-// of keeping all of it is the same as keeping three -- but only the states
-// that decide whether and how a draw reaches the framebuffer are acted on:
-// the blend equation, its factors, and the colour write mask. Depth, stencil,
-// culling and alpha test are still ignored on purpose, for the reason
-// nxGlEnsurePipeline gives: nothing here fills a depth buffer or tracks a
-// winding order yet, so honouring them could only discard geometry for
-// reasons that have nothing to do with whether the geometry is right.
+// of keeping all of it is the same as keeping three -- and the draw path acts
+// on the states that decide whether and how a draw reaches the framebuffer:
+// the blend equation, its factors and the colour write mask (nxGlApplyBlend),
+// depth, stencil, culling, depth bias and fill mode (nxGlApplyDepthStencil).
+// Alpha test lives in the translated pixel shaders (uAlphaTestFunc/uAlphaRef).
 enum { NX_RS_COUNT = 256 };
 static DWORD s_rs[NX_RS_COUNT];
 
@@ -1044,6 +1042,30 @@ static void nxInitRenderStates(void)
     s_rs[D3DRS_BLENDOPALPHA]   = D3DBLENDOP_ADD;
     s_rs[D3DRS_BLENDFACTOR]    = 0xFFFFFFFFu;
     s_rs[D3DRS_COLORWRITEENABLE] = 0xF;   // all four channels
+
+    // Depth, stencil and rasterizer, as D3D9 starts them. ZENABLE is TRUE
+    // only because the device is always created with an automatic depth
+    // buffer here (Reset and CreateDevice attach it).
+    s_rs[D3DRS_ZENABLE]      = D3DZB_TRUE;
+    s_rs[D3DRS_ZWRITEENABLE] = TRUE;
+    s_rs[D3DRS_ZFUNC]        = D3DCMP_LESSEQUAL;
+    s_rs[D3DRS_STENCILENABLE]    = FALSE;
+    s_rs[D3DRS_STENCILFAIL]      = D3DSTENCILOP_KEEP;
+    s_rs[D3DRS_STENCILZFAIL]     = D3DSTENCILOP_KEEP;
+    s_rs[D3DRS_STENCILPASS]      = D3DSTENCILOP_KEEP;
+    s_rs[D3DRS_STENCILFUNC]      = D3DCMP_ALWAYS;
+    s_rs[D3DRS_STENCILREF]       = 0;
+    s_rs[D3DRS_STENCILMASK]      = 0xFFFFFFFFu;
+    s_rs[D3DRS_STENCILWRITEMASK] = 0xFFFFFFFFu;
+    s_rs[D3DRS_TWOSIDEDSTENCILMODE] = FALSE;
+    s_rs[D3DRS_CCW_STENCILFAIL]  = D3DSTENCILOP_KEEP;
+    s_rs[D3DRS_CCW_STENCILZFAIL] = D3DSTENCILOP_KEEP;
+    s_rs[D3DRS_CCW_STENCILPASS]  = D3DSTENCILOP_KEEP;
+    s_rs[D3DRS_CCW_STENCILFUNC]  = D3DCMP_ALWAYS;
+    s_rs[D3DRS_CULLMODE]  = D3DCULL_CCW;
+    s_rs[D3DRS_FILLMODE]  = D3DFILL_SOLID;
+    s_rs[D3DRS_DEPTHBIAS] = 0;             // floats, stored as their bits
+    s_rs[D3DRS_SLOPESCALEDEPTHBIAS] = 0;
 }
 
 // BLENDFACTOR and INVBLENDFACTOR need glBlendColor, which is one piece of
@@ -1120,6 +1142,41 @@ static void nxGlApplyBlend(void)
                  ((f >>  8) & 0xff) / 255.0f,
                  ((f      ) & 0xff) / 255.0f,
                  ((f >> 24) & 0xff) / 255.0f);
+}
+
+static GLenum nxCmpToGl(DWORD f)
+{
+    switch (f) {
+    case D3DCMP_NEVER:        return GL_NEVER;
+    case D3DCMP_LESS:         return GL_LESS;
+    case D3DCMP_EQUAL:        return GL_EQUAL;
+    case D3DCMP_LESSEQUAL:    return GL_LEQUAL;
+    case D3DCMP_GREATER:      return GL_GREATER;
+    case D3DCMP_NOTEQUAL:     return GL_NOTEQUAL;
+    case D3DCMP_GREATEREQUAL: return GL_GEQUAL;
+    default:                  return GL_ALWAYS;
+    }
+}
+
+static GLenum nxStencilOpToGl(DWORD op)
+{
+    switch (op) {
+    case D3DSTENCILOP_ZERO:    return GL_ZERO;
+    case D3DSTENCILOP_REPLACE: return GL_REPLACE;
+    case D3DSTENCILOP_INCRSAT: return GL_INCR;
+    case D3DSTENCILOP_DECRSAT: return GL_DECR;
+    case D3DSTENCILOP_INVERT:  return GL_INVERT;
+    case D3DSTENCILOP_INCR:    return GL_INCR_WRAP;
+    case D3DSTENCILOP_DECR:    return GL_DECR_WRAP;
+    default:                   return GL_KEEP;
+    }
+}
+
+static float nxRsFloat(DWORD v)
+{
+    float f;
+    memcpy(&f, &v, sizeof(f));
+    return f;
 }
 
 // Vertex shader constant registers, recorded as the engine sets them. Only the
@@ -1297,6 +1354,7 @@ static bool s_framePosWSeen;
 struct NxFrameStats {
     unsigned draws, via2d, viaMatrix, viaDefault;
     unsigned drawsBlended;
+    unsigned drawsDepthTested, drawsStencil, drawsCulled;   // nxGlApplyDepthStencil
     // Where the draw's colour came from. drawsTextured is the only one of
     // these that samples an image; the three white ones each name a
     // different reason it could not.
@@ -1614,14 +1672,9 @@ static bool nxGlEnsurePipeline(void)
     glGenVertexArrays(1, &s_vao);
     glBindVertexArray(s_vao);
 
-    // Still state this file discards: no depth buffer is filled and no winding
-    // order is tracked, so leaving these on could only throw the geometry away
-    // for reasons that have nothing to do with whether the geometry arrived.
-    // (The y flip in s_vsSrc also reverses every winding, which culling will
-    // have to answer for when it is honoured.)
-    //
-    // GL_BLEND, the scissor and the viewport have left this list: the draw
-    // path sets all three per draw, from the state the engine asked for.
+    // Only a starting point: the draw path sets blend, scissor, viewport,
+    // depth, stencil and culling per draw from the state the engine asked for
+    // (nxGlApplyBlend, nxGlApplyDepthStencil).
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
@@ -2787,6 +2840,93 @@ static void nxTraceNote(const char *fmt, ...)
     printf("[nx-trace] #%-3u %s (target %s)\n", s_traceIndex++, msg, target);
 }
 
+
+// Depth, stencil and the rasterizer, per draw, for the same reason as the
+// blend state above.
+//
+// Winding. Every vertex stage here -- translated shaders and the built-in
+// program alike -- negates y, because targets are stored top row first (see
+// "Render targets"). D3D9 judges winding in screen space, y down; GL judges
+// it in window space, y up. The flip makes the two agree: a triangle that is
+// counter-clockwise on the D3D9 screen is counter-clockwise in GL's window
+// too. So with GL's default front face (CCW), D3DCULL_CCW -- "cull what is
+// counter-clockwise" -- is GL_FRONT, and D3DCULL_CW is GL_BACK. The CCW
+// stencil ops of two-sided stencil apply to those same front faces.
+//
+// Depth bias. D3D9 adds DEPTHBIAS in depth-buffer units of [0,1] plus
+// SLOPESCALEDEPTHBIAS times the slope; glPolygonOffset's factor is the same
+// slope term, and its units are multiples of the smallest resolvable depth
+// step, so the constant term is scaled by the buffer's precision.
+static void nxGlApplyDepthStencil(void)
+{
+    const NxSurface *ds = s_ds;
+
+    if (ds && s_rs[D3DRS_ZENABLE] != D3DZB_FALSE) {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(nxCmpToGl(s_rs[D3DRS_ZFUNC]));
+        ++s_frame.drawsDepthTested;
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+    // D3D9 writes depth only when the test is on, as GL does.
+    glDepthMask(s_rs[D3DRS_ZWRITEENABLE] ? GL_TRUE : GL_FALSE);
+
+    bool stencilBits = ds && (ds->format == D3DFMT_D24S8 || ds->format == D3DFMT_D24FS8);
+    if (stencilBits && s_rs[D3DRS_STENCILENABLE]) {
+        glEnable(GL_STENCIL_TEST);
+        ++s_frame.drawsStencil;
+        GLint  ref  = (GLint)(s_rs[D3DRS_STENCILREF] & 0xFFu);
+        GLuint mask = (GLuint)s_rs[D3DRS_STENCILMASK];
+        GLenum face = s_rs[D3DRS_TWOSIDEDSTENCILMODE] ? GL_BACK : GL_FRONT_AND_BACK;
+        glStencilFuncSeparate(face, nxCmpToGl(s_rs[D3DRS_STENCILFUNC]), ref, mask);
+        glStencilOpSeparate(face, nxStencilOpToGl(s_rs[D3DRS_STENCILFAIL]),
+                            nxStencilOpToGl(s_rs[D3DRS_STENCILZFAIL]),
+                            nxStencilOpToGl(s_rs[D3DRS_STENCILPASS]));
+        if (s_rs[D3DRS_TWOSIDEDSTENCILMODE]) {
+            glStencilFuncSeparate(GL_FRONT, nxCmpToGl(s_rs[D3DRS_CCW_STENCILFUNC]), ref, mask);
+            glStencilOpSeparate(GL_FRONT, nxStencilOpToGl(s_rs[D3DRS_CCW_STENCILFAIL]),
+                                nxStencilOpToGl(s_rs[D3DRS_CCW_STENCILZFAIL]),
+                                nxStencilOpToGl(s_rs[D3DRS_CCW_STENCILPASS]));
+        }
+        glStencilMask((GLuint)s_rs[D3DRS_STENCILWRITEMASK]);
+    } else {
+        glDisable(GL_STENCIL_TEST);
+    }
+
+    switch (s_rs[D3DRS_CULLMODE]) {
+    case D3DCULL_CCW:
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_FRONT);
+        ++s_frame.drawsCulled;
+        break;
+    case D3DCULL_CW:
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        ++s_frame.drawsCulled;
+        break;
+    default:
+        glDisable(GL_CULL_FACE);
+        break;
+    }
+
+    float bias  = nxRsFloat(s_rs[D3DRS_DEPTHBIAS]);
+    float slope = nxRsFloat(s_rs[D3DRS_SLOPESCALEDEPTHBIAS]);
+    if (bias != 0.0f || slope != 0.0f) {
+        float steps = (ds && (ds->format == D3DFMT_D16 || ds->format == D3DFMT_D16_LOCKABLE))
+                    ? 65536.0f : 16777216.0f;
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(slope, bias * steps);
+    } else {
+        glDisable(GL_POLYGON_OFFSET_FILL);
+    }
+
+    switch (s_rs[D3DRS_FILLMODE]) {
+    case D3DFILL_POINT:     glPolygonMode(GL_FRONT_AND_BACK, GL_POINT); break;
+    case D3DFILL_WIREFRAME: glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  break;
+    default:                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);  break;
+    }
+}
+
 static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
                             UINT startIndex, UINT primCount)
 {
@@ -2939,6 +3079,7 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     }   // built-in program
 
     nxGlApplyBlend();
+    nxGlApplyDepthStencil();
 
     UINT stride = s_streamStride[pos->Stream];
     UINT attrOffset = s_streamOffset[pos->Stream] + pos->Offset;
@@ -3129,8 +3270,10 @@ static void nxGlDumpGeometry(void)
     // The frame as a whole. Everything below this block is one vertex.
     const NxFrameStats &f = s_frame;
     printf("        this frame: %u draws | transform: R_CmdBufSet2D match=%u "
-           "last 4-row write=%u c0 default=%u | blended=%u\n",
-           f.draws, f.via2d, f.viaMatrix, f.viaDefault, f.drawsBlended);
+           "last 4-row write=%u c0 default=%u | blended=%u depth-tested=%u "
+           "stencil=%u culled=%u\n",
+           f.draws, f.via2d, f.viaMatrix, f.viaDefault, f.drawsBlended,
+           f.drawsDepthTested, f.drawsStencil, f.drawsCulled);
     printf("          indices %u: in front %u, on screen %u, w<=0 %u, "
            "out of buffer %u, draws not read back (non-float pos) %u\n",
            f.refs, f.refs - f.refsBehind, f.refsInside, f.refsBehind,

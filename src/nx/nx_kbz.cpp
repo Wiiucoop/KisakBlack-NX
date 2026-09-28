@@ -39,6 +39,11 @@
 #include <gfx_d3d/rb_resource.h>
 #include <sound/snd_bank.h>
 #include <ui/ui_shared.h>
+#include <gfx_d3d/r_bsp.h>
+#include <gfx_d3d/r_buffers.h>
+
+// Written by tools/ffconv (prelink.h ZEROBLK): sized in the header, no bytes in the file.
+static const uint32_t KBZ_RUNTIME_BLOCK = 1;
 
 extern "C" void nx_normalize_path(const char *in, char *out, size_t outSize);
 extern "C" const char *nx_get_install_dir(void);
@@ -299,9 +304,33 @@ static unsigned buildImage(XAssetHeader h, NxBuildCtx &ctx)
     return 1;
 }
 
+// A map's world geometry: Load_GfxWorldVertexData and
+// Load_GfxWorldVertexLayerData (db_load.cpp:7973/7990) hand the vertices and
+// the layer data to Load_VertexBuffer as soon as they are read. The buffers
+// are fields of the GfxWorld itself, so this builds them on the pool entry.
+static unsigned buildGfxWorld(XAssetHeader h, NxBuildCtx &)
+{
+    GfxWorld *world = h.gfxWorld;
+    if (!world)
+        return 0;
+    GfxWorldDraw *draw = &world->draw;
+    unsigned built = 0;
+    if (draw->vd.vertices && draw->vertexCount && !draw->vd.worldVb) {
+        Load_VertexBuffer(&draw->vd.worldVb, (unsigned char *)draw->vd.vertices,
+                          (int)(sizeof(GfxWorldVertex) * draw->vertexCount));
+        built += draw->vd.worldVb != 0;
+    }
+    if (draw->vld.data && draw->vertexLayerDataSize && !draw->vld.layerVb) {
+        Load_VertexBuffer(&draw->vld.layerVb, draw->vld.data, (int)draw->vertexLayerDataSize);
+        built += draw->vld.layerVb != 0;
+    }
+    return built;
+}
+
 static const NxBuildStep kBuildSteps[] = {
     { ASSET_TYPE_TECHNIQUE_SET, buildTechniqueSet, "shader/vertex-decl objects" },
     { ASSET_TYPE_IMAGE,         buildImage,        "textures" },
+    { ASSET_TYPE_GFXWORLD,      buildGfxWorld,     "world vertex buffers" },
 };
 
 // Walk the assets this zone registered, once per step, in registration order.
@@ -510,9 +539,17 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
     // 1. allocate blocks and copy their images. These are PERMANENT (code_pre /
     // en_code_pre / code_post never unload), so a plain persistent malloc is
     // fine and the assets keep pointing into them for the process lifetime.
+    //
+    // Block 1 is the runtime block, as in the fastfile (Load_Stream memsets
+    // it): the converter records its size but stores no bytes, and it starts
+    // zeroed here. The map zones keep megabytes of visibility scratch in it.
     uint8_t *block[16] = {0};
     for (uint32_t i = 0; i < nblk; ++i) {
         if (!blockSize[i]) continue;
+        if (i == KBZ_RUNTIME_BLOCK) {
+            block[i] = (uint8_t *)calloc(1, blockSize[i]);
+            continue;
+        }
         if (p + blockSize[i] > end) {
             Com_PrintError(10, "NX_TryLoadKbz: '%s' truncated block %u\n", path, i);
             for (uint32_t k = 0; k < i; ++k) free(block[k]);

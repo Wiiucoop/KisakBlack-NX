@@ -118,7 +118,7 @@ XModel *__cdecl XModelCreateDefault(void *(__cdecl *Alloc)(int))
 {
     XModel *model; // [esp+0h] [ebp-4h]
 
-    model = (XModel *)Alloc(380);
+    model = (XModel *)Alloc((int)sizeof(XModel) + 128);   // nx-port: was 380 (x86 XModel + 128)
     XModelMakeDefault(model);
     return model;
 }

@@ -379,7 +379,10 @@ are silent and need reading:
   mid-entity), `0x1DD8` for `vehicle_info_t`, `24 * i` over
   `XAnimClientNotify`, `5 * numModels` for a DObj's model list, `objBuf[3072][31]` (124-byte DObjs,
   so neighbours overlapped). Use
-  `sizeof` / `offsetof`.
+  `sizeof` / `offsetof`. Allocation sites were swept with
+  `grep -rnE "(MT_Alloc|MT_Free|Hunk_[A-Za-z]*Alloc|Z_Malloc)([^;]*[0-9]{2,}"`
+  and every struct-sized literal replaced (cgame, FX and server client memory,
+  `XAnim_s`, the MT caches); their `*_SizeRequired` totals follow the same terms.
 - **Script field tables with x86 offsets** (`{ "classname", 356, ... }`).
   Map each literal to its member with the layoutgen loose dump:
   `LAYOUTGEN_LOOSE=1 STRUCTS=tools/nx/fields_structs.txt OUT=fields_gen.h
@@ -478,7 +481,7 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    hunk page arithmetic, the script compiler and VM, weapon model arrays,
    the unlockables table overrun, the script field tables and entity links,
    script strings in the KBZ (the map's traverse scripts), the hunk's
-   `fileData_s` headers, the game entity and client sizes, DObj creation and storage. Then the 3D renderer meets its first world frame.
+   `fileData_s` headers, the game entity and client sizes, DObj creation and storage, struct-sized allocations (the client now reaches `CG_Init`). Then the 3D renderer meets its first world frame.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

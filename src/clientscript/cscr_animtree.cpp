@@ -964,8 +964,8 @@ void __cdecl Scr_LoadAnimTreeAtIndex(
                 iassert(size);
 
                 iValueCount = Scr_GetAnimTreeValueCount(inst, gScrAnimPub[inst].animtree_node);
-                g_pCurrClientData->pTreeNameMap = (TreeNameMap *)Hunk_Alloc(84 * size, "Client AnimScript", 16);
-                memset((unsigned __int8 *)g_pCurrClientData->pTreeNameMap, 0, 84 * size);
+                g_pCurrClientData->pTreeNameMap = (TreeNameMap *)Hunk_Alloc(sizeof(TreeNameMap) * size, "Client AnimScript", 16);
+                memset((unsigned __int8 *)g_pCurrClientData->pTreeNameMap, 0, sizeof(TreeNameMap) * size);
                 g_pCurrClientData->numIndices = size;
                 animtree.anims = XAnimCreateAnimsWithValues(SL_ConvertToString(filenameId, inst), size, iValueCount, Alloc);
                 name = SL_GetString_(inst, "root", 0, 4);

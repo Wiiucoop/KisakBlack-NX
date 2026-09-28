@@ -177,7 +177,7 @@ void __cdecl CG_GenerateLinkInfo(int localClientNum, centity_s *cent, int attach
 
     if ( !cent->linkInfo )
     {
-        cent->linkInfo = (cLinkInfo_s *)MT_Alloc(72, 18, SCRIPTINSTANCE_SERVER);
+        cent->linkInfo = (cLinkInfo_s *)MT_Alloc(sizeof(cLinkInfo_s), 18, SCRIPTINSTANCE_SERVER);
         cent->linkInfo->linkEnt = 1023;
         relative_angles = cent->linkInfo->relative_angles;
         *relative_angles = 0.0f;
@@ -277,7 +277,7 @@ void __cdecl CG_UpdateFakeEntityLink(int localClientNum, centity_s *cent, int pa
     {
         if ( linkInfo )
         {
-            MT_Free((unsigned char*)linkInfo, 72, SCRIPTINSTANCE_SERVER);
+            MT_Free((unsigned char*)linkInfo, sizeof(cLinkInfo_s), SCRIPTINSTANCE_SERVER);
             cent->linkInfo = 0;
         }
     }
@@ -312,7 +312,7 @@ void __cdecl CG_UpdateFakeEntityLink(int localClientNum, centity_s *cent)
         && linkInfo->linkEnt != 1023
         && ((*((unsigned int *)CG_GetEntity(localClientNum, cent->linkInfo->linkEnt) + 201) >> 1) & 1) == 0 )
     {
-        MT_Free((unsigned char*)linkInfo, 72, SCRIPTINSTANCE_SERVER);
+        MT_Free((unsigned char*)linkInfo, sizeof(cLinkInfo_s), SCRIPTINSTANCE_SERVER);
         cent->linkInfo = 0;
     }
 }

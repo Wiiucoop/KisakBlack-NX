@@ -26,7 +26,8 @@ int fx_serverVisClient;
 
 int __cdecl FX_AllocateClientMemory_SizeRequired(int maxLocalClients)
 {
-    return 405536 * maxLocalClients + 127 + 155688 * maxLocalClients + 254;
+    // nx-port: was 405536 (x86 FxSystemContainer + FxSystemBuffers) and 155688
+    return (int)((sizeof(FxSystemContainer) + sizeof(FxSystemBuffers) + sizeof(FxMarksSystem)) * maxLocalClients + 127 + 254);
 }
 
 void __cdecl FX_AllocateClientMemory(HunkUser *hunk, int maxLocalClients)
@@ -34,12 +35,12 @@ void __cdecl FX_AllocateClientMemory(HunkUser *hunk, int maxLocalClients)
     int i; // [esp+0h] [ebp-4h]
 
     fx_maxLocalClients = maxLocalClients;
-    fx_systemPool = (FxSystemContainer *)Hunk_UserAlloc(hunk, 2976 * maxLocalClients, 128, "fx_systemPool");
-    memset((unsigned __int8 *)fx_systemPool, 0, 2976 * maxLocalClients);
-    fx_systemBufferPool = (FxSystemBuffers *)Hunk_UserAlloc(hunk, 402560 * maxLocalClients, 128, "fx_systemBufferPool");
-    memset((unsigned __int8 *)fx_systemBufferPool, 0, 402560 * maxLocalClients);
-    fx_marksSystemPool = (FxMarksSystem *)Hunk_UserAlloc(hunk, 155688 * maxLocalClients, 128, "fx_marksSystemPool");
-    memset((unsigned __int8 *)fx_marksSystemPool, 0, 155688 * maxLocalClients);
+    fx_systemPool = (FxSystemContainer *)Hunk_UserAlloc(hunk, sizeof(FxSystemContainer) * maxLocalClients, 128, "fx_systemPool");
+    memset((unsigned __int8 *)fx_systemPool, 0, sizeof(FxSystemContainer) * maxLocalClients);
+    fx_systemBufferPool = (FxSystemBuffers *)Hunk_UserAlloc(hunk, sizeof(FxSystemBuffers) * maxLocalClients, 128, "fx_systemBufferPool");
+    memset((unsigned __int8 *)fx_systemBufferPool, 0, sizeof(FxSystemBuffers) * maxLocalClients);
+    fx_marksSystemPool = (FxMarksSystem *)Hunk_UserAlloc(hunk, sizeof(FxMarksSystem) * maxLocalClients, 128, "fx_marksSystemPool");
+    memset((unsigned __int8 *)fx_marksSystemPool, 0, sizeof(FxMarksSystem) * maxLocalClients);
     for ( i = 0; i < maxLocalClients; ++i )
     {
         fx_systemPool[i].system.shared = &fx_systemPool[i].shared;

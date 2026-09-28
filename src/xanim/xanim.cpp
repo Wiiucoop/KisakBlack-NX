@@ -160,7 +160,7 @@ XAnimParts *__cdecl XAnimClone(XAnimParts *fromParts, void *(__cdecl *Alloc)(int
     __int16 notifyInfoIndex; // [esp+18h] [ebp-8h]
     unsigned __int16 *boneNames; // [esp+1Ch] [ebp-4h]
 
-    toParts = (XAnimParts *)Alloc(104);
+    toParts = (XAnimParts *)Alloc(sizeof(XAnimParts));   // nx-port: was 104 (x86)
     memcpy(toParts, fromParts, sizeof(XAnimParts));
     boneNames = toParts->names;
     size = toParts->boneCount[9];
@@ -392,8 +392,10 @@ XAnim_s *__cdecl XAnimCreateAnimsWithValues(
         __debugbreak();
     if ( !Alloc && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\xanim\\xanim.cpp", 684, 0, "%s", "Alloc") )
         __debugbreak();
-    anims = (XAnim_s *)Alloc(16 * size + 20 * iTotalValueCount + 24);
-    memset((unsigned __int8 *)anims, 0, 16 * size + 20 * iTotalValueCount + 24);
+    // nx-port: was 16 * size + 20 * iTotalValueCount + 24 (x86 header and entries)
+    const int animsSize = (int)(offsetof(XAnim_s, entries) + sizeof(XAnimEntry) * size + sizeof(XAnimParam) * iTotalValueCount);
+    anims = (XAnim_s *)Alloc(animsSize);
+    memset((unsigned __int8 *)anims, 0, animsSize);
     anims->size = size;
     anims->paramSize = iTotalValueCount;
     if ( anims->paramSize )
@@ -410,8 +412,8 @@ XAnim_s *__cdecl XAnimCreateAnimsWithValues(
         }
         while ( v5 );
         anims->debugName = newDebugName;
-        anims->debugAnimNames = (const char **)Hunk_UserAlloc(g_DebugHunkUser, 4 * size, 4, "XAnimCreateAnims");
-        memset((unsigned __int8 *)anims->debugAnimNames, 0, 4 * size);
+        anims->debugAnimNames = (const char **)Hunk_UserAlloc(g_DebugHunkUser, sizeof(const char *) * size, 8, "XAnimCreateAnims");
+        memset((unsigned __int8 *)anims->debugAnimNames, 0, sizeof(const char *) * size);
     }
     anims->wasLoggedIfMissing = (bool *)Hunk_UserAlloc(g_DebugHunkUser, size, 4, "XAnimCreateAnims");
     memset((unsigned __int8 *)anims->wasLoggedIfMissing, 0, size);

@@ -7348,7 +7348,7 @@ void __cdecl CScriptMover_Move(
     float origin[3]; // [esp+2Ch] [ebp-Ch] BYREF
 
     if ( !pEnt->cScriptMover )
-        pEnt->cScriptMover = (cgScriptMover_s *)MT_Alloc(96, 22, SCRIPTINSTANCE_SERVER);
+        pEnt->cScriptMover = (cgScriptMover_s *)MT_Alloc(sizeof(cgScriptMover_s), 22, SCRIPTINSTANCE_SERVER);
     origin[0] = pEnt->pose.origin[0];
     origin[1] = pEnt->pose.origin[1];
     origin[2] = pEnt->pose.origin[2];
@@ -7686,7 +7686,7 @@ void __cdecl CScriptMover_Rotate(
     float angles[3]; // [esp+2Ch] [ebp-Ch] BYREF
 
     if ( !cent->cScriptMover )
-        cent->cScriptMover = (cgScriptMover_s *)MT_Alloc(96, 22, SCRIPTINSTANCE_SERVER);
+        cent->cScriptMover = (cgScriptMover_s *)MT_Alloc(sizeof(cgScriptMover_s), 22, SCRIPTINSTANCE_SERVER);
     angles[0] = cent->pose.angles[0];
     angles[1] = cent->pose.angles[1];
     angles[2] = cent->pose.angles[2];
@@ -7822,7 +7822,7 @@ void __cdecl CScriptMover_RotateSpeed(
                 float fDecelTime)
 {
     if ( !pEnt->cScriptMover )
-        pEnt->cScriptMover = (cgScriptMover_s *)MT_Alloc(96, 22, SCRIPTINSTANCE_SERVER);
+        pEnt->cScriptMover = (cgScriptMover_s *)MT_Alloc(sizeof(cgScriptMover_s), 22, SCRIPTINSTANCE_SERVER);
     CScriptMover_SetupMoveSpeed(
         &pEnt->nextState.lerp.apos,
         vRotSpeed,

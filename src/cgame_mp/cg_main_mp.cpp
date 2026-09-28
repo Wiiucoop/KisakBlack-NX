@@ -1886,9 +1886,12 @@ int __cdecl CG_AllocateClientMemory_SizeRequired(int maxLocalClients)
     int localClientNum; // [esp+0h] [ebp-8h]
     int size; // [esp+4h] [ebp-4h]
 
-    size = 907268 * maxLocalClients;
+    // nx-port: were x86 literals (907268 and 1062080); the same terms as
+    // CG_AllocateClientMemory, from the structs (the second cgs_t was in the
+    // original total), plus 128 for cgArray's alignment.
+    size = (int)((sizeof(cg_s) + 2 * sizeof(cgs_t) + 512 * sizeof(fake_centity_s) + sizeof(ViewModelInfo)) * maxLocalClients + 128);
     for ( localClientNum = 0; localClientNum < maxLocalClients; ++localClientNum )
-        size += 1062080;
+        size += (int)(2048 * sizeof(weaponInfo_s) + 1024 * sizeof(centity_s) + 18432 + 144 * sizeof(Destructible) + 117760);
     return size;
 }
 
@@ -1896,16 +1899,16 @@ void __cdecl CG_AllocateClientMemory(HunkUser *hunk, int maxLocalClients)
 {
     int localClientNum; // [esp+0h] [ebp-4h]
 
-    cgArray = (cg_s *)Hunk_UserAlloc(hunk, 466048 * maxLocalClients, 128, "cgArray");
-    cgsArray = (cgs_t *)Hunk_UserAlloc(hunk, 12712 * maxLocalClients, 8, "cgsArray");
-    cg_fakeEntitiesArray = (fake_centity_s *)Hunk_UserAlloc(hunk, 415744 * maxLocalClients, 4, "cg_fakeEntitiesArray");
-    cg_viewModelArray = (ViewModelInfo *)Hunk_UserAlloc(hunk, 52 * maxLocalClients, 4, "cg_viewModelArray");
+    cgArray = (cg_s *)Hunk_UserAlloc(hunk, sizeof(cg_s) * maxLocalClients, 128, "cgArray");
+    cgsArray = (cgs_t *)Hunk_UserAlloc(hunk, sizeof(cgs_t) * maxLocalClients, 8, "cgsArray");
+    cg_fakeEntitiesArray = (fake_centity_s *)Hunk_UserAlloc(hunk, sizeof(fake_centity_s) * 512 * maxLocalClients, 4, "cg_fakeEntitiesArray");
+    cg_viewModelArray = (ViewModelInfo *)Hunk_UserAlloc(hunk, sizeof(ViewModelInfo) * maxLocalClients, 4, "cg_viewModelArray");
     for ( localClientNum = 0; localClientNum < maxLocalClients; ++localClientNum )
     {
-        cg_weaponsArray[localClientNum] = (weaponInfo_s *)Hunk_UserAlloc(hunk, 73728, 4, "cg_weaponsArray");
-        cg_entitiesArray[localClientNum] = (centity_s *)Hunk_UserAlloc(hunk, 827392, 4, "cg_entitiesArray");
+        cg_weaponsArray[localClientNum] = (weaponInfo_s *)Hunk_UserAlloc(hunk, 2048 * sizeof(weaponInfo_s), 8, "cg_weaponsArray");
+        cg_entitiesArray[localClientNum] = (centity_s *)Hunk_UserAlloc(hunk, 1024 * sizeof(centity_s), 8, "cg_entitiesArray");
         cg_entityOriginArray[localClientNum] = (float (*)[3])Hunk_UserAlloc(hunk, 18432, 4, "cg_entityOriginArray");
-        cg_destructibles[localClientNum] = (Destructible *)Hunk_UserAlloc(hunk, 24768, 4, "cg_destructibles");
+        cg_destructibles[localClientNum] = (Destructible *)Hunk_UserAlloc(hunk, 144 * sizeof(Destructible), 8, "cg_destructibles");
         cg_ikBuf[localClientNum] = (unsigned __int8 *)Hunk_UserAlloc(hunk, 117760, 16, "ikStatesArray");
         memset(cg_ikBuf[localClientNum], 0, 0x1CC00u);
         IK_AllocateLocalClientMemory(cg_ikBuf[localClientNum], localClientNum);
@@ -2730,12 +2733,12 @@ void __cdecl CG_InitClientEntityCaches(int localClientNum)
         cent = CG_GetEntity(localClientNum, i);
         if ( !cent->clientTagCache )
         {
-            cent->clientTagCache = (ClientTagCache *)MT_Alloc(96, 22, SCRIPTINSTANCE_SERVER);
+            cent->clientTagCache = (ClientTagCache *)MT_Alloc(sizeof(ClientTagCache), 22, SCRIPTINSTANCE_SERVER);
             memset((unsigned __int8 *)cent->clientTagCache, 0, sizeof(ClientTagCache));
         }
         if ( !cent->aimTargetInfo )
         {
-            cent->aimTargetInfo = (AimTargetCache *)MT_Alloc(8, 22, SCRIPTINSTANCE_SERVER);
+            cent->aimTargetInfo = (AimTargetCache *)MT_Alloc(sizeof(AimTargetCache), 22, SCRIPTINSTANCE_SERVER);
             aimTargetInfo = cent->aimTargetInfo;
             aimTargetInfo->lastUpdateTime = 0;
             aimTargetInfo->targetHeight = 0.0;
@@ -2753,12 +2756,12 @@ void __cdecl CG_FreeClientEntityCaches(int localClientNum)
         cent = CG_GetEntity(localClientNum, i);
         if ( cent->clientTagCache )
         {
-            MT_Free((unsigned char*)cent->clientTagCache, 96, SCRIPTINSTANCE_SERVER);
+            MT_Free((unsigned char*)cent->clientTagCache, sizeof(ClientTagCache), SCRIPTINSTANCE_SERVER);
             cent->clientTagCache = 0;
         }
         if ( cent->aimTargetInfo )
         {
-            MT_Free((unsigned char *)cent->aimTargetInfo, 8, SCRIPTINSTANCE_SERVER);
+            MT_Free((unsigned char *)cent->aimTargetInfo, sizeof(AimTargetCache), SCRIPTINSTANCE_SERVER);
             cent->aimTargetInfo = 0;
         }
     }

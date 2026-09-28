@@ -57,7 +57,7 @@ void __cdecl R_CreateMaterialList()
     }
     if ( s_world.materialMemoryCount )
     {
-        s_world.materialMemory = (MaterialMemory *)Hunk_Alloc(8 * s_world.materialMemoryCount, "R_CreateMaterialList", 21);
+        s_world.materialMemory = (MaterialMemory *)Hunk_Alloc(sizeof(MaterialMemory) * s_world.materialMemoryCount, "R_CreateMaterialList", 21);
         index = 0;
         for ( hashIndexa = 0; hashIndexa < 0x1000u; ++hashIndexa )
         {

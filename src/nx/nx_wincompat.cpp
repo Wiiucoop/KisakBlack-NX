@@ -1318,6 +1318,33 @@ void *GetProcAddress(HMODULE, LPCSTR) { return NULL; }
 // hand out page-aligned memory so those invariants hold.
 #define NX_PAGE 0x1000u
 #define NX_MAX_VMEM 512
+
+extern "C" void nx_mem_status(uint64_t *total, uint64_t *avail);
+
+static uintptr_t nx_text_base(void)
+{
+    MemoryInfo text = {};
+    u32 pageInfo;
+    svcQueryMemory(&text, &pageInfo, (u64)&nx_text_base);
+    return (uintptr_t)text.addr;
+}
+
+static size_t nxVmemTotal(int *count);
+
+// One line of heap state: free heap, the malloc arena's view, and what the
+// VirtualAlloc regions hold. Called periodically (Com_Frame) and on failure.
+extern "C" void nx_mem_report(const char *why, size_t request)
+{
+    uint64_t total = 0, avail = 0;
+    nx_mem_status(&total, &avail);
+    struct mallinfo mi = mallinfo();
+    int regions = 0;
+    size_t vtotal = nxVmemTotal(&regions);
+    printf("[nx-mem] %s (request %zu KB): free heap %llu MB, arena %zu MB, in use %zu MB, "
+           "top chunk %zu KB, VirtualAlloc %zu MB in %d regions\n",
+           why, request >> 10, (unsigned long long)(avail >> 20), (size_t)mi.arena >> 20,
+           (size_t)mi.uordblks >> 20, (size_t)mi.keepcost >> 10, vtotal >> 20, regions);
+}
 struct NxVMemRegion { uintptr_t base; size_t size; };
 static NxVMemRegion s_vmem[NX_MAX_VMEM];
 static Mutex s_vmemLock;
@@ -1329,6 +1356,18 @@ static void nxVmemLock(void)
     mutexLock(&s_vmemLock);
 }
 
+static size_t nxVmemTotal(int *count)
+{
+    size_t sum = 0;
+    int n = 0;
+    nxVmemLock();
+    for (int i = 0; i < NX_MAX_VMEM; ++i)
+        if (s_vmem[i].base) { sum += s_vmem[i].size; ++n; }
+    mutexUnlock(&s_vmemLock);
+    *count = n;
+    return sum;
+}
+
 LPVOID VirtualAlloc(LPVOID address, SIZE_T size, DWORD type, DWORD)
 {
     // Committing inside a prior reservation: memory is already backed.
@@ -1338,13 +1377,26 @@ LPVOID VirtualAlloc(LPVOID address, SIZE_T size, DWORD type, DWORD)
         size_t rounded = (size + (NX_PAGE - 1)) & ~(size_t)(NX_PAGE - 1);
         if (rounded == 0) rounded = NX_PAGE;
         void *p = memalign(NX_PAGE, rounded);
-        if (!p) { SetLastError(ERROR_NOT_ENOUGH_MEMORY); return NULL; }
+        if (!p) {
+            nx_mem_report("VirtualAlloc failed", rounded);
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return NULL;
+        }
+        if (rounded >= (16u << 20))
+            printf("[nx-mem] VirtualAlloc %zu KB at %p (caller elf+0x%llx)\n", rounded >> 10, p,
+                   (unsigned long long)((uintptr_t)__builtin_return_address(0) - nx_text_base()));
         memset(p, 0, rounded);
         nxVmemLock();
-        for (int i = 0; i < NX_MAX_VMEM; ++i) {
-            if (!s_vmem[i].base) { s_vmem[i].base = (uintptr_t)p; s_vmem[i].size = rounded; break; }
+        int slot = 0;
+        while (slot < NX_MAX_VMEM && s_vmem[slot].base)
+            ++slot;
+        if (slot < NX_MAX_VMEM) {
+            s_vmem[slot].base = (uintptr_t)p;
+            s_vmem[slot].size = rounded;
         }
         mutexUnlock(&s_vmemLock);
+        if (slot == NX_MAX_VMEM)
+            printf("[nx-mem] VirtualAlloc region table full; %zu KB at %p untracked\n", rounded >> 10, p);
         return p;
     }
     return NULL;

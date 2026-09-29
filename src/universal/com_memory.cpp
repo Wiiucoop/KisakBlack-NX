@@ -85,7 +85,13 @@ void *__cdecl Z_TryVirtualAllocInternal(int size)
 {
     void *ptr; // [esp+0h] [ebp-4h]
 
+#ifdef KISAK_NX
+    // Reserving is backed by real memory here and can fail; this is the path
+    // whose callers handle a NULL (R_DebugAlloc), so do not assert.
+    ptr = VirtualAlloc(0, size, MEM_RESERVE, PAGE_READWRITE);
+#else
     ptr = Z_VirtualReserve(size);
+#endif
     if ( ptr )
     {
         if ( Z_TryVirtualCommitInternal(ptr, size) )

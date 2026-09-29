@@ -2774,6 +2774,10 @@ void __cdecl Com_CheckSyncFrame()
     UI_ViewerCheckStreamer();
 }
 
+#ifdef KISAK_NX
+extern "C" void nx_mem_report(const char *why, size_t request); // nx_wincompat.cpp
+#endif
+
 void __cdecl Com_Frame()
 {
     void *Value; // eax
@@ -2789,6 +2793,20 @@ void __cdecl Com_Frame()
         Com_Frame_Try_Block_Function();
         ++com_frameNumber;
     }
+#ifdef KISAK_NX
+    {
+        // Heap state every 5 s, to tell a steady leak from a single spike.
+        static int s_lastMemReport;
+        int now = Sys_Milliseconds();
+        if (now - s_lastMemReport >= 5000)
+        {
+            s_lastMemReport = now;
+            char why[48];
+            snprintf(why, sizeof(why), "frame %d", com_frameNumber);
+            nx_mem_report(why, 0);
+        }
+    }
+#endif
 
     Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
     if (com_errorEntered)

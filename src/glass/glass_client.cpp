@@ -719,7 +719,8 @@ int __cdecl GlassClient::Outlines::CalcMemorySize(const GlassShard **shards, int
     numVerts = 0;
     for ( i = 0; i < numShards; ++i )
         numVerts += shards[i]->outline.numVerts;
-    return 12 * numShards + 8 * numVerts + 8;
+    // nx-port: was 12 * numShards + 8 * numVerts + 8, the x86 header and Outline
+    return (int)(sizeof(GlassClient::Outlines) + sizeof(GlassClient::Outlines::Outline) * numShards + sizeof(float[2]) * numVerts);
 }
 
 GlassClient::Outlines::Outlines(

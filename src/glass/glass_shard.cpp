@@ -2643,7 +2643,7 @@ LABEL_23:
     //glassExtent = GlassShard::Outline::Extent(&this->outline);
     glassExtent = this->outline.Extent();
     newShards[0] = this;
-    memset(&newShards[1], 0, 36);
+    memset(&newShards[1], 0, 9 * sizeof(newShards[0]));   // nx-port: was 36, nine x86 pointers
     numNewShards = 1;
     minShardSize = this->group->glassDef->minShardSize * clGlasses->renderer->shardShatterSizeLimitScale->current.value;
     maxShardSize = this->group->glassDef->maxShardSize;

@@ -504,6 +504,16 @@ are silent and need reading:
   then compare each literal with the native size by compiling a probe
   (`template <size_t N, int X> struct Show; Show<sizeof(T), X> s;` with
   `-fsyntax-only` and the project's flags; the error prints both).
+- **Tables of x86 field offsets**: `g_animRateOffsets` (cg_weapons.cpp) held
+  the x86 byte offsets of each weapon anim's time field in `WeaponDef` /
+  `WeaponVariantDef` (948 = `iRechamberTime`…), so the first weapon anim read
+  a float as its duration (assert `time >= 0`, time -1073741824). Now
+  `offsetof`. To name x86 offsets, run the layout generator on the structs
+  alone: `STRUCTS=<file with "include bgame/bg_weapons_def.h", "WeaponDef">
+  LAYOUTGEN_LOOSE=1 OUT=<tmp.h> sh tools/ffconv/layout/layout.sh`, then read
+  the `X_Struct__field = N` lines. Script field tables (`g_client_fields`,
+  vehicles) go through `GCLIENT_X86` / `VEHICLE_X86`; `hudelem_s` holds no
+  pointers; the flame table's floats precede its pointers.
 - **Allocators doing pointer arithmetic in `int`**: the physics transient
   allocator aligned, bumped and returned its pointers as `int`
   (`~(align - 1) & (int)&cur[align - 1]`), so every allocation came back cut

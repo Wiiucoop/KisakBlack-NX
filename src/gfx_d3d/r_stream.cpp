@@ -1024,28 +1024,30 @@ void __cdecl R_Stream_AddImagePartImportance(int imagePartIndex, float importanc
     }
 }
 
-void __cdecl importance_swap_func(void **a, void **b)
+void __cdecl importance_swap_func(int *a, int *b)
 {
-    void *temp; // [esp+0h] [ebp-4h]
+    int temp; // [esp+0h] [ebp-4h]
 
     temp = *a;
     *a = *b;
     *b = temp;
 }
 
-bool __cdecl importance_compare_func(void *a, void *b)
+bool __cdecl importance_compare_func(int a, int b)
 {
-    return (signed int)streamFrontendGlob.imageImportanceBits[(unsigned int)a - 4064] > (signed int)streamFrontendGlob.imageImportanceBits[(unsigned int)b - 4064];
+    return (signed int)streamFrontendGlob.imageImportanceBits[a - 4064] > (signed int)streamFrontendGlob.imageImportanceBits[b - 4064];
 }
 
-void *aux_buffer[2113];
-void __cdecl importance_merge_sort(void **list, int list_count)
+// The list holds image part indices (ints). The x86 source sorted it as
+// void *, which is 8 bytes here and walked twice the array.
+int aux_buffer[2113];
+void __cdecl importance_merge_sort(int *list, int list_count)
 {
-    void **t; // [esp+0h] [ebp-14h]
-    void **b; // [esp+8h] [ebp-Ch]
-    void **ba; // [esp+8h] [ebp-Ch]
-    void **a; // [esp+10h] [ebp-4h]
-    void **aa; // [esp+10h] [ebp-4h]
+    int *t; // [esp+0h] [ebp-14h]
+    int *b; // [esp+8h] [ebp-Ch]
+    int *ba; // [esp+8h] [ebp-Ch]
+    int *a; // [esp+10h] [ebp-4h]
+    int *aa; // [esp+10h] [ebp-4h]
 
     if ( list_count >= 3 )
     {
@@ -2337,7 +2339,7 @@ void __cdecl R_StreamUpdate_EndQuerySort(bool diskOrder)
     }
     else
     {
-        importance_merge_sort((void **)((char *)streamFrontendGlob.sortedImages + 2), streamFrontendGlob.totalBytesWanted);
+        importance_merge_sort((int *)((char *)streamFrontendGlob.sortedImages + 2), streamFrontendGlob.totalBytesWanted);
     }
 }
 

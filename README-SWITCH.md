@@ -416,6 +416,9 @@ are silent and need reading:
   wrong node and the tree walk recursed until the stack ran out. The converter
   rescales it (`tGfxCellRefs`). Other `*Offset` fields in zone structs are
   either same-size strides (`mnode_t`, `DObjSkelMat`) or not links.
+- **Int arrays handled as `void *`**: `importance_merge_sort` sorted the
+  `int` image-index list as `void **`, walking twice the array. Typed as
+  `int *`. The other hand-written merge sorts hold real pointers.
 - **Pointers written through the wrong union member**: the decompiler picks
   any member at the right x86 offset, so `pose.fx.triggerTime = (int)&ci->control`
   is `pose.player.control`, `ent_update.handle = (int)playback` is

@@ -642,9 +642,18 @@ files: `g_sp_crosshair`, `g_sp_lookat_nodes`, `bg_actor_constants`,
 now uses `offsetof` (it had raw x86 offsets into a struct with pointers).
 
 **The SP build.** `cmake -S . -B build-nx-sp -DNX_SP=ON` builds the same
-sources with `KISAK_SP` for `KISAK_MP` (NRO title "KisakBlack SP"). It needs
-the SP zones converted (an SP mode in the converter: SP numbers its asset types
-differently and has `col_map_sp` / `game_map_sp`); the plan is
+sources with `KISAK_SP` for `KISAK_MP` (NRO title "KisakBlack SP").
+
+**SP zones.** No separate converter mode was needed: SP and MP share one
+`XAssetType` numbering and the same asset struct layouts. What SP zones add is
+three asset types MP maps never carry, all on existing transcoders --
+`GAMEWORLD_SP` (14, the same `{name; PathData}` as `GAMEWORLD_MP`) and
+`CLIPMAP` (11, the same `clipMap_t` loader as `CLIPMAP_PVS`) -- and string tail
+sharing: a localize entry can point into the middle of another string, so
+inline strings are recorded as byte ranges (`emitInlineStr`). `convert-zones.sh`
+converts the Zombies set after the MP one (`code_pre_gfx`, `code_post_gfx`,
+`common`, `patch`, `frontend` + `_patch`, `common_zombie` + `_patch`,
+`zombie_theater` + `_patch`, and their `en_` zones); all validate. Boot with
 `+devmap zombie_theater`, skipping the frontend.
 
 **Zombies goes through OpenBLOPS.** OpenBLOPS (GPL-3.0, no history available)

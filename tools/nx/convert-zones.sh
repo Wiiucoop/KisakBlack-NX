@@ -1,6 +1,9 @@
 #!/bin/sh
 # Convert the zones the port uses into <game>/kbz/ and validate each with
-# kbzdump. Run from the msys2 UCRT64 shell after tools/ffconv/build.sh:
+# kbzdump: the multiplayer set, then the SP / Zombies set (code_*, common,
+# patch, frontend, common_zombie, zombie_theater). SP zones have no _mp
+# suffix, so both share kbz/. Run from the msys2 UCRT64 shell after
+# tools/ffconv/build.sh:
 #   GAME=/f/pluto_t5_full_game sh tools/nx/convert-zones.sh
 root=$(cd "$(dirname "$0")/../.." && pwd)
 GAME=${GAME:?set GAME to the Black Ops install}
@@ -16,7 +19,14 @@ for z in \
     Common/ui_mp             English/en_ui_mp \
     Common/patch_mp          English/en_patch_mp \
     Common/patch_ui_mp       Common/ui_viewer_mp \
-    Common/mp_nuked          English/en_mp_nuked
+    Common/mp_nuked          English/en_mp_nuked \
+    Common/code_pre_gfx      English/en_code_pre_gfx \
+    Common/code_post_gfx     English/en_code_post_gfx \
+    Common/common            English/en_common \
+    Common/patch             English/en_patch \
+    Common/frontend          Common/frontend_patch      English/en_frontend \
+    Common/common_zombie     Common/common_zombie_patch English/en_common_zombie \
+    Common/zombie_theater    Common/zombie_theater_patch English/en_zombie_theater
 do
     name=$(basename "$z")
     kbz="$OUT/$name.kbz"

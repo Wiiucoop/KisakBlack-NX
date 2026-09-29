@@ -124,7 +124,9 @@ static void tempReserve(uint32_t size) { g_x86temp += size; }
 // (AllocLoad_raw_byte = DB_AllocStreamPos(0), then strlen+1 bytes).
 static Prelink::Loc emitInlineStr(Prelink &z, const std::string &s) {
     Prelink::Loc L = z.putBytes(OUT, (const uint8_t *)s.c_str(), s.size() + 1, 1);
-    b4Reserve(0, (uint32_t)s.size() + 1, L);
+    // A range, byte for byte: the linker shares string tails, so a later
+    // reference may point into the middle of this one (SP localize entries).
+    b4ReserveRange(0, (uint32_t)s.size() + 1, L);
     return L;
 }
 
@@ -4345,7 +4347,7 @@ static void tGfxWorld(Reader &r, Prelink &z, Prelink::Loc o) {
 // GameWorldMp: 44 -> 88, a name and a PathData (Load_GameWorldMp,
 // db_load.cpp:3700). The node tree is a union per node: node indexes when
 // axis < 0, two child pointers otherwise (Load_pathnode_tree_info_t).
-enum { AT_GAMEWORLD_MP = 15 };
+enum { AT_GAMEWORLD_SP = 14, AT_GAMEWORLD_MP = 15 };
 
 static void tPathnodeTreeInfo(Reader &r, Prelink &z, Prelink::Loc t, const uint8_t *tx);
 
@@ -4417,7 +4419,7 @@ static void tGameWorldMp(Reader &r, Prelink &z, Prelink::Loc o) {
 // pointers are -1 for "one record follows" and otherwise an offset into an
 // array loaded before it (a brush's sides into brushsides, its verts into
 // brushVerts), which resolveB4 maps record by record.
-enum { AT_CLIPMAP_PVS = 12, AT_MAP_ENTS = 16 };
+enum { AT_CLIPMAP = 11, AT_CLIPMAP_PVS = 12, AT_MAP_ENTS = 16 };
 
 // One cplane_s inline, or an offset to one (Load_cbrushside_t, Load_cNode_t).
 static void tPlaneRef(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag) {
@@ -4791,7 +4793,12 @@ int main(int argc, char **argv) {
         case AT_COMWORLD:    { Prelink::Loc o = z.alloc(OUT, SZ_COMWORLD, 8); tComWorld(r, z, o); z.addAsset(AT_COMWORLD, o); break; }
         case AT_GFXWORLD:    { Prelink::Loc o = z.alloc(OUT, L_sizeof_GfxWorld, 8); tGfxWorld(r, z, o); z.addAsset(AT_GFXWORLD, o); break; }
         case AT_GAMEWORLD_MP: { Prelink::Loc o = z.alloc(OUT, L_sizeof_GameWorldMp, 8); tGameWorldMp(r, z, o); z.addAsset(AT_GAMEWORLD_MP, o); break; }
+        // GameWorldSp is the same struct {name; PathData} and Load_GameWorldSp the
+        // same loader (db_load.cpp), so the MP transcoder serves both.
+        case AT_GAMEWORLD_SP: { Prelink::Loc o = z.alloc(OUT, L_sizeof_GameWorldMp, 8); tGameWorldMp(r, z, o); z.addAsset(AT_GAMEWORLD_SP, o); break; }
         case AT_CLIPMAP_PVS: { Prelink::Loc o = z.alloc(OUT, L_sizeof_clipMap_t, 8); tClipMap(r, z, o); z.addAsset(AT_CLIPMAP_PVS, o); break; }
+        // SP maps (col_map_sp) register as CLIPMAP; the loader is the same clipMap_t one.
+        case AT_CLIPMAP: { Prelink::Loc o = z.alloc(OUT, L_sizeof_clipMap_t, 8); tClipMap(r, z, o); z.addAsset(AT_CLIPMAP, o); break; }
         case AT_GLASSES:     { Prelink::Loc o = z.alloc(OUT, L_sizeof_Glasses, 8); tGlasses(r, z, o); z.addAsset(AT_GLASSES, o); break; }
         default:
             fprintf(stderr, "unsupported asset type %u at index %u (Stage 1 = rawfile/stringtable/localize)\n", types[i], i);

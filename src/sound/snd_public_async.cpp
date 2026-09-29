@@ -1170,8 +1170,8 @@ void __cdecl SND_SubtitleNotify(const char *subtitle, unsigned int lengthMs)
     if ( cmd )
     {
         cmd->type = SND_NOTIFY_SUBTITLE;
-        cmd->context.length.ent = (unsigned int)subtitle;
-        cmd->context.ent_update.handle.handle = lengthMs;
+        cmd->context.subtitle.subtitle = subtitle;   // nx-port: was written through length.ent and ent_update.handle
+        cmd->context.subtitle.lengthMs = lengthMs;
         SND_NotifyPush(cmd);
     }
 }
@@ -1185,7 +1185,7 @@ void __cdecl SND_LengthNotify(unsigned int ent, unsigned int lengthMs)
     {
         cmd->type = SND_NOTIFY_LENGTH;
         cmd->context.length.ent = ent;
-        cmd->context.ent_update.handle.handle = lengthMs;
+        cmd->context.length.lengthMs = lengthMs;
         SND_NotifyPush(cmd);
     }
 }
@@ -1203,7 +1203,7 @@ void __cdecl SND_FreePlaybackNotify(snd_playback *playback)
     if ( cmd )
     {
         cmd->type = SND_NOTIFY_PLAYBACK_FREE;
-        cmd->context.ent_update.handle.handle = (int)playback;
+        cmd->context.playback_free.playback = playback;   // nx-port: was (int) through ent_update.handle
         SND_NotifyPush(cmd);
     }
 }

@@ -1257,7 +1257,7 @@ void __cdecl CL_ResetSkeletonCache(unsigned int localClientNum)
     v1 = &clients[localClientNum];
     if ( !++v1->skelTimeStamp )
         ++v1->skelTimeStamp;
-    v1->skelMemoryStart = (char *)((unsigned int)&v1->skelMemory[15] & 0xFFFFFFF0);
+    v1->skelMemoryStart = (char *)((uintptr_t)&v1->skelMemory[15] & ~(uintptr_t)15);   // nx-port: was (unsigned int)
     v1->skelMemPos = 0;
 }
 

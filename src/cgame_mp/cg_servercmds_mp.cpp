@@ -1149,8 +1149,8 @@ void __cdecl CG_ConfigStringModified(int localClientNum)
                                 }
                                 else
                                 {
-                                    *((unsigned int *)cgs + num - 1403) = (unsigned int)FX_Register(str);
-                                    if ( !*((unsigned int *)cgs + num - 1403)
+                                    cgs->fxs[num - 2080] = FX_Register(str);   // nx-port: was ((unsigned int *)cgs)[num - 1403]
+                                    if ( !cgs->fxs[num - 2080]
                                         && !Assert_MyHandler(
                                                     "C:\\projects_pc\\cod\\codsrc\\src\\cgame_mp\\cg_servercmds_mp.cpp",
                                                     879,
@@ -1164,7 +1164,7 @@ void __cdecl CG_ConfigStringModified(int localClientNum)
                             }
                             else
                             {
-                                *((unsigned int *)cgs + num - 1403) = (unsigned int)R_RegisterModel(str);
+                                cgs->gameModels[num - 1568] = R_RegisterModel(str);   // nx-port: was ((unsigned int *)cgs)[num - 1403]
                             }
                             break;
                     }

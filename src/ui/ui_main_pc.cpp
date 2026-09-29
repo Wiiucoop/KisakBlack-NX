@@ -1267,11 +1267,17 @@ Material *__cdecl UI_GetLevelShot(int index)
 {
     if ( index < 0 || index >= sharedUiInfo.mapCount )
         index = 0;
-    if ( !sharedUiInfo.mapList[index].timeToBeat[31] )
-        sharedUiInfo.mapList[index].timeToBeat[31] = (int)Material_RegisterHandle(
-                                                                                                                (char *)&sharedUiInfo.mapList[index].mapPackTypeIndex,
-                                                                                                                3);
-    return (Material *)sharedUiInfo.mapList[index].timeToBeat[31];
+    // nx-port: the material pointer was kept in the int timeToBeat[31]; it
+    // lives in a side table now and that int only marks it registered.
+    static Material *s_levelShots[ARRAY_COUNT(sharedUiInfo.mapList)];
+    if ( !sharedUiInfo.mapList[index].timeToBeat[31] || !s_levelShots[index] )
+    {
+        s_levelShots[index] = Material_RegisterHandle(
+            (char *)&sharedUiInfo.mapList[index].mapPackTypeIndex,
+            3);
+        sharedUiInfo.mapList[index].timeToBeat[31] = 1;
+    }
+    return s_levelShots[index];
 }
 
 void __cdecl UI_DrawMapPreview(int contextIndex, const rectDef_s *rect, const float *color)

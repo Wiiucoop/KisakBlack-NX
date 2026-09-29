@@ -398,6 +398,13 @@ are silent and need reading:
 - **Constants decompiled as addresses**: `(int)&objBuf[1758][2]` is
   `FL_OBSTACLE` (0x4000000) -- the value happened to fall inside objBuf in the
   PC binary. Wrong on every build; breaks outright once the array resizes.
+- **Pointers written through the wrong union member**: the decompiler picks
+  any member at the right x86 offset, so `pose.fx.triggerTime = (int)&ci->control`
+  is `pose.player.control`, `ent_update.handle = (int)playback` is
+  `playback_free.playback`. Rewrite with the member that has the pointer type.
+- **Pointers kept inside byte streams or int fields**: a chat icon's
+  `Material *` inside the text (now a 4-byte slot, `R_TextIconHandle`), a map
+  level shot in `int timeToBeat[31]` (side table).
 - **Stack buffers sized for x86 structs**: `unsigned __int8 dst[9896]` then
   `memset(dst, 0, sizeof(playerState_s))` wrote 256 bytes past the array into
   the frame (first snapshot: the reader read garbage). `playerState_s` grew
@@ -497,7 +504,7 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    hunk page arithmetic, the script compiler and VM, weapon model arrays,
    the unlockables table overrun, the script field tables and entity links,
    script strings in the KBZ (the map's traverse scripts), the hunk's
-   `fileData_s` headers, the game entity and client sizes, DObj creation and storage, IK state buffers, struct-sized allocations (the client now reaches `CG_Init`), physics handles (physics off), the glass allocators. `CL_InitCGame` now completes; the main loop runs and parses snapshots. Then the 3D renderer meets its first world frame.
+   `fileData_s` headers, the game entity and client sizes, DObj creation and storage, IK state buffers, struct-sized allocations (the client now reaches `CG_Init`), physics handles (physics off), the glass allocators. `CL_InitCGame` now completes; the main loop runs, parses snapshots and draws the first HUD. Then the 3D renderer meets its first world frame.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

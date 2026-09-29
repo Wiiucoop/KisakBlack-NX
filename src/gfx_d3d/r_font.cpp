@@ -397,3 +397,29 @@ int __cdecl R_ConsoleTextWidth(const char *textPool, int poolSize, int firstChar
     return width;
 }
 
+
+static Material *s_textIcons[1024];
+static int s_textIconCount;
+
+unsigned int R_TextIconHandle(Material *material)
+{
+    if (!material)
+        return 0;
+    const int count = __atomic_load_n(&s_textIconCount, __ATOMIC_ACQUIRE);
+    for (int i = 0; i < count; ++i)
+        if (s_textIcons[i] == material)
+            return (unsigned int)i + 1;
+    // Icons are added from the client thread only; the render thread reads.
+    if (count >= (int)(sizeof(s_textIcons) / sizeof(s_textIcons[0])))
+        return 0;
+    s_textIcons[count] = material;
+    __atomic_store_n(&s_textIconCount, count + 1, __ATOMIC_RELEASE);
+    return (unsigned int)count + 1;
+}
+
+Material *R_TextIconMaterial(unsigned int handle)
+{
+    if (!handle || handle > (unsigned int)__atomic_load_n(&s_textIconCount, __ATOMIC_ACQUIRE))
+        return 0;
+    return s_textIcons[handle - 1];
+}

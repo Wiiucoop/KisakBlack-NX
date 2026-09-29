@@ -50,3 +50,11 @@ const char *__cdecl R_TextLineWrapPosition(
                 Font_s *font,
                 float scale);
 int __cdecl R_ConsoleTextWidth(const char *textPool, int poolSize, int firstChar, int charCount, Font_s *font);
+
+// nx-port: text embeds an icon as '^', flip, width, height and a 4-byte
+// material reference (CL_AddMessageIcon; drawn in rb_backend.cpp). On x86 the
+// reference was the Material pointer itself; here it is a slot in a small
+// append-only table, so the 7-byte layout every text parser skips stays.
+struct Material;
+unsigned int R_TextIconHandle(Material *material);
+Material *R_TextIconMaterial(unsigned int handle);

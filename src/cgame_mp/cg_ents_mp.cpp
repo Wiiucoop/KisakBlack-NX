@@ -122,7 +122,7 @@ void __cdecl CG_Player_PreControllers(DObj *obj, centity_s *cent)
         BG_Player_DoControllersSetup(&cent->nextState, ci, cgameGlob->frametime);
         for ( i = 0; i < 6; ++i )
             DObjGetBoneIndex(obj, *controller_names[i], &cent->pose.player.tag[i], -1);
-        cent->pose.fx.triggerTime = (int)&ci->control;
+        cent->pose.player.control = &ci->control;   // nx-port: was (int) through pose.fx.triggerTime
     }
     else
     {
@@ -204,7 +204,7 @@ void __cdecl CG_mg42_PreControllers(DObj *obj, centity_s *cent)
     }
     if ( cent->pose.turret.playerUsing )
     {
-        cent->pose.fx.triggerTime = (int)cgameGlob->predictedPlayerState.viewangles;
+        cent->pose.turret.viewAngles = cgameGlob->predictedPlayerState.viewangles;   // nx-port: was (int) through pose.fx.triggerTime
         cent->pose.cullIn = 0;
         cent->pose.turret.barrelPitch = 0.0f;
     }

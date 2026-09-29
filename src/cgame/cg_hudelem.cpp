@@ -863,7 +863,7 @@ int __cdecl compare_hudelems(const void *pe0, const void *pe1)
 {
     float delta; // [esp+0h] [ebp-Ch]
 
-    delta = *(float *)(*(unsigned int *)pe0 + 56) - *(float *)(*(unsigned int *)pe1 + 56);
+    delta = (*(hudelem_s *const *)pe0)->sort - (*(hudelem_s *const *)pe1)->sort;   // nx-port: was the element pointer read as unsigned int, + 56
     if ( delta >= 0.0 )
         return delta > 0.0;
     else

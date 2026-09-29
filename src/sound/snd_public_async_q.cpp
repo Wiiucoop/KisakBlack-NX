@@ -789,7 +789,7 @@ void __cdecl SND_NotifyProcess(const snd_notify *cmd)
             break;
         case SND_NOTIFY_SUBTITLE:
             //PIXBeginNamedEvent(-1, "CG_SubtitleSndLengthNotify");
-            CG_SubtitleSndLengthNotify(cmd->context.ent_update.handle.handle, cmd->context.subtitle.subtitle);
+            CG_SubtitleSndLengthNotify(cmd->context.subtitle.lengthMs, cmd->context.subtitle.subtitle);   // nx-port: was ent_update.handle
             //if ( GetCurrentThreadId() == g_DXDeviceThread )
                 goto LABEL_8;
             break;
@@ -801,7 +801,7 @@ void __cdecl SND_NotifyProcess(const snd_notify *cmd)
             break;
         case SND_NOTIFY_PLAYBACK_UPDATE:
             //PIXBeginNamedEvent(-1, "update playback");
-            if ( !cmd->context.ent_update.handle.handle
+            if ( !cmd->context.playback_update.playback   // nx-port: was ent_update.handle
                 && !Assert_MyHandler(
                             "C:\\projects_pc\\cod\\codsrc\\src\\sound\\snd_public_async_q.cpp",
                             552,
@@ -811,7 +811,7 @@ void __cdecl SND_NotifyProcess(const snd_notify *cmd)
             {
                 __debugbreak();
             }
-            if ( *(unsigned int *)cmd->context.ent_update.handle.handle == -1
+            if ( *(unsigned int *)cmd->context.playback_update.playback == -1   // nx-port: was ent_update.handle
                 && !Assert_MyHandler(
                             "C:\\projects_pc\\cod\\codsrc\\src\\sound\\snd_public_async_q.cpp",
                             553,
@@ -821,7 +821,7 @@ void __cdecl SND_NotifyProcess(const snd_notify *cmd)
             {
                 __debugbreak();
             }
-            playback = cmd->context.playback_free.playback;
+            playback = cmd->context.playback_update.playback;
             playback->attenuation = cmd->context.playback_update.attenuation;
             *(_QWORD *)&playback->lengthMs = *(_QWORD *)&cmd->context.playback_update.lengthMs;
             //if ( g_DXDeviceThread == GetCurrentThreadId() )

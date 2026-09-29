@@ -1,4 +1,5 @@
 #include <qcommon/common.h>
+#include <gfx_d3d/r_font.h>
 #include "screen_placement.h"
 #include "cl_console.h"
 
@@ -1796,7 +1797,10 @@ unsigned int __cdecl CL_AddMessageIcon(
     {
         __debugbreak();
     }
-    *(unsigned int *)&msg[msgLenc] = (unsigned int)iconShader;
+    {
+        const unsigned int iconHandle = R_TextIconHandle(iconShader);   // nx-port: was the pointer as unsigned int
+        memcpy(&msg[msgLenc], &iconHandle, 4);
+    }
     msgLend = msgLenc + 4;
     if ( msgLend - msgLen != 8
         && !Assert_MyHandler(

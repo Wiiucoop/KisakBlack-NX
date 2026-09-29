@@ -1,4 +1,5 @@
 #include "rb_backend.h"
+#include <gfx_d3d/r_font.h>
 #include "rb_stats.h"
 #include "r_image.h"
 #include "rb_shade.h"
@@ -3722,9 +3723,12 @@ double __cdecl RB_DrawHudIcon(
     {
         __debugbreak();
     }
-    if ( !IsValidMaterialHandle(*(Material *const *)(text + 3)) )
+    unsigned int iconHandle;   // nx-port: a R_TextIconHandle slot, not the pointer
+    memcpy(&iconHandle, text + 3, 4);
+    Material *iconMaterial = R_TextIconMaterial(iconHandle);
+    if ( !IsValidMaterialHandle(iconMaterial) )
         return 0.0;
-    material = Material_FromHandle(*(Material **)(text + 3));
+    material = Material_FromHandle(iconMaterial);
     RB_DrawStretchPicRotate(material, x, ya, 1.0, w, h, s0, 0.0, s1, 1.0, sinAngle, cosAngle, color, GFX_PRIM_STATS_HUD);
     return w;
 }

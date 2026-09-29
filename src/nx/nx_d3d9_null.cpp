@@ -3233,15 +3233,18 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     UINT stride = s_streamStride[pos->Stream];
     UINT attrOffset = s_streamOffset[pos->Stream] + pos->Offset;
 
-    { NxProfScope p(NXP_GETERROR); glGetError(); }   // clear anything stale
+    // glGetError makes the driver wait for its queue: two per draw were ~630 ms
+    // of a 690 ms frame. Only the frame the report describes checks.
+    bool checkErrors = (s_nSwapPresent % 60) == 0;
+    if (checkErrors) { NxProfScope p(NXP_GETERROR); glGetError(); }   // clear anything stale
     {
     NxProfScope prof(NXP_DRAW_CALL);
     glDrawElementsBaseVertex(mode, count, idxType,
                              (const void *)(uintptr_t)(startIndex * idxSize),
                              baseVertexIndex);
     }
-    GLenum err;
-    { NxProfScope p(NXP_GETERROR); err = glGetError(); }
+    GLenum err = GL_NO_ERROR;
+    if (checkErrors) { NxProfScope p(NXP_GETERROR); err = glGetError(); }
     if (err != GL_NO_ERROR) {
         s_lastGlDrawError = err;
         ++s_nGlDrawFailed;

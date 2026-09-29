@@ -63,7 +63,7 @@ struct phys_transient_allocator // sizeof=0x18
         int alignment,
         int no_error,
         const char *error_msg);
-    int mt_allocate_internal(int size, int alignment);
+    char *mt_allocate_internal(int size, int alignment);
 
     void reset();
     void reset_to_state(const phys_transient_allocator::allocator_state *as);

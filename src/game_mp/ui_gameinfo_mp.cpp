@@ -337,7 +337,7 @@ const char *UI_LoadArenasFromFile_LoadObj()
                 FS_Read((unsigned __int8 *)buffer, len, f);
                 buffer[len] = 0;
                 FS_FCloseFile(f);
-                ui_numArenas += UI_ParseInfos(buffer, 128 - ui_numArenas, (char **)(4 * ui_numArenas + 160058192));
+                ui_numArenas += UI_ParseInfos(buffer, 128 - ui_numArenas, &ui_arenaInfos[ui_numArenas]   /* nx-port: was its x86 address */);
             }
             else
             {

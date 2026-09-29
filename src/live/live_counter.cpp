@@ -121,7 +121,7 @@ TaskRecord *__cdecl LiveCounter_UploadAllCounters(int controllerIndex)
             s_uploadCounters[uploadCount].m_counterID = s_localCounters[i].m_counterID;
             v1 = uploadCount;
             LODWORD(s_uploadCounters[v1].m_counterValue) = s_localCounters[i].m_counterValue;
-            *(unsigned int *)(v1 * 16 + 172781500) = HIDWORD(s_localCounters[i].m_counterValue);
+            HIDWORD(s_uploadCounters[v1].m_counterValue) = HIDWORD(s_localCounters[i].m_counterValue);   // nx-port: was a store through the x86 address of the high half
             ++uploadCount;
         }
     }
@@ -131,7 +131,7 @@ TaskRecord *__cdecl LiveCounter_UploadAllCounters(int controllerIndex)
     {
         v3 = j;
         LODWORD(s_localCounters[v3].m_counterValue) = 0;
-        *(unsigned int *)(v3 * 16 + 172779900) = 0;
+        HIDWORD(s_localCounters[v3].m_counterValue) = 0;   // nx-port: was a store through the x86 address of the high half
     }
     return LiveCounter_IncrementCounters(task_uploadAllCounters, controllerIndex, s_uploadCounters, uploadCount);
 #else
@@ -164,7 +164,7 @@ void __cdecl LiveCounter_UploadAllCountersFailure(TaskRecord *task)
                 v2 = j;
                 LODWORD(s_localCounters[v2].m_counterValue) = LODWORD(s_uploadCounters[i].m_counterValue)
                                                                                                         + LODWORD(s_localCounters[j].m_counterValue);
-                *(unsigned int *)(v2 * 16 + 172779900) = HIDWORD(v1);
+                HIDWORD(s_localCounters[v2].m_counterValue) = HIDWORD(v1);   // nx-port: was a store through the x86 address of the high half
                 break;
             }
         }
@@ -235,7 +235,7 @@ void __cdecl LiveCounter_IncrementCounterValue(int counterID, __int64 increment)
                 v2 = increment + __PAIR64__(HIDWORD(s_localCounters[i].m_counterValue), s_localCounters[i].m_counterValue);
                 v3 = i;
                 LODWORD(s_localCounters[v3].m_counterValue) = increment + LODWORD(s_localCounters[i].m_counterValue);
-                *(unsigned int *)(v3 * 16 + 172779900) = HIDWORD(v2);
+                HIDWORD(s_localCounters[v3].m_counterValue) = HIDWORD(v2);   // nx-port: was a store through the x86 address of the high half
                 if ( !s_countersReadyForUpload )
                 {
                     s_countersReadyForUpload = 1;
@@ -327,13 +327,13 @@ void __cdecl LiveCounter_SetupCounters()
             s_serverCounters[i].m_counterID = counterID;
             v0 = i;
             LODWORD(s_localCounters[v0].m_counterValue) = 0;
-            *(unsigned int *)(v0 * 16 + 172779900) = 0;
+            HIDWORD(s_localCounters[v0].m_counterValue) = 0;   // nx-port: was a store through the x86 address of the high half
             v1 = i;
             LODWORD(s_uploadCounters[v1].m_counterValue) = 0;
-            *(unsigned int *)(v1 * 16 + 172781500) = 0;
+            HIDWORD(s_uploadCounters[v1].m_counterValue) = 0;   // nx-port: was a store through the x86 address of the high half
             v2 = i;
             LODWORD(s_serverCounters[v2].m_counterValue) = -1;
-            *(unsigned int *)(v2 * 16 + 172778300) = -1;
+            HIDWORD(s_serverCounters[v2].m_counterValue) = -1;   // nx-port: was a store through the x86 address of the high half
         }
         else
         {

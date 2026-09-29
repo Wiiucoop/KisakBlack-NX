@@ -398,6 +398,11 @@ are silent and need reading:
 - **Constants decompiled as addresses**: `(int)&objBuf[1758][2]` is
   `FL_OBSTACLE` (0x4000000) -- the value happened to fall inside objBuf in the
   PC binary. Wrong on every build; breaks outright once the array resizes.
+- **Absolute x86 addresses**: `*(_BYTE *)(strlen(info6) + 67341897) = 0` is an
+  inlined strcat into `info6`; `*(unsigned int *)(v * 16 + 172779900) = hi` is
+  the high half of the element `LODWORD(...)` set on the line before. Find them
+  with `grep -rnE "+ [0-9]{8,9})" src`; the online-only ones (live_meetplayer,
+  sessions, ticker, fileshare, DW) are left.
 
 **Physics is off on the Switch** (`nx_physics 0`): `Phys_ObjCreateAxis`
 returns NULL, which every caller treats as "no physics" (dynents stay put).

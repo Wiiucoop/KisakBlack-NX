@@ -1303,7 +1303,7 @@ char __cdecl Playlist_AppendRules(const char *base, const char *token)
                 __debugbreak();
             }
             s_playlistRuleBuffer[s_playlistRuleBufferUsed] = 59;
-            *(_BYTE *)(s_playlistRuleBufferUsed + 160499321) = 0;
+            s_playlistRuleBuffer[s_playlistRuleBufferUsed + 1] = 0;   // nx-port: was its x86 address + 1
             if ( ++s_playlistRuleBufferUsed >= 0x8000
                 && !Assert_MyHandler(
                             "C:\\projects_pc\\cod\\codsrc\\src\\ui\\ui_playlists.cpp",

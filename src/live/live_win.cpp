@@ -1693,7 +1693,7 @@ void __cdecl Live_PopulateRecentServers(unsigned __int8 *buf, int bufsize)
     {
         v2 = i;
         LODWORD(s_recentServers[v2].serverID) = *(unsigned int *)ptr;
-        *(unsigned int *)(v2 * 16 + 174315068) = *((unsigned int *)ptr + 1);
+        HIDWORD(s_recentServers[v2].serverID) = *((unsigned int *)ptr + 1);   // nx-port: was a store through the x86 address of the high half
         s_recentServers[i].joinTime = *((unsigned int *)ptr + 2);
         ptr += 12;
     }
@@ -1793,7 +1793,7 @@ char __cdecl Live_AddFavourite_Ingame(unsigned __int64 serverid, unsigned __int6
         *(_WORD *)&v4->addressblob[4] = WORD2(serverid);
         v5 = i;
         LODWORD(s_favourites[v5].uid) = serveruid;
-        *(unsigned int *)(v5 * 16 + 174313908) = HIDWORD(serveruid);
+        HIDWORD(s_favourites[v5].uid) = HIDWORD(serveruid);   // nx-port: was a store through the x86 address of the high half
         CL_SetFavourites_f();
         v6 = UI_SafeTranslateString("EXE_FAVORITEADDED");
         v7 = va("%s\n", v6);
@@ -1821,7 +1821,7 @@ void __cdecl Live_AddFavourite(unsigned __int64 serverid, unsigned __int64 serve
         *(_WORD *)&v2->addressblob[4] = WORD2(serverid);
         v3 = i;
         LODWORD(s_favourites[v3].uid) = serveruid;
-        *(unsigned int *)(v3 * 16 + 174313908) = HIDWORD(serveruid);
+        HIDWORD(s_favourites[v3].uid) = HIDWORD(serveruid);   // nx-port: was a store through the x86 address of the high half
     }
     CL_SetFavourites_f();
 }
@@ -1837,7 +1837,7 @@ void __cdecl Live_DeleteFavourite(unsigned __int64 serverid)
     {
         v1 = i;
         LODWORD(s_favourites[v1].uid) = 0;
-        *(unsigned int *)(v1 * 16 + 174313908) = 0;
+        HIDWORD(s_favourites[v1].uid) = 0;   // nx-port: was a store through the x86 address of the high half
         CL_SetFavourites_f();
     }
 }
@@ -1855,7 +1855,7 @@ void __cdecl Live_ParseFavsBlobs(unsigned __int8 *addrblob, unsigned __int8 *uid
         *(_WORD *)&v2->addressblob[4] = *((_WORD *)addrblob + 2);
         v3 = i;
         LODWORD(s_favourites[v3].uid) = *(unsigned int *)uidblob;
-        *(unsigned int *)(v3 * 16 + 174313908) = *((unsigned int *)uidblob + 1);
+        HIDWORD(s_favourites[v3].uid) = *((unsigned int *)uidblob + 1);   // nx-port: was a store through the x86 address of the high half
         addrblob += 6;
         uidblob += 8;
     }
@@ -2235,7 +2235,7 @@ void __cdecl Live_AddFriendServer(unsigned __int64 serverID, unsigned __int64 fr
         {
             v2 = i;
             LODWORD(s_friendsServers[v2].serverID) = serverID;
-            *(unsigned int *)(v2 * 16 + 174309628) = HIDWORD(serverID);
+            HIDWORD(s_friendsServers[v2].serverID) = HIDWORD(serverID);   // nx-port: was a store through the x86 address of the high half
             break;
         }
     }
@@ -2243,10 +2243,10 @@ void __cdecl Live_AddFriendServer(unsigned __int64 serverID, unsigned __int64 fr
     {
         v3 = s_numfriendsonservers;
         LODWORD(s_friendsServers[v3].friendID) = friendID;
-        *(unsigned int *)(v3 * 16 + 174309620) = HIDWORD(friendID);
+        HIDWORD(s_friendsServers[v3].friendID) = HIDWORD(friendID);   // nx-port: was a store through the x86 address of the high half
         v4 = s_numfriendsonservers;
         LODWORD(s_friendsServers[v4].serverID) = serverID;
-        *(unsigned int *)(v4 * 16 + 174309628) = HIDWORD(serverID);
+        HIDWORD(s_friendsServers[v4].serverID) = HIDWORD(serverID);   // nx-port: was a store through the x86 address of the high half
         ++s_numfriendsonservers;
     }
     Live_FindFriendServers();
@@ -2311,7 +2311,7 @@ void __cdecl Live_OnInvite(unsigned __int64 uid, bdSessionID sessionID, const ch
                 *(unsigned int *)&p_sessionID->m_sessionID.ab[4] = v7;
                 v9 = i;
                 LODWORD(s_invites[v9].from) = uid;
-                *(unsigned int *)(v9 * 56 + 174495612) = HIDWORD(uid);
+                HIDWORD(s_invites[v9].from) = HIDWORD(uid);   // nx-port: was a store through the x86 address of the high half
                 memcpy(s_invites[i].password, password, sizeof(s_invites[i].password));
                 break;
             }
@@ -2322,7 +2322,7 @@ void __cdecl Live_OnInvite(unsigned __int64 uid, bdSessionID sessionID, const ch
         {
             v10 = firstfree;
             LODWORD(s_invites[v10].from) = uid;
-            *(unsigned int *)(v10 * 56 + 174495612) = HIDWORD(uid);
+            HIDWORD(s_invites[v10].from) = HIDWORD(uid);   // nx-port: was a store through the x86 address of the high half
             v11 = *(unsigned int *)&sessionID.m_sessionID.ab[4];
             v12 = &s_invites[firstfree].sessionID;
             *(unsigned int *)v12->m_sessionID.ab = *(unsigned int *)sessionID.m_sessionID.ab;
@@ -2348,7 +2348,7 @@ void __cdecl Live_OnRevokeInvite(unsigned __int64 uid)
             Com_DPrintf(23, "Removing invite from %llu\n", uid);
             v1 = i;
             LODWORD(s_invites[v1].from) = 0;
-            *(unsigned int *)(v1 * 56 + 174495612) = 0;
+            HIDWORD(s_invites[v1].from) = 0;   // nx-port: was a store through the x86 address of the high half
             break;
         }
     }

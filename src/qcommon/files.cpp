@@ -754,10 +754,7 @@ char *__cdecl FS_ReferencedIwdPureChecksums()
     info6[0] = 0;
     checksum = fs_checksumFeed;
     numIwds = 0;
-    *(_BYTE *)(strlen(info6) + 67341897) = 0;
-    *(_BYTE *)(strlen(info6) + 67341898) = 0;
-    info6[strlen(info6)] = 35;
-    info6[strlen(info6)] = 32;
+    I_strncat(info6, sizeof(info6), "# ");   // nx-port: was an inlined strcat through info6's x86 address (67341896)
     for ( search = fs_searchpaths; search; search = search->next )
     {
         if ( search->iwd && !search->bLocalized )

@@ -70,7 +70,7 @@ void __cdecl PCache_Init()
         {
             v0 = indexa;
             LODWORD(s_entries[v0].xuid) = 0;
-            *(unsigned int *)(v0 * 32 + 173170852) = 0;
+            HIDWORD(s_entries[v0].xuid) = 0;   // nx-port: was a store through the x86 address of the high half
         }
         PCache_ProfileInit();
         Cmd_AddCommandInternal("pcacherank", PCache_GetRank_f, &PCache_GetRank_f_VAR);

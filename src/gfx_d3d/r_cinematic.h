@@ -79,10 +79,33 @@ void __cdecl R_Cinematic_Init();
 unsigned int *R_Cinematic_ReserveMemory();
 void __cdecl R_Cinematic_Shutdown();
 void __cdecl R_Cinematic_ReleaseImages(CinematicTextureSet *textureSet);
-void __cdecl R_Cinematic_StartPlayback_Internal(const char *name, unsigned int playbackFlags, int volume);
+void __cdecl R_Cinematic_StartPlayback_Internal(const char *name, unsigned int playbackFlags, float volume);
+void __cdecl R_Cinematic_StartPlayback(const char *name, unsigned int playbackFlags, float volume);
+// SP queue producer, retail 0x006DA060. This writes the NEXT slot; the three-argument
+// R_Cinematic_StartPlayback above writes the current target slot.
+void __cdecl R_Cinematic_SetNextPlayback(const char *name, unsigned int playbackFlags);
 void __cdecl R_Cinematic_StartNextPlayback();
 bool __cdecl R_Cinematic_IsNextReady_Internal();
+// SP-only addition (Ghidra 0x006da230) -- see r_cinematic.cpp for the full evidence note. Tests
+// cinematicGlob.targetCinematicName[0], distinct from R_Cinematic_IsNextReady_Internal above
+// (which tests nextCinematicName). Descriptive name, not a confirmed retail symbol.
+bool __cdecl R_Cinematic_IsTargetSet();
+#ifdef KISAK_SP
+// Reconstruction names for reviewed SP behavior; not recovered retail symbols.
+float R_Cinematic_GetRemainingSeconds_SP();
+bool R_Cinematic_ConsumeFirstFrameNotify_SP();
+bool R_Cinematic_ConsumeLastFrameNotify_SP();
+#endif
+// SP-only addition (Ghidra 0x006da140) -- see r_cinematic.cpp for the full evidence note. A
+// one-line Sys_WaitWorkerCmdInternal(&_UpdateFrameWorkerCmd) bracket, used by SP's cinematic
+// consumers around StartNextPlayback+UpdateFrame. Descriptive name, not a confirmed retail symbol.
+void __cdecl R_Cinematic_WaitForUpdateFrame();
 void __cdecl R_Cinematic_StopPlayback();
+// SP-only additions (Ghidra 0x006d9f90 / 0x006d9fe0) -- see r_cinematic.cpp for the full
+// evidence note. fromScript selects the stronger CINEMATIC_SCRIPT_PAUSED state, which only
+// a fromScript resume (or an unconditional fromScript=true resume) can release.
+void __cdecl R_Cinematic_Pause(bool fromScript);
+void __cdecl R_Cinematic_Resume(bool fromScript);
 int __cdecl _UpdateFrameCallback();
 void __cdecl R_Cinematic_UpdateFrame_Core(bool force_wait);
 char __cdecl R_Cinematic_AreHunksOpen();

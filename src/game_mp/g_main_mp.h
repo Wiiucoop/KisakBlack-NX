@@ -437,6 +437,14 @@ extern const dvar_t *g_password;
 extern const dvar_t *g_banIPs;
 extern const dvar_t *g_speed;
 extern const dvar_t *g_knockback;
+#ifdef KISAK_SP
+// SP-only. Retail SP's ClientSpawn (BlackOps.exe 0x00480170) reads this to seed
+// the player's health; the SP script corpus NEVER assigns self.health, so with
+// no engine-side producer the SP player spawns at 0 hp. See g_client_mp.cpp.
+extern const dvar_t *g_player_maxhealth;
+extern const dvar_t *g_reloading;
+extern const dvar_t *g_changelevel_time;
+#endif
 extern const dvar_t *g_maxDroppedWeapons;
 extern const dvar_t *g_inactivity;
 extern const dvar_t *g_debugDamage;
@@ -450,6 +458,9 @@ extern const dvar_t *ai_turnRate;
 extern const dvar_t *ai_useFacingTranslation;
 extern const dvar_t *ai_useLeanRunAnimations;
 extern const dvar_t *ai_useBetterLookahead;
+#ifdef KISAK_SP
+extern const dvar_t *zm_pathdebug;
+#endif
 extern const dvar_t *ai_slowdownMinYawDiff;
 extern const dvar_t *ai_slowdownMaxYawDiff;
 extern const dvar_t *ai_slowdownMinRate;

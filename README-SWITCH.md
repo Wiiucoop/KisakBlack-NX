@@ -626,6 +626,27 @@ the same problems).
 converts and validates) -> renderer stage 3 (done) -> first 3D map via
 `devmap`, fixing the LP64 crashes on that path -> SP / Zombies.
 
+**The OpenBLOPS merge (branch `sp-merge`).** OpenBLOPS forked upstream
+KisakBlack at `2a778526` (2 Aug 2026; closest on every sample, later commits
+drift away), and this repository carries that commit, so the merge is a real
+three-way one: base `2a778526`, theirs OpenBLOPS, ours `switch-port`. 190
+files changed there (22k lines, 140 of them with `KISAK_SP` code); 174 merged
+cleanly and 27 hunks in 16 files were resolved by hand -- keeping our LP64 fixes
+(`sizeof` instead of x86 literals, `GCLIENT_X86`, `clientFlags` by field) with
+their additions, and taking theirs where they fixed the same thing properly
+(`mapInfo.levelShot`, `displayServers`, `deathContents`, offline stats). New
+files: `g_sp_crosshair`, `g_sp_lookat_nodes`, `bg_actor_constants`,
+`bg_sp_anim_snapshot` (+ `cg_sp_anim_snapshot.inl`), `msg_origin_quantization`,
+`live_stats_layout`, `sv_offline_stats`, `ui_custom_bots_mp`. Their x86 layout
+`static_assert`s are fenced with `#ifndef KISAK_NX`; the sentient field table
+now uses `offsetof` (it had raw x86 offsets into a struct with pointers).
+
+**The SP build.** `cmake -S . -B build-nx-sp -DNX_SP=ON` builds the same
+sources with `KISAK_SP` for `KISAK_MP` (NRO title "KisakBlack SP"). It needs
+the SP zones converted (an SP mode in the converter: SP numbers its asset types
+differently and has `col_map_sp` / `game_map_sp`); the plan is
+`+devmap zombie_theater`, skipping the frontend.
+
 **Zombies goes through OpenBLOPS.** OpenBLOPS (GPL-3.0, no history available)
 is the same KisakBlack tree with SP and Zombies built from it under `KISAK_SP`:
 1344 of its 1372 engine/game files map one-to-one onto `src/<module>`, the SP
@@ -703,10 +724,9 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
 
 ## 8. Scope: this is the multiplayer executable
 
-KisakBlack reimplements **only `BlackOpsMP.exe`** — as its own README and its
-author's blog say. Campaign and Zombies live in `BlackOps.exe`, which is not
-decompiled, and **no amount of work on this tree reaches them**. That is a
-property of the upstream project, not of this port.
+KisakBlack itself reimplements only `BlackOpsMP.exe`. Campaign and Zombies live
+in `BlackOps.exe`; they come from **OpenBLOPS**, which builds SP and Zombies
+from the same tree under `KISAK_SP`, merged here (below).
 
 The nearest thing to a single-player experience is therefore **offline
 multiplayer against bots** — Combat Training, `src/server_mp/sv_bot_mp.cpp`,

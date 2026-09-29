@@ -492,3 +492,4 @@ build-nx/lp64-work/
 __pycache__/
 mesa-switch-main/
 build-nx-mesa20/
+build-nx-sp/

@@ -1,4 +1,5 @@
 #include "player_use_mp.h"
+#include <game/g_sp_crosshair.h>
 #include <clientscript/cscr_vm.h>
 #include "g_spawn_mp.h"
 #include <clientscript/scr_const.h>
@@ -367,11 +368,21 @@ void __cdecl Player_UpdateCursorHints(gentity_s *ent)
         __debugbreak();
     }
     ps = &ent->client->ps;
+    const int prevHintEntIndex = ps->cursorHintEntIndex;
     ps->cursorHint = 0;
+#ifdef KISAK_SP
+    // Retail SP Player_UpdateCursorHints (0x00603760) clears all three hint
+    // fields every frame and hands the previous ent index to Player_GetUseList.
+    ps->cursorHintString = -1;
+    ps->cursorHintEntIndex = 1023;
+#endif
     if ( !BG_ThrowingBackGrenade(ps) )
         ps->throwBackGrenadeTimeLeft = 0;
     if ( ent->health > 0 )
     {
+#ifdef KISAK_SP
+        if (!g_reloading->current.integer) G_SPPublishLookAt(ent);
+#endif
         if ( ent->active )
         {
             if ( (ps->eFlags & 0x300) != 0 )
@@ -403,7 +414,7 @@ void __cdecl Player_UpdateCursorHints(gentity_s *ent)
                 && (ent->client->flags & 4) == 0
                 && (ent->client->flags & 8) == 0 )
             {
-                v8 = Player_GetUseList(ent, useList, ps->cursorHintEntIndex);
+                v8 = Player_GetUseList(ent, useList, prevHintEntIndex);
                 if ( v8 )
                 {
                     item = 0;
@@ -445,7 +456,11 @@ void __cdecl Player_UpdateCursorHints(gentity_s *ent)
                                     goto LABEL_85;
                                 }
                                 if ( self->team && self->team != ent->client->sess.cs.team
+#ifdef KISAK_SP
+                                    || self->trigger.perk != BG_SP_PERK_COUNT && !BG_HasSPPerk(ent->client->ps.perks, self->trigger.perk)
+#else
                                     || self->trigger.perk != 52 && !BG_HasPerk(ent->client->ps.perks, self->trigger.perk)
+#endif
                                     || self->item[1].ammoCount != 1023 && self->item[1].ammoCount != ent->client->ps.clientNum
                                     || (self->r.clientMask[(int)ps->clientNum >> 5] & (1 << (ps->clientNum & 0x1F))) != 0 )
                                 {
@@ -476,7 +491,12 @@ void __cdecl Player_UpdateCursorHints(gentity_s *ent)
                                 v2 = (self->s.eventParm & 0xC000) >> 14;
                                 if ( !v2 || v2 == ent->client->sess.cs.team )
                                 {
-                                    if ( (self->s.eventParm & 0x3FFF) != 0 && BG_HasPerk(ps->perks, (self->s.eventParm & 0x3FFF) >> 8) )
+                                    if ( (self->s.eventParm & 0x3FFF) != 0
+#ifdef KISAK_SP
+                                        && BG_HasSPPerk(ps->perks, (self->s.eventParm & 0x3FFF) >> 8) )
+#else
+                                        && BG_HasPerk(ps->perks, (self->s.eventParm & 0x3FFF) >> 8) )
+#endif
                                         scale = (unsigned __int8)self->s.eventParm;
 LABEL_85:
                                     if ( item )
@@ -636,7 +656,17 @@ int Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEntIndex)
         gEnt = &g_entities[entityList[i]];
         if (ent != gEnt && (gEnt->s.eType == 3 || (gEnt->r.contents & 0x200000) != 0))
         {
+#ifdef KISAK_SP
+            // Retail SP (0x00817db0) routes trigger_radius through the same
+            // bounds + SV_EntityContact touch test as trigger_use_touch (only
+            // when its cursor hint item is > 0); it never reaches the
+            // use-radius/look-at path below. trigger_radius_use does.
+            if (gEnt->classname == scr_const.trigger_radius && gEnt->s.un3.item <= 0)
+                continue;
+            if (gEnt->classname == scr_const.trigger_use_touch || gEnt->classname == scr_const.trigger_radius)
+#else
             if (gEnt->classname == scr_const.trigger_use_touch)
+#endif
             {
                 if (gEnt->r.absmin[0] <= v28
                     && v54 <= gEnt->r.absmax[0]
@@ -645,7 +675,11 @@ int Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEntIndex)
                     && gEnt->r.absmin[2] <= v30
                     && v56 <= gEnt->r.absmax[2])
                 {
-                    if (SV_EntityContact(&v54, &v28, gEnt))
+                    // The decompiler split the player box into scalar locals; they are
+                    // not guaranteed contiguous, so rebuild real vec3s for the trace.
+                    const float playerMins[3] = { v54, v55, v56 };
+                    const float playerMaxs[3] = { v28, v29, v30 };
+                    if (SV_EntityContact(playerMins, playerMaxs, gEnt))
                     {
                         useList[v42].score = -256.0f;
                         useList[v42++].ent = gEnt;
@@ -720,67 +754,54 @@ int Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEntIndex)
                                             || !gEnt->trigger.requireLookAt
                                             || v53 <= v18)
                                         {
-                                            if (gEnt->classname != scr_const.trigger_radius
-                                                && gEnt->classname != scr_const.trigger_radius_use)
+                                            // Retail (both MP and SP) accepts any classname reaching this
+                                            // point unconditionally once the distance/requireLookAt dot-product
+                                            // test above passes -- there is no team/SV_EntityContact re-check
+                                            // for trigger_radius_use in Player_GetUseList (retail SP
+                                            // 0x00817db0; trigger_radius is contact-tested in the touch
+                                            // branch at the top of the loop instead). A prior reconstruction added one, which
+                                            // silently dropped every trigger_radius_use entity (e.g. zombie
+                                            // barricade rebuild triggers) whose spawn-time team never matches
+                                            // the player's, since SP entities are not team-scoped.
+                                            v41 = 1.0 - (float)((float)(v18 + 1.0) * 0.5);
+                                            useList[v42].score = v41 * v31;
+                                            if ((gEnt->flags & 0x200) != 0)
                                             {
-                                                goto LABEL_61;
+                                                useList[v42].score = useList[v42].score - (float)(v31 * 0.55000001);
                                             }
-                                            team = level_bgs.clientinfo[ent->client->ps.clientNum].team;
-                                            if (gEnt->team != 255 && gEnt->team == team)
+                                            else
                                             {
-                                                v12 = 0;
-                                                v11[0] = gEnt->r.currentOrigin[0] + gEnt->r.mins[0];
-                                                v11[1] = gEnt->r.currentOrigin[1] + gEnt->r.mins[1];
-                                                v11[2] = gEnt->r.currentOrigin[2] + gEnt->r.mins[2];
-                                                v13[0] = gEnt->r.currentOrigin[0] + gEnt->r.maxs[0];
-                                                v13[1] = gEnt->r.currentOrigin[1] + gEnt->r.maxs[1];
-                                                v13[2] = gEnt->r.currentOrigin[2] + gEnt->r.maxs[2];
-                                                ExpandBoundsToWidth(v11, v13);
-                                                v12 = SV_EntityContact(v11, v13, ent);
-                                                if (v12)
+                                                if (gEnt->s.eType == 4)
+                                                    useList[v42].score = useList[v42].score - (float)(v31 * 2.0);
+                                                if (gEnt->s.eType == 14)
+                                                    useList[v42].score = useList[v42].score - (float)(v31 * 2.0);
+                                                if (gEnt->classname == scr_const.trigger_radius
+                                                    || gEnt->classname == scr_const.trigger_radius_use && gEnt->s.un3.item > 0)
                                                 {
-                                                LABEL_61:
-                                                    v41 = 1.0 - (float)((float)(v18 + 1.0) * 0.5);
-                                                    useList[v42].score = v41 * v31;
-                                                    if ((gEnt->flags & 0x200) != 0)
-                                                    {
-                                                        useList[v42].score = useList[v42].score - (float)(v31 * 0.55000001);
-                                                    }
-                                                    else
-                                                    {
-                                                        if (gEnt->s.eType == 4)
-                                                            useList[v42].score = useList[v42].score - (float)(v31 * 2.0);
-                                                        if (gEnt->s.eType == 14)
-                                                            useList[v42].score = useList[v42].score - (float)(v31 * 2.0);
-                                                        if (gEnt->classname == scr_const.trigger_radius
-                                                            || gEnt->classname == scr_const.trigger_radius_use && gEnt->s.un3.item > 0)
-                                                        {
-                                                            useList[v42].score = useList[v42].score - (float)(v31 * 1.5);
-                                                        }
-                                                        if (gEnt->classname == scr_const.trigger_use || gEnt->classname == scr_const.trigger_radius)
-                                                            useList[v42].score = useList[v42].score - v31;
-                                                        if (gEnt->s.eType == 6)
-                                                            useList[v42].score = useList[v42].score - (float)(v31 * 0.75);
-                                                    }
-                                                    if (gEnt->s.eType == 11)
-                                                    {
-                                                        if (G_IsTurretUsable(gEnt, ent))
-                                                            useList[v42].score = useList[v42].score - (float)(v31 * 0.5);
-                                                        else
-                                                            useList[v42].score = useList[v42].score + 10000.0;
-                                                    }
-                                                    if (gEnt->s.eType == 3
-                                                        && (!BG_CanItemBeGrabbed(&gEnt->s, &ent->client->ps, 0)
-                                                            || BG_PlayerWeaponBlockPickupWeapon(&ent->client->ps, ent->client->ps.weapon)))
-                                                    {
-                                                        useList[v42].score = useList[v42].score + 10000.0;
-                                                        ++v48;
-                                                    }
-                                                    useList[v42].ent = gEnt;
-                                                    useList[v42].score = useList[v42].score + v33;
-                                                    ++v42;
+                                                    useList[v42].score = useList[v42].score - (float)(v31 * 1.5);
                                                 }
+                                                if (gEnt->classname == scr_const.trigger_use || gEnt->classname == scr_const.trigger_radius)
+                                                    useList[v42].score = useList[v42].score - v31;
+                                                if (gEnt->s.eType == 6)
+                                                    useList[v42].score = useList[v42].score - (float)(v31 * 0.75);
                                             }
+                                            if (gEnt->s.eType == 11)
+                                            {
+                                                if (G_IsTurretUsable(gEnt, ent))
+                                                    useList[v42].score = useList[v42].score - (float)(v31 * 0.5);
+                                                else
+                                                    useList[v42].score = useList[v42].score + 10000.0;
+                                            }
+                                            if (gEnt->s.eType == 3
+                                                && (!BG_CanItemBeGrabbed(&gEnt->s, &ent->client->ps, 0)
+                                                    || BG_PlayerWeaponBlockPickupWeapon(&ent->client->ps, ent->client->ps.weapon)))
+                                            {
+                                                useList[v42].score = useList[v42].score + 10000.0;
+                                                ++v48;
+                                            }
+                                            useList[v42].ent = gEnt;
+                                            useList[v42].score = useList[v42].score + v33;
+                                            ++v42;
                                         }
                                     }
                                 }

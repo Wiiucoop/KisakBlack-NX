@@ -1,4 +1,5 @@
 #include "actor_fields.h"
+#include <cstddef>
 #include <clientscript/cscr_vm.h>
 #include <game_mp/g_utils_mp.h>
 #include <clientscript/cscr_stringlist.h>
@@ -11,6 +12,12 @@
 #include <game_mp/g_spawn_mp.h>
 #include <flame/flame_system.h>
 #include <bgame/bg_weapons_def.h>
+
+// The numeric offsets below are the original MP actor_s layout.  actor_s gained
+// the four SP engage*Dist floats ahead of arrivalInfo, which shifts every later
+// member by 16 bytes, so all fields from arrivalInfo onwards (favoriteenemy,
+// maxsightdistsqrd, pushable, badplaceawareness, ...) must use the real offset.
+#define AFOFS(member) ((int)offsetof(actor_s, member))
 
 void __cdecl AIFIELD_NULLSUB(actor_s *pSelf, const actor_fields_s *pField)
 {
@@ -47,77 +54,85 @@ const actor_fields_s entfields[7] =
 actor_fields_s aifield_delete =
 { NULL, 0, { 0 }, F_INT, NULL, NULL };
 
+// These script fields were originally bound by raw offsets taken from the MP binary.  The
+// reconstructed actor_s does not reproduce that layout (members from Physics onward sit higher),
+// so raw offsets made script writes such as self.pathenemyfightdist land inside scriptGoal.pos.
+// Every entry is bound by member via AFOFS instead.
 const actor_fields_s aifields[80] =
 {
-  { "type", 8, { 4 }, F_INT, ActorScr_SetSpecies, ActorScr_GetSpecies },
-  { "isdog", 8, { 4 }, F_INT, ActorScr_ReadOnly, ActorScr_GetIsDog },
-  { "accuracy", 468, { 4 }, F_FLOAT, ActorScr_Clamp_0_Positive, NULL },
-  { "lookforward", 248, { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
-  { "lookright", 260, { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
-  { "lookup", 272, { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
-  { "fovcosine", 3860, { 4 }, F_FLOAT, ActorScr_Clamp_0_1, NULL },
-  { "maxsightdistsqrd", 3864, { 4 }, F_FLOAT, NULL, NULL },
-  { "ignoreclosefoliage", 3868, { 4 }, F_INT, NULL, NULL },
-  { "interval", 3576, { 4 }, F_FLOAT, NULL, NULL },
-  { "damagetaken", 496, { 4 }, F_INT, ActorScr_ReadOnly, NULL },
-  { "damagedir", 504, { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
-  { "damageyaw", 500, { 4 }, F_INT, ActorScr_ReadOnly, NULL },
-  { "damagelocation", 516, { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
-  { "damageweapon", 518, { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
-  { "damagemod", 520, { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
-  { "proneok", 332, { 4 }, F_INT, ActorScr_ReadOnly, NULL },
-  { "walkdist", 3564, { 4 }, F_FLOAT, NULL, NULL },
-  { "desiredangle", 316, { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
-  { "pacifist", 3768, { 4 }, F_INT, NULL, NULL },
-  { "pacifistwait", 3772, { 4 }, F_INT, ActorScr_SetTime, ActorScr_GetTime },
-  { "ignoresuppression", 5840, { 4 }, F_INT, NULL, NULL },
-  { "suppressionwait", 5844, { 4 }, F_INT, NULL, NULL },
-  { "suppressionduration", 5848, { 4 }, F_INT, NULL, NULL },
-  { "suppressionstarttime", 5852, { 4 }, F_INT, ActorScr_ReadOnly, NULL },
-  { "suppressionmeter", 5856, { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
-  { "aiweapon", 236, { 2 }, F_STRING, NULL, NULL },
-  { "dontavoidplayer", 3600, { 4 }, F_INT, NULL, NULL },
-  { "grenadeawareness", 5880, { 4 }, F_FLOAT, ActorScr_Clamp_0_1, NULL },
-  { "grenade", 5888, { 4 }, F_ENTHANDLE, ActorScr_ReadOnly, NULL },
+  { "type", AFOFS(species), { 4 }, F_INT, ActorScr_SetSpecies, ActorScr_GetSpecies },
+  { "isdog", AFOFS(species), { 4 }, F_INT, ActorScr_ReadOnly, ActorScr_GetIsDog },
+  { "accuracy", AFOFS(accuracy), { 4 }, F_FLOAT, ActorScr_Clamp_0_Positive, NULL },
+  { "lookforward", AFOFS(vLookForward), { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
+  { "lookright", AFOFS(vLookRight), { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
+  { "lookup", AFOFS(vLookUp), { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
+  { "fovcosine", AFOFS(fovDot), { 4 }, F_FLOAT, ActorScr_Clamp_0_1, NULL },
+  { "maxsightdistsqrd", AFOFS(fMaxSightDistSqrd), { 4 }, F_FLOAT, NULL, NULL },
+  { "ignoreclosefoliage", AFOFS(ignoreCloseFoliage), { 4 }, F_INT, NULL, NULL },
+  { "interval", AFOFS(fInterval), { 4 }, F_FLOAT, NULL, NULL },
+  { "damagetaken", AFOFS(iDamageTaken), { 4 }, F_INT, ActorScr_ReadOnly, NULL },
+  { "damagedir", AFOFS(damageDir), { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
+  { "damageyaw", AFOFS(iDamageYaw), { 4 }, F_INT, ActorScr_ReadOnly, NULL },
+  { "damagelocation", AFOFS(damageHitLoc), { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
+  { "damageweapon", AFOFS(damageWeapon), { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
+  { "damagemod", AFOFS(damageMod), { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
+  { "proneok", AFOFS(bProneOK), { 4 }, F_INT, ActorScr_ReadOnly, NULL },
+  { "walkdist", AFOFS(fWalkDist), { 4 }, F_FLOAT, NULL, NULL },
+  { "desiredangle", AFOFS(fDesiredBodyYaw), { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
+  { "pacifist", AFOFS(bPacifist), { 4 }, F_INT, NULL, NULL },
+  { "pacifistwait", AFOFS(iPacifistWait), { 4 }, F_INT, ActorScr_SetTime, ActorScr_GetTime },
+  { "ignoresuppression", AFOFS(ignoreSuppression), { 4 }, F_INT, NULL, NULL },
+  { "suppressionwait", AFOFS(suppressionWait), { 4 }, F_INT, NULL, NULL },
+  { "suppressionduration", AFOFS(suppressionDuration), { 4 }, F_INT, NULL, NULL },
+  { "suppressionstarttime", AFOFS(suppressionStartTime), { 4 }, F_INT, ActorScr_ReadOnly, NULL },
+  { "suppressionmeter", AFOFS(suppressionMeter), { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
+#ifdef KISAK_SP
+  { "weapon", AFOFS(weaponName), { 2 }, F_STRING, NULL, NULL },
+#else
+  { "aiweapon", AFOFS(weaponName), { 2 }, F_STRING, NULL, NULL },
+#endif
+  { "dontavoidplayer", AFOFS(bDontAvoidPlayer), { 4 }, F_INT, NULL, NULL },
+  { "grenadeawareness", AFOFS(grenadeAwareness), { 4 }, F_FLOAT, ActorScr_Clamp_0_1, NULL },
+  { "grenade", AFOFS(pGrenade), { 4 }, F_ENTHANDLE, ActorScr_ReadOnly, NULL },
   {
     "grenadeweapon",
-    5892,
+    AFOFS(iGrenadeWeaponIndex),
     { 4 },
     F_INT,
     ActorScr_SetWeapon,
     ActorScr_GetWeapon
   },
-  { "grenadeammo", 5908, { 4 }, F_INT, NULL, NULL },
-  { "grenadethrowback", 5884, { 4 }, F_INT, NULL, NULL },
-  { "favoriteenemy", 5792, { 4 }, F_SENTIENTHANDLE, NULL, NULL },
-  { "allowpain", 228, { 1 }, F_BYTE, NULL, NULL },
-  { "allowdeath", 229, { 1 }, F_BYTE, NULL, NULL },
-  { "delayeddeath", 230, { 1 }, F_BYTE, NULL, NULL },
-  { "providecoveringfire", 231, { 1 }, F_BYTE, NULL, NULL },
-  { "ignoretriggers", 5960, { 1 }, F_BYTE, NULL, NULL },
-  { "pushable", 5961, { 1 }, F_BYTE, NULL, NULL },
-  { "dropweapon", 5948, { 4 }, F_INT, NULL, NULL },
-  { "drawoncompass", 5952, { 4 }, F_INT, NULL, NULL },
-  { "activatecrosshair", 5956, { 4 }, F_INT, NULL, NULL },
+  { "grenadeammo", AFOFS(iGrenadeAmmo), { 4 }, F_INT, NULL, NULL },
+  { "grenadethrowback", AFOFS(bThrowbackGrenades), { 4 }, F_INT, NULL, NULL },
+  { "favoriteenemy", AFOFS(pFavoriteEnemy), { 4 }, F_SENTIENTHANDLE, NULL, NULL },
+  { "allowpain", AFOFS(allowPain), { 1 }, F_BYTE, NULL, NULL },
+  { "allowdeath", AFOFS(allowDeath), { 1 }, F_BYTE, NULL, NULL },
+  { "delayeddeath", AFOFS(delayedDeath), { 1 }, F_BYTE, NULL, NULL },
+  { "providecoveringfire", AFOFS(provideCoveringFire), { 1 }, F_BYTE, NULL, NULL },
+  { "ignoretriggers", AFOFS(ignoreTriggers), { 1 }, F_BYTE, NULL, NULL },
+  { "pushable", AFOFS(pushable), { 1 }, F_BYTE, NULL, NULL },
+  { "dropweapon", AFOFS(bDropWeapon), { 4 }, F_INT, NULL, NULL },
+  { "drawoncompass", AFOFS(bDrawOnCompass), { 4 }, F_INT, NULL, NULL },
+  { "activatecrosshair", AFOFS(bActivateCrosshair), { 4 }, F_INT, NULL, NULL },
   {
     "groundtype",
-    604,
+    AFOFS(Physics.iSurfaceType),
     { 4 },
     F_STRING,
     ActorScr_ReadOnly,
     ActorScr_GetGroundType
   },
-  { "scriptstate", 5992, { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
-  { "lastscriptstate", 5994, { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
-  { "statechangereason", 5996, { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
-  { "goalradius", 3716, { 4 }, F_FLOAT, ActorScr_SetGoalRadius, NULL },
-  { "goalheight", 3720, { 4 }, F_FLOAT, ActorScr_SetGoalHeight, NULL },
-  { "goalpos", 3648, { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
-  { "ignoreforfixednodesafecheck", 3752, { 1 }, F_BYTE, NULL, NULL },
-  { "fixednode", 3753, { 1 }, F_BYTE, ActorScr_SetFixedNode, NULL },
+  { "scriptstate", AFOFS(scriptState), { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
+  { "lastscriptstate", AFOFS(lastScriptState), { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
+  { "statechangereason", AFOFS(stateChangeReason), { 2 }, F_STRING, ActorScr_ReadOnly, NULL },
+  { "goalradius", AFOFS(scriptGoal.radius), { 4 }, F_FLOAT, ActorScr_SetGoalRadius, NULL },
+  { "goalheight", AFOFS(scriptGoal.height), { 4 }, F_FLOAT, ActorScr_SetGoalHeight, NULL },
+  { "goalpos", AFOFS(codeGoal.pos), { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
+  { "ignoreforfixednodesafecheck", AFOFS(ignoreForFixedNodeSafeCheck), { 1 }, F_BYTE, NULL, NULL },
+  { "fixednode", AFOFS(fixedNode), { 1 }, F_BYTE, ActorScr_SetFixedNode, NULL },
   {
     "fixednodesaferadius",
-    3756,
+    AFOFS(fixedNodeSafeRadius),
     { 4 },
     F_FLOAT,
     ActorScr_Clamp_0_Positive,
@@ -125,58 +140,70 @@ const actor_fields_s aifields[80] =
   },
   {
     "pathgoalpos",
-    3472,
+    AFOFS(Path.vFinalGoal),
     { 12 },
     F_VECTOR,
     ActorScr_ReadOnly,
     ActorScr_GetPathGoalPos
   },
-  { "stopanimdistsq", 3552, { 4 }, F_FLOAT, NULL, NULL },
+  { "stopanimdistsq", AFOFS(Path.pathEndAnimDistSq), { 4 }, F_FLOAT, NULL, NULL },
   {
     "lastenemysightpos",
-    5800,
+    AFOFS(lastEnemySightPos),
     { 12 },
     F_VECTOR,
     ActorScr_SetLastEnemySightPos,
     ActorScr_GetLastEnemySightPos
   },
-  { "pathenemylookahead", 3736, { 4 }, F_FLOAT, NULL, NULL },
-  { "pathenemyfightdist", 3740, { 4 }, F_FLOAT, NULL, NULL },
-  { "meleeattackdist", 3744, { 4 }, F_FLOAT, NULL, NULL },
+  { "pathenemylookahead", AFOFS(pathEnemyLookahead), { 4 }, F_FLOAT, NULL, NULL },
+  { "pathenemyfightdist", AFOFS(pathEnemyFightDist), { 4 }, F_FLOAT, NULL, NULL },
+  { "meleeattackdist", AFOFS(meleeAttackDist), { 4 }, F_FLOAT, NULL, NULL },
   {
     "movemode",
-    548,
+    AFOFS(moveMode),
     { 1 },
     F_STRING,
     ActorScr_ReadOnly,
     ActorScr_GetMoveMode
   },
-  { "safetochangescript", 549, { 1 }, F_BYTE, NULL, NULL },
-  { "keepclaimednode", 3608, { 1 }, F_BYTE, NULL, NULL },
-  { "keepclaimednodeingoal", 3609, { 1 }, F_BYTE, NULL, NULL },
-  { "nododgemove", 3610, { 1 }, F_BYTE, NULL, NULL },
-  { "leanamount", 3624, { 4 }, F_FLOAT, NULL, NULL },
-  { "isfacingmotion", 3628, { 1 }, F_BYTE, ActorScr_ReadOnly, NULL },
-  { "badplaceawareness", 5972, { 4 }, F_FLOAT, ActorScr_Clamp_0_1, NULL },
-  { "goodshootpos", 5976, { 12 }, F_VECTOR, NULL, NULL },
-  { "goodshootposvalid", 5988, { 4 }, F_INT, NULL, NULL },
-  { "flashbangimmunity", 6100, { 4 }, F_INT, NULL, NULL },
-  { "lookaheaddir", 3484, { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
-  { "lookaheaddist", 3504, { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
-  { "exposedduration", 3644, { 4 }, F_INT, NULL, NULL },
-  { "requestarrivalnotify", 3828, { 4 }, F_INT, NULL, NULL },
-  { "finalaccuracy", 484, { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
-  { "weaponaccuracy", 488, { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
-  { "goalangle", 3704, { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
-  { "ikpriority", 10108, { 4 }, F_INT, AIFIELD_NULLSUB, NULL },
-  { "animtranslationscale", 560, { 4 }, F_FLOAT, NULL, NULL },
+  { "safetochangescript", AFOFS(safeToChangeScript), { 1 }, F_BYTE, NULL, NULL },
+  { "keepclaimednode", AFOFS(keepClaimedNode), { 1 }, F_BYTE, NULL, NULL },
+  { "keepclaimednodeingoal", AFOFS(keepClaimedNodeInGoal), { 1 }, F_BYTE, NULL, NULL },
+  { "nododgemove", AFOFS(noDodgeMove), { 1 }, F_BYTE, NULL, NULL },
+  { "leanamount", AFOFS(leanAmount), { 4 }, F_FLOAT, NULL, NULL },
+  { "isfacingmotion", AFOFS(isFacingMotion), { 1 }, F_BYTE, ActorScr_ReadOnly, NULL },
+  { "badplaceawareness", AFOFS(badPlaceAwareness), { 4 }, F_FLOAT, ActorScr_Clamp_0_1, NULL },
+  { "goodshootpos", AFOFS(goodShootPos), { 12 }, F_VECTOR, NULL, NULL },
+  { "goodshootposvalid", AFOFS(goodShootPosValid), { 4 }, F_INT, NULL, NULL },
+  { "flashbangimmunity", AFOFS(flashBangImmunity), { 4 }, F_INT, NULL, NULL },
+  { "lookaheaddir", AFOFS(Path.lookaheadDir), { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
+  { "lookaheaddist", AFOFS(Path.fLookaheadDist), { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
+  { "exposedduration", AFOFS(exposedDuration), { 4 }, F_INT, NULL, NULL },
+  { "requestarrivalnotify", AFOFS(arrivalInfo.arrivalNotifyRequested), { 4 }, F_INT, NULL, NULL },
+  { "finalaccuracy", AFOFS(debugLastAccuracy), { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
+  { "weaponaccuracy", AFOFS(debugWeaponAccuracy), { 4 }, F_FLOAT, ActorScr_ReadOnly, NULL },
+  { "goalangle", AFOFS(scriptGoal.ang), { 12 }, F_VECTOR, ActorScr_ReadOnly, NULL },
+  { "ikpriority", AFOFS(ikPriority), { 4 }, F_INT, AIFIELD_NULLSUB, NULL },
+  { "animtranslationscale", AFOFS(fAnimTranslationScale), { 4 }, F_FLOAT, NULL, NULL },
   { NULL, 0, { 0 }, F_INT, NULL, NULL }
 };
 
 actor_fields_s aifield_list =
 { NULL, 0, { 0 }, F_INT, NULL, NULL };
 
+#ifdef KISAK_SP
+// Retail SP has four species. The names are the four this file's own Scr_Error text already
+// lists ("should be human, dog, zombie, zombie_dog"), in that order -- which is also the order
+// the SP animscript SET pass writes g_animScriptTable in. Indexed by AISpecies.
+const unsigned __int16 *g_AISpeciesNames[MAX_AI_SPECIES] = {
+    (const unsigned __int16 *)&scr_const.human,
+    (const unsigned __int16 *)&scr_const.dog,
+    (const unsigned __int16 *)&scr_const.zombie,
+    (const unsigned __int16 *)&scr_const.zombie_dog,
+};
+#else
 const unsigned __int16 *g_AISpeciesNames[1] = { (const unsigned __int16 *)&scr_const.dog };
+#endif
 
 void __cdecl ActorScr_SetSpecies(actor_s *pSelf, const actor_fields_s *pField)
 {
@@ -188,7 +215,7 @@ void __cdecl ActorScr_SetSpecies(actor_s *pSelf, const actor_fields_s *pField)
     if ( !pSelf && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp", 304, 0, "%s", "pSelf") )
         __debugbreak();
     type = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
-    for ( i = AI_SPECIES_DOG; i < MAX_AI_SPECIES; ++i )
+    for ( i = AI_SPECIES_FIRST; i < MAX_AI_SPECIES; ++i )
     {
         if ( type == *g_AISpeciesNames[i] )
         {
@@ -207,14 +234,21 @@ void __cdecl ActorScr_GetSpecies(actor_s *pSelf, const actor_fields_s *pField)
 {
     if ( !pSelf && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp", 330, 0, "%s", "pSelf") )
         __debugbreak();
+#ifdef KISAK_SP
+    // MP writes this bound check as `pSelf->species` against a literal 1, which only works
+    // while MAX_AI_SPECIES is 1. SP has four species, so the MP form would fire on every
+    // non-human -- and Assert_MyHandler calls __debugbreak() in Release. MP left untouched.
+    if ( (unsigned int)pSelf->species >= (unsigned int)MAX_AI_SPECIES
+#else
     if ( pSelf->species
+#endif
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp",
                     331,
                     0,
                     "pSelf->species doesn't index MAX_AI_SPECIES\n\t%i not in [0, %i)",
                     pSelf->species,
-                    1) )
+                    MAX_AI_SPECIES) )
     {
         __debugbreak();
     }
@@ -223,23 +257,41 @@ void __cdecl ActorScr_GetSpecies(actor_s *pSelf, const actor_fields_s *pField)
 
 void __cdecl ActorScr_GetIsDog(actor_s *pSelf, const actor_fields_s *pField)
 {
+#ifndef KISAK_SP
     unsigned __int8 LocalClientSourceRange; // al
+#endif
 
     if ( !pSelf && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp", 343, 0, "%s", "pSelf") )
         __debugbreak();
+#ifdef KISAK_SP
+    // MP writes this bound check as `pSelf->species` against a literal 1, which only works
+    // while MAX_AI_SPECIES is 1. SP has four species, so the MP form would fire on every
+    // non-human -- and Assert_MyHandler calls __debugbreak() in Release. MP left untouched.
+    if ( (unsigned int)pSelf->species >= (unsigned int)MAX_AI_SPECIES
+#else
     if ( pSelf->species
+#endif
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp",
                     344,
                     0,
                     "pSelf->species doesn't index MAX_AI_SPECIES\n\t%i not in [0, %i)",
                     pSelf->species,
-                    1) )
+                    MAX_AI_SPECIES) )
     {
         __debugbreak();
     }
+#ifdef KISAK_SP
+    // Retail SP ActorScr_GetIsDog (0x007C11A0) passes species to 0x005886B0,
+    // which returns true only for dog (1) and zombie_dog (3).  The inherited
+    // MP constant-true stub made ordinary zombies select dog traversal anims.
+    Scr_AddBool(
+        pSelf->species == AI_SPECIES_DOG || pSelf->species == AI_SPECIES_ZOMBIE_DOG,
+        SCRIPTINSTANCE_SERVER);
+#else
     LocalClientSourceRange = Flame_GetLocalClientSourceRange();
     Scr_AddBool(LocalClientSourceRange, SCRIPTINSTANCE_SERVER);
+#endif
 }
 
 void __cdecl ActorScr_Clamp_0_1(actor_s *pSelf, const actor_fields_s *pField)
@@ -432,7 +484,7 @@ void __cdecl ActorScr_GetGroundType(actor_s *pSelf, const actor_fields_s *pField
     {
         __debugbreak();
     }
-    if ( pField->ofs != 604
+    if ( pField->ofs != AFOFS(Physics.iSurfaceType)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp",
                     560,
@@ -465,7 +517,7 @@ void __cdecl ActorScr_SetLastEnemySightPos(actor_s *pSelf, const actor_fields_s 
     {
         __debugbreak();
     }
-    if ( pField->ofs != 5800
+    if ( pField->ofs != AFOFS(lastEnemySightPos)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp",
                     611,
@@ -502,7 +554,7 @@ void __cdecl ActorScr_GetLastEnemySightPos(actor_s *pSelf, const actor_fields_s 
     {
         __debugbreak();
     }
-    if ( pField->ofs != 5800
+    if ( pField->ofs != AFOFS(lastEnemySightPos)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp",
                     634,
@@ -532,7 +584,7 @@ void __cdecl ActorScr_GetPathGoalPos(actor_s *self, const actor_fields_s *field)
     {
         __debugbreak();
     }
-    if ( field->ofs != 3472
+    if ( field->ofs != AFOFS(Path.vFinalGoal)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp",
                     652,
@@ -582,7 +634,7 @@ void __cdecl ActorScr_GetMoveMode(actor_s *pSelf, const actor_fields_s *pField)
     {
         __debugbreak();
     }
-    if ( pField->ofs != 548
+    if ( pField->ofs != AFOFS(moveMode)
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_fields.cpp",
                     686,
@@ -1365,4 +1417,3 @@ void __cdecl Scr_GetActorField(actor_s *actor, unsigned int offset)
     else
         GScr_GetGenericField((unsigned __int8 *)actor, f->type, f->ofs, 0);
 }
-

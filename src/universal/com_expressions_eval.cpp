@@ -3341,6 +3341,13 @@ void __cdecl IsItemLockedForAll(int localClientNum, itemDef_s *item, OperandStac
     result.dataType = VAL_INT;
     result.internals.intVal = 1;
     index = GetSourceInt(&source).intVal;
+    // Lobby menus can run before a local client is marked as being used.
+    if ( BG_UnlockablesAllItemsUnlocked() )
+    {
+        result.internals.intVal = 0;
+        AddOperandToStack(dataStack, &result);
+        return;
+    }
     for ( otherLocalClientNum = 0; otherLocalClientNum < 1; ++otherLocalClientNum )
     {
         if ( Com_LocalClient_IsBeingUsed(otherLocalClientNum) )
@@ -8309,18 +8316,22 @@ void __cdecl IsProfileSignedIn(int localClientNum, itemDef_s *item, OperandStack
     AddOperandToStack(dataStack, &result);
 }
 
-// OPENBLOPS_OFFLINE_MENUS -- from OpenBLOPS (GPL-3.0), set by cmake/switch.cmake.
+// OPENBLOPS_OFFLINE_MENUS
 //
-// There is no DemonWare/Live layer here (no KISAK_LIVE), so every expression the
-// front end uses to ask whether it is online answers false -- isSignedIn,
-// isSignedInToLive, anySignedIn, the stats/contracts-fetched pair, istimesynced,
-// isDemonwareFetchingDone -- and Play, Theater and Operations answer with
-// error_netconnect_popmenu. With the define they report success, so the menus
-// open and Combat Training is reachable offline. A UI-expression override only:
-// nothing in the live, session or authentication code claims a login.
-// OpenBLOPS also carries an offline stats provider behind its stats-fetched
-// answers; this tree does not have it yet, so those report 1 outright, as
-// OpenBLOPS did before it had one.
+// The DemonWare/Live layer is not built in this tree (no KISAK_LIVE,
+// KISAK_LIVE_SERVICE or KISAK_DW), so everything the front end asks about being
+// online answers false: isSignedIn, isSignedInToLive, anySignedIn,
+// anySignedInToLiveAndStatsFetched, areStatsFetched, arecontractsfetched,
+// istimesynced and isDemonwareFetchingDone. The menus read that as "no network
+// connection" and will not open Play.
+//
+// With OPENBLOPS_OFFLINE_MENUS defined (see the defines line in
+// OpenBlops.buildscript, on by default) those expressions report success so the
+// menus are navigable. This is a UI-expression-level override only -- no live,
+// session or authentication code reports a real online login. Offline MP stats
+// now have a local provider; the fetched-stat expressions below report its actual
+// readiness. Contracts and playlists still use the legacy navigation overrides.
+
 void __cdecl IsSignedIn(int localClientNum, itemDef_s *item, OperandStack *dataStack)
 {
 #ifdef KISAK_LIVE
@@ -8331,6 +8342,15 @@ void __cdecl IsSignedIn(int localClientNum, itemDef_s *item, OperandStack *dataS
     result.internals.intVal = Live_IsSignedIn(ControllerIndex);
     result.dataType = VAL_INT;
     if ( uiscript_debug && uiscript_debug->current.integer )
+        Expression_TraceInternal("IsSignedIn() = %i\n", result.internals.intVal);
+    AddOperandToStack(dataStack, &result);
+#elif defined(OPENBLOPS_OFFLINE_MENUS)
+    Operand result; // [esp+0h] [ebp-8h] BYREF
+
+    Com_LocalClient_GetControllerIndex(localClientNum);
+    result.internals.intVal = 1;
+    result.dataType = VAL_INT;
+    if (uiscript_debug && uiscript_debug->current.integer)
         Expression_TraceInternal("IsSignedIn() = %i\n", result.internals.intVal);
     AddOperandToStack(dataStack, &result);
 #else
@@ -8397,7 +8417,8 @@ void __cdecl AnySignedInToLiveAndStatsFetched(int localClientNum, itemDef_s *ite
     Operand result; // [esp+0h] [ebp-8h] BYREF
 
 #ifdef OPENBLOPS_OFFLINE_MENUS
-    result.internals.intVal = 1;
+    result.internals.intVal = LiveStorage_UsesOfflineStats()
+        ? LiveStorage_OfflineStatsReady(Com_LocalClient_GetControllerIndex(localClientNum)) : 1;
 #else
     result.internals.intVal = 0;
 #endif
@@ -8414,8 +8435,8 @@ void __cdecl AreStatsFetched(int localClientNum, itemDef_s *item, OperandStack *
 
     localControllerIndex = Com_LocalClient_GetControllerIndex(localClientNum);
 #ifdef OPENBLOPS_OFFLINE_MENUS
-    (void)localControllerIndex;
-    result.internals.intVal = 1;
+    result.internals.intVal = LiveStorage_UsesOfflineStats()
+        ? LiveStorage_OfflineStatsReady(localControllerIndex) : 1;
 #else
     result.internals.intVal = Live_IsUserSignedInToDemonware(localControllerIndex)
                                                  && LiveStorage_DoWeHaveAllStats(localControllerIndex);
@@ -8490,8 +8511,9 @@ void __cdecl IsDemonwareFetchingDone(int localClientNum, itemDef_s *item, Operan
     weHavePlaylist = LiveStorage_DoWeHavePlaylists();
     hasMultiplayerPrivileges = Flame_GetLocalClientSourceRange();
 #ifndef OPENBLOPS_OFFLINE_MENUS
-    // Every one of these is false without a live layer -- see the note above
-    // IsSignedIn().
+    // Every one of these is false without a live layer, which is what makes the
+    // front end report no network connection. See the OPENBLOPS_OFFLINE_MENUS
+    // note above IsSignedIn().
     if ( !isUserSignedInToDemonware || !weHaveStats || !weHavePlaylist || !hasMultiplayerPrivileges )
         result.internals.intVal = 0;
 #endif

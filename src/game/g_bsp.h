@@ -36,10 +36,16 @@ struct GameWorldMp // sizeof=0x2C
 };
 
 
+// gameWorldMp is the shared path-data world used by pathnode.cpp/sv_bot_mp.cpp
+// et al regardless of build flavor -- nothing in this codebase actually reads
+// or writes SP-specific world data yet, so it stays unconditional rather than
+// being hidden behind KISAK_SP (that used to make it flat-out undeclared for
+// every KISAK_SP translation unit that references it, since the #else branch
+// was the only place it existed). gameWorldSp is declared for future
+// SP-specific pathfinding work but is currently unused anywhere.
+extern GameWorldMp gameWorldMp;
 #ifdef KISAK_SP
 extern GameWorldSp gameWorldSp;
-#else
-extern GameWorldMp gameWorldMp;
 #endif
 
 extern GameWorldMp *gameWorldCurrent;

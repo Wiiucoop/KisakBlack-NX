@@ -504,8 +504,11 @@ void __cdecl R_Cinematic_ReleaseImages(CinematicTextureSet *textureSet)
     Image_Release(&textureSet->drawImageA);
 }
 
-void __cdecl R_Cinematic_StartPlayback_Internal(const char *name, unsigned int playbackFlags, int volume)
+void __cdecl R_Cinematic_StartPlayback_Internal(const char *name, unsigned int playbackFlags, float volume)
 {
+#ifdef KISAK_SP
+    Com_Printf(14, "SP cinematic target: name='%s' flags=0x%x volume=%g\n", name, playbackFlags, volume);
+#endif
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
     I_strncpyz(cinematicGlob.targetCinematicName, name, 256);
     cinematicGlob.targetCinematicChanged = 1;
@@ -516,11 +519,41 @@ void __cdecl R_Cinematic_StartPlayback_Internal(const char *name, unsigned int p
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
 }
 
+// Retail SP 0x006D9F00: the public target-slot wrapper takes the outer cinematic lock around the
+// independently locked target-change operation. The float channel is instruction-proven by the
+// FLD/FSTP forwarding sequence and the callee's MOVSS playback-volume store.
+void __cdecl R_Cinematic_StartPlayback(const char *name, unsigned int playbackFlags, float volume)
+{
+    Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
+    R_Cinematic_StartPlayback_Internal(name, playbackFlags, volume);
+    Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
+}
+
+// Retail SP 0x006DA060 / OpenWarfare-attested R_Cinematic_SetNextPlayback. This is the distinct
+// queue producer used by Com_Init for number_lady_intro.
+void __cdecl R_Cinematic_SetNextPlayback(const char *name, unsigned int playbackFlags)
+{
+#ifdef KISAK_SP
+    Com_Printf(14, "SP cinematic queue: name='%s' flags=0x%x\n", name, playbackFlags);
+#endif
+    Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
+    I_strncpyz(cinematicGlob.nextCinematicName, name, 256);
+    cinematicGlob.nextCinematicPlaybackFlags = playbackFlags;
+    Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
+}
+
 void __cdecl R_Cinematic_StartNextPlayback()
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     if ( R_Cinematic_IsNextReady_Internal() )
     {
+#ifdef KISAK_SP
+        Com_Printf(
+            14,
+            "SP cinematic promote: name='%s' flags=0x%x\n",
+            cinematicGlob.nextCinematicName,
+            cinematicGlob.nextCinematicPlaybackFlags);
+#endif
         R_Cinematic_StartPlayback_Internal(
             cinematicGlob.nextCinematicName,
             cinematicGlob.nextCinematicPlaybackFlags,
@@ -535,6 +568,70 @@ bool __cdecl R_Cinematic_IsNextReady_Internal()
     return cinematicGlob.nextCinematicName[0] != 0;
 }
 
+// SP-only addition (Ghidra 0x006da230). Retail body is a single-field predicate,
+// `return cinematicGlob.targetCinematicName[0] != 0;` -- confirmed by decompiling the address
+// directly. The retail function is deliberately left unnamed on its own Ghidra plate ("no source
+// counterpart... a plausible name would be invented, so it was withheld") because a *confirmed
+// retail symbol* name needs two independent facts this campaign doesn't have; the name used here
+// is this reconstruction's own descriptive label for the confirmed behavior, not a claimed retail
+// symbol. Distinct from R_Cinematic_IsNextReady_Internal just above, which tests
+// nextCinematicName (the "next playback" queue slot) rather than targetCinematicName (the "in
+// flight/requested" slot) -- the two fields are 0x100 bytes apart in cinematicGlob.
+bool __cdecl R_Cinematic_IsTargetSet()
+{
+    return cinematicGlob.targetCinematicName[0] != 0;
+}
+
+#ifdef KISAK_SP
+// Retail 0x006D9F30. Keep the integer frame-rate division (DIV at 0x006D9F6D)
+// and the script-pause release. These are reconstruction API names, not retail symbols.
+float R_Cinematic_GetRemainingSeconds_SP()
+{
+    const BINK *const bink = cinematicGlob.bink;
+    if (!bink)
+        return 0.0f;
+
+    if (cinematicGlob.targetPaused == CINEMATIC_SCRIPT_PAUSED)
+        cinematicGlob.targetPaused = CINEMATIC_NOT_PAUSED;
+
+    const unsigned int framesRemaining = bink->Frames - bink->FrameNum;
+    const unsigned int framesPerSecond = bink->FrameRate / bink->FrameRateDiv;
+    return static_cast<float>(framesRemaining) / static_cast<float>(framesPerSecond);
+}
+
+// Retail G_RunFrame pairs 0x006DA250/270 and 0x006DA260/280. Consume each
+// flag before invoking scripts; keep them separate so the first callback runs first.
+bool R_Cinematic_ConsumeFirstFrameNotify_SP()
+{
+    const bool pending = cinematicGlob.firstFrameNotify;
+    if (pending)
+        cinematicGlob.firstFrameNotify = false;
+    return pending;
+}
+
+bool R_Cinematic_ConsumeLastFrameNotify_SP()
+{
+    const bool pending = cinematicGlob.lastFrameNotify;
+    if (pending)
+        cinematicGlob.lastFrameNotify = false;
+    return pending;
+}
+#endif
+
+// SP-only addition (Ghidra 0x006da140). Retail factors R_Cinematic_Shutdown's own
+// Sys_WaitWorkerCmdInternal(&_UpdateFrameWorkerCmd) wait (see R_Cinematic_Shutdown elsewhere in
+// this file) into a standalone one-line helper, used as a synchronization bracket around
+// StartNextPlayback+UpdateFrame by SP's cinematic consumers (UI_Project_RunMenuScript's
+// "playerstart" command and the per-frame UI_Refresh lifecycle helper). Confirmed by decompiling
+// the address directly: whole body is `Sys_WaitWorkerCmdInternal(&_UpdateFrameWorkerCmd);`, and
+// _UpdateFrameWorkerCmd is the SAME global object already used by R_Cinematic_Shutdown and
+// R_Cinematic_UpdateFrame in this reconstruction. As with R_Cinematic_IsTargetSet above, this
+// reconstruction's name is descriptive, not a claimed retail symbol.
+void __cdecl R_Cinematic_WaitForUpdateFrame()
+{
+    Sys_WaitWorkerCmdInternal(&_UpdateFrameWorkerCmd);
+}
+
 void __cdecl R_Cinematic_StopPlayback()
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
@@ -544,6 +641,34 @@ void __cdecl R_Cinematic_StopPlayback()
     cinematicGlob.cinematicFinished = 0;
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
+}
+
+// SP-only additions (Ghidra 0x006d9f90 / 0x006d9fe0, researched 2026-08-22 for the
+// pause3dcinematic/Bink-control fix). Retail bodies, decompiled verbatim:
+//   pause(fromScript):  if (fromScript) targetPaused = SCRIPT_PAUSED;
+//                        else if (targetPaused != SCRIPT_PAUSED) targetPaused = PAUSED;
+//   resume(fromScript): if (fromScript || targetPaused != SCRIPT_PAUSED) targetPaused = NOT_PAUSED;
+// i.e. a script-forced pause can only be released by a script-forced resume (or an
+// unconditional fromScript=true resume); an engine-side pause (fromScript=false, e.g.
+// the game menu) never overrides or clears a script pause. Both are gated by the same
+// CRITSECT_CINEMATIC_TARGET_CHANGE critsect R_Cinematic_StartPlayback_Internal uses,
+// since they write the same cinematicGlob.targetPaused field.
+void __cdecl R_Cinematic_Pause(bool fromScript)
+{
+    Sys_EnterCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
+    if (fromScript)
+        cinematicGlob.targetPaused = CINEMATIC_SCRIPT_PAUSED;
+    else if (cinematicGlob.targetPaused != CINEMATIC_SCRIPT_PAUSED)
+        cinematicGlob.targetPaused = CINEMATIC_PAUSED;
+    Sys_LeaveCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
+}
+
+void __cdecl R_Cinematic_Resume(bool fromScript)
+{
+    Sys_EnterCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
+    if (fromScript || cinematicGlob.targetPaused != CINEMATIC_SCRIPT_PAUSED)
+        cinematicGlob.targetPaused = CINEMATIC_NOT_PAUSED;
+    Sys_LeaveCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
 }
 
 int __cdecl _UpdateFrameCallback()
@@ -973,28 +1098,49 @@ void __cdecl R_Cinematic_UpdateTimeInMsec(const BINKREALTIME *binkRealtime)
     }
 }
 
+// Ghidra-validated 2026-08-23 (retail 0x006d91e5, inlined in R_Cinematic_Advance 0x006d9000).
+// FIX for a live hang: the previous body had two bugs, both in the "custom logic" branch only
+// (used whenever a looping cinematic forces useCustomLogic=true, e.g. Start3DCinematic's loop
+// bit -- see R_Cinematic_Advance) --
+//   1. `cinematicGlob.bink + 12` is pointer arithmetic on a real BINK*, so it advanced by
+//      12*sizeof(BINK) bytes (UB / garbage read), not the 12-byte offset of BINK::FrameNum it
+//      was meant to reach.
+//   2. `*(uint*)&cinematicGlob.usingAlpha` / `*(float*)&cinematicGlob.fileIoState` reinterpreted
+//      a bool and an enum as a timestamp and a playback-rate float -- confirmed via
+//      get_xrefs_to on the retail globals that the REAL fields read here are
+//      cinematicGlob.startTimeMS and cinematicGlob.framerateSpeedFactor (both already declared
+//      and already correctly populated elsewhere in this file; this was a wrong-field read, not
+//      a missing/misdeclared struct field).
+// Net effect of both bugs: for any looping cinematic, this predicate read near-arbitrary memory
+// instead of "are we still ahead of real-world elapsed time", so the decode loop in
+// R_Cinematic_Advance could spin through the whole clip (and wrap past Frames) in a single call
+// instead of yielding after ~1 frame -- permanently occupying a worker thread and hanging the
+// game. Confirmed live via debugger: BINK->FrameNum observed cycling 292->561->550 within one
+// _UpdateFrame job.
 int __cdecl R_Cinematic_BinkShouldSkip(bool useCustomLogic)
 {
-    float bink; // [esp+14h] [ebp-8h]
+    float startFrameNum; // holds cinematicGlob.frameNum (the BinkFrameNum captured at the last
+                          // pause/loop-restart boundary), NOT the bink pointer -- misleading
+                          // decompiler-derived name kept for traceability to retail 0x006d91e5.
 
     if ( !useCustomLogic )
         return BinkShouldSkip(cinematicGlob.bink);
-    bink = (float)(int)cinematicGlob.bink;
-    return *(unsigned int *)(cinematicGlob.bink + 12) < (unsigned int)(__int64)((double)(int)(Sys_Milliseconds() - *(unsigned int *)&cinematicGlob.usingAlpha) * *(float *)&cinematicGlob.fileIoState / 1000.0 + bink);
+    startFrameNum = (float)cinematicGlob.frameNum;
+    return cinematicGlob.bink->FrameNum < (unsigned int)(__int64)((double)(int)(Sys_Milliseconds() - cinematicGlob.startTimeMS) * cinematicGlob.framerateSpeedFactor / 1000.0 + startFrameNum);
 }
 
 int __cdecl R_Cinematic_BinkShouldWait(bool useCustomLogic)
 {
-    float bink; // [esp+14h] [ebp-8h]
+    float startFrameNum; // see R_Cinematic_BinkShouldSkip's comment on this local's real meaning.
 
     if ( !useCustomLogic )
         return BinkWait(cinematicGlob.bink);
 
-    bink = (float)(int)cinematicGlob.bink;
-    return (unsigned int)(__int64)((double)(int)(Sys_Milliseconds() + 16 - *(unsigned int *)&cinematicGlob.usingAlpha)
-                                                             * *(float *)&cinematicGlob.fileIoState
+    startFrameNum = (float)cinematicGlob.frameNum;
+    return (unsigned int)(__int64)((double)(int)(Sys_Milliseconds() + 16 - cinematicGlob.startTimeMS)
+                                                             * cinematicGlob.framerateSpeedFactor
                                                              / 1000.0
-                                                             + bink) < *(unsigned int *)(cinematicGlob.bink + 12);
+                                                             + startFrameNum) < cinematicGlob.bink->FrameNum;
 }
 
 void R_Cinematic_StopPlayback_Now()
@@ -1028,6 +1174,9 @@ char __cdecl R_Cinematic_StartPlayback_Now(const char *filename, unsigned int pl
     unsigned int TrackIDsToPlay[5]; // [esp+1Ch] [ebp-9Ch] BYREF
     char errText[132]; // [esp+30h] [ebp-88h] BYREF
 
+#ifdef KISAK_SP
+    Com_Printf(14, "SP cinematic open begin: name='%s' flags=0x%x\n", filename, playbackFlags);
+#endif
     TrackIDsToPlay[0] = 0;
     TrackIDsToPlay[1] = 1;
     TrackIDsToPlay[2] = 2;
@@ -1113,6 +1262,9 @@ char __cdecl R_Cinematic_StartPlayback_Now(const char *filename, unsigned int pl
         BinkRegisterFrameBuffers(cinematicGlob.bink, &cinematicGlob.binkTextureSet.bink_buffers);
         R_Cinematic_CheckBinkError();
         cinematicGlob.currentPaused = CINEMATIC_NOT_PAUSED;
+#ifdef KISAK_SP
+        Com_Printf(14, "SP cinematic open success: name='%s' flags=0x%x\n", filename, playbackFlags);
+#endif
         return 1;
     }
     else
@@ -1397,7 +1549,21 @@ void __cdecl R_Cinematic_BlackRendererImages()
 
 void *__stdcall R_Cinematic_Bink_Alloc(unsigned int bytes)
 {
+#ifdef KISAK_SP
+    // Retail SP 0x006d9610 is a direct bump allocation from cinematicGlob.binkHunk. The previous
+    // malloc() body was incompatible with R_Cinematic_Bink_Free: it never populated
+    // lastAllocPtr, so the matching free callback could neither rewind the hunk nor release the
+    // heap block. Keep MP's reconstructed behavior untouched until it is audited separately.
+    char *alloced = (char *)cinematicGlob.binkHunk.atFront;
+    char *newAtFront = alloced + bytes;
+    cinematicGlob.binkHunk.atFront = newAtFront;
+    if ( newAtFront > (char *)cinematicGlob.binkHunk.atBack )
+        return (void *)-1;
+    cinematicGlob.binkHunk.lastAllocPtr = alloced;
+    return alloced;
+#else
     return malloc(bytes);
+#endif
 }
 
 void __stdcall R_Cinematic_Bink_Free(void *ptr)
@@ -1415,7 +1581,13 @@ void __stdcall R_Cinematic_Bink_Free(void *ptr)
         v1 = 0;
     }
     if (!v1)
+#ifdef KISAK_SP
+        // Retail SP 0x006d9640 simply ignores non-LIFO frees and has no fragmented field in its
+        // 0x14-byte CinematicHunk. The MP reconstruction's field and behavior remain unchanged.
+        return;
+#else
         cinematicGlob.binkHunk.fragmented = 1;
+#endif
 }
 
 bool __cdecl R_Cinematic_BinkOpen(const char *filename, char playbackFlags, char *errText, unsigned int errTextSize)

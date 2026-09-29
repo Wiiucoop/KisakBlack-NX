@@ -1,4 +1,7 @@
+#include "sv_offline_stats.h"
 #include "sv_init_mp.h"
+#include <bgame/bg_unlockable_items.h>
+#include <bgame/bg_weapons_attachment.h>
 #include <server/server.h>
 #include <qcommon/common.h>
 #include <clientscript/cscr_stringlist.h>
@@ -36,6 +39,12 @@
 #include <DW/dwUtils_pc.h>
 #include <client_mp/cl_main_pc_mp.h>
 #include <qcommon/files.h>
+#ifdef KISAK_SP
+#include <gfx_d3d/r_cinematic.h>
+#include <sound/snd_dvar.h>
+#include <sound/snd_public_async.h>
+#include <ui_mp/ui_main_mp.h>
+#endif
 
 const dvar_t *sv_gametype;
 const dvar_t *sv_privateClients;
@@ -136,7 +145,7 @@ void __cdecl SV_SetConfigstring(int index, char *val)
     int i; // [esp+460h] [ebp-8h]
     char cmd; // [esp+467h] [ebp-1h]
 
-    if ( (unsigned int)index >= 0xCBC )
+    if ( (unsigned int)index >= MAX_CONFIGSTRINGS )
         Com_Error(ERR_DROP, "SV_SetConfigstring: bad index %i", index);
     if ( sv.configstrings[index] )
     {
@@ -146,7 +155,10 @@ void __cdecl SV_SetConfigstring(int index, char *val)
         {
             SL_RemoveRefToString(SCRIPTINSTANCE_SERVER, sv.configstrings[index]);
             caseSensitive = index < 1547;
-            v2 = index < 1547
+#ifdef KISAK_SP
+            caseSensitive |= index >= CS_SP_LOOKAT_TEXT;
+#endif
+            v2 = caseSensitive
                  ? SL_GetString_(SCRIPTINSTANCE_SERVER, val, 0, 19)
                  : SL_GetLowercaseString_(val, 0, 19, SCRIPTINSTANCE_SERVER);
             sv.configstrings[index] = v2;
@@ -541,7 +553,7 @@ void __cdecl    SV_SpawnServer(int controllerIndex, char *server, int mapIsPrelo
     Scr_ParseGameTypeList();
     SV_SetGametype();
 
-    if ( !mapIsPreloaded )
+    if ( !mapIsPreloaded && !IsDedicatedServer() )
         CL_InitLoad(server, sv_gametype->current.string);
 
     if ( useFastFile->current.enabled && !mapIsPreloaded )
@@ -584,12 +596,28 @@ void __cdecl    SV_SpawnServer(int controllerIndex, char *server, int mapIsPrelo
     LiveSteam_Server_Init();
     R_EndRemoteScreenUpdate(0);
 
-    if ( !mapIsPreloaded )
+    if ( !mapIsPreloaded && !IsDedicatedServer() )
     {
         CL_MapLoading(server);
         R_BeginRemoteScreenUpdate();
         R_EndRemoteScreenUpdate(0);
         CL_ShutdownAll();
+#ifdef KISAK_SP
+        // Retail SP 0x0050F2A9 -> 0x0046BF30 -> 0x004E27D0/0x00882B00. The
+        // cinematic owner runs after CL_ShutdownAll, is suppressed for tool/savegame/networked
+        // paths, maps every menu level to the frontend selector, and owns the final audio fade.
+        if ( !G_ExitAfterToolComplete()
+            && !savegame
+            && !onlinegame->current.enabled
+            && !Dvar_GetBool("systemlink") )
+        {
+            const float menuMaster = snd_menu_master->current.value;
+            const float menuCinematic = snd_menu_cinematic->current.value;
+            const float volume = menuMaster * menuMaster * menuCinematic * menuCinematic;
+            CL_MapLoading_StartCinematic(Com_IsMenuLevel(server) ? "frontend" : server, volume);
+        }
+        SND_FadeOut();
+#endif
     }
 
     SV_ShutdownGameProgs();
@@ -629,10 +657,45 @@ void __cdecl    SV_SpawnServer(int controllerIndex, char *server, int mapIsPrelo
     if ( !mapIsPreloaded )
     {
         ProfLoad_Begin("start loading client");
-        CL_StartLoading();
+        if (!IsDedicatedServer())
+            CL_StartLoading();
         ProfLoad_End();
         if ( useFastFile->current.enabled )
         {
+#ifdef KISAK_SP
+            // SP-only, Ghidra 0x0050F3F6..0x0050F41C (SV_SpawnServer, retail 0x0050F030): the
+            // first of two retail call sites restoring the briefing/loading menu around the level
+            // fastfile load (docs/SP_MAIN_MENU_BOOTCHAIN.md Sec.2 row 4). Guard confirmed live by
+            // decompiling this function directly: retail wraps this whole block in
+            // `*(char*)(DAT_0247fec8 + 0x18) != 0`, which is exactly this reconstruction's
+            // `useFastFile->current.enabled` (the condition already wrapping this block), so no
+            // extra guard is needed for Com_UnloadFrontEnd/Com_LoadLevelFastFiles themselves. The
+            // inner cinematic/menu activation is separately gated on retail's third formal
+            // parameter -- Ghidra's decompiler resolves `(char)param_3 == 0` identically at BOTH
+            // 0x0050F3FB and 0x0050F433 (the second site, below). That parameter maps to this
+            // function's `savegame` argument: retail's own signature drops this reconstruction's
+            // leading `controllerIndex` (an already-recorded divergence on this function's
+            // machine-proposed-name plate), leaving (server, mapIsPreloaded, savegame)
+            // positionally 1:1 against retail's (param_1, param_2, param_3); `savegame` is
+            // otherwise unused anywhere in this reconstruction's SV_SpawnServer body, and both of
+            // its current call sites (sv_ccmds_mp.cpp:85, :367) already pass literal 0, matching
+            // the retail map/spmap/devmap/spdevmap command handler's confirmed hardcoded 0 for the
+            // same argument slot (docs/SP_MP_STARTUP_AUDIT.md Sec.5.7, disassembly-confirmed).
+            // <ctx> is Com_LocalClients_GetPrimary(): retail calls the unnamed FUN_005BEE40
+            // (Ghidra 0x005BEE40) here, whose body is a linear scan over a 0x14-byte-stride table
+            // for the first entry with flag bit 0x2 set, returning its index or -1 -- the stride
+            // exactly matches sizeof(ClientGameState) (0x14) and the tested bit exactly matches
+            // the "primary" bit Com_LocalClient_SetPrimary sets/clears on ClientGameState::flags,
+            // so this reconstruction's existing helper is reused rather than porting FUN_005BEE40
+            // fresh under a new name.
+            if (!IsDedicatedServer())
+                Com_UnloadFrontEnd();
+            if ( !savegame && !IsDedicatedServer() )
+            {
+                R_Cinematic_UpdateFrame(1);
+                UI_SetActiveMenuSp(Com_LocalClients_GetPrimary(), UISP_BRIEFING);
+            }
+#endif
             Com_LoadLevelFastFiles(server);
 
             iassert(sv_loadMyChanges);
@@ -645,6 +708,42 @@ void __cdecl    SV_SpawnServer(int controllerIndex, char *server, int mapIsPrelo
     }
 
     R_BeginRemoteScreenUpdate();
+#ifdef KISAK_SP
+    // SP-only, Ghidra 0x0050F425..0x0050F447 (SV_SpawnServer): the second retail call site, same
+    // guard and <ctx> derivation as the first site above -- see that note for the full evidence.
+    // Retail interposes one more setup call here (UI_LoadIngameMenus(0), Ghidra 0x00523090,
+    // called at 0x0050F42B) between R_BeginRemoteScreenUpdate and this guard.
+    // IDENTITY RESOLVED 2026-08-26 (was "unidentified"): 0x00523090 is named UI_LoadIngameMenus
+    // in the live Ghidra database. Its whole body is this tree's UI_LoadIngameMenus
+    // (ui_main.cpp:3939) -- the g_ingameMenusLoaded[contextIndex] once-only guard, then
+    // va("%singame.txt", SP_UI_DIR) -> UI_LoadMenus(list, 3) -> UI_AddMenuList(contextIndex, dc,
+    // list, 1), the same literal 3 and the same trailing 1 -- plus a SECOND identical block for
+    // va("%singame_options.txt", SP_UI_DIR) inside the same guard (see the TODO on that function).
+    // CAVEAT worth carrying: that symbol was written through a deliberate name-policy bypass. The
+    // function carries the name-policy-blocked tag alongside openblops-source-match, and its plate
+    // still opens "NOT APPLIED -- function remains FUN_*", which is now stale -- the policy refused
+    // UI_LoadIngameMenus as a token-subset duplicate of UI_LoadMenus and a later pass overrode it.
+    // The identity is verified (unique "%singame.txt" literal, one referrer); only the write path
+    // was irregular.
+    // DONE 2026-08-26: ported below. The call POSITION was re-derived from the raw listing of
+    // retail SV_SpawnServer (0x0050F030) in this pass rather than taken from the note above:
+    //     0050f425  CALL 0x006d7e60   ; R_BeginRemoteScreenUpdate (live Ghidra name)
+    //     0050f42a  PUSH EBP          ; EBP == 0 -- zeroed at 0x0050F32D / 0x0050F33A on both
+    //                                 ; incoming paths and never written again before here
+    //     0050f42b  CALL 0x00523090   ; UI_LoadIngameMenus
+    //     0050f430  ADD ESP,0x4
+    //     0050f433  CMP byte ptr [ESP+0x78],0x0   ; the `savegame` guard immediately below
+    // so the call lands between R_BeginRemoteScreenUpdate() and the !savegame guard, with a
+    // literal 0 for contextIndex -- exactly the slot this block already occupies. The
+    // declaration reaches this TU through <ui_mp/ui_main_mp.h> (included in the KISAK_SP block
+    // at the top of this file), which includes <ui/ui_main.h> where it is declared at :364.
+    if (!IsDedicatedServer())
+        UI_LoadIngameMenus(0);
+    if ( !savegame && !IsDedicatedServer() )
+    {
+        UI_SetActiveMenuSp(Com_LocalClients_GetPrimary(), UISP_BRIEFING);
+    }
+#endif
     sv.emptyConfigString = SL_GetString_(SCRIPTINSTANCE_SERVER, "", 0, 19);
     for ( i = 0; i < MAX_CONFIGSTRINGS; ++i )
     {
@@ -686,6 +785,26 @@ void __cdecl    SV_SpawnServer(int controllerIndex, char *server, int mapIsPrelo
     if ( !G_ExitAfterConnectPaths() && !useFastFile->current.enabled )
         Com_GetBspFilename(filename, 64, server);
     R_EndRemoteScreenUpdate(0);
+#ifdef KISAK_SP
+    // Com_LoadLevelFastFiles queues the level zone asynchronously.  In this
+    // reconstruction the map's delayed overrides can still be pending here:
+    // a traced zombie_theater run loaded the patch copy of
+    // configstrings_pc_zombie_theater_zom.csv (checksum 355402927), cached that
+    // value below, and only then DB_PostLoadXZone swapped in the level copy
+    // (checksum 232304673).  CL_ParseGamestate looked up the level copy and
+    // rejected the stale server checksum.  A full row dump proved both parsed
+    // tables have 773 rows and differ only at configstrings 3 and 219, ruling
+    // out parser corruption; DB xasset diagnostics proved the late
+    // patch->zombie_theater override ordering.
+    //
+    // Synchronize the queued SP level transaction before caching its constant
+    // config strings.  This is deliberately a reconstruction scheduling fix,
+    // not a checksum bypass: server and client still independently load and
+    // validate the same shipped table, and KISAK_MP retains its original
+    // asynchronous behavior.
+    if ( useFastFile->current.enabled && !mapIsPreloaded )
+        DB_SyncXAssets();
+#endif
     party = 1;
     if ( CCS_ShouldLoadConstConfigStrings(1) )
         CCS_LoadConstantConfigStrings(server, sv_gametype->current.string);
@@ -713,9 +832,25 @@ void __cdecl    SV_SpawnServer(int controllerIndex, char *server, int mapIsPrelo
     SV_SetXUIDConfigStrings();
     Pregame_Reset();
     SV_SetServerDvarsBeforeScriptsInit();
+#ifdef KISAK_MP
+    SV_ApplyCustomMatchBots();
+#endif
 
     {
         ProfLoad_Begin("Init game");
+#ifndef KISAK_SP
+        if (IsDedicatedServer())
+        {
+            // Unlockable attachment-point lists depend on this table. Clients
+            // load it in BG_UnlockableItemsInit before BG_InitUnlockables.
+            BG_LoadWeaponAttachmentTable();
+            BG_InitUnlockables();
+        }
+#endif
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+        if (!SV_OfflineStatsBindSchema())
+            Com_Error(ERR_DROP, "Offline dedicated stats schema/defaults unavailable (see console)");
+#endif
         SV_InitGameProgs(savepersist);
         ProfLoad_End();
     }
@@ -802,6 +937,15 @@ void __cdecl    SV_SpawnServer(int controllerIndex, char *server, int mapIsPrelo
 
 }
 
+#ifdef KISAK_SP
+static int SV_CachedSnapshotEntityCount(int maxClients)
+{
+    // SP maps can archive every entity, independently of the player count.
+    // Keep room for a full frame and its decode successor, even with one slot.
+    return 1024 * (maxClients > 2 ? maxClients : 2);
+}
+#endif
+
 const int ikStateSize = (int)sizeof(IKState);   // nx-port: was 3680 (x86); 5344 on LP64
 unsigned __int8 *sv_ikBuf;
 char *__cdecl SV_AllocateClientMemory_SizeRequired(int maxLocalClients, int maxClients)
@@ -826,7 +970,11 @@ char *__cdecl SV_AllocateClientMemory_SizeRequired(int maxLocalClients, int maxC
         + 32 * sizeof(clientState_s) * maxClients * maxClients
         + 512 * sizeof(cachedSnapshot_t) + 0x80
         + sizeof(MatchState) * maxClients
+#ifdef KISAK_SP
+        + sizeof(archivedEntity_s) * SV_CachedSnapshotEntityCount(maxClients)
+#else
         + 80 * sizeof(archivedEntity_s) * maxClients
+#endif
         + 0x80
         + sizeof(cachedClient_s) * v3 * v4
         + 1200 * sizeof(archivedSnapshot_s) + 0x1000000
@@ -840,6 +988,9 @@ void __cdecl SV_AllocateClientMemory(HunkUser *hunk, int maxLocalClients, int ma
 
     svs.clients = (client_t *)Hunk_UserAlloc(hunk, sizeof(client_t) * maxClients, 4, "svs.clients");
     memset((unsigned __int8 *)svs.clients, 0, sizeof(client_t) * maxClients);
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    SV_OfflineStatsResetAll();
+#endif
     svs.numSnapshotMatchStates = 32 * maxClients;
     svs.snapshotMatchStates = (MatchState *)Hunk_UserAlloc(hunk, sizeof(MatchState) * svs.numSnapshotMatchStates, 4, "svs.snapshotMatchStates");
     memset((unsigned __int8 *)svs.snapshotMatchStates, 0, sizeof(MatchState) * svs.numSnapshotMatchStates);
@@ -858,7 +1009,11 @@ void __cdecl SV_AllocateClientMemory(HunkUser *hunk, int maxLocalClients, int ma
                                                                                                     4,
                                                                                                     "svs.cachedSnapshotMatchStates");
     memset((unsigned __int8 *)svs.cachedSnapshotMatchStates, 0, sizeof(MatchState) * svs.numCachedSnapshotMatchStates);
+#ifdef KISAK_SP
+    svs.numCachedSnapshotEntities = SV_CachedSnapshotEntityCount(maxClients);
+#else
     svs.numCachedSnapshotEntities = 80 * maxClients;
+#endif
     svs.cachedSnapshotEntities = (archivedEntity_s *)Hunk_UserAlloc(
                                                                                                          hunk,
                                                                                                          sizeof(archivedEntity_s) * svs.numCachedSnapshotEntities,
@@ -887,6 +1042,9 @@ void __cdecl SV_AllocateClientMemory(HunkUser *hunk, int maxLocalClients, int ma
 
 void __cdecl SV_FreeClientMemory(HunkUser *hunk)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    SV_OfflineStatsResetAll();
+#endif
     if ( sv_ikBuf )
     {
         Hunk_UserFree(hunk, sv_ikBuf);
@@ -935,7 +1093,38 @@ void __cdecl SV_Init()
     SV_AddOperatorCommands();
     Demo_RegisterDvars();
     SV_BotRegisterDvars();
+#ifdef KISAK_SP
+    _Dvar_RegisterInt("g_gameskill", 1, 0, 3, 0x1064u, "");
+    // Retail SV_Init (BlackOps.exe 0x00698260, site 0x0069XXXX) registers this
+    // Bool(true, 0x1004 = SAVED|SERVERINFO). Never registered in this tree, so
+    // maps/_load.gsc:270 `SetSavedDvar("sv_saveOnStartMap", ...)` was throwing
+    // "does not exist" (after the g_speed SAVED-flag throw above it, both on the
+    // frontend map's _load::main()).
+    _Dvar_RegisterBool("sv_saveOnStartMap", 1, 0x1004u, "");
+#endif
+    // This is the CREATING registration for g_gametype: Com_Init calls SV_Init
+    // (common.cpp:2013) long before Com_LoadFrontEnd (common.cpp:1699) triggers the
+    // frontend SV_SpawnServer. Dvar_Reregister never rewrites dvar->reset (dvar.cpp:1898
+    // only ORs flags and sets description), so the reset value stored here is the one every
+    // later _Dvar_RegisterString("g_gametype", ...) is compared against for the rest of the
+    // process -- namely SV_SetGametype (sv_game.cpp) and G_RegisterDvars
+    // (g_main_mp.cpp). If any of the three disagree, Dvar_Reregister's reset-value
+    // check fires: (dvar->flags & 0x9200) == 0 is true for 0x24, and Dvar_ValuesEqual for
+    // DVAR_TYPE_STRING is a plain strcmp (dvar.cpp:690), so dvar.cpp:1884 calls
+    // Assert_MyHandler -- whose real body is #if 0'd in this tree, leaving
+    // `__debugbreak(); return 1;` (assertive.cpp:626). That prints nothing and raises an
+    // unhandled EXCEPTION_BREAKPOINT, which the SP exception filter turns into a bare
+    // "Fatal Error" with no file, line, or message.
+#ifdef KISAK_SP
+    // Retail SP registers "cmp" with an empty description here. Verified in BlackOps.exe at
+    // 0x00698391: push 0x9dd354 ("") / push 0x24 / push 0xa30458 ("cmp") / push 0xa1ca20
+    // ("g_gametype"). All three SP registration sites (0x00698391 here, 0x005715e0
+    // G_RegisterDvars, 0x00549ac3 SV_SetGametype) push byte-identical operands, which is why
+    // retail never trips the assert described above.
+    sv_gametype = _Dvar_RegisterString("g_gametype", "cmp", 0x24u, "");
+#else
     sv_gametype = _Dvar_RegisterString("g_gametype", "tdm", 0x24u, "Current game type");
+#endif
     _Dvar_RegisterInt("protocol", 1044, 1044, 1044, 0x44u, "Protocol version");
     sv_mapname = _Dvar_RegisterString("mapname", (char *)"", 0x44u, "Current map name");
     sv_privateClients = _Dvar_RegisterInt(
@@ -1004,6 +1193,10 @@ void __cdecl SV_Init()
     sv_security = _Dvar_RegisterInt("sv_security", 1, 0, 2, 0x14u, "Enable security on this server");
     sv_ranked = _Dvar_RegisterInt("sv_ranked", 0, 0, 5, 0x44u, "Server license type.");
     ui_ranked = _Dvar_RegisterBool("ui_ranked", 0, 0x80u, "True if playing in a ranked server");
+#if defined(KISAK_SP) && defined(KISAK_DEDICATED)
+    sv_dedicatedmaxclients = _Dvar_RegisterInt("sv_dedicatedmaxclients", 4, 1, 4, 0x10u, "Maximum Zombies clients");
+    sv_maxclients = _Dvar_RegisterInt("sv_maxclients", 4, 1, 4, 5u, "Maximum Zombies clients");
+#else
     sv_dedicatedmaxclients = _Dvar_RegisterInt(
                                                          "sv_dedicatedmaxclients",
                                                          32,
@@ -1018,6 +1211,7 @@ void __cdecl SV_Init()
                                         IsDedicatedServer() ? sv_dedicatedmaxclients->current.integer : 30,
                                         5u,
                                         "The maximum number of clients that can connect to a server");
+#endif
     sv_maxRate = _Dvar_RegisterInt("sv_maxRate", 5000, 0, 25000, 5u, "Maximum bit rate");
     sv_minPing = _Dvar_RegisterInt("sv_minPing", 0, 0, 999, 5u, "Minimum ping allowed on the server");
     sv_maxPing = _Dvar_RegisterInt("sv_maxPing", 0, 0, 999, 5u, "Maximum ping allowed on the server");
@@ -1093,7 +1287,7 @@ void __cdecl SV_Init()
     sv_authenticating = _Dvar_RegisterBool("sv_authenticating", 0, 0x40u, "");
     sv_voice = _Dvar_RegisterBool("sv_voice", 0, 0x105u, "Use server side voice communications");
     sv_voiceQuality = _Dvar_RegisterInt("sv_voiceQuality", 3, 0, 9, 0x100u, "Voice quality");
-    sv_cheats = _Dvar_RegisterBool("sv_cheats", 1, 0x18u, "Enable cheats on the server");
+    sv_cheats = _Dvar_RegisterBool("sv_cheats", 0, 0x18u, "Enable cheats on the server");
     sv_pure = _Dvar_RegisterBool("sv_pure", 0, 0x104u, "Cannot use modified IWD files");
     rcon_password = _Dvar_RegisterString("rcon_password", (char *)"", 0, "Password for the rcon command");
     sv_fps = _Dvar_RegisterInt("sv_fps", 20, 10, 1000, 0, "Server frames per second");
@@ -1246,7 +1440,12 @@ void __cdecl SV_Shutdown(const char *finalmsg)
         SV_FreeClients();
         SV_ClearServer();
         Dvar_SetBool((dvar_s *)com_sv_running, 0);
+#ifndef KISAK_SP
+        // SP retail SV_Shutdown (0x005142b0) leaves this to its caller.
+        // Com_ShutdownInternal frees client memory after Com_Restart releases
+        // collision; freeing here unloads frontend while cm.isInUse is set.
         CL_FreePerLocalClientMemory();
+#endif
         memset((unsigned __int8 *)&svs, 0, sizeof(svs));
         if (!IsDedicatedServer())
         {

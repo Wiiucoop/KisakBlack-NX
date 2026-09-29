@@ -1,5 +1,6 @@
 #pragma once
 #include "net_chan_mp.h"
+#include "msg_mp.h"
 #include <client_mp/cl_main_mp.h>
 #include <server/server.h>
 
@@ -139,8 +140,8 @@ void __cdecl MSG_WriteDeltaHudElems(
 
 
 
-static const int maxStateFieldCount = 74;
-static const int numEntityStateFields = 69;
+static const int maxStateFieldCount = 74 + SP_ENTITY_ANIM_FIELDS;
+static const int numEntityStateFields = 69 + SP_ENTITY_ANIM_FIELDS;
 
 
 extern int g_entsClientOnce;

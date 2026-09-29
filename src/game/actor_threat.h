@@ -36,6 +36,8 @@ struct threat_bias_t // sizeof=0x424
                                         // Actor_GetThreatBias(int,int)+15/r ...
 };
 
+extern threat_bias_t g_threatBias;
+
 bool __fastcall Actor_CheckIgnore(sentient_s *self, sentient_s *enemy);
 void __cdecl Actor_InitThreatBiasGroups();
 int __fastcall Actor_GetThreatBias(int groupSelf, int groupEnemy);

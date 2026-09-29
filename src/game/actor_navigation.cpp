@@ -2088,7 +2088,25 @@ int __fastcall Path_GeneratePath(
     pPath->numReductions = 0;
     pPath->numIncreases = 0;
     if ( pPath->fLookaheadAmount == 0.0 )
+    {
+#ifdef KISAK_SP
+        if ( pPath->wNegotiationStartNode > 0 && pPath->wNegotiationStartNode < pPath->wPathLen )
+        {
+            Com_Printf(
+                15,
+                "ZM_BARRICADE path_generated time=%d path=%p flags=0x%X len=%d neg=%d lookahead=%d startNode=%d endNode=%d noLookahead=1\n",
+                level.time,
+                pPath,
+                pPath->flags,
+                pPath->wPathLen,
+                pPath->wNegotiationStartNode,
+                pPath->lookaheadNextNode,
+                pPath->pts[pPath->wNegotiationStartNode].iNodeNum,
+                pPath->pts[pPath->wNegotiationStartNode - 1].iNodeNum);
+        }
+#endif
         return 1;
+    }
     if ( (prevFlags & 0x180) != 0 )
     {
         if ( (prevFlags & 0x80) != 0 )
@@ -2180,6 +2198,22 @@ int __fastcall Path_GeneratePath(
     {
         __debugbreak();
     }
+#ifdef KISAK_SP
+    if ( pPath->wNegotiationStartNode > 0 && pPath->wNegotiationStartNode < pPath->wPathLen )
+    {
+        Com_Printf(
+            15,
+            "ZM_BARRICADE path_generated time=%d path=%p flags=0x%X len=%d neg=%d lookahead=%d startNode=%d endNode=%d noLookahead=0\n",
+            level.time,
+            pPath,
+            pPath->flags,
+            pPath->wPathLen,
+            pPath->wNegotiationStartNode,
+            pPath->lookaheadNextNode,
+            pPath->pts[pPath->wNegotiationStartNode].iNodeNum,
+            pPath->pts[pPath->wNegotiationStartNode - 1].iNodeNum);
+    }
+#endif
     return 1;
 }
 
@@ -3465,6 +3499,30 @@ int __fastcall Path_PredictionTraceCheckForEntities(
     return !Path_PredictionTrace(vStartPos, vEndPos, entityIgnore, mask, vTraceEndPos, 18.0, 1);
 }
 
+#ifdef KISAK_SP
+// Port diagnostic (not retail): rate-limited reason log for failed prediction traces.
+static int s_predTraceLogTime;
+static int s_predTraceLogCount;
+static void Path_PredictionTraceFail_SP(int reason, const trace_t *trace, const float *vSource, const float *vDest, const float *vEndPos, const float *vTraceEndPos, int mask)
+{
+    if ( !zm_pathdebug->current.integer )
+        return;
+    if ( s_predTraceLogTime != level.time ) { s_predTraceLogTime = level.time; s_predTraceLogCount = 0; }
+    if ( ++s_predTraceLogCount > 6 )
+        return;
+    const unsigned int hit = Trace_GetEntityHitId(trace);
+    Com_Printf(15, "ZM_PTRACE t=%d reason=%d frac=%g startsolid=%d allsolid=%d hit=%u hitcontents=0x%X cflags=0x%X sflags=0x%X n=(%.2f,%.2f,%.2f) src=(%.1f,%.1f,%.1f) dst=(%.1f,%.1f,%.1f) endz=%.1f tend=(%.1f,%.1f,%.1f) mask=0x%X\n",
+        level.time, reason, trace->fraction, trace->startsolid, trace->allsolid, hit,
+        hit < 1024 ? level.gentities[hit].r.contents : 0, trace->cflags, trace->sflags,
+        trace->normal.vec.v[0], trace->normal.vec.v[1], trace->normal.vec.v[2],
+        vSource[0], vSource[1], vSource[2], vDest[0], vDest[1], vDest[2], vEndPos[2],
+        vTraceEndPos[0], vTraceEndPos[1], vTraceEndPos[2], mask);
+}
+#define PTFAIL(r) Path_PredictionTraceFail_SP((r), &trace, vSource, vDest, vEndPos, vTraceEndPos, mask)
+#else
+#define PTFAIL(r) ((void)0)
+#endif
+
 bool __fastcall Path_PredictionTrace(
                 float *vStartPos,
                 float *vEndPos,
@@ -3512,11 +3570,11 @@ bool __fastcall Path_PredictionTrace(
         Vec3Lerp(vSource, vDest, trace.fraction, vTraceEndPos);
         if ( trace.fraction < 0.000099999997 )
         {
-            return 0;
+            { PTFAIL(1); return 0; }
         }
         if ( trace.startsolid && !allowStartSolid )
         {
-            return 0;
+            { PTFAIL(2); return 0; }
         }
         if ( !trace.allsolid && trace.fraction == 1.0 )
         {
@@ -3524,18 +3582,20 @@ bool __fastcall Path_PredictionTrace(
             vSource[1] = vTraceEndPos[1];
             vDown[0] = *vTraceEndPos;
             vDown[1] = vTraceEndPos[1];
-            vDown[2] = vSource[2] - 48.0;
+            // retail SP 006795a0 uses 72.0 (0x00a2a8b8) for the drop distance and height tolerance; MP uses 48.0
+            vDown[2] = vSource[2] - PREDICTION_TRACE_MAX[2];
             G_TraceCapsule(&trace, vSource, traceMin, PREDICTION_TRACE_MAX, vDown, entityIgnore, mask, &context);
             Vec3Lerp(vSource, vDown, trace.fraction, vTraceEndPos);
             if ( vTraceEndPos[2] < vSource[2] || trace.fraction == 1.0 || trace.normal.vec.v[2] >= 0.69999999 )
             {
                 vTraceEndPos[2] = vTraceEndPos[2] + stepheight;
-                v10 = fabs(vTraceEndPos[2] - vEndPos[2]) < 48.0;
+                v10 = fabs(vTraceEndPos[2] - vEndPos[2]) < PREDICTION_TRACE_MAX[2];
+                if ( !v10 ) PTFAIL(9);
                 return v10;
             }
             else
             {
-                return 0;
+                { PTFAIL(3); return 0; }
             }
         }
         hitEntId = Trace_GetEntityHitId(&trace);
@@ -3544,25 +3604,27 @@ bool __fastcall Path_PredictionTrace(
         actor = level.gentities[hitEntId].actor;
         if ( !actor )
         {
-            return 0;
+            { PTFAIL(4); return 0; }
         }
         if ( (actor->eAnimMode != AI_ANIM_MOVE_CODE || !actor->moveMode)
             && (!actor->pPileUpActor || actor->pPileUpActor->ent->s.number != entityIgnore) )
         {
-            return 0;
+            { PTFAIL(5); return 0; }
         }
+        // NOTE: retail SP 00679764 clears 0x4000 here because SP_actor (004f5bcc) gives actors contents 0x4000.
+        // This repo's SP_actor still uses the MP value 0x8000 (actor_mp.cpp), so keep 0x8000 until both are switched together.
         mask &= ~0x8000u;
 LABEL_45:
         vSource[0] = *vTraceEndPos;
         vSource[1] = vTraceEndPos[1];
         vDown[0] = *vTraceEndPos;
         vDown[1] = vTraceEndPos[1];
-        vDown[2] = vSource[2] - 48.0;
+        vDown[2] = vSource[2] - PREDICTION_TRACE_MAX[2]; // retail SP 006797d9: 72.0
         G_TraceCapsule(&trace, vSource, traceMin, PREDICTION_TRACE_MAX, vDown, entityIgnore, mask, &context);
         Vec3Lerp(vSource, vDown, trace.fraction, vTraceEndPos);
         if ( vTraceEndPos[2] >= vSource[2] && trace.fraction != 1.0 && trace.normal.vec.v[2] < 0.69999999 )
         {
-            return 0;
+            { PTFAIL(6); return 0; }
         }
         vSource[2] = vTraceEndPos[2] + stepheight;
         vDest[2] = vSource[2];
@@ -3572,7 +3634,7 @@ LABEL_45:
     {
         goto LABEL_45;
     }
-    return 0;
+    { PTFAIL(7); return 0; }
 }
 
 bool __fastcall Path_LookaheadPredictionTrace(path_t *pPath, float *vStartPos, float *vEndPos)
@@ -6554,18 +6616,22 @@ double  CustomSearchInfo_FindPathWithWidth::EvaluateHeuristic(
     // aislop
     // 
     // Compute delta vector from successor to goal
-    float dx = pSuccessor->constant.vOrigin[0] - vGoalPos[0];
-    float dy = pSuccessor->constant.vOrigin[1] - vGoalPos[1];
+    // retail 007c5fa0 (inlined): delta must be a contiguous 2-vector for Vec2Length
+    // (previously two separate locals were passed as &dx, which is undefined behaviour).
+    float delta[2];
+    delta[0] = pSuccessor->constant.vOrigin[0] - vGoalPos[0];
+    delta[1] = pSuccessor->constant.vOrigin[1] - vGoalPos[1];
 
     // Project delta onto the "perp" vector, subtract width, scale
-    float proj = (perp[0] * dx + perp[1] * dy) - width;
-    float factor = expf(fabsf(proj) * 0.0069077001f); // approximate exponential decay
+    float proj = (perp[0] * delta[0] + perp[1] * delta[1]) - width;
+    // retail evaluates exp() in double precision on the float product, then narrows
+    float factor = (float)exp((double)(float)(fabsf(proj) * 0.0069077001f));
 
     // Store factor in successor costFactor
     pSuccessor->transient.costFactor = factor;
 
     // Return 2D distance to goal multiplied by the factor
-    return Vec2Length(&dx) * factor;
+    return Vec2Length(delta) * factor;
 }
 
 double __thiscall CustomSearchInfo_FindPathWithLOS::EvaluateHeuristic(

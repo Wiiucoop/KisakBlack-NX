@@ -27,8 +27,19 @@
 #include "sv_bot_mp.h"
 #include <demo/demo_recording.h>
 #include "sv_archive_mp.h"
+#ifdef KISAK_SP
+#include <cgame_mp/cg_animscripted_mp.h>
+#endif
 
 msg_t g_archiveMsg;
+
+#ifdef KISAK_SP
+// A Zombies archive may contain all 1023 network entities, not the MP
+// estimate of 160. Reserve a complete frame at each recursive decode level.
+static const int SV_CACHED_ENTITIES_PER_DECODE = 1024;
+#else
+static const int SV_CACHED_ENTITIES_PER_DECODE = 160;
+#endif
 
 void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
 {
@@ -211,6 +222,11 @@ void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
         GlassSv_WriteSnapshotToClient(msg, oldframe->serverTime);
     else
         GlassSv_WriteSnapshotToClient(msg, 0);
+#ifdef KISAK_SP
+    // Integrated SP/frontend shares animation state in-process.
+    if (client->header.netchan.remoteAddress.type != NA_LOOPBACK)
+        SV_WriteAnimSnapshot_SP(msg, svsHeader.time, frame->first_entity, frame->num_entities);
+#endif
     for ( i = 0; i < sv_padPackets->current.integer; ++i )
         MSG_WriteByte(msg, 0);
 #ifdef KISAK_NX
@@ -1111,7 +1127,7 @@ cachedSnapshot_t *__cdecl SV_GetCachedSnapshotInternal(int archivedFrame, int de
                 __debugbreak();
             }
             if (cachedFrame->matchState > depth + svs.nextCachedSnapshotMatchStates - svs.numCachedSnapshotMatchStates
-                && cachedFrame->first_entity > 160 * depth + svs.nextCachedSnapshotEntities - svs.numCachedSnapshotEntities
+                && cachedFrame->first_entity > SV_CACHED_ENTITIES_PER_DECODE * depth + svs.nextCachedSnapshotEntities - svs.numCachedSnapshotEntities
                 && cachedFrame->first_client > 32 * depth + svs.nextCachedSnapshotClients - svs.numCachedSnapshotClients)
             {
                 return cachedFrame;
@@ -1613,7 +1629,7 @@ bool __cdecl SV_HasCachedSnapshotInternal(int archivedFrame, int callDepth)
                 __debugbreak();
             }
             if ( cachedFrame->matchState > callDepth + svs.nextCachedSnapshotMatchStates - svs.numCachedSnapshotMatchStates
-                && cachedFrame->first_entity >= 160 * callDepth + svs.nextCachedSnapshotEntities - svs.numCachedSnapshotEntities
+                && cachedFrame->first_entity >= SV_CACHED_ENTITIES_PER_DECODE * callDepth + svs.nextCachedSnapshotEntities - svs.numCachedSnapshotEntities
                 && cachedFrame->first_client >= 32 * callDepth + svs.nextCachedSnapshotClients - svs.numCachedSnapshotClients )
             {
                 return 1;
@@ -1997,6 +2013,10 @@ int __cdecl SV_AddModifiedStatsWithinOffset(
 
 void __cdecl SV_AddModifiedStats(unsigned int clientNum)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // No legacy client-profile deltas for server-session records.
+    return;
+#else
     int j; // [esp+0h] [ebp-6Ch]
     unsigned __int8 *dirtyByte; // [esp+4h] [ebp-68h]
     int startOffset; // [esp+8h] [ebp-64h]
@@ -2026,7 +2046,7 @@ void __cdecl SV_AddModifiedStats(unsigned int clientNum)
         startOffset = 0;
         endOffset = 0;
         memset((unsigned __int8 *)msgBuff, 0, 0x41u);
-        if ( svs.clients[clientNum].statsSentIndex >= 5021
+        if ( svs.clients[clientNum].statsSentIndex >= MODIFIED_STATS_BYTE_SIZE
             && !Assert_MyHandler(
                         "C:\\projects_pc\\cod\\codsrc\\src\\server_mp\\sv_snapshot_mp.cpp",
                         2850,
@@ -2036,9 +2056,9 @@ void __cdecl SV_AddModifiedStats(unsigned int clientNum)
         {
             __debugbreak();
         }
-        if ( svs.clients[clientNum].statsSentIndex >= 5021 )
+        if ( svs.clients[clientNum].statsSentIndex >= MODIFIED_STATS_BYTE_SIZE )
             svs.clients[clientNum].statsSentIndex = 0;
-        for ( i = svs.clients[clientNum].statsSentIndex; i < 5021; ++i )
+        for ( i = svs.clients[clientNum].statsSentIndex; i < MODIFIED_STATS_BYTE_SIZE; ++i )
         {
             dirtyByte = &svs.clients[clientNum].modifiedStatBytes[i];
             if ( *dirtyByte )
@@ -2107,6 +2127,7 @@ void __cdecl SV_AddModifiedStats(unsigned int clientNum)
                 SV_UpdatePersonalBestsForClient(clientNum);
         }
     }
+#endif
 }
 
 void __cdecl SV_BuildClientSnapshot(client_t *client)

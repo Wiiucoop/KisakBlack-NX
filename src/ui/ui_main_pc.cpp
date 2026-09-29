@@ -841,28 +841,33 @@ int __cdecl UI_GameType_HandleKey(int flags, int key, int resetMap)
 
     if (key != 200 && key != 201 && key != 13 && key != 191)
         return 0;
+    if ( sharedUiInfo.numGameTypes <= 0 )
+        return 1;
     oldCount = UI_MapCountByGameType();
     if (key != 201)
     {
-        nextGameType = ui_netGameTypeName->current.integer + 1;
+        nextGameType = ui_netGameType->current.integer + 1;
         if (nextGameType >= sharedUiInfo.numGameTypes)
             goto LABEL_7;
-        if (ui_netGameTypeName->current.integer == 1)
+        if (ui_netGameType->current.integer == 1)
             nextGameType = 3;
     LABEL_14:
-        Dvar_SetInt((dvar_s*)ui_netGameTypeName, nextGameType);
+        Dvar_SetInt((dvar_s*)ui_netGameType, nextGameType);
         goto LABEL_15;
     }
-    nextGameType = ui_netGameTypeName->current.integer - 1;
-    if (ui_netGameTypeName->current.integer != 3)
+    nextGameType = ui_netGameType->current.integer - 1;
+    if (ui_netGameType->current.integer != 3)
     {
         if (nextGameType < 2)
             nextGameType = sharedUiInfo.numGameTypes - 1;
         goto LABEL_14;
     }
 LABEL_7:
-    Dvar_SetInt((dvar_s *)ui_netGameTypeName, 1);
+    Dvar_SetInt((dvar_s *)ui_netGameType, 1);
 LABEL_15:
+    if ( ui_netGameType->current.integer < 0 || ui_netGameType->current.integer >= sharedUiInfo.numGameTypes )
+        Dvar_SetInt((dvar_s *)ui_netGameType, 0);
+    Dvar_SetString((dvar_s *)ui_netGameTypeName, sharedUiInfo.gameTypes[ui_netGameType->current.integer].gameType);
     if (resetMap)
     {
         if (oldCount != UI_MapCountByGameType())
@@ -947,64 +952,34 @@ void __cdecl UI_SelectListIndexForMapIndex(int mapIndex)
 
 int __cdecl UI_JoinGameType_HandleKey(int flags, int key)
 {
-    int integer; // [esp+0h] [ebp-8h]
-    int nextJoinGameType; // [esp+4h] [ebp-4h]
-
     if ( key != 200 && key != 201 && key != 13 && key != 191 )
         return 0;
-    if ( key == 201 )
-    {
-        if ( ui_joinGameType->current.integer )
-            integer = ui_joinGameType->current.integer;
-        else
-            integer = sharedUiInfo.gameTypeMapCount[31];
-        Dvar_SetInt((dvar_s *)ui_joinGameType, integer - 1);
-    }
+    const int count = sharedUiInfo.numJoinGameTypes;
+    int nextJoinGameType = ui_joinGameType->current.integer;
+    if ( count <= 0 || nextJoinGameType < 0 || nextJoinGameType >= count )
+        nextJoinGameType = 0;
+    else if ( key == 201 )
+        nextJoinGameType = nextJoinGameType == 0 ? count - 1 : nextJoinGameType - 1;
     else
-    {
-        nextJoinGameType = ui_joinGameType->current.integer + 1;
-        if ( nextJoinGameType == sharedUiInfo.gameTypeMapCount[31] )
-            nextJoinGameType = 0;
-        Dvar_SetInt((dvar_s *)ui_joinGameType, nextJoinGameType);
-    }
+        nextJoinGameType = nextJoinGameType + 1 == count ? 0 : nextJoinGameType + 1;
+    Dvar_SetInt((dvar_s *)ui_joinGameType, nextJoinGameType);
     UI_BuildServerDisplayList(0, uiInfoArray, 1);
     return 1;
 }
 
 int __cdecl UI_JoinMod_HandleKey(int flags, int key)
 {
-    const char *nextJoinMod; // [esp+0h] [ebp-4h]
-    int nextJoinModa; // [esp+0h] [ebp-4h]
-
     if ( key != 200 && key != 201 && key != 13 && key != 191 )
         return 0;
-    if ( key == 201 )
-    {
-        if ( ui_browserMod->current.integer - 1 >= -2 )
-            nextJoinMod = ui_browserMod->current.string;
-        else
-            nextJoinMod = sharedUiInfo.modList[63].modDescr;
-        nextJoinModa = (int)(nextJoinMod - 1);
-    }
+    // -2 selects all mods; -1 selects unmodded servers.
+    int nextJoinMod = ui_browserMod->current.integer;
+    if ( nextJoinMod < -2 || nextJoinMod >= sharedUiInfo.modCount )
+        nextJoinMod = -2;
+    else if ( key == 201 )
+        nextJoinMod = nextJoinMod == -2 ? sharedUiInfo.modCount - 1 : nextJoinMod - 1;
     else
-    {
-        nextJoinModa = ui_browserMod->current.integer + 1;
-        if ( (const char *)nextJoinModa == sharedUiInfo.modList[63].modDescr )
-            nextJoinModa = -2;
-    }
-    if ( (nextJoinModa < -2 || nextJoinModa > 64)
-        && !Assert_MyHandler(
-                    "C:\\projects_pc\\cod\\codsrc\\src\\ui\\ui_main_pc.cpp",
-                    1106,
-                    0,
-                    "nextJoinMod not in [ALLMODS, MAX_MODS]\n\t%i not in [%i, %i]",
-                    nextJoinModa,
-                    -2,
-                    64) )
-    {
-        __debugbreak();
-    }
-    Dvar_SetInt((dvar_s *)ui_browserMod, nextJoinModa);
+        nextJoinMod = nextJoinMod + 1 == sharedUiInfo.modCount ? -2 : nextJoinMod + 1;
+    Dvar_SetInt((dvar_s *)ui_browserMod, nextJoinMod);
     UI_BuildServerDisplayList(0, uiInfoArray, 1);
     return 1;
 }
@@ -1072,8 +1047,10 @@ void __cdecl UI_DrawGameType(
 {
     char *v6; // eax
 
-    if ( sharedUiInfo.gameTypes[ui_netGameTypeName->current.integer].gameType[8] )
-        v6 = UI_SafeTranslateString(&sharedUiInfo.gameTypes[ui_netGameTypeName->current.integer].gameType[8]);
+    const int index = ui_netGameType->current.integer;
+    if ( index >= 0 && index < sharedUiInfo.numGameTypes
+        && sharedUiInfo.gameTypes[index].gameTypeName[0] )
+        v6 = UI_SafeTranslateString(sharedUiInfo.gameTypes[index].gameTypeName);
     else
         v6 = UI_SafeTranslateString("EXE_ALL");
     UI_DrawText(
@@ -1265,19 +1242,14 @@ void __cdecl UI_DrawNetSource(
 
 Material *__cdecl UI_GetLevelShot(int index)
 {
+    if ( sharedUiInfo.mapCount <= 0 )
+        return 0;
     if ( index < 0 || index >= sharedUiInfo.mapCount )
         index = 0;
-    // nx-port: the material pointer was kept in the int timeToBeat[31]; it
-    // lives in a side table now and that int only marks it registered.
-    static Material *s_levelShots[ARRAY_COUNT(sharedUiInfo.mapList)];
-    if ( !sharedUiInfo.mapList[index].timeToBeat[31] || !s_levelShots[index] )
-    {
-        s_levelShots[index] = Material_RegisterHandle(
-            (char *)&sharedUiInfo.mapList[index].mapPackTypeIndex,
-            3);
-        sharedUiInfo.mapList[index].timeToBeat[31] = 1;
-    }
-    return s_levelShots[index];
+    mapInfo &map = sharedUiInfo.mapList[index];
+    if ( !map.levelShot && map.imageName[0] )
+        map.levelShot = Material_RegisterHandle(map.imageName, 3);
+    return map.levelShot;
 }
 
 void __cdecl UI_DrawMapPreview(int contextIndex, const rectDef_s *rect, const float *color)
@@ -1285,6 +1257,8 @@ void __cdecl UI_DrawMapPreview(int contextIndex, const rectDef_s *rect, const fl
     Material *mtl; // [esp+20h] [ebp-4h]
 
     mtl = UI_GetLevelShot(ui_currentNetMap->current.integer);
+    if ( !mtl )
+        return;
     UI_DrawHandlePic(
         &scrPlaceView[contextIndex],
         rect->x,

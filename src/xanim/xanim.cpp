@@ -1725,6 +1725,35 @@ void __cdecl XAnimClearServerNotify(XAnimInfo *info, scriptInstance_t inst)
     info->notifyIndex = -1;
 }
 
+#ifdef KISAK_SP
+void __cdecl XAnimApplyClientCommandCatchup_SP(DObj *obj, unsigned int animIndex, int elapsedMs)
+{
+    if ( !obj || !obj->localTree || !obj->localTree->children )
+        return;
+
+    const unsigned int infoIndex = XAnimGetInfoIndex_r(animIndex, obj->localTree->children);
+    if ( !infoIndex || g_xAnimInfo[infoIndex].state.currentAnimTime != 0.0f )
+        return;
+
+    if ( elapsedMs < 0 )
+        elapsedMs = 0;
+
+    const float dtime = elapsedMs * 0.001f;
+    float time = dtime
+        * static_cast<float>(XAnimGetAverageRateFrequency(obj->localTree, infoIndex))
+        * g_xAnimInfo[infoIndex].state.rate;
+    if ( time < 0.0f )
+        time = 0.0f;
+    else if ( time > 0.999f )
+        time = 0.999f;
+
+    g_xAnimInfo[infoIndex].state.currentAnimTime = time;
+    if ( time > 0.0f && g_xAnimInfo[infoIndex].state.weight != 0.0f )
+        XAnimProcessClientNotify(&g_xAnimInfo[infoIndex], dtime);
+    g_xAnimInfo[infoIndex].state.oldTime = time;
+}
+#endif
+
 double __cdecl XAnimGetAverageRateFrequency(const XAnimTree_s *tree, unsigned int infoIndex)
 {
     const XAnimInfo *info; // [esp+Ch] [ebp-18h]

@@ -39,6 +39,12 @@ const NetField demoPlayerStateFields[176] =
   { "weaponIdleTime", 76, 4, -71, 0u, "MSG_FIELD_WEAPON_IDLE_TIME", "0" },
   { "aimSpreadScale", 1308, 4, -106, 0u, "MSG_FIELD_AIM_SPREAD_SCALE", "0" },
   { "torsoTimer", 184, 4, 16, 0u, "16", "0" },
+  // DELIBERATELY STILL 25, in BOTH configs. msg_mp.cpp's live playerStateFields
+  // row widens to 32 under KISAK_SP (retail 0x00a5c6d8) so pm_flags bit 26 can
+  // reach the client; this is the DEMO archive table, a frozen file format that
+  // is written and read by the same build, so widening it would only invalidate
+  // existing .dm_ files for no gain. Same rule dc5eeb7 applied to the demo
+  // clientState list pinned at 50u.
   { "pm_flags", 12, 4, 25, 0u, "PMF_BIT_COUNT", "0" },
   { "weapAnim", 1300, 4, 11, 0u, "ANIM_BITS", "0" },
   { "weapAnimLeft", 1304, 4, 11, 0u, "ANIM_BITS", "0" },
@@ -292,28 +298,28 @@ const NetFieldList s_demoOtherNetFieldList_Base[6] =
 
 const NetFieldList s_demoEntityNetFieldList_Base[22] =
 {
-  { entityStateFields, 69u, "entityStateFields" },
-  { playerEntityStateFields, 74u, "playerEntityStateFields" },
-  { corpseEntityStateFields, 68u, "corpseEntityStateFields" },
-  { itemEntityStateFields, 69u, "itemEntityStateFields" },
-  { missileEntityStateFields, 69u, "missileEntityStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { scriptMoverStateFields, 72u, "scriptMoverStateFields" },
-  { soundBlendEntityStateFields, 68u, "soundBlendEntityStateFields" },
-  { fxStateFields, 68u, "fxStateFields" },
-  { loopFxEntityStateFields, 69u, "loopFxEntityStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { turretEntityStateFields, 69u, "turretEntityStateFields" },
-  { helicopterEntityStateFields, 71u, "helicopterEntityStateFields" },
-  { planeStateFields, 66u, "planeStateFields" },
-  { vehicleEntityStateFields, 71u, "vehicleEntityStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { actorStateFields, 69u, "actorStateFields" },
-  { actorStateFields, 69u, "actorStateFields" },
-  { actorStateFields, 69u, "actorStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { eventEntityStateFields, 69u, "eventEntityStateFields" }
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { playerEntityStateFields, 74u + SP_ENTITY_ANIM_FIELDS, "playerEntityStateFields" },
+  { corpseEntityStateFields, 68u + SP_ENTITY_ANIM_FIELDS, "corpseEntityStateFields" },
+  { itemEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "itemEntityStateFields" },
+  { missileEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "missileEntityStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { scriptMoverStateFields, 72u + SP_ENTITY_ANIM_FIELDS, "scriptMoverStateFields" },
+  { soundBlendEntityStateFields, 68u + SP_ENTITY_ANIM_FIELDS, "soundBlendEntityStateFields" },
+  { fxStateFields, 68u + SP_ENTITY_ANIM_FIELDS, "fxStateFields" },
+  { loopFxEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "loopFxEntityStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { turretEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "turretEntityStateFields" },
+  { helicopterEntityStateFields, 71u + SP_ENTITY_ANIM_FIELDS, "helicopterEntityStateFields" },
+  { planeStateFields, 66u + SP_ENTITY_ANIM_FIELDS, "planeStateFields" },
+  { vehicleEntityStateFields, 71u + SP_ENTITY_ANIM_FIELDS, "vehicleEntityStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { actorStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "actorStateFields" },
+  { actorStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "actorStateFields" },
+  { actorStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "actorStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { eventEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "eventEntityStateFields" }
 };
 
 const NetFieldList *s_demoOtherNetFieldLists[] = { s_demoOtherNetFieldList_Base };
@@ -331,8 +337,8 @@ const NetFieldList *__cdecl Demo_GetNetFieldListForType(netFieldTypes_t fieldTyp
 {
     int netFieldsVersionIndex; // [esp+0h] [ebp-8h]
 
-    netFieldsVersionIndex = 1 - Demo_GetVersion();
-    if ( netFieldsVersionIndex < 0 )
+    netFieldsVersionIndex = OPENBLOPS_DEMO_VERSION - Demo_GetVersion();
+    if ( netFieldsVersionIndex != 0 )
         Com_Error(ERR_DROP, "Invalid Version Handling. Grab Bat !!!");
     return &s_demoOtherNetFieldLists[netFieldsVersionIndex][fieldType];
 }
@@ -342,8 +348,8 @@ const NetFieldList *__cdecl Demo_GetStateFieldListForEntityType(int eType)
     int v2; // [esp+0h] [ebp-Ch]
     int netFieldsVersionIndex; // [esp+4h] [ebp-8h]
 
-    netFieldsVersionIndex = 1 - Demo_GetVersion();
-    if ( netFieldsVersionIndex < 0 )
+    netFieldsVersionIndex = OPENBLOPS_DEMO_VERSION - Demo_GetVersion();
+    if ( netFieldsVersionIndex != 0 )
         Com_Error(ERR_DROP, "Invalid Version Handling. Grab Bat !!!");
     if ( eType > 21 )
         v2 = 21;
@@ -351,4 +357,3 @@ const NetFieldList *__cdecl Demo_GetStateFieldListForEntityType(int eType)
         v2 = eType;
     return &s_demoEntityNetFieldLists[netFieldsVersionIndex][v2];
 }
-

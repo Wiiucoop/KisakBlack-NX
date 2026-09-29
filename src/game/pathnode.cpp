@@ -476,6 +476,288 @@ void __cdecl setup_pathnode_parent(pathnode_t *node, int entnum, const float *or
     generic_avl_map_add(&g_pathnode_parent_map, node_parent, (uintptr_t)node);
 }
 
+// ---------------------------------------------------------------------------
+// SP-only dynamic node linking (script LinkNodes / UnlinkNodes / SetEnableNode)
+// and the per-level reset of the pathnode AVL maps.  None of this exists in the
+// MP-derived source; reconstructed from retail SP BlackOps.exe.
+// ---------------------------------------------------------------------------
+extern phys_simple_allocator<generic_avl_map_node_t> g_generic_avl_map_node_allocator;
+
+struct pathnode_dynlinks_t // sizeof=0x14, retail SP FUN_005468e0
+{
+    pathnode_t *node;
+    pathlink_s *origLinks;
+    int origLinkCount;
+    pathlink_s *links;
+    int linkCount;
+};
+
+static phys_inplace_avl_tree<uintptr_t, generic_avl_map_node_t, generic_avl_map_node_t> g_pathnode_dynlinks_map;   // nx-port: pointer-width key // retail 0x01d0489c
+static int g_pathnode_dynlinks_count;   // retail 0x01d04898
+static int g_pathnode_maps_restart;     // retail 0x01d04878
+
+static pathlink_s *Path_AllocDynLinks(int count)
+{
+    if ( count <= 0 )
+        return 0;
+    return (pathlink_s *)PMM_ALLOC(sizeof(pathlink_s) * count, 4);
+}
+
+static void Path_FreeDynLinks(pathlink_s *links, int count)
+{
+    if ( links && count > 0 )
+        PMM_FREE((unsigned __int8 *)links, sizeof(pathlink_s) * count, 4);
+}
+
+// retail SP FUN_005468e0: find or create the private, growable copy of a node's link array
+static pathnode_dynlinks_t *Path_GetDynamicLinks(pathnode_t *node)
+{
+    generic_avl_map_node_t *gamn; // [esp+0h] [ebp-Ch]
+    pathnode_dynlinks_t *rec;
+    int i;
+
+    gamn = g_pathnode_dynlinks_map.m_tree_root;
+    while ( gamn && (uintptr_t)node != gamn->m_avl_key )
+    {
+        if ( (uintptr_t)node >= gamn->m_avl_key )
+            gamn = gamn->m_avl_tree_node.m_right;
+        else
+            gamn = gamn->m_avl_tree_node.m_left;
+    }
+    if ( gamn )
+        return (pathnode_dynlinks_t *)gamn->m_data;
+
+    rec = (pathnode_dynlinks_t *)PMM_ALLOC(sizeof(pathnode_dynlinks_t), 4);
+    iassert(rec);
+    ++g_pathnode_dynlinks_count;
+    rec->node = node;
+    rec->origLinks = node->constant.Links;
+    rec->origLinkCount = node->constant.totalLinkCount;
+    rec->links = Path_AllocDynLinks(node->constant.totalLinkCount);
+    rec->linkCount = node->constant.totalLinkCount;
+    for ( i = 0; i < rec->linkCount; ++i )
+        rec->links[i] = rec->origLinks[i];
+    node->constant.Links = rec->links;
+    gamn = generic_avl_map_add(&g_pathnode_dynlinks_map, rec, (uintptr_t)node);
+    return (pathnode_dynlinks_t *)gamn->m_data;
+}
+
+// retail SP FUN_00679f50 (script "linknodes")
+void __cdecl Path_LinkNodes(pathnode_t *nodeFrom, pathnode_t *nodeTo)
+{
+    pathnode_dynlinks_t *rec;
+    pathlink_s *newLinks;
+    unsigned __int16 toNum;
+    int newCount;
+    int i;
+
+    rec = Path_GetDynamicLinks(nodeFrom);
+    toNum = (unsigned __int16)Path_ConvertNodeToIndex(nodeTo);
+    for ( i = 0; i < rec->linkCount; ++i )
+    {
+        if ( rec->links[i].nodeNum == toNum )
+            return;
+    }
+    newCount = rec->linkCount + 1;
+    newLinks = Path_AllocDynLinks(newCount);
+    // the new link goes first so that it lands inside the connected [0, wLinkCount) partition
+    newLinks[0].fDist = Vec3Distance(nodeFrom->constant.vOrigin, nodeTo->constant.vOrigin);
+    newLinks[0].nodeNum = toNum;
+    newLinks[0].disconnectCount = 0;
+    newLinks[0].negotiationLink = 0;
+    newLinks[0].ubBadPlaceCount[0] = 0;
+    newLinks[0].ubBadPlaceCount[1] = 0;
+    newLinks[0].ubBadPlaceCount[2] = 0;
+    newLinks[0].ubBadPlaceCount[3] = 0;
+    for ( i = 0; i < rec->linkCount; ++i )
+        newLinks[i + 1] = rec->links[i];
+    ++nodeFrom->dynamic.wLinkCount;
+    nodeFrom->constant.Links = newLinks;
+    nodeFrom->constant.totalLinkCount = newCount;
+    Path_FreeDynLinks(rec->links, rec->linkCount);
+    rec->links = newLinks;
+    rec->linkCount = newCount;
+}
+
+// retail SP FUN_0050e8a0 (script "unlinknodes")
+void __cdecl Path_UnlinkNodes(pathnode_t *nodeFrom, pathnode_t *nodeTo)
+{
+    pathnode_dynlinks_t *rec;
+    pathlink_s *newLinks;
+    pathlink_s *found;
+    pathlink_s *out;
+    unsigned __int16 toNum;
+    int newCount;
+    int i;
+
+    rec = Path_GetDynamicLinks(nodeFrom);
+    toNum = (unsigned __int16)Path_ConvertNodeToIndex(nodeTo);
+    found = 0;
+    for ( i = 0; i < rec->linkCount && !found; ++i )
+    {
+        if ( rec->links[i].nodeNum == toNum )
+            found = &rec->links[i];
+    }
+    if ( !found )
+        return;
+    newCount = rec->linkCount - 1;
+    newLinks = Path_AllocDynLinks(newCount);
+    out = newLinks;
+    for ( i = 0; i < rec->linkCount; ++i )
+    {
+        if ( &rec->links[i] != found )
+            *out++ = rec->links[i];
+    }
+    nodeFrom->constant.Links = newLinks;
+    nodeFrom->constant.totalLinkCount = newCount;
+    if ( found - rec->links < nodeFrom->dynamic.wLinkCount )
+        --nodeFrom->dynamic.wLinkCount;
+    Path_FreeDynLinks(rec->links, rec->linkCount);
+    rec->links = newLinks;
+    rec->linkCount = newCount;
+}
+
+// retail SP 0x004b9ee0: destroy callback for g_pathnode_dynlinks_map
+static void Path_FreeDynamicLinksCallback(void *data)
+{
+    pathnode_dynlinks_t *rec = (pathnode_dynlinks_t *)data;
+
+    if ( g_pathnode_maps_restart )
+    {
+        // the GameWorld asset survives a map_restart, so give the node its fastfile links back
+        rec->node->constant.Links = rec->origLinks;
+        rec->node->constant.totalLinkCount = rec->origLinkCount;
+        rec->node->dynamic.wLinkCount = rec->origLinkCount;
+    }
+    Path_FreeDynLinks(rec->links, rec->linkCount);
+    --g_pathnode_dynlinks_count;
+    PMM_FREE((unsigned __int8 *)rec, sizeof(pathnode_dynlinks_t), 4);
+}
+
+// retail SP 0x00815120: destroy callback for g_pathnode_parent_map
+static void Path_FreePathnodeParentCallback(void *data)
+{
+    if ( data )
+        g_pathnode_parent_allocator.free((pathnode_parent_t *)data);
+}
+
+static void Path_NullMapCallback(void *)
+{
+}
+
+// retail SP FUN_0063e4a0 / FUN_004ecf10
+static void Path_DestroyMap_r(generic_avl_map_node_t *gamn, void (*callback)(void *))
+{
+    if ( !gamn )
+        return;
+    Path_DestroyMap_r(gamn->m_avl_tree_node.m_left, callback);
+    Path_DestroyMap_r(gamn->m_avl_tree_node.m_right, callback);
+    callback(gamn->m_data);
+    g_generic_avl_map_node_allocator.free(gamn);
+}
+
+// retail SP FUN_004587d0, called by G_InitGame right before G_SpawnEntitiesFromString
+void __cdecl Path_ResetNodeMaps(int restart)
+{
+    g_pathnode_maps_restart = restart;
+    Path_DestroyMap_r(g_pathnode_dynlinks_map.m_tree_root, Path_FreeDynamicLinksCallback);
+    g_pathnode_dynlinks_map.m_tree_root = 0;
+    Path_DestroyMap_r(g_parented_pathnode_list_map.m_tree_root, Path_NullMapCallback);
+    g_parented_pathnode_list_map.m_tree_root = 0;
+    if ( !restart )
+    {
+        Path_DestroyMap_r(g_pathnode_parent_map.m_tree_root, Path_FreePathnodeParentCallback);
+        g_pathnode_parent_map.m_tree_root = 0;
+    }
+}
+
+// retail SP FUN_00814c40
+static void Path_UpdateParentedNodes_r(generic_avl_map_node_t *gamn)
+{
+    float axis[3][3];
+    phys_mat44 mat;
+    gentity_s *gent;
+
+    for ( ; gamn; gamn = gamn->m_avl_tree_node.m_right )
+    {
+        gent = &level.gentities[((pathnode_parent_t *)gamn->m_data)->entnum];
+        AnglesToAxis(gent->r.currentAngles, axis);
+        Phys_AxisToNitrousMat(axis, &mat);
+        Phys_Vec3ToNitrousVec(gent->r.currentOrigin, &mat.w);
+        parented_pathnode_list_update(gent, &mat);
+        Path_UpdateParentedNodes_r(gamn->m_avl_tree_node.m_left);
+    }
+}
+
+// retail SP FUN_005896c0 (+ FUN_00814bf0), called by G_InitGame after G_DropPathnodesToFloor:
+// builds g_parented_pathnode_list_map (entnum -> list of parented nodes), which the source never populated.
+void __cdecl Path_BuildParentedNodeLists()
+{
+    generic_avl_map_node_t *gamn;
+    pathnode_parent_t *parent;
+    unsigned int i;
+
+    if ( enable_moving_paths->current.integer != 1 )
+        return;
+    for ( i = 0; i < gameWorldCurrent->path.nodeCount; ++i )
+    {
+        parent = (pathnode_parent_t *)get_pathnode_parent(&gameWorldCurrent->path.nodes[i]);
+        if ( parent->entnum == 1022 )
+            continue;
+        gamn = g_parented_pathnode_list_map.m_tree_root;
+        while ( gamn && (unsigned int)parent->entnum != gamn->m_avl_key )
+        {
+            if ( (unsigned int)parent->entnum >= gamn->m_avl_key )
+                gamn = gamn->m_avl_tree_node.m_right;
+            else
+                gamn = gamn->m_avl_tree_node.m_left;
+        }
+        if ( !gamn )
+            gamn = generic_avl_map_add(&g_parented_pathnode_list_map, 0, parent->entnum);
+        parent->m_next = (pathnode_parent_t *)gamn->m_data;
+        gamn->m_data = parent;
+    }
+    Path_UpdateParentedNodes_r(g_parented_pathnode_list_map.m_tree_root);
+}
+
+// retail SP script "setenablenode" @ 0x00642a80: disabled nodes carry spawnflag 0x200 (see IsNodeEnabled)
+void __cdecl Scr_SetEnableNode()
+{
+    pathnode_t *node;
+    int enable;
+    int numParam;
+
+    enable = 1;
+    numParam = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    if ( numParam != 1 )
+    {
+        if ( numParam != 2 )
+            return; // retail falls through to a write through a null node here
+        enable = Scr_GetInt(1u, SCRIPTINSTANCE_SERVER);
+    }
+    node = Scr_GetPathnode(0, SCRIPTINSTANCE_SERVER);
+    if ( enable )
+        node->constant.spawnflags &= ~0x200u;
+    else
+        node->constant.spawnflags |= 0x200u;
+}
+
+// retail SP script "linknodes" @ 0x00563f90
+void __cdecl Scr_LinkNodes()
+{
+    pathnode_t *nodeFrom = Scr_GetPathnode(0, SCRIPTINSTANCE_SERVER);
+    pathnode_t *nodeTo = Scr_GetPathnode(1u, SCRIPTINSTANCE_SERVER);
+    Path_LinkNodes(nodeFrom, nodeTo);
+}
+
+// retail SP script "unlinknodes" @ 0x00522eb0
+void __cdecl Scr_UnlinkNodes()
+{
+    pathnode_t *nodeFrom = Scr_GetPathnode(0, SCRIPTINSTANCE_SERVER);
+    pathnode_t *nodeTo = Scr_GetPathnode(1u, SCRIPTINSTANCE_SERVER);
+    Path_UnlinkNodes(nodeFrom, nodeTo);
+}
+
 bool __cdecl is_moving_entity(gentity_s *gent)
 {
     return gent->s.eType == 6 || gent->s.eType == 14;
@@ -1184,7 +1466,7 @@ int __cdecl Path_NodesInRadius(const float *origin, float maxDist, pathsort_t *n
 
 int __cdecl Path_IsDynamicBlockingEntity(gentity_s *ent)
 {
-    return ent->flags & 0x800;
+    return ent->flags & FL_DYNAMICPATH;
 }
 
 bool __cdecl Path_IsBadPlaceLink(unsigned int nodeNumFrom, unsigned int nodeNumTo, team_t eTeam)
@@ -1247,7 +1529,7 @@ void __cdecl Path_AutoDisconnectPaths()
     for ( i = 0; i < level.num_entities; ++i )
     {
         ent = &level.gentities[i];
-        if ( ent->r.inuse && Path_IsDynamicBlockingEntity(ent) && (ent->flags & 0x40000000) != 0 )
+        if ( ent->r.inuse && Path_IsDynamicBlockingEntity(ent) && (ent->flags & FL_AUTO_BLOCKPATHS) != 0 )
             Path_DisconnectPathsForEntity(ent);
     }
 }
@@ -2328,8 +2610,25 @@ pathnode_t *__cdecl Path_NearestNodeNotCrossPlanes(
         adjustedOrigin[0] = *vOrigin;
         adjustedOrigin[1] = vOrigin[1];
         adjustedOrigin[2] = vOrigin[2];
-        adjustedOrigin[2] = adjustedOrigin[2] - 120.0;
-        iNodeCount = Path_NodesInCylinder(adjustedOrigin, fMaxDist, 184.0, nodes, maxNodes, typeFlags);
+#ifdef KISAK_SP
+        // retail SP 0068e910: zombiemode uses the zombiemode_path_minz_bias dvar instead of the fixed 120/184 window
+        if ( zombiemode->current.enabled )
+        {
+            adjustedOrigin[2] = adjustedOrigin[2] - zombiemode_path_minz_bias->current.value;
+            iNodeCount = Path_NodesInCylinder(
+                             adjustedOrigin,
+                             fMaxDist,
+                             zombiemode_path_minz_bias->current.value + 64.0,
+                             nodes,
+                             maxNodes,
+                             typeFlags);
+        }
+        else
+#endif
+        {
+            adjustedOrigin[2] = adjustedOrigin[2] - 120.0;
+            iNodeCount = Path_NodesInCylinder(adjustedOrigin, fMaxDist, 184.0, nodes, maxNodes, typeFlags);
+        }
     }
 
     //std::_Sort<GfxCachedShaderText *,int,bool (__cdecl *)(GfxCachedShaderText const &,GfxCachedShaderText const &)>(
@@ -2344,7 +2643,11 @@ pathnode_t *__cdecl Path_NearestNodeNotCrossPlanes(
     mins[1] = -15.0;
     maxs[0] = actorMaxs[0];
     maxs[1] = 15.0;
+#ifdef KISAK_SP
+    maxs[2] = 72.0; // retail SP 0068e910: actor box height is 72
+#else
     maxs[2] = 48.0;
+#endif
     mins[2] = 0.0 + 17.0;
 
     static const float zombie_fudge = 14.0f;
@@ -2376,7 +2679,11 @@ pathnode_t *__cdecl Path_NearestNodeNotCrossPlanes(
                 && vOrigin[1] > (float)((float)(node->constant.vOrigin[1] + -15.0) - 1.0)
                 && (float)((float)(node->constant.vOrigin[1] + 15.0) + 1.0) > vOrigin[1]
                 && vOrigin[2] > (float)((float)(node->constant.vOrigin[2] + 0.0) - 1.0)
+#ifdef KISAK_SP
+                && (float)((float)(node->constant.vOrigin[2] + 72.0) + 1.0) > vOrigin[2] ) // retail SP 0068e910
+#else
                 && (float)((float)(node->constant.vOrigin[2] + 48.0) + 1.0) > vOrigin[2] )
+#endif
             {
                 return node;
             }
@@ -3089,7 +3396,7 @@ void __cdecl Path_ConnectPathsForEntity(gentity_s *ent)
     {
         __debugbreak();
     }
-    ent->flags |= FL_OBSTACLE /* nx-port: decompiled as &objBuf[1758][2] */;
+    ent->flags |= FL_OBSTACLE;
     oldInfoIndex = ent->disconnectedLinks;
     if ( oldInfoIndex )
     {
@@ -3170,7 +3477,14 @@ void __cdecl Path_ConnectPath(pathnode_t *node, int toNodeNum)
 
 const float dist_cutoff = 266.0f;
 const float disconnectMins[3] = { -15.0, -15.0, 18.0 };
+#ifdef KISAK_SP
+// Retail SP Path_DisconnectPathsForEntity (BlackOps.exe 0x0058E060) uses a
+// 72-unit upper capsule bound.  The MP reconstruction's 48 misses elevated
+// links around zombie barricades and other dynamic blockers.
+const float disconnectMaxs[3] = { 15.0, 15.0, 72.0 };
+#else
 const float disconnectMaxs[3] = { 15.0, 15.0, 48.0 };
+#endif
 
 void __cdecl Path_DisconnectPathsForEntity(gentity_s *ent)
 {
@@ -3197,7 +3511,10 @@ void __cdecl Path_DisconnectPathsForEntity(gentity_s *ent)
         __debugbreak();
     }
     Path_ConnectPathsForEntity(ent);
-    ent->flags &= ~0x4000000u;
+    // ConnectPaths marks the entity as an obstacle.  Disconnecting must clear
+    // the build-specific flag (0x400 in SP, 0x04000000 in MP); the old literal
+    // only cleared the MP bit and left every SP blocker permanently obstructing.
+    ent->flags &= ~FL_OBSTACLE;
     ent->iDisconnectTime = level.time;
     entityNum = ent->s.number;
     rdir[0] = dist_cutoff;

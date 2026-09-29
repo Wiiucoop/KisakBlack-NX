@@ -1,4 +1,9 @@
 #include "live_storage.h"
+#ifdef KISAK_MP
+#define STATS_METADATA(buffer, field, legacyOffset) ((buffer)->field)
+#else
+#define STATS_METADATA(buffer, field, legacyOffset) ((buffer)[1].statsBuffer[legacyOffset])
+#endif
 #include <qcommon/com_gamemodes.h>
 #include "live_stats.h"
 #include "live_storage_pub.h"
@@ -21,6 +26,160 @@
 #include <ui_mp/ui_main_mp.h>
 #include "live_counter.h"
 #include <qcommon/threads.h>
+#include <bgame/bg_unlockable_items.h>
+
+// Local provider for the MP build without Live/Demonware. This is OpenBLOPS
+// behavior, not a recovered retail login bypass. Menu readiness and the shared
+// stats gate must describe the same initialized records.
+enum OfflineStatsState { OFFLINE_STATS_EMPTY, OFFLINE_STATS_INITIALIZING, OFFLINE_STATS_READY };
+static OfflineStatsState s_offlineStatsState[1];
+
+struct OfflineStatsGameModeScope
+{
+    const dvar_s *vars[6] = { onlinegame, xblive_privatematch, xblive_basictraining,
+                             xblive_wagermatch, xblive_theater, xblive_clanmatch };
+    bool saved[6];
+    OfflineStatsGameModeScope()
+    {
+        for (unsigned int i = 0; i < 6; ++i)
+            saved[i] = vars[i]->current.enabled;
+        Com_GameMode_ResetGameModes();
+        // ValidateGameModes requires this flag for the basic-training defaults.
+        // It describes engine mode here; it does not authenticate a service.
+        Dvar_SetBool((dvar_s *)onlinegame, true);
+    }
+    ~OfflineStatsGameModeScope()
+    {
+        for (unsigned int i = 0; i < 6; ++i)
+            Dvar_SetBool((dvar_s *)vars[i], saved[i]);
+    }
+};
+
+bool LiveStorage_UsesOfflineStats()
+{
+#if defined(KISAK_MP) && defined(OPENBLOPS_OFFLINE_MENUS) && !defined(KISAK_LIVE)
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool LiveStorage_OfflineStatsReady(int controllerIndex)
+{
+    return LiveStorage_UsesOfflineStats() && controllerIndex == 0
+        && s_offlineStatsState[controllerIndex] == OFFLINE_STATS_READY;
+}
+
+bool LiveStorage_OfflineStatsAccessible(int controllerIndex)
+{
+    // The synchronous retail defaults script reads/writes stats while preparing
+    // them. Only that phase may access records before menu readiness is published.
+    return LiveStorage_UsesOfflineStats() && controllerIndex == 0 && g_statsDDL
+        && s_offlineStatsState[controllerIndex] != OFFLINE_STATS_EMPTY;
+}
+
+static bool LiveStorage_OfflineClassesInitialized(int controllerIndex)
+{
+    const char *classes[] = { "customclass1", "customclass2", "customclass3", "customclass4", "customclass5",
+                             "prestigeclass1", "prestigeclass2", "prestigeclass3", "prestigeclass4", "prestigeclass5" };
+    const char *slots[] = { "primary", "secondary" };
+    for (const char *className : classes)
+    {
+        for (const char *slot : slots)
+        {
+            unsigned int item = BG_UnlockablesGetEquippedItemInSlot(controllerIndex, className, slot);
+            if (item >= 256 || !BG_UnlockablesIsItemValidNotNull(item))
+                return false;
+        }
+    }
+    return true;
+}
+
+static bool LiveStorage_OfflineStatsInitFailed(int controllerIndex, bool wasBasicTraining)
+{
+    Dvar_SetBool((dvar_s *)xblive_basictraining, false);
+    LiveStorage_SetStatsFetched(controllerIndex, STATS_LOCATION_FORCE_NORMAL, false);
+    LiveStorage_SetStatsFetched(controllerIndex, STATS_LOCATION_GLOBAL, false);
+    LiveStorage_SetStatsFetched(controllerIndex, STATS_LOCATION_BASICTRAINING, false);
+    s_offlineStatsState[controllerIndex] = OFFLINE_STATS_EMPTY;
+    Dvar_SetBool((dvar_s *)xblive_basictraining, wasBasicTraining);
+    return false;
+}
+
+bool LiveStorage_InitOfflineStats(int controllerIndex)
+{
+    if (!LiveStorage_UsesOfflineStats() || controllerIndex != 0 || !g_statsDDL)
+        return false;
+    if (s_offlineStatsState[controllerIndex] != OFFLINE_STATS_EMPTY)
+        return LiveStorage_OfflineStatsReady(controllerIndex);
+
+    const bool wasBasicTraining = xblive_basictraining->current.enabled;
+    OfflineStatsGameModeScope modeScope;
+    Dvar_SetBool((dvar_s *)xblive_basictraining, false);
+    // Run only after LiveStorage_Init has cleared storage and registered its
+    // dvars. Never reset a populated record to grant access to its existing CAC.
+    persistentStats *normal = LiveStorage_GetStatsBuffer(controllerIndex, STATS_LOCATION_FORCE_NORMAL, false);
+    persistentStats *basic = LiveStorage_GetStatsBuffer(controllerIndex, STATS_LOCATION_BASICTRAINING, false);
+    bool newNormal = true;
+    bool newBasic = true;
+    for (unsigned int i = 0; i < STATS_BUFFER_SIZE; ++i)
+    {
+        newNormal = newNormal && normal->statsBuffer[i] == 0;
+        newBasic = newBasic && basic->statsBuffer[i] == 0;
+    }
+
+    const statsLocation locations[] = { STATS_LOCATION_FORCE_NORMAL, STATS_LOCATION_GLOBAL, STATS_LOCATION_BASICTRAINING };
+    for (statsLocation location : locations)
+    {
+        if (!LiveStorage_ValidateWithDDL(controllerIndex, location))
+        {
+            return LiveStorage_OfflineStatsInitFailed(controllerIndex, wasBasicTraining);
+        }
+    }
+    for (statsLocation location : locations)
+        LiveStorage_SetStatsFetched(controllerIndex, location, true);
+    s_offlineStatsState[controllerIndex] = OFFLINE_STATS_INITIALIZING;
+
+    if (newNormal)
+    {
+        LiveStats_InitStatsBuffer(controllerIndex);
+        if (!LiveStorage_OfflineClassesInitialized(controllerIndex))
+            return LiveStorage_OfflineStatsInitFailed(controllerIndex, wasBasicTraining);
+        LiveStats_SetBasicTrainingState(normal->statsBuffer, false);
+        LiveStats_SetOnlineRankedState(normal->statsBuffer, true);
+    }
+    if (newBasic)
+    {
+        // stats_init.cfg has basic-training-specific defaults. Execute it against
+        // that record rather than copying the normal classes/progression.
+        Dvar_SetBool((dvar_s *)xblive_basictraining, true);
+        LiveStats_InitStatsBuffer(controllerIndex);
+        if (!LiveStorage_OfflineClassesInitialized(controllerIndex))
+            return LiveStorage_OfflineStatsInitFailed(controllerIndex, wasBasicTraining);
+        LiveStats_SetBasicTrainingState(basic->statsBuffer, true);
+        LiveStats_SetOnlineRankedState(basic->statsBuffer, false);
+        Dvar_SetBool((dvar_s *)xblive_basictraining, false);
+    }
+
+    // Global permission-2 fields start at zero in their separate local record.
+    // Associate/validate explicitly by location; the legacy global helper marks
+    // NORMAL on its fast path, so it cannot establish global readiness here.
+    for (statsLocation location : locations)
+    {
+        if (!LiveStorage_ValidateWithDDL(controllerIndex, location))
+        {
+            return LiveStorage_OfflineStatsInitFailed(controllerIndex, wasBasicTraining);
+        }
+        persistentStats *record = LiveStorage_GetStatsBuffer(controllerIndex, location, false);
+        LiveStats_WriteChecksumToBuffer(record->statsBuffer, STATS_BUFFER_SIZE);
+        LiveStorage_SetStatsChecksumValid(controllerIndex, location, true);
+    }
+    LiveStats_MakeStableStatsBuffer(controllerIndex);
+    LiveStats_MakeStableGlobalStatsBuffer(controllerIndex);
+    s_offlineStatsState[controllerIndex] = OFFLINE_STATS_READY;
+    Dvar_SetBool((dvar_s *)xblive_basictraining, wasBasicTraining);
+    return true;
+}
 
 cmd_function_s LiveStorage_FakeComErrorCmd_VAR;
 cmd_function_s LiveStorage_ReadStatsBackupCmd_VAR;
@@ -58,7 +217,7 @@ playerFileOperations controllerFileOps[1];
 unsigned __int64 s_tempXuid;
 unsigned __int64 s_XuidOfOtherPlayer;
 int s_lastStatsUpdateTimeForOtherPlayer;
-unsigned __int8 s_tempStatsBuffer[40168];
+unsigned __int8 s_tempStatsBuffer[STATS_BUFFER_SIZE];
 char s_matchRecordBinaryData[66560];
 
 const TaskDefinition task_LiveDeleteUserFile[1] =
@@ -501,17 +660,17 @@ void __cdecl LiveStorage_CorrectStatsError(char *msg)
 
 int __cdecl LiveStorage_GetStatsBufferSize()
 {
-    return 40168;
+    return STATS_BUFFER_SIZE;
 }
 
 unsigned __int8 __cdecl LiveStorage_GetStatsChecksumValid(int controllerIndex, statsLocation playerStatsLocation)
 {
-    return LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 1)[1].statsBuffer[892];
+    return STATS_METADATA(LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 1), isChecksumValid, 892);
 }
 
 void __cdecl LiveStorage_SetStatsChecksumValid(int controllerIndex, statsLocation playerStatsLocation, bool isValid)
 {
-    LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 1)[1].statsBuffer[892] = isValid;
+    STATS_METADATA(LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 1), isChecksumValid, 892) = isValid;
 }
 
 bool __cdecl LiveStorage_GetStatsWriteNeeded(int controllerIndex, statsLocation location)
@@ -532,7 +691,7 @@ void __cdecl LiveStorage_SetStatsWriteNeeded(int controllerIndex, bool isWriteNe
 
 int __cdecl LiveStorage_ValidateWithDDL(int controllerIndex, statsLocation location)
 {
-    char backupBuffer[40172]; // [esp+0h] [ebp-9CF8h] BYREF
+    char backupBuffer[STATS_RECORD_SIZE]; // [esp+0h] [ebp-9CF8h] BYREF
     char *buffer; // [esp+9CF0h] [ebp-8h]
     int bufferSize; // [esp+9CF4h] [ebp-4h]
 
@@ -548,8 +707,8 @@ int __cdecl LiveStorage_ValidateWithDDL(int controllerIndex, statsLocation locat
         LiveStorage_SetStatsDDLValidated(controllerIndex, location, 1);
         return 1;
     }
-    else if ( DDL_FixBufferVersion(buffer, g_statsDDL, "ddl_mp/stats.ddl", backupBuffer, 40168)
-                 || DDL_FixBufferVersion(buffer, g_statsDDL, "ddl_mp/stats_archive.ddl", backupBuffer, 40168) )
+    else if ( DDL_FixBufferVersion(buffer, g_statsDDL, STATS_DDL_ASSET_NAME, backupBuffer, STATS_BUFFER_SIZE)
+                 || DDL_FixBufferVersion(buffer, g_statsDDL, STATS_ARCHIVE_DDL_ASSET_NAME, backupBuffer, STATS_BUFFER_SIZE) )
     {
         DDL_NoCheckPrintWarning(
             "DDL: Stats buffer updated to version %d for controller index %d.\n",
@@ -566,7 +725,7 @@ int __cdecl LiveStorage_ValidateWithDDL(int controllerIndex, statsLocation locat
 
 unsigned __int8 __cdecl LiveStorage_AreStatsDDLValidated(int controllerIndex, statsLocation playerStatsLocation)
 {
-    return LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 1)[1].statsBuffer[894];
+    return STATS_METADATA(LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 1), statsValidatedWithDDL, 894);
 }
 
 void __cdecl LiveStorage_SetStatsDDLValidated(
@@ -574,7 +733,7 @@ void __cdecl LiveStorage_SetStatsDDLValidated(
                 statsLocation playerStatsLocation,
                 bool statsValidatedWithDDL)
 {
-    LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 1)[1].statsBuffer[894] = statsValidatedWithDDL;
+    STATS_METADATA(LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 1), statsValidatedWithDDL, 894) = statsValidatedWithDDL;
 }
 
 void __cdecl LiveStorage_StatsBackupFetchCompleted(int controllerIndex)
@@ -594,12 +753,12 @@ void __cdecl LiveStorage_StatsBackupFetchCompleted(int controllerIndex)
 
 unsigned __int8 __cdecl LiveStorage_DoWeHaveStats(int controllerIndex, statsLocation playerStatsLocation)
 {
-    return LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 0)[1].statsBuffer[895];
+    return STATS_METADATA(LiveStorage_GetPersStatsBuffer(controllerIndex, playerStatsLocation, 0), statsFetched, 895);
 }
 
 unsigned __int8 __cdecl LiveStorage_DoWeHaveCurrentStats(int controllerIndex)
 {
-    return LiveStorage_GetPersStatsBuffer(controllerIndex, STATS_LOCATION_NORMAL, 0)[1].statsBuffer[895];
+    return STATS_METADATA(LiveStorage_GetPersStatsBuffer(controllerIndex, STATS_LOCATION_NORMAL, 0), statsFetched, 895);
 }
 
 bool __cdecl LiveStorage_DoWeHaveAllStats(int controllerIndex)
@@ -614,7 +773,7 @@ bool __cdecl LiveStorage_DoWeHaveAllStats(int controllerIndex)
 
 void __cdecl LiveStorage_SetStatsFetched(int localControllerIndex, statsLocation playerStatsLocation, bool isFetched)
 {
-    LiveStorage_GetPersStatsBuffer(localControllerIndex, playerStatsLocation, 0)[1].statsBuffer[895] = isFetched;
+    STATS_METADATA(LiveStorage_GetPersStatsBuffer(localControllerIndex, playerStatsLocation, 0), statsFetched, 895) = isFetched;
 }
 
 fileSharePrivateData *__cdecl LiveStorage_FileShare_GetFileShareData(fileShareBufferLocation bufferLocation)
@@ -1244,7 +1403,7 @@ TaskRecord *__cdecl LiveStorage_ReadStatsBackup(int controllerIndex)
                                                                                                                                     controllerIndex,
                                                                                                                                     STATS_LOCATION_BACKUP,
                                                                                                                                     1);
-    fileInfo->statsBackupFileInfo.bufferSize = 40172;
+    fileInfo->statsBackupFileInfo.bufferSize = STATS_RECORD_SIZE;
     fileInfo->statsBackupFileInfo.fileOperationSucessFunction = (void (__cdecl *)(const int, void *))LiveStorage_StatsBackupReadSuccessful;
     fileInfo->statsBackupFileInfo.fileNotFoundFunction = (taskCompleteResults (__cdecl *)(const int, void *))LiveStorage_StatsBackupFileNotFound;
     fileInfo->statsBackupFileInfo.fileTask.m_optional = 1;
@@ -1520,7 +1679,7 @@ TaskRecord *__cdecl LiveStorage_ReadOtherPlayerStats(int controllerIndex, unsign
     fileInfo->isCompressedFile = 1;
     fileInfo->fileTask.m_filename = (char*)"globalstatsCompressed";
     fileInfo->fileBuffer = (unsigned __int8 *)LiveStorage_GetStatsBuffer(controllerIndex, STATS_LOCATION_OTHERPLAYER, 1);
-    fileInfo->bufferSize = 40172;
+    fileInfo->bufferSize = STATS_RECORD_SIZE;
     fileInfo->fileOperationSucessFunction = (void (__cdecl *)(const int, void *))LiveStorage_ReadOtherPlayerStatsSuccessful;
     fileInfo->fileNotFoundFunction = (taskCompleteResults (__cdecl *)(const int, void *))LiveStorage_OtherPlayerStatsFileNotFound;
     fileInfo->menuDef = "popup_fetchstats";
@@ -1645,7 +1804,7 @@ void __cdecl LiveStorage_ReadPlayerStatsSuccessful(int controllerIndex)
     wasBasicTraining = xblive_basictraining->current.enabled;
     Dvar_SetBool((dvar_s *)xblive_basictraining, 0);
     StatsBuffer = LiveStorage_GetStatsBuffer(0, STATS_LOCATION_NORMAL, 1);
-    memcpy(StatsBuffer->statsBuffer, s_tempStatsBuffer, 0x9CE8u);
+    memcpy(StatsBuffer->statsBuffer, s_tempStatsBuffer, STATS_BUFFER_SIZE);
     LiveStorage_SetFirstTimeRunning(0);
     LiveStorage_SetStatsFetched(controllerIndex, STATS_LOCATION_FORCE_NORMAL, 1);
     controllerNetworkData[controllerIndex].firstTimeRunning = 0;
@@ -1732,7 +1891,7 @@ TaskRecord *__cdecl LiveStorage_ReadCommonStats(
     {
         memset(s_tempStatsBuffer, 0, sizeof(s_tempStatsBuffer));
         fileInfo->fileBuffer = s_tempStatsBuffer;
-        fileInfo->bufferSize = 40168;
+        fileInfo->bufferSize = STATS_BUFFER_SIZE;
     }
     nestedTask = LiveStorage_ReadDWFile(controllerIndex, fileInfo);
     return LiveStorage_SetupNestedTask(taskDef, controllerIndex, nestedTask, fileInfo);
@@ -1925,9 +2084,9 @@ TaskRecord *__cdecl LiveStorage_WriteBasicTrainingStats(int controllerIndex)
     }
     if ( !LiveStorage_DoWeHaveStats(controllerIndex, STATS_LOCATION_BASICTRAINING) )
         return 0;
-    if ( !controllerNetworkData[controllerIndex].basicTrainingStats[40168] )
+    if ( !controllerNetworkData[controllerIndex].basicTrainingStats[STATS_BUFFER_SIZE] )
         return 0;
-    if ( !controllerNetworkData[controllerIndex].basicTrainingStats[40170] )
+    if ( !controllerNetworkData[controllerIndex].basicTrainingStats[STATS_BUFFER_SIZE + 2] )
         return 0;
     if ( !LiveStorage_GetStatsWriteNeeded(controllerIndex, STATS_LOCATION_BASICTRAINING) )
         return 0;
@@ -2057,6 +2216,10 @@ void __cdecl LiveStorage_BackupCorruptedStats(int controllerIndex, char *filenam
 
 void __cdecl LiveStorage_SetAllStatsNotFetched(int controllerIndex)
 {
+    // A cloud sign-in/refetch does not invalidate the offline provider. A real
+    // user reset clears storage (and its readiness state) before reaching here.
+    if (LiveStorage_OfflineStatsReady(controllerIndex))
+        return;
     LiveStorage_SetStatsFetched(controllerIndex, STATS_LOCATION_FORCE_NORMAL, 0);
     LiveStorage_SetStatsFetched(controllerIndex, STATS_LOCATION_BACKUP, 0);
     LiveStats_SetBufferInitialised(controllerIndex, 0);
@@ -3949,9 +4112,12 @@ void __cdecl LiveStorage_ListCustomGameTypesForUser_f()
 
 void __cdecl LiveStorage_NewUser(int controllerIndex)
 {
+    const bool hadOfflineStats = LiveStorage_OfflineStatsReady(controllerIndex);
     LiveStorage_ClearPlayerStats(controllerIndex);
     LiveStorage_ResetAllFileOps();
     LiveStorage_SetAllStatsNotFetched(controllerIndex);
+    if (hadOfflineStats)
+        LiveStorage_InitOfflineStats(controllerIndex);
 }
 
 void __cdecl LiveStorage_ClearPlayerStats(int controllerIndex)
@@ -3968,6 +4134,7 @@ void __cdecl LiveStorage_ClearPlayerStats(int controllerIndex)
         __debugbreak();
     }
     memset(controllerNetworkData[controllerIndex].playerStats, 0, sizeof(playerNetworkData));
+    s_offlineStatsState[controllerIndex] = OFFLINE_STATS_EMPTY;
     controllerNetworkData[controllerIndex].fileOps = &controllerFileOps[controllerIndex];
 }
 
@@ -4115,7 +4282,37 @@ char __cdecl LiveStorage_Init()
                                                  "If true, a basic training stats error will cause the game to end, if false a warning is printed"
                                                  " to the console and the game continues");
     LiveStorage_Init_Platform();
+#ifndef KISAK_SP
     Live_FileShare_Init();
+#else
+    // File Share (Theater / custom-gametype sharing) is an MP-only subsystem and its two
+    // DDL assets are not packaged for SP at all, so this call is an unconditional ERR_DROP
+    // on the SP boot path.
+    // Evidence:
+    //   - live_fileshare.cpp:3529/3531 do DDL_LoadAsset("ddl_mp/file_share.ddl") and
+    //     ("ddl_mp/file_share_public.ddl"). Both assets exist ONLY in code_post_gfx_mp.ff
+    //     across all 139 shipped zones; "ddl/file_share.ddl" / "ddl/file_share_public.ddl"
+    //     exist in NO zone, so there is no SP path to substitute (unlike ddl/stats.ddl).
+    //   - retail BlackOps.exe contains exactly three "ddl"-prefixed literals - "ddl",
+    //     "ddl/stats.ddl", "ddl/stats_archive.ddl". No file-share DDL literal of any spelling.
+    //   - DDL_LoadAsset -> DB_FindXAssetHeader(ASSET_TYPE_DDL, name, errorIfMissing=1, -1);
+    //     ASSET_TYPE_DDL is NOT in the non-fatal whitelist at db_registry.cpp:1454-1461, and
+    //     g_defaultAssetName[ASSET_TYPE_DDL] is "" -> Com_Error(ERR_DROP, "Could not load
+    //     default asset '' for asset type 'ddl'. Tried to load asset '...'") at
+    //     db_registry.cpp:1805 - byte-for-byte the fatal already seen for ddl_mp/stats.ddl.
+    // Guarded at the CALL, not at the two loads: g_fileshareDDL would otherwise stay NULL and
+    // feed DDL_Reset plus ~20 downstream DDL_AssociateBuffer/DDL_FixBufferVersion consumers
+    // (the "suppressed the load but left the consumers running" mistake this project already
+    // made once). Skipping the whole init leaves the subsystem inert instead of half-built:
+    // its cache self-initialises lazily (live_fileshare_cache.cpp:77,124), and its only other
+    // consumers are the fileShare*/downloaddemofile/listcustomgametypes commands and Theater
+    // menu expressions, none of which exist on the SP frontend path.
+    // Audit finding C1 (asset-availability audit), live_storage.cpp:4118.
+    // TODO(SP): unconfirmed whether retail SP's LiveStorage_Init omits this call outright or
+    // whether SP has a different File Share entry point. Would be settled by decompiling
+    // LiveStorage_Init in BlackOps.exe and checking for a Live_FileShare_Init-shaped tail
+    // call; Ghidra is unavailable in this session.
+#endif
     return 1;
 }
 

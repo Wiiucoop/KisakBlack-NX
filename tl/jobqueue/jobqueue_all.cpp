@@ -1921,18 +1921,15 @@ void __cdecl jqFlush(jqBatchGroup *GroupID, unsigned __int64 batchCount)
     int  i = 0;
     while (1)
     {
-        // Stop if nothing queued/executing
-        if ((p_group->QueuedBatchCount + p_group->ExecutingBatchCount) == 0)
+        // Retail SP jqFlush @ 0x008F3350: read queued before executing, with
+        // an interlocked barrier between them. Reading executing first can
+        // observe two zeroes while a worker moves the last queued job to execution.
+        const unsigned int queuedBatchCount = p_group->QueuedBatchCount;
+        LONG barrier = 0;
+        InterlockedExchange(&barrier, 0);
+        if (queuedBatchCount + p_group->ExecutingBatchCount == 0
+            && p_group->BatchCount <= batchCount)
             break;
-
-        // Stop if a max `batchCount` was specified and we've hit that limit
-        if (batchCount && *workerBatchCount == 0)
-            break;
-
-        //Target = 0;
-        //InterlockedExchange(&Target, 0);
-        //if (!(QueuedBatchCount + *ExecutingBatchCount) && p_group->BatchCount <= batchCount)
-        //    break;
 
         jqWorkerLoop(jqWorkers, GroupID, true, workerBatchCount);
 

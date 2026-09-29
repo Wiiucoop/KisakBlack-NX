@@ -11,7 +11,35 @@ enum scriptAnimAIFunctionTypes_t : __int32
     AI_ANIM_FUNCTION_DEATH  = 0x5,
 };
 
-struct AnimScriptList // sizeof=0x40C0
+// RETAIL SP LAYOUT, recovered 2026-08-28 from the animscript SET pass (0x007eeda0 human,
+// 0x007ef000 dog, 0x007ef090 zombie, 0x007ef190 zombie_dog), each of which pushes the absolute
+// address of the member it fills. Member offsets, all stride 8 (sizeof(scr_animscript_t)):
+//   +0x00 combat              +0x40 cover_prone          +0x80 pain
+//   +0x08 concealment_crouch  +0x48 cover_right          +0x88 react
+//   +0x10 concealment_prone   +0x50 cover_stand          +0x90 move
+//   +0x18 concealment_stand   +0x58 cover_wide_left      +0x98 scripted
+//   +0x20 cover_arrival       +0x60 cover_wide_right     +0xa0 stop
+//   +0x28 cover_crouch        +0x68 death                +0xa8 grenade_cower
+//   +0x30 cover_left          +0x70 grenade_return_throw +0xb0 flashed
+//   +0x38 cover_pillar        +0x78 init                 +0xb8 turn
+//
+// cover_pillar is the one member this MP-derived struct was missing; every member after it sat
+// 8 bytes low against SP. Confirmed by a READER rather than the loaders (independent second
+// fact): Actor_AnimTryRun at 0x0051ac94 computes g_animScriptTable[species] then ADD EDX,0x90
+// for ->move and ADD EDX,0xa0 for ->stop, which are this table's offsets and NOT the MP ones
+// (+0x88 / +0x98). animscripts/cover_pillar.gsc ships in common.ff and frontend.ff.
+//
+// DELIBERATE DEVIATION, recorded rather than silently taken: retail SP has no `jump` member
+// (nothing in SP loads dog_jump; the slot retail uses at +0xb8 is `turn`). `jump` is kept here
+// for both configs because Game/Server/game/actor_dog_exposed.cpp compares against its ADDRESS
+// at three sites, and removing it under KISAK_SP would break those for no functional gain --
+// nothing serialises AnimScriptList, so only self-consistency is load-bearing. The cost is that
+// SP's `turn` lands at +0xc0 here instead of retail's +0xb8. Same reasoning for weapons[]:
+// retail SP's stride between species lists is 0x4C0, which leaves 0x400 after the 24-member
+// head and so implies weapons[128], but that is gap arithmetic rather than a positive
+// observation, and under-sizing an array indexed by weapon number is the dangerous direction --
+// so it stays at 2048 for both configs.
+struct AnimScriptList // sizeof=0x40C0 (MP); SP retail is 0x4C0, see note above
 {                                       // XREF: scr_data_t/r
     scr_animscript_t combat;
     scr_animscript_t concealment_crouch;
@@ -20,6 +48,9 @@ struct AnimScriptList // sizeof=0x40C0
     scr_animscript_t cover_arrival;
     scr_animscript_t cover_crouch;
     scr_animscript_t cover_left;
+#ifdef KISAK_SP
+    scr_animscript_t cover_pillar;      // retail SP +0x38; absent from the MP set
+#endif
     scr_animscript_t cover_prone;
     scr_animscript_t cover_right;
     scr_animscript_t cover_stand;
@@ -70,4 +101,4 @@ void __stdcall Actor_AnimSetCompleteGoalWeight(
                 int bRestart);
 void __stdcall Actor_AnimClearGoalWeight(unsigned int animIndex, float blendTime);
 
-extern AnimScriptList *g_animScriptTable[1];
+extern AnimScriptList *g_animScriptTable[MAX_AI_SPECIES];

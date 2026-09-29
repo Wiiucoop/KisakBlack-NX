@@ -565,7 +565,7 @@ struct gameState_t // sizeof=0x132F8
                                                                                 // CL_WriteUncompressedDemoInfo(int)+83B/r ...
 };
 #ifndef KISAK_NX // nx-port: x86 layout assert
-static_assert(sizeof(gameState_t) == 78584);
+static_assert(sizeof(gameState_t) == 78584 + (MAX_CONFIGSTRINGS - 0xCBC) * sizeof(int));
 #endif
 
 struct clientStatic_t // sizeof=0x1CF2800
@@ -776,7 +776,7 @@ struct __declspec(align(8)) clientConnection_t // sizeof=0xAFF48
         // padding byte
         // padding byte
         __int64 statPacketsToSend;
-        int statPacketSendTime[34];
+        int statPacketSendTime[36];
         unsigned int serverChallenge;
         unsigned int clientChallenge;
         unsigned int nonce;
@@ -859,6 +859,12 @@ void __cdecl CL_ShutdownDevGui();
 void __cdecl CL_ShutdownHunkUsers();
 void __cdecl CL_ShutdownAll();
 void __cdecl CL_ShutdownDemo();
+#ifdef KISAK_SP
+void __cdecl CL_MapLoading_CalcMovieToPlay(const char *buffer, const char *inMapName, char *outMovieName);
+void __cdecl CL_MapLoading_CalcMovieToPlay_LoadObj(const char *inMapName, char *outMovieName);
+void __cdecl CL_MapLoading_CalcMovieToPlay_FastFile(const char *inMapName, char *outMovieName);
+void __cdecl CL_MapLoading_StartCinematic(const char *mapName, float volume);
+#endif
 void __cdecl CL_MapLoading(const char *mapname);
 void __cdecl CL_ResetSkeletonCache(unsigned int localClientNum);
 void __cdecl CL_ClearStaticDownload();
@@ -934,6 +940,9 @@ void __cdecl CL_InitRef();
 void __cdecl SetupGfxConfig(GfxConfiguration *config);
 void __cdecl CL_InitDedicated();
 void __cdecl CL_startSingleplayer_f();
+#ifdef KISAK_SP
+void __cdecl CL_startMultiplayer_f();
+#endif
 void __cdecl CL_DrawLogo(int localClientNum);
 void __cdecl CL_StopLogo(int localClientNum);
 void __cdecl CL_StopLogoOrCinematic(int localClientNum);

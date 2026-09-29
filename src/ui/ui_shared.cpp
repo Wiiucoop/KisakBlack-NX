@@ -1,4 +1,7 @@
 #include "ui_shared.h"
+#ifdef KISAK_MP
+#include <ui_mp/ui_main_mp.h>
+#endif
 #include "ui_shared_obj.h"
 #include "ui_localvars.h"
 #include "ui_utils.h"
@@ -34,6 +37,9 @@
 #include <client_mp/cl_input_mp.h>
 #include <sound/snd_public_async.h>
 #include <cgame/cg_sound.h>
+#ifdef KISAK_SP
+#include <ui/ui_main.h>                 // ui_menuLvlNotify, for the "cmd mlvl" menu notifications
+#endif
 
 cmd_function_s UI_SetLocalVarBool_f_VAR;
 cmd_function_s UI_SetLocalVarInt_f_VAR;
@@ -92,7 +98,25 @@ struct commandDef_t // sizeof=0x8
     void (__cdecl *handler)(int, UiContext *, itemDef_s *, const char **);
 };
 
-const commandDef_t commandList[50] =
+#ifdef KISAK_SP
+// Manual source-only adapters, not recovered retail symbol names. Retail
+// 0x0083B750 / 0x0083B7F0 consume an item name and set opposite visibility
+// values using save availability. See docs/SP_MANUALLY_NAMED_FUNCTIONS.md.
+// TODO(SP): restore the save predicates when the save backend is implemented.
+// savegame/savegamenocommit are currently no-ops and issavesuccessful returns 0,
+// so there is no committed save: hide Save and Quit, and show ordinary Quit.
+static void Script_NoSaveHide_SP(int localClientNum, UiContext *dc, itemDef_s *item, const char **args)
+{
+    Script_Hide(localClientNum, dc, item, args);
+}
+
+static void Script_SaveAvailableHide_SP(int localClientNum, UiContext *dc, itemDef_s *item, const char **args)
+{
+    Script_Show(localClientNum, dc, item, args);
+}
+#endif
+
+const commandDef_t commandList[] =
 {
   { "fadein", Script_FadeIn },
   { "fadeout", Script_FadeOut },
@@ -143,7 +167,11 @@ const commandDef_t commandList[50] =
   { "openforgametype", Script_OpenForGameType },
   { "closeforgametype", Script_CloseForGameType },
   { "activateblur", Script_ActivateBlur },
-  { "deactivateblur", Script_DeactivateBlur }
+  { "deactivateblur", Script_DeactivateBlur },
+#ifdef KISAK_SP
+  { "nosavehide", Script_NoSaveHide_SP },
+  { "saveAvailableHide", Script_SaveAvailableHide_SP },
+#endif
 };
 
 
@@ -1280,6 +1308,16 @@ int __cdecl Menus_RemoveFromStack(int localClientNum, UiContext *dc, menuDef_t *
         dc->menuStack[i].menu = dc->menuStack[i + 1].menu;
         dc->menuStack[i++].localClientNum = v3;
     }
+#ifdef KISAK_SP
+    // SP-only, retail Menus_RemoveFromStack 0x00839880, emit block at 0x008398cf-0x00839905.
+    // Placed on the FOUND path only: retail's not-found exit is 0x008398a3
+    // (XOR EAX,EAX / POP / RET) and never reaches this block, which matches the `return 0` above.
+    // Same two-dvar gate and same window.name read as the Menus_AddToStack emit -- see the long
+    // note there; the only difference is the format string, 0x00a23160 ("cmd mlvl close %s\n"),
+    // pushed at 0x008398f0.
+    if ( ui_menuLvlNotify->current.enabled && !cl_paused->current.integer )
+        Cbuf_AddText(localClientNum, va("cmd mlvl close %s\n", pMenu->window.name));
+#endif
     return 1;
 }
 
@@ -2995,7 +3033,7 @@ void __cdecl Item_RunScript(int localClientNum, UiContext *dc, itemDef_s *item, 
             if ( command[0] != 59 || command[1] )
             {
                 bRan = 0;
-                for ( i = 0; i < 0x32; ++i )
+                for ( i = 0; i < std::size(commandList); ++i )
                 {
                     if ( !I_stricmp(command, commandList[i].name) )
                     {
@@ -3885,7 +3923,8 @@ void __cdecl UI_ValidatePrivateMatchGametype_f()
         if ( !I_strcmp(ui_gametype->current.string, sharedUiInfo.customMatchGameTypes[i].gameType) )
             return;
     }
-    Dvar_SetString((dvar_s *)ui_gametype, (const char *)&sharedUiInfo.numCustomMatchGameTypes);
+    if ( sharedUiInfo.numCustomMatchGameTypes > 0 )
+        Dvar_SetString((dvar_s *)ui_gametype, sharedUiInfo.customMatchGameTypes[0].gameType);
 }
 
 void __cdecl UI_SetActiveMenu_f()
@@ -4279,6 +4318,14 @@ void __cdecl Item_TextField_BeginEdit(int localClientNum, int contextIndex, item
 
 void __cdecl Menus_Open(int localClientNum, UiContext *dc, menuDef_t *menu)
 {
+#ifdef KISAK_MP
+    if (UI_IsCustomBotMenu(menu))
+    {
+        UI_PrepareCustomBotMenu();
+        if (!Dvar_GetString("scr_bot_difficulty")[0])
+            Dvar_SetStringByName("scr_bot_difficulty", "normal");
+    }
+#endif
     int openSlideSpeed; // [esp+0h] [ebp-1Ch]
     int openFadingTime; // [esp+4h] [ebp-18h]
     int i; // [esp+18h] [ebp-4h]
@@ -4349,12 +4396,45 @@ void __cdecl Menus_AddToStack(int localClientNum, UiContext *dc, menuDef_t *pMen
         {
             dc->menuStack[i + 1].menu = pMenu;
             dc->menuStack[i + 1].localClientNum = localClientNum;
+#ifdef KISAK_SP
+            // Retail falls out of the loop here rather than returning, so that the notify below
+            // runs on the inserted path too -- see the convergence note under the emit.
+            break;
+#else
             return;
+#endif
         }
         v3 = dc->menuStack[i].localClientNum;
         dc->menuStack[i + 1].menu = dc->menuStack[i].menu;
         dc->menuStack[i + 1].localClientNum = v3;
     }
+#ifdef KISAK_SP
+    // SP-only, retail Menus_AddToStack 0x00839910, emit block at 0x0083999a-0x008399cc.
+    //
+    // UNCONDITIONAL after the insertion loop: all three exits converge on 0x0083999a -- the
+    // loop-never-entered jump (0x0083994d JL), the loop-exhausted jump (0x0083998a JMP), and the
+    // inserted path (0x0083998c stores, then falls through). That is why the early return above
+    // becomes a break: leaving it a return would silence the common case.
+    //
+    // The gate is two dvars, both read from the binary:
+    //   0x0083999a  CMP byte ptr [DAT_02598ef4 + 0x18],0  -> ui_menuLvlNotify->current.enabled
+    //               (DAT_02598ef4 identified by the registrar walk; see ui_main_mp.cpp).
+    //   0x008399ae  UCOMISS XMM0(0.0), dword ptr [DAT_0243fd0c + 0x18] / LAHF / TEST AH,0x44 / JP
+    //               -- MSVC's codegen for `f == 0.0f`. DAT_0243fd0c is cl_paused: its only
+    //               writers are CL_PauseGame's two Dvar_SetInt calls (0x0062c2a7, 0x0062c2c4).
+    //               cl_paused is _Dvar_RegisterInt in this tree, and dvar_t::current is a union,
+    //               so retail's float read of current.value is bit-identical to current.integer
+    //               for the only question being asked (nonzero or not).
+    //   0x008399b8  PUSH dword ptr [EDI] -> the menu pointer's offset 0, which is
+    //               menuDef_t::window (offset 0) . windowDef_t::name (offset 0).
+    //   0x008399bb  PUSH 0x009f41f8 ("cmd mlvl open %s\n")
+    //
+    // DO NOT "fix" the resulting double emit: Menus_AddToStack calls Menus_RemoveFromStack first,
+    // so reopening an already-open menu emits close-then-open. That is retail behaviour and the
+    // GSC switch tolerates it.
+    if ( ui_menuLvlNotify->current.enabled && !cl_paused->current.integer )
+        Cbuf_AddText(localClientNum, va("cmd mlvl open %s\n", pMenu->window.name));
+#endif
 }
 
 void __cdecl Menu_LoseFocusDueToOpen(int localClientNum, UiContext *dc, menuDef_t *menu)
@@ -11170,6 +11250,9 @@ void __cdecl UI_AddMenu(int localClientNum, UiContext *dc, menuDef_t *menu, int 
         __debugbreak();
     }
     if ( useFastFile->current.enabled
+#ifdef KISAK_MP
+        && !UI_IsCustomBotMenu(menu)
+#endif
 #ifdef KISAK_NX
         && touchMenu != menu
 #else
@@ -11182,6 +11265,9 @@ void __cdecl UI_AddMenu(int localClientNum, UiContext *dc, menuDef_t *menu, int 
     dc->Menus[dc->menuCount++] = menu;
     if ( close )
         Menus_Close(localClientNum, dc, menu);
+#ifdef KISAK_MP
+    UI_AddCustomBotSettings(localClientNum, dc, menu);
+#endif
 }
 
 void __cdecl UI_PlaySound(char context, char *aliasname)

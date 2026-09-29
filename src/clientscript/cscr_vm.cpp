@@ -137,9 +137,36 @@ void __cdecl Scr_Settings(int developer, int developer_script, int abort_on_erro
     gScrVmPub[inst].abort_on_error = abort_on_error != 0;
 #endif
     // KISAKTODO: script debug "potential infinite loop!!!"
+#ifdef KISAK_SP
+    // SP bring-up diagnostic (2026-08-08). Not a behaviour fix -- it makes GSC compile
+    // errors NAMED instead of anonymous, which is the difference between a 49-item
+    // guessing game and a loop.
+    //
+    // With developer == 0, CompileError2 (cscr_parser.cpp:1805-1815) falls back to
+    // Scr_PrintPrevCodePos's `va("@ %d\n", codePos - gScrVarPub[inst].programBuffer)`
+    // form (cscr_parser.cpp:1394), and Scr_GetTextSourcePos (:1830) short-circuits and
+    // returns an empty line. That is exactly why the live fatal reads
+    //     Error: unknown function: @ 155211
+    // with no script name -- 155211 is a byte offset into the compiled opcode buffer,
+    // not a source position. With developer == 1 the same error instead reads
+    //     Error: unknown function: maps/_gameskill.gsc(NN): <the offending source line>
+    // and keeps naming the next one after every fix.
+    //
+    // developer_script deliberately stays FALSE: enabling it additionally compiles the
+    // /# ... #/ developer blocks, which pull in six further unregistered builtins
+    // (getdebugdvar, getdebugdvarint, isgodmode, record3dtext, recordenttext, recordline)
+    // and would manufacture new failures rather than exposing existing ones.
+    //
+    // Revisit once the SP builtin/method tables are complete -- retail reads these from
+    // the `developer` / `developer_script` dvars (the #if 0 block above).
+    gScrVarPub[inst].developer = true;
+    gScrVarPub[inst].developer_script = false;
+    gScrVmPub[inst].abort_on_error = false;
+#else
     gScrVarPub[inst].developer = false;
     gScrVarPub[inst].developer_script = false;
     gScrVmPub[inst].abort_on_error = false;
+#endif
 }
 
 void __cdecl Scr_Shutdown(scriptInstance_t inst)
@@ -5494,7 +5521,14 @@ WAIT:
                     waitTime = Q_rint(localFs.top->u.floatValue * (inst != SCRIPTINSTANCE_SERVER ? 60.0f : 20.0f));
                     if (!waitTime)
                     {
+#ifdef KISAK_SP
+                        // Retail OP_wait (0x008aa460): a nonzero sub-frame
+                        // delay advances one tick. Testing only NaN made
+                        // wait(0.01) repeatedly run in the current server tick.
+                        waitTime = localFs.top->u.floatValue != 0.0f;
+#else
                         waitTime = isnan(localFs.top->u.floatValue) ? 1 : 0;
+#endif
 
                         //v14 = *(float *)&localFs.top->u.intValue < 0.0;
                         //v18 = 0;

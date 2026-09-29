@@ -1670,6 +1670,10 @@ void __cdecl Demo_ReadHeader()
     const char *v1; // eax
 
     demo.header.version = MSG_ReadByte(&demo.msg);
+#ifdef KISAK_SP
+    if (demo.header.version != OPENBLOPS_DEMO_VERSION)
+        Com_Error(ERR_DROP, "This SP demo uses an incompatible entity animation layout.");
+#endif
     demo.header.maxClients = MSG_ReadByte(&demo.msg);
     Byte = MSG_ReadByte(&demo.msg);
     Demo_SetDemoClientIndex(Byte);
@@ -3391,7 +3395,7 @@ void __cdecl Demo_ReadConfigStrings(int localClientNum, msg_t *msg)
             configStringIndex = lastStringIndex + 1;
         else
             configStringIndex = MSG_ReadBits(msg, 0xCu);
-        if ( configStringIndex >= 0xCBC
+        if ( configStringIndex >= MAX_CONFIGSTRINGS
             && !Assert_MyHandler(
                         "C:\\projects_pc\\cod\\codsrc\\src\\demo\\demo_playback.cpp",
                         4954,
@@ -6023,4 +6027,3 @@ void __cdecl Demo_HandleHoldInput(int localClientNum, int key, bool holdResult)
         demo.playback->holdCmd.active = 0;
     }
 }
-

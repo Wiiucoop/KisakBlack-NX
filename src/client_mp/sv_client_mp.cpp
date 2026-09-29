@@ -1,3 +1,5 @@
+#include <server_mp/sv_offline_stats.h>
+#include <clientscript/cscr_vm.h>
 #include "sv_client_mp.h"
 #include <server_mp/sv_main_mp.h>
 #include <live/live_storage_win.h>
@@ -74,6 +76,10 @@ unsigned __int64 g_notifyLeave[32];
 
 void __cdecl SV_HandleDWChallengeResponse(netadr_t from, msg_t *msg)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Session-owned records must never be replaced by asynchronous service responses.
+    return;
+#else
     client_t *client; // [esp+0h] [ebp-10h]
     unsigned int serverchallenge; // [esp+4h] [ebp-Ch] BYREF
     int qport; // [esp+8h] [ebp-8h]
@@ -105,6 +111,7 @@ void __cdecl SV_HandleDWChallengeResponse(netadr_t from, msg_t *msg)
             }
         }
     }
+#endif
 }
 
 void __cdecl SV_GetChallenge(netadr_t from)
@@ -156,6 +163,13 @@ void __cdecl SV_GetChallenge(netadr_t from)
     }
 
 
+#ifdef OPENBLOPS_NO_STEAM_AUTH
+    // Direct-connect development protocol: retain the address-bound challenge,
+    // but do not require or invent a Steam identity.
+    challenge->steamID64 = 0;
+    challenge->pingTime = svs.time;
+    NET_OutOfBandPrint(NS_SERVER, from, va("challengeResponse %i", challenge->challenge));
+#else
     //challenge->pingTime = svs.time;
     //NET_OutOfBandPrint(NS_SERVER, from, va("challengeResponse %i", challenge->challenge));
     
@@ -211,10 +225,15 @@ void __cdecl SV_GetChallenge(netadr_t from)
         memset(challenge, 0, sizeof(challenge_t));
         return;
     }
+#endif
 }
 
 void __cdecl SV_CacheClientStatChange(unsigned int clientNum, ddlState_t *searchState)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Legacy deltas have no buffer selector and cannot represent permission routing.
+    return;
+#else
     int offset; // [esp+4h] [ebp-10h]
     int byteEndOffset; // [esp+8h] [ebp-Ch]
     int bitEndOffset; // [esp+Ch] [ebp-8h]
@@ -238,10 +257,16 @@ void __cdecl SV_CacheClientStatChange(unsigned int clientNum, ddlState_t *search
     for ( offset = searchState->absoluteOffset / 8; offset < byteEndOffset; ++offset )
         svs.clients[clientNum].modifiedStatBytes[offset >> 3] |= 1 << (offset & 7);
     svs.clients[clientNum].statsModified = 1;
+#endif
 }
 
 void __cdecl SV_SetClientDIntStat(unsigned int clientNum, ddlState_t *searchState, unsigned int value)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    char *buffer = SV_OfflineStatsBuffer(clientNum, searchState);
+    if (searchState->member->type > 2 || !DDL_SetInt(searchState, value, buffer))
+        Scr_Error("setdstat: invalid integer value", 0);
+#else
     ddlDef_t *StatsDDL; // eax
     client_t *cl; // [esp+8h] [ebp-50h]
     char *buffer; // [esp+Ch] [ebp-4Ch]
@@ -271,7 +296,7 @@ void __cdecl SV_SetClientDIntStat(unsigned int clientNum, ddlState_t *searchStat
         if ( !cl->statsValidated )
         {
             StatsDDL = LiveStats_GetStatsDDL();
-            if ( !DDL_AssociateBuffer(buffer, 40168, StatsDDL) )
+            if ( !DDL_AssociateBuffer(buffer, STATS_BUFFER_SIZE, StatsDDL) )
             {
                 DDL_PrintError("DDL: Could not get stat. Buffer error.");
                 return;
@@ -285,10 +310,14 @@ void __cdecl SV_SetClientDIntStat(unsigned int clientNum, ddlState_t *searchStat
             SV_CacheClientStatChange(clientNum, searchState);
         }
     }
+#endif
 }
 
 void __cdecl SV_SetClientDStringStat(unsigned int clientNum, ddlState_t *searchState, const char *value)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    SV_OfflineStatsSetString(clientNum, searchState, value);
+#else
     ddlDef_t *StatsDDL; // eax
     client_t *cl; // [esp+8h] [ebp-50h]
     char *buffer; // [esp+Ch] [ebp-4Ch]
@@ -318,7 +347,7 @@ void __cdecl SV_SetClientDStringStat(unsigned int clientNum, ddlState_t *searchS
         if ( !cl->statsValidated )
         {
             StatsDDL = LiveStats_GetStatsDDL();
-            if ( !DDL_AssociateBuffer(buffer, 40168, StatsDDL) )
+            if ( !DDL_AssociateBuffer(buffer, STATS_BUFFER_SIZE, StatsDDL) )
             {
                 DDL_PrintError("DDL: Could not get stat. Buffer error.");
                 return;
@@ -332,10 +361,16 @@ void __cdecl SV_SetClientDStringStat(unsigned int clientNum, ddlState_t *searchS
             SV_CacheClientStatChange(clientNum, searchState);
         }
     }
+#endif
 }
 
 void __cdecl SV_SetClientDInt64Stat(unsigned int clientNum, ddlState_t *searchState, unsigned __int64 value)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    char *buffer = SV_OfflineStatsBuffer(clientNum, searchState);
+    if (searchState->member->type != 3 || !DDL_SetInt64(searchState, value, buffer))
+        Scr_Error("setdstat: invalid 64-bit value", 0);
+#else
     ddlDef_t *StatsDDL; // eax
     client_t *cl; // [esp+8h] [ebp-50h]
     char *buffer; // [esp+Ch] [ebp-4Ch]
@@ -365,7 +400,7 @@ void __cdecl SV_SetClientDInt64Stat(unsigned int clientNum, ddlState_t *searchSt
         if ( !cl->statsValidated )
         {
             StatsDDL = LiveStats_GetStatsDDL();
-            if ( !DDL_AssociateBuffer(buffer, 40168, StatsDDL) )
+            if ( !DDL_AssociateBuffer(buffer, STATS_BUFFER_SIZE, StatsDDL) )
             {
                 DDL_PrintError("DDL: Could not get stat. Buffer error.");
                 return;
@@ -379,10 +414,16 @@ void __cdecl SV_SetClientDInt64Stat(unsigned int clientNum, ddlState_t *searchSt
             SV_CacheClientStatChange(clientNum, searchState);
         }
     }
+#endif
 }
 
 unsigned int __cdecl SV_GetClientDIntStat(unsigned int clientNum, ddlState_t *searchState)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    char *buffer = SV_OfflineStatsBuffer(clientNum, searchState);
+    if (searchState->member->type > 2) Scr_Error("getdstat: expected integer", 0);
+    return DDL_GetInt(searchState, buffer);
+#else
     ddlDef_t *StatsDDL; // eax
     char *buffer; // [esp+8h] [ebp-4Ch]
 
@@ -416,7 +457,7 @@ unsigned int __cdecl SV_GetClientDIntStat(unsigned int clientNum, ddlState_t *se
     if ( !svs.clients[clientNum].statsValidated )
     {
         StatsDDL = LiveStats_GetStatsDDL();
-        if ( !DDL_AssociateBuffer(buffer, 40168, StatsDDL) )
+        if ( !DDL_AssociateBuffer(buffer, STATS_BUFFER_SIZE, StatsDDL) )
         {
             DDL_PrintError("DDL: Could not get stat. Buffer error.");
             return 0;
@@ -424,10 +465,14 @@ unsigned int __cdecl SV_GetClientDIntStat(unsigned int clientNum, ddlState_t *se
         svs.clients[clientNum].statsValidated = 1;
     }
     return DDL_GetInt(searchState, buffer);
+#endif
 }
 
 char *__cdecl SV_GetClientDStringStat(unsigned int clientNum, ddlState_t *searchState)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    return SV_OfflineStatsString(clientNum, searchState);
+#else
     ddlDef_t *StatsDDL; // eax
     char *buffer; // [esp+8h] [ebp-4Ch]
 
@@ -453,7 +498,7 @@ char *__cdecl SV_GetClientDStringStat(unsigned int clientNum, ddlState_t *search
     if ( !svs.clients[clientNum].statsValidated )
     {
         StatsDDL = LiveStats_GetStatsDDL();
-        if ( !DDL_AssociateBuffer(buffer, 40168, StatsDDL) )
+        if ( !DDL_AssociateBuffer(buffer, STATS_BUFFER_SIZE, StatsDDL) )
         {
             DDL_PrintError("DDL: Could not get stat. Buffer error.");
             return (char *)"";
@@ -461,10 +506,16 @@ char *__cdecl SV_GetClientDStringStat(unsigned int clientNum, ddlState_t *search
         svs.clients[clientNum].statsValidated = 1;
     }
     return DDL_GetString(searchState, buffer);
+#endif
 }
 
-unsigned int __cdecl SV_GetClientDInt64Stat(unsigned int clientNum, ddlState_t *searchState)
+unsigned __int64 __cdecl SV_GetClientDInt64Stat(unsigned int clientNum, ddlState_t *searchState)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    char *buffer = SV_OfflineStatsBuffer(clientNum, searchState);
+    if (searchState->member->type != 3) Scr_Error("getdstat: expected 64-bit integer", 0);
+    return DDL_GetInt64(searchState, buffer);
+#else
     ddlDef_t *StatsDDL; // eax
     char *buffer; // [esp+8h] [ebp-4Ch]
 
@@ -494,7 +545,7 @@ unsigned int __cdecl SV_GetClientDInt64Stat(unsigned int clientNum, ddlState_t *
     if ( !svs.clients[clientNum].statsValidated )
     {
         StatsDDL = LiveStats_GetStatsDDL();
-        if ( !DDL_AssociateBuffer(buffer, 40168, StatsDDL) )
+        if ( !DDL_AssociateBuffer(buffer, STATS_BUFFER_SIZE, StatsDDL) )
         {
             DDL_PrintError("DDL: Could not get stat. Buffer error.");
             return 0;
@@ -502,10 +553,15 @@ unsigned int __cdecl SV_GetClientDInt64Stat(unsigned int clientNum, ddlState_t *
         svs.clients[clientNum].statsValidated = 1;
     }
     return DDL_GetInt64(searchState, buffer);
+#endif
 }
 
 void __cdecl SV_UploadStats(int clientNum)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Offline stats live only for the server connection; no upload command/service write.
+    return;
+#else
     client_t *client; // [esp+0h] [ebp-4h]
 
     client = &svs.clients[clientNum];
@@ -515,6 +571,7 @@ void __cdecl SV_UploadStats(int clientNum)
         if ( !xblive_wagermatch->current.enabled )
             SV_DWWriteClientStats(client);
     }
+#endif
 }
 
 void __cdecl SV_UploadStats()
@@ -734,6 +791,9 @@ void __cdecl SV_FreeClient(client_t *cl)
         ClientDisconnect(cl - svs.clients);
     SV_SetUserinfo(cl - svs.clients, (char *)"");
     SV_FreeClientScriptId(cl);
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    SV_OfflineStatsReset((unsigned int)(cl - svs.clients));
+#endif
 }
 
 void __cdecl SV_FreeClients()
@@ -808,6 +868,22 @@ void __cdecl SV_DirectConnect(netadr_t from)
         Com_DPrintf(15, "    rejected connect from protocol version %i (should be %i)\n", version, 1044);
         return;
     }
+    if (IsDedicatedServer() && !NET_IsLocalAddress(from) && from.type != NA_BOT
+        && I_strcmp(Info_ValueForKey(userinfo, "openblops_mode"), OPENBLOPS_GAME_MODE))
+    {
+        NET_OutOfBandPrint(NS_SERVER, from,
+            "error\nUse a matching OpenBLOPS " OPENBLOPS_GAME_MODE " client build.");
+        return;
+    }
+#ifdef KISAK_SP
+    if (!NET_IsLocalAddress(from) && from.type != NA_BOT
+        && I_strcmp(Info_ValueForKey(userinfo, "openblops_sp_anim"), OPENBLOPS_SP_ANIM_PROTOCOL))
+    {
+        NET_OutOfBandPrint(NS_SERVER, from,
+            "error\nThis Zombies server requires an updated OpenBLOPS SP client.");
+        return;
+    }
+#endif
     challenge = atoi(Info_ValueForKey(userinfo, "challenge"));
     qport = atoi(Info_ValueForKey(userinfo, "qport"));
     i = 0;
@@ -1006,6 +1082,9 @@ void __cdecl SV_DirectConnect(netadr_t from)
     gotnewcl:
         tempslot = newcl->reservedSlot;
         memset((unsigned __int8 *)newcl, 0, sizeof(client_t));
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+        SV_OfflineStatsReset((unsigned int)(newcl - svs.clients));
+#endif
         newcl->reservedSlot = tempslot;
         clientNum = newcl - svs.clients;
         Pregame_ResetDataForClient(clientNum);
@@ -1086,6 +1165,9 @@ void __cdecl SV_DirectConnect(netadr_t from)
             NET_OutOfBandPrint(NS_SERVER, from, va("error\n%s", denied));
             Com_DPrintf(15, "Game rejected a connection: %s.\n", denied);
             SV_FreeClientScriptId(newcl);
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+            SV_OfflineStatsReset(clientNum);
+#endif
         }
         else
         {
@@ -1104,7 +1186,9 @@ void __cdecl SV_DirectConnect(netadr_t from)
             I_strncpyz(newcl->clientPBguid, clientPBguid, 33);
 
             // LWSS ADD - for steam auth
+#ifndef OPENBLOPS_NO_STEAM_AUTH
             iassert(steamID64 || newcl->bIsDemoClient || !IsDedicatedServer());
+#endif
             newcl->steamID = steamID64;
             // LWSS END
 
@@ -1268,12 +1352,14 @@ void __cdecl SV_DropClient(client_t *drop, const char *reason, bool tellThem, bo
         if (onlinegame->current.enabled && com_sv_running->current.enabled)
             MatchRecordPlayerDetails(&level.clients[clientNum], reason);
 #endif
+#ifndef OPENBLOPS_NO_STEAM_AUTH
         // LWSS ADD
         if (IsDedicatedServer() && !drop->bIsDemoClient)
         {
             Steam_OnClientDropped(drop->steamID);
         }
         // LWSS END
+#endif
         LiveSteam_Server_ClientSteamDisconnect(drop->steamID);
         SV_FreeClient(drop);
         Com_DPrintf(15, "Going to CS_ZOMBIE from %i for %s due to %s\n", dropState, droppedClientName, reason);
@@ -1431,7 +1517,13 @@ void __cdecl SV_SendClientGameState(client_t *client)
         }
     }
 
-#ifdef KISAK_STATS
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    if (!SV_OfflineStatsReady((unsigned int)(client - svs.clients)))
+    {
+        SV_DropClient(client, "Offline stats profile unavailable", false, false);
+        return;
+    }
+#elif defined(KISAK_STATS)
     // to pass the below check if it's just a testclient/democlient 
     if (client->bIsTestClient || client->bIsDemoClient)
     {
@@ -1754,6 +1846,10 @@ process_configString:
 
 bool __cdecl SV_ConfigStringIsConstant(int configStringNum)
 {
+#ifdef KISAK_SP
+    if (configStringNum >= CS_SP_LOOKAT_TEXT && configStringNum <= CS_SP_LOOKAT_TEXT_LAST)
+        return false;
+#endif
     bool result; // al
 
     switch ( configStringNum )
@@ -3001,6 +3097,55 @@ void __cdecl SV_ExecuteClientMessage(client_t *cl, msg_t *msg)
             //LargeLocal::~LargeLocal(&msgCompressed_buf_large_local);
             return;
         }
+#ifdef KISAK_SP
+        // SP retail divergence, live-disassembled from BlackOps.exe SV_ExecuteClientMessage
+        // (0x005158e0..0x00515b13; this branch is 0x0051598c..0x005159e8):
+        //
+        //   0051598c: CMP dword ptr [0x01c05344],0x0   ; level.registerWeapons
+        //   00515995: CMP dword ptr [0x01c05348],0x0   ; level.bRegisterItems
+        //   0051599e: MOV AL,0x1  /  005159a2: XOR AL,AL
+        //   005159a4: MOV EDX,[EBX+0x10f28]            ; cl->messageAcknowledge
+        //   005159aa: CMP EDX,[EBX+0x10f30]            ; cl->gamestateMessageNum
+        //   005159b0: JLE  -> return
+        //   005159b6: TEST AL,AL / JZ -> return
+        //   005159cc: CALL Com_DPrintf(15, "%s : dropped gamestate, resending\n", cl->name)
+        //   005159d2: CALL SV_SendClientGameState      (0x00506320)
+        //
+        // Two verified differences from the MP-shaped code below:
+        //
+        // 1. Retail SP does NOT call SV_ProcessClientCommands on this branch at all. The
+        //    serverId test at 0x00515956 jumps straight past the SV_ProcessClientCommands
+        //    call site (0x005159f3, reached only via 0x005159e9) -- stale commands from the
+        //    previous server generation are discarded, not executed.
+        //
+        // 2. Retail SP additionally gates the resend on level.registerWeapons == 0 &&
+        //    level.bRegisterItems == 0. SV_SendClientGameState serializes every configstring,
+        //    including the weapon configstrings written by SaveRegisteredWeapons
+        //    (0x0055e920, clears 0x01c05344) and the registered-item bitmask written by
+        //    SaveRegisteredItems (0x0065bcf0, clears 0x01c05348). Both flags are cleared once
+        //    per server frame by G_RunFrame (0x0045a6c0 tail; source g_main_mp.cpp:3251-3254),
+        //    so this only delays the gamestate until those configstrings are rebuilt -- it
+        //    cannot block it permanently.
+        //
+        // NOTE: the Com_Printf("... file %s line %i") trace below is NOT retail. The only
+        // xref to "%s : dropped gamestate, resending\n" (0x009dcefc) is the Com_DPrintf at
+        // 0x005159c5, and "SV_SendClientGameState() for %s\n" (0x009ed478) is referenced only
+        // from inside SV_SendClientGameState itself (0x005063eb). It was added by commit
+        // fc9412a as a debug trace; it is kept here because it is currently the only visible
+        // marker of this path in the SP log.
+        if ( !level.registerWeapons && !level.bRegisterItems
+            && cl->messageAcknowledge > cl->gamestateMessageNum )
+        {
+            Com_DPrintf(15, "%s : dropped gamestate, resending\n", cl->name);
+            Com_Printf(
+                15,
+                "SV_SendClientGameState() for %s file %s line %i\n",
+                cl->name,
+                "C:\\projects_pc\\cod\\codsrc\\src\\server_mp\\sv_client_mp.cpp",
+                4902);
+            SV_SendClientGameState(cl);
+        }
+#else
         if ( SV_ProcessClientCommands(cl, &msgCompressed, 1, &c) && cl->messageAcknowledge > cl->gamestateMessageNum )
         {
             Com_DPrintf(15, "%s : dropped gamestate, resending\n", cl->name);
@@ -3012,6 +3157,7 @@ void __cdecl SV_ExecuteClientMessage(client_t *cl, msg_t *msg)
                 4902);
             SV_SendClientGameState(cl);
         }
+#endif
         //LargeLocal::~LargeLocal(&msgCompressed_buf_large_local);
         return;
     }

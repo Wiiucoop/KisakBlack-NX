@@ -90,19 +90,63 @@ const char *bg_perkNames[52] =
   "specialty_unlimitedsprint"
 };
 
+#ifdef KISAK_SP
+// BlackOps.exe initializes this exact 15-entry table at 0x00BDF2CC from
+// the string pointers at 0x00B6DFE8.  SP perks occupy two bits apiece.
+const char *bg_spPerkNames[BG_SP_PERK_COUNT] =
+{
+  "specialty_longersprint",
+  "specialty_unlimitedsprint",
+  "specialty_scavanger",
+  "specialty_fastreload",
+  "specialty_bulletdamage",
+  "specialty_bulletaccuracy",
+  "specialty_flakjacket",
+  "specialty_armorvest",
+  "specialty_quickrevive",
+  "specialty_altmelee",
+  "specialty_rof",
+  "specialty_extraammo",
+  "specialty_endurance",
+  "specialty_deadshot",
+  "specialty_additionalprimaryweapon"
+};
+#endif
+
 unsigned int __cdecl BG_GetPerkIndexForName(const char *perkName)
 {
     unsigned int idx; // [esp+0h] [ebp-4h]
 
+#ifdef KISAK_SP
+    if ( !perkName )
+        return BG_SP_PERK_COUNT;
+    for ( idx = 0; idx < BG_SP_PERK_COUNT && I_stricmp(perkName, bg_spPerkNames[idx]); ++idx )
+        ;
+#else
     if ( !perkName )
         return 52;
     for ( idx = 0; idx < 0x34 && I_stricmp(perkName, bg_perkNames[idx]); ++idx )
         ;
+#endif
     return idx;
 }
 
 const char *__cdecl BG_GetPerkNameForIndex(unsigned int perkIndex)
 {
+#ifdef KISAK_SP
+    if ( perkIndex >= BG_SP_PERK_COUNT
+        && !Assert_MyHandler(
+                    "C:\\projects_pc\\cod\\codsrc\\src\\bgame\\bg_perks.cpp",
+                    144,
+                    0,
+                    "perkIndex doesn't index SP_PERK_COUNT\n\t%i not in [0, %i)",
+                    perkIndex,
+                    BG_SP_PERK_COUNT) )
+    {
+        __debugbreak();
+    }
+    return bg_spPerkNames[perkIndex];
+#else
     if ( perkIndex >= 0x34
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\bgame\\bg_perks.cpp",
@@ -115,6 +159,7 @@ const char *__cdecl BG_GetPerkNameForIndex(unsigned int perkIndex)
         __debugbreak();
     }
     return bg_perkNames[perkIndex];
+#endif
 }
 
 void __cdecl Perks_RegisterDvars()

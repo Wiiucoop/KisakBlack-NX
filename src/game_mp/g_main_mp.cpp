@@ -1,4 +1,5 @@
 #include "g_main_mp.h"
+#include <game/g_sp_crosshair.h>
 #include <universal/dvar.h>
 #include <gfx_d3d/r_reflection_probe.h>
 #include <universal/assertive.h>
@@ -62,6 +63,10 @@
 #include "g_cmds_mp.h"
 #include <game/actor_spawner.h>
 #include "pregame.h"
+#ifdef KISAK_SP
+#include "g_scr_main_mp.h"
+#include <gfx_d3d/r_cinematic.h>
+#endif
 
 const char *g_entcountNames[8] =
 {
@@ -120,6 +125,11 @@ const dvar_t *g_password;
 const dvar_t *g_banIPs;
 const dvar_t *g_speed;
 const dvar_t *g_knockback;
+#ifdef KISAK_SP
+const dvar_t *g_player_maxhealth;
+const dvar_t *g_reloading;
+const dvar_t *g_changelevel_time;
+#endif
 const dvar_t *g_maxDroppedWeapons;
 const dvar_t *g_inactivity;
 const dvar_t *g_debugDamage;
@@ -133,6 +143,9 @@ const dvar_t *ai_turnRate;
 const dvar_t *ai_useFacingTranslation;
 const dvar_t *ai_useLeanRunAnimations;
 const dvar_t *ai_useBetterLookahead;
+#ifdef KISAK_SP
+const dvar_t *zm_pathdebug; // port diagnostic, not a retail dvar
+#endif
 const dvar_t *ai_slowdownMinYawDiff;
 const dvar_t *ai_slowdownMaxYawDiff;
 const dvar_t *ai_slowdownMinRate;
@@ -323,7 +336,7 @@ TIMED_RADIUS_DAMAGE g_timed_radius_damage[512];
 
 gentity_s g_entities[MAX_GENTITIES];
 sentient_s g_sentients[48];
-actor_s g_actors[16];
+actor_s g_actors[MAX_ACTORS];
 gclient_s g_clients[32];
 
 playerState_s g_defaultPlayerState;
@@ -677,7 +690,11 @@ void G_FreeAnimTreeInstances()
     {
         if (g_scr_data.actorCorpseInfo[i].tree)
         {
+#ifdef KISAK_SP
+            Com_XAnimFreeSmallTree(g_scr_data.actorCorpseInfo[i].tree);
+#else
             XAnimFreeTree(g_scr_data.actorCorpseInfo[i].tree, 0, SCRIPTINSTANCE_SERVER);
+#endif
             g_scr_data.actorCorpseInfo[i].tree = NULL;
         }
     }
@@ -699,13 +716,22 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
     PROF_SCOPED("G_InitGame");
 
     Com_Printf(15, "------- Game Initialization -------\n");
-    Com_Printf(15, "gamename: %s\n", "Call of Duty®");
+    Com_Printf(15, "gamename: %s\n", "Call of Dutyï¿½");
     Com_Printf(15, "gamedate: %s\n", "Nov    5 2010");
     Rope_InitRopes();
     Swap_Init();
     EntHandle::Init();
+#ifdef KISAK_SP
+    G_SPInitLookAt();
+#endif
     SentientHandle::Init();
     memset((unsigned __int8 *)&level, 0, sizeof(level));
+#ifdef KISAK_SP
+    G_SPResetSoundNotifyState();
+    GScr_ResetGroundReferenceState_SP();
+    G_SetGrenadeSuicideDisabled_SP(false);
+    G_SetAILimit_SP(0);
+#endif
     level.initializing = 1;
     level.currentEntityThink = -1;
     level.scriptPrintChannel = 25;
@@ -713,6 +739,12 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
     Rand_Init(randomSeed);
     if ( registerDvars )
         G_RegisterDvars();
+#ifdef KISAK_SP
+    // Retail G_InitGame resets g_reloading after its dvar-registration path
+    // (BlackOps.exe 0x0051E9C6..0x0051E9D3). Reset the reconstructed
+    // change-level sidecar at the same lifecycle boundary.
+    GScr_ResetChangeLevel_SP();
+#endif
     if ( !Dvar_GetBool("sv_cheats") && !restart )
         Dvar_SetCheatState();
     GScr_LoadConsts();
@@ -790,6 +822,51 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
         __debugbreak();
     }
 
+    // TODO(SP) Dog_CreateAnims is MP-only in retail and SHOULD be excluded from
+    // SP -- but excluding it here is NOT safe in this tree today, and doing so
+    // hangs the SP boot.  MEASURED, not predicted: guarding this call out under
+    // #ifndef KISAK_SP was built, deployed and run on 2026-08-27.  The process
+    // died with exit code 0x80000003 (STATUS_BREAKPOINT) and
+    // console_mp.log stopped mid-animscript-load, ~2400 lines short of
+    // CL_InitCGame, which the unguarded build reaches normally.
+    //
+    // CAUSE: s_dogAnims is load-bearing on the SP path in THIS tree.
+    //   * actor_mp.cpp:316-318 -- Actor_AddToWorld does
+    //         anims = Dog_GetAnims();
+    //         if ( !anims && !Assert_MyHandler(... "anims") ) __debugbreak();
+    //     for EVERY actor added to the world, then feeds it to
+    //     Com_XAnimCreateSmallTree.  Assert_MyHandler's live body is
+    //     `__debugbreak(); return 1;` (assertive.cpp, see agents.md 7.7), so this
+    //     is an unconditional crash in Release, not a Debug-only check.
+    //   * g_main_mp.cpp:2225 G_LoadAnimTreeInstances does the same for the 8
+    //     actorCorpseInfo trees (there only iassert, i.e. silent in Release --
+    //     which would hand XAnimCreateTree a null and fault slightly later).
+    //
+    // So the "61 Could not load xanim lines are pure log noise" reading is WRONG:
+    // the dog anim tree is consumed unconditionally by every SP actor spawn.  It
+    // is only reachable at all BECAUSE of the unresolved species /
+    // g_animScriptTable problem (every SP actor is currently handed the dog
+    // animscript set) -- i.e. this call and that problem are the SAME issue, and
+    // this one cannot be retired before it is.  Deliberately left in place.
+    //
+    // The retail-absence evidence itself is solid and worth keeping for whoever
+    // does the species pass -- it just does not license removing the call yet.
+    // Verified in the SP binary 2026-08-27, unanchored substring searches (an
+    // anchored pattern can report a real string as missing, see agents.md):
+    //     "Dog_CreateAnims"   0 hits     (the Dog_DebugPrint literal)
+    //     "shep"              0 hits     (covers german_shepherd_* and the
+    //                                     misspelled german_shepard_* alike)
+    //     "DOG_ANIMS"         0 hits     (the XAnimCreateAnims table name)
+    // Positive controls, same tool, same program, all found:
+    //     "void_loop" 0x009daae0, "dog_init" 0x00a094e4,
+    //     "zombie_dog_init" 0x009f2c3c, "XAnimCreateAnims" 0x009f13dc,
+    //     plus 21 dog/zombie_dog animscript state names.
+    // The last two controls are the sharp ones: the xanim-table CONSTRUCTOR and
+    // the dog ANIMSCRIPT names are both present in SP, so this is not a search
+    // blind to dog content -- retail SP specifically does not ship the xanim
+    // NAME TABLE.
+    // The 61 "Could not load xanim" lines it emits are therefore EXPECTED noise
+    // for now, and are the cheapest visible symptom of the species problem.
     Dog_CreateAnims(Hunk_AllocXAnimServer);
     SpawnSystem_Init();
 
@@ -836,7 +913,8 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
 
     memset(g_entities, 0, sizeof(g_entities));
     level.gentities = g_entities;
-    g_entities[1023].flags |= 0x4000000u;
+    // retail SP 0x0051ECD4 ORs 0x400 (SP FL_OBSTACLE); Actor_IsDodgeEntity relies on it for ENTITYNUM_NONE
+    g_entities[ENTITYNUM_NONE].flags |= FL_OBSTACLE;
     level.maxclients = com_maxclients->current.integer;
     memset(g_clients, 0, sizeof(g_clients));
     level.clients = g_clients;
@@ -864,10 +942,16 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
     G_InitTurrets();
     GlassSv_Init();
     DynEntSv_InitEntities();
+#ifdef KISAK_SP
+    // retail SP G_InitGame @ 0051e8f0: reset the pathnode AVL maps (FUN_004587d0) and spawn entities first;
+    // path nodes are only dropped to the floor once, AFTER the entities exist (see below).
+    Path_ResetNodeMaps(restart);
+#else
     Path_PreSpawnInitPaths();
 
     if (!restart)
         G_DropPathnodesToFloor();
+#endif
 
     G_SpawnEntitiesFromString();
     G_setfog((char*)"0");
@@ -893,6 +977,9 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
         G_DropPathnodesToFloor();
     }
 
+#ifdef KISAK_SP
+    Path_BuildParentedNodeLists(); // retail SP FUN_005896c0
+#endif
     G_DropActorSpawnersToFloor();
     Scr_FreeEntityList(SCRIPTINSTANCE_SERVER);
     Com_Printf(15, "-----------------------------------\n");
@@ -949,10 +1036,41 @@ void __cdecl    G_InitGame(int levelTime, int randomSeed, int restart, int regis
         g_scr_data.playerCorpseInfo[i].entnum = -1;
     }
 
+#ifndef KISAK_SP
+    // SP has no G_PrintAllFastFileErrors at all - this is not a zone-name substitution.
+    // This block was the SP boot blocker: G_PrintFastFileErrors("code_post_gfx_mp") ->
+    // DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, ...) returns NULL (RAWFILE is on the explicit
+    // no-default-entry list, see db_registry.cpp:1478-1486), the iassert does not halt a release
+    // build, and the following `rawfile->len` read faults at +4 (AV reading 0x00000004).
+    // Evidence that retail SP simply omits the call, three independent facts:
+    //   1. The only literal this code path owns, "There were errors when building fast file '%s'",
+    //      is byte-absent from the whole retail image (search_byte_patterns over 00400000-046761ff
+    //      for the substring "when building" -> 0 hits). Positive controls confirming the search
+    //      works and that g_main-family Com_Print* literals do survive into retail:
+    //      "code_post_gfx" -> 2 hits, "Hunk_Alloc" -> 4 hits, "ShutdownGame:\n" -> 0x00a2a150.
+    //   2. "code_post_gfx_mp" is byte-absent image-wide (0 hits); only bare "code_post_gfx"
+    //      exists, at 0x009afaec, and its three xrefs are DB_LoadGraphicsAssetsForPC (0x00571db0)
+    //      plus the two arena-scan name filters - none of them a rawfile lookup.
+    //   3. Structural: SP's G_InitGame is Ghidra 0x0051e8f0 -- now named G_InitGame in the live
+    //      database, so this anchoring is no longer an inference (anchored on GScr_LoadConsts,
+    //      G_SetupWeaponDef, G_ParseHitLocDmgTable, BG_LoadPenetrationDepthTable,
+    //      Sentient_InvalidateNearestNode, g_pLevelGentities/Sentients/Actors and this function's
+    //      own Com_Printf(15,"---...---") banner). Between the 4-iteration playerCorpseInfo
+    //      entnum = -1 loop (0x0051ef10-0x0051ef20, stride 0x630, exactly 4 passes) and
+    //      level.initializing = 0 (0x0051ef52) - i.e. the interval bracketed by the two source
+    //      anchors that surround this call - the only call is the DAT_01c0706c==2 gated pair
+    //      FUN_0056bfc0 -> FUN_0048acd0, which takes a non-string argument and whose callee is a
+    //      one-line wrapper. No IsFastFileLoad gate, no rawfile lookup, no room for either.
+    // Fact 1 is order-independent, so this is not the "zero gap measured on the wrong side of the
+    // anchor" failure mode that ORCHESTRATOR.md section 7 records for SV_InitServerThread.
+    // MP path deliberately unchanged: the assert-then-unconditional-deref shape below is the
+    // house iassert idiom, and retail MP never misses because the linker always emits the
+    // build-error rawfile into code_post_gfx_mp.ff / common_mp.ff. No invented null check.
     if (IsFastFileLoad())
     {
         G_PrintAllFastFileErrors();
     }
+#endif
 
     iassert(bgs == &level_bgs);
     bgs = NULL;
@@ -983,7 +1101,7 @@ void G_RegisterDvars()
 {
     const dvar_s *result; // eax
 
-    g_cheats = _Dvar_RegisterBool("sv_cheats", 1, 0, "Enable cheats");
+    g_cheats = _Dvar_RegisterBool("sv_cheats", 0, 0, "Enable cheats");
     g_erroronpathsnotconnected = _Dvar_RegisterBool(
                                                                  "g_erroronpathsnotconnected",
                                                                  1,
@@ -991,7 +1109,18 @@ void G_RegisterDvars()
                                                                  "Errors out during load if paths are not connected.");
     //sv_mapname = _Dvar_RegisterString("sv_mapname", (char *)"", 0x44u, "The current map name");
     _Dvar_RegisterString("sv_mapname", (char *)"", 0x44u, "The current map name");
+    // g_gametype's reset value must match the one stored by the CREATING registration in
+    // SV_Init (sv_init_mp.cpp); see the long note there. G_RegisterDvars runs later in
+    // the same SV_SpawnServer (via SV_InitGameProgs, sv_init_mp.cpp:719), so a mismatch here
+    // would trip Dvar_Reregister's silent reset-value assert (dvar.cpp:1884) a few hundred
+    // lines after SV_SetGametype rather than avoiding it.
+#ifdef KISAK_SP
+    // Retail SP: BlackOps.exe 0x005715e0 pushes 0x9dd354 ("") / 0x24 / 0xa30458 ("cmp") /
+    // 0xa1ca20 ("g_gametype") -- byte-identical to SV_Init's and SV_SetGametype's calls.
+    g_gametype = _Dvar_RegisterString("g_gametype", "cmp", 0x24u, "");
+#else
     g_gametype = _Dvar_RegisterString("g_gametype", "tdm", 0x24u, "The current campaign");
+#endif
     g_synchronousClients = _Dvar_RegisterBool(
                                                      "g_synchronousClients",
                                                      0,
@@ -1006,8 +1135,50 @@ void G_RegisterDvars()
     g_logSync = _Dvar_RegisterBool("g_logSync", 0, 1u, "Enable synchronous logging");
     g_password = _Dvar_RegisterString("g_password", (char *)"", 0, "Password");
     g_banIPs = _Dvar_RegisterString("g_banIPs", (char *)"", 1u, "IP addresses to ban from playing");
-    g_speed = _Dvar_RegisterInt("g_speed", 190, 0x80000000, 0x7FFFFFFF, 0, "Player speed");
+    // Retail (BlackOps.exe, single exe for every mode) G_RegisterDvars 0x007e0c00
+    // registers g_speed with flags 0x3000 (SAVED|CHEAT_PROTECTED), not 0. GSC's
+    // maps/_load.gsc:264 `SetSavedDvar("g_speed", ...)` throws
+    // "SetSavedDvar can only be called on dvars with the SAVED flag set" without
+    // the SAVED bit, which was killing the rest of _load::main() on the frontend map.
+    g_speed = _Dvar_RegisterInt("g_speed", 190, 0x80000000, 0x7FFFFFFF, 0x3000u, "Player speed");
     g_knockback = _Dvar_RegisterFloat("g_knockback", 1000.0, -3.4028235e38, 3.4028235e38, 0, "Maximum knockback");
+#ifdef KISAK_SP
+    // Retail SP-only dvars, all consumed by SetSavedDvar/GetDvar from GSC (no
+    // engine-side reader exists yet -- gameplay effect is out of scope here,
+    // this only satisfies the SetSavedDvar SAVED-flag check on the frontend map).
+    // Verified in BlackOps.exe G_RegisterDvars (0x007e0c00):
+    //   player_damageMultiplier        Float 1.0  [0.0, 1000.0]        0x3000
+    //   player_meleeDamageMultiplier   Float 1.0  [0.0, 1000.0]        0x3000
+    //   player_deathInvulnerableTime   Int   1000 [0, 0x7FFFFFFF]      0x3080
+    //   ai_accuracyDistScale           Float 1.0  [FLT_MIN, FLT_MAX]   0x3080
+    _Dvar_RegisterFloat("player_damageMultiplier", 1.0, 0.0, 1000.0, 0x3000u, "");
+    _Dvar_RegisterFloat("player_meleeDamageMultiplier", 1.0, 0.0, 1000.0, 0x3000u, "");
+    _Dvar_RegisterInt("player_deathInvulnerableTime", 1000, 0, 0x7FFFFFFF, 0x3080u, "");
+    _Dvar_RegisterFloat("ai_accuracyDistScale", 1.0, 1.1754944e-38, 3.4028235e38, 0x3080u, "");
+    // g_player_maxhealth -- unlike the four above this one HAS an engine-side
+    // reader: retail SP's ClientSpawn (0x00480170) seeds the whole health chain
+    // from it. Verified in G_RegisterDvars at 0x007e0cad..0x007e0cd6:
+    //   PUSH 0xa2e124 ("g_player_maxhealth") / 0x64 (100) / 0xa (10) / 0x7d0 (2000)
+    //   PUSH 0x2000 (SAVED) / 0x9dd354 ("") ; CALL Dvar_RegisterInt
+    //   MOV [0x01bf13ec], EAX   <- the exact global ClientSpawn dereferences
+    g_player_maxhealth = _Dvar_RegisterInt("g_player_maxhealth", 100, 10, 2000, 0x2000u, "");
+    // Retail SP G_RegisterDvars registrations used by ChangeLevel:
+    //   0x007E0C8B: g_reloading       int   0 [0,4]       flags 0x40
+    //   0x007E167F: g_changelevel_time float 0 [0,FLT_MAX] flags 0x2000
+    g_reloading = _Dvar_RegisterInt("g_reloading", 0, 0, 4, 0x40u, "");
+    g_changelevel_time = _Dvar_RegisterFloat("g_changelevel_time", 0.0f, 0.0f, 3.4028235e38f, 0x2000u, "");
+    // ui_campaign: retail registers this identically at five sites
+    // (G_RegisterDvars 0x007e0c41 among them); one registration suffices.
+    _Dvar_RegisterString("ui_campaign", (char *)"american", 0x1000u, "");
+    // ui_nextMission: citation corrected 2026-08-22 -- re-verification found
+    // this string does NOT appear in either G_RegisterDvars fragment
+    // (0x007e0c00 / 0x007e1c10); its sole real retail registration site is
+    // FUN_0051d1f0 (a separate UI-dvar registration function), values
+    // confirmed exact there (0, [0,3], 0x1000, ""). Registering it here
+    // alongside ui_campaign is harmless (idempotent registration), just not
+    // literally where retail puts it.
+    _Dvar_RegisterInt("ui_nextMission", 0, 0, 3, 0x1000u, "");
+#endif
     g_maxDroppedWeapons = _Dvar_RegisterInt("g_maxDroppedWeapons", 16, 2, 32, 0, "Maximum number of dropped weapons");
     g_inactivity = _Dvar_RegisterInt(
                                      "g_inactivity",
@@ -1027,18 +1198,36 @@ void G_RegisterDvars()
     g_ai = _Dvar_RegisterBool("g_ai", 1, 0x2080u, "Enable AI");
     g_spawnai = _Dvar_RegisterBool("g_spawnai", 1, 0x20A0u, "Enable AI spawning");
     g_dumpAIEvents = _Dvar_RegisterInt("g_aiEventDump", -1, -1, 1023, 0x80u, "Print AI events happening for this entity");
+#ifdef KISAK_SP
+    // Retail SP FUN_007e1c10 registers the degree-per-second form.
+    ai_turnRate = _Dvar_RegisterFloat("ai_turnRate", 220.0f, 0.0f, 1080.0f, 0x4080u, "turn rate for AI");
+#else
     ai_turnRate = _Dvar_RegisterFloat("ai_turnRate", 0.30000001, 0.0099999998, 0.5, 0x4080u, "turn rate for AI");
+#endif
     ai_useFacingTranslation = _Dvar_RegisterBool(
                                                             "ai_useFacingTranslation",
                                                             0,
                                                             0x4080u,
                                                             "whether to use facing to determine direction of translation");
+#ifdef KISAK_SP
+    ai_useLeanRunAnimations = _Dvar_RegisterBool(
+                                                            "ai_useLeanRunAnimations",
+                                                            1,
+                                                            0x4080u,
+                                                            "whether to use lean run animations instead of strafes");
+#else
     ai_useLeanRunAnimations = _Dvar_RegisterBool(
                                                             "ai_useLeanRunAnimations",
                                                             0,
                                                             0x4080u,
                                                             "whether to use lean run animations instead of strafes");
+#endif
     ai_useBetterLookahead = _Dvar_RegisterBool("ai_useBetterLookahead", 1, 0x4080u, "t5 lookahead improvements");
+#ifdef KISAK_SP
+    zm_pathdebug = _Dvar_RegisterInt(
+        "zm_pathdebug", 0, -1, 1023, 0,
+        "Port diagnostic: log actor path state to the console log (0 off, -1 all actors, N entity number)");
+#endif
     ai_slowdownMinYawDiff = _Dvar_RegisterFloat(
                                                         "ai_slowdownMinYawDiff",
                                                         0.0,
@@ -1082,6 +1271,14 @@ void G_RegisterDvars()
                                                              5.0,
                                                              0x4080u,
                                                              "yaw deceleration factor (decel rate = factor * accel rate)");
+#ifdef KISAK_SP
+    // Exact retail SP registrations from FUN_007e1c10. The shipped
+    // animscripts/zombie_run.gsc reads ai_runAnimUpdateFrequency every pass.
+    // When absent, GetDvarFloat returns 0 and wait(0) immediately reschedules
+    // the loop until the VM watchdog kills the zombie_move thread.
+    _Dvar_RegisterFloat("ai_turnAnimAngleThreshold", 50.0f, 0.0f, 180.0f, 0x4080u, "");
+    _Dvar_RegisterFloat("ai_runAnimUpdateFrequency", 0.05f, 0.05f, 0.2f, 0x4080u, "");
+#endif
     ai_corpseCount = _Dvar_RegisterInt("ai_corpseCount", 5, 0, 8, 0x2001u, "Maximum number of AI corpses");
     ai_showNodes = _Dvar_RegisterInt("ai_showNodes", 0, 0, 4, 0x80u, "Show AI navigation node debug information");
     ai_showNodesDist = _Dvar_RegisterFloat(
@@ -1665,7 +1862,11 @@ void G_RegisterDvars()
     g_NoScriptSpam = _Dvar_RegisterBool("g_no_script_spam", 0, 0, "Turn off script debugging info");
     g_friendlyfireDist = _Dvar_RegisterFloat(
                                                  "g_friendlyfireDist",
+#ifdef KISAK_SP
+                                                 175.0,
+#else
                                                  256.0,
+#endif
                                                  0.0,
                                                  15000.0,
                                                  0x80u,
@@ -2116,19 +2317,30 @@ void __cdecl G_SafeDObjFree(unsigned int handle, int unusedLocalClientNum)
 
 void G_LoadAnimTreeInstances()
 {
+#ifndef KISAK_SP
     XAnim_s *anims; // [esp+8h] [ebp-4h]
+#endif
 
     for ( int i = 0; i < com_maxclients->current.integer; ++i )
         level_bgs.clientinfo[i].pXAnimTree = XAnimCreateTree(level_bgs.animData->generic_human.tree.anims, Hunk_AllocXAnimServer);
     for ( int i = 0; i < 4; ++i )
         g_scr_data.playerCorpseInfo[i].tree = XAnimCreateTree(level_bgs.animData->generic_human.tree.anims, Hunk_AllocXAnimServer);
 
+#ifndef KISAK_SP
     anims = Dog_GetAnims();
     iassert(anims);
+#endif
 
     for ( int i = 0; i < 8; ++i )
     {
+#ifdef KISAK_SP
+        // Retail SP FUN_00642b80 moves each dying actor's exact small tree into
+        // this slot.  There is no generic preallocated destination and no
+        // XAnimCloneAnimTree call on the actor-corpse path.
+        g_scr_data.actorCorpseInfo[i].tree = NULL;
+#else
         g_scr_data.actorCorpseInfo[i].tree = XAnimCreateTree(anims, (void* (*)(unsigned int))Hunk_AllocActorXAnimServer);
+#endif
         g_scr_data.actorCorpseInfo[i].entnum = -1;
     }
 }
@@ -2307,6 +2519,9 @@ void __cdecl G_ShutdownGame(int freeScripts)
     }
     //*(unsigned int *)(*((unsigned int *)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 8) = 0;
     bgs = 0;
+#ifdef KISAK_SP
+    G_SPShutdownLookAt();
+#endif
     G_FreeEntities(1);
     HudElem_DestroyAll();
     Path_Shutdown();
@@ -2314,6 +2529,9 @@ void __cdecl G_ShutdownGame(int freeScripts)
     G_FreeVehiclePaths();
     if ( Scr_IsSystemActive(1u, SCRIPTINSTANCE_SERVER) && !level.savepersist )
         SV_FreeClientScriptPers();
+#ifdef KISAK_SP
+    G_SPShutdownSoundNotifyState();
+#endif
     Scr_ShutdownSystem(SCRIPTINSTANCE_SERVER, 1u, level.savepersist == 0);
     if ( freeScripts )
     {
@@ -2988,6 +3206,9 @@ void    G_RunFrame(int levelTime)
                 }
                 if ((ent->client->flags & 3) == 0)
                     G_DoTouchTriggers(ent);
+#ifdef KISAK_SP
+                G_SPUpdateLookAtClaim(ent);
+#endif
                 G_UpdateWeapons(ent);
                 G_UpdateTimedDamage(ent);
                 G_UpdateIKPlayerClipTerrainTimeout(ent);
@@ -3021,6 +3242,26 @@ void    G_RunFrame(int levelTime)
             ++ent;
         }
     }
+
+#ifdef KISAK_SP
+    // Retail G_RunFrame 0x0045A806..0x0045A878, after DObj time updates and
+    // before trigger/script processing. The handle at 0x01C7AE78 is loaded
+    // from maps/_callbacksetup::CodeCallback_LevelNotify (0x00612888..C0).
+    if (R_Cinematic_ConsumeFirstFrameNotify_SP())
+    {
+        Scr_AddInt(1, SCRIPTINSTANCE_SERVER);
+        Scr_AddString("cine_notify", SCRIPTINSTANCE_SERVER);
+        const unsigned short thread = Scr_ExecThread(SCRIPTINSTANCE_SERVER, g_scr_data.levelnotify, 2);
+        Scr_FreeThread(thread, SCRIPTINSTANCE_SERVER);
+    }
+    if (R_Cinematic_ConsumeLastFrameNotify_SP())
+    {
+        Scr_AddInt(0, SCRIPTINSTANCE_SERVER);
+        Scr_AddString("cine_notify", SCRIPTINSTANCE_SERVER);
+        const unsigned short thread = Scr_ExecThread(SCRIPTINSTANCE_SERVER, g_scr_data.levelnotify, 2);
+        Scr_FreeThread(thread, SCRIPTINSTANCE_SERVER);
+    }
+#endif
 
     memset(entIndex, 0, 0x400u);
     index = 0;
@@ -3213,6 +3454,12 @@ void    G_RunFrame(int levelTime)
         SaveRegisteredWeapons();
     if ( level.bRegisterItems )
         SaveRegisteredItems();
+#ifdef KISAK_SP
+    // Retail G_RunFrame calls its change-level checker at 0x0045AB15, at
+    // this exact point after the registration saves and before the next
+    // general update call.
+    GScr_UpdateChangeLevel_SP();
+#endif
     SpawnSystem_Update();
     G_PopulateMatchState();
     G_ProcessRadiantCmds();
@@ -3258,11 +3505,36 @@ void __cdecl G_ClientDoPerFrameNotifies(gentity_s *ent)
     }
     if ( client->ps.weapon != LOWORD(client->lastWeapon) )
     {
+#ifdef KISAK_SP
+        // Retail SP G_ClientDoPerFrameNotifies (BlackOps.exe 0x007E3370)
+        // supplies both old and new weapon names to weapon_change.
+        Scr_AddString((char *)BG_WeaponName(LOWORD(client->lastWeapon)), SCRIPTINSTANCE_SERVER);
+#endif
         v1 = (char *)BG_WeaponName(client->ps.weapon);
         Scr_AddString(v1, SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+        Scr_Notify(ent, scr_const.weapon_change, 2u);
+#else
         Scr_Notify(ent, scr_const.weapon_change, 1u);
+#endif
         client->lastWeapon = client->ps.weapon;
     }
+#ifdef KISAK_SP
+    // Retail SP tracks entry into WEAPON_RAISING / WEAPON_RAISING_ALTSWITCH,
+    // then emits weapon_change_complete with the current weapon as soon as the
+    // player leaves both states.  Zombie perk purchases wait on this notify
+    // before restoring controls and calling give_perk().
+    if ( client->ps.weaponstate == WEAPON_RAISING || client->ps.weaponstate == WEAPON_RAISING_ALTSWITCH )
+    {
+        client->previouslyBeganWeaponRaise = true;
+    }
+    else if ( client->previouslyBeganWeaponRaise )
+    {
+        Scr_AddString((char *)BG_WeaponName(client->ps.weapon), SCRIPTINSTANCE_SERVER);
+        Scr_Notify(ent, scr_const.weapon_change_complete, 1u);
+        client->previouslyBeganWeaponRaise = false;
+    }
+#endif
     if ( client->ps.lastDtpEnd && client->ps.lastDtpEnd == client->ps.commandTime )
         Scr_Notify(ent, scr_const.dtp_end, 0);
     if ( (client->ps.weaponstate == 6 || client->ps.weaponstate == 31) && client->ps.pm_type < 9 )
@@ -3353,6 +3625,9 @@ void __cdecl G_RunFrameForEntity(gentity_s *ent)
                 }
             }
         }
+#ifdef KISAK_SP
+        G_SPUpdateSoundNotify(ent);
+#endif
         if ( ent->scr_vehicle )
         {
             iassert((unsigned)(ent->scr_vehicle - level.vehicles) < MAX_VEHICLES);

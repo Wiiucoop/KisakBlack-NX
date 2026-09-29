@@ -4,6 +4,11 @@
 #include <ui/ui_main.h>
 
 void __cdecl UI_Project_RegisterDvars();
+#ifdef KISAK_MP
+void UI_PrepareCustomBotMenu();
+bool UI_IsCustomBotMenu(const menuDef_t *menu);
+void UI_AddCustomBotSettings(int localClientNum, UiContext *dc, menuDef_t *menu);
+#endif
 void __cdecl UI_Project_AssetCache();
 void __cdecl UI_Project_Refresh(int localClientNum);
 void __cdecl UI_Project_Shutdown(int localClientNum);
@@ -171,6 +176,41 @@ void __cdecl UI_RunMenuScript_RefreshServer(int localClientNum, int contextIndex
 void __cdecl UI_RunMenuScript_CreateFavorites(int localClientNum, int contextIndex);
 void __cdecl UI_RunMenuScript_CreateFavoriteInGame(int localClientNum);
 void __cdecl UI_Project_InitOnceForAllClients();
+#ifdef KISAK_SP
+// SP's uiMenuCommand_t is a DIFFERENT, larger enum than MP's (ui_shared.h). These are the SP
+// values, transcribed from the retail SP UI_SetActiveMenu switch (Ghidra 0x005852c0) - see the
+// case-by-case evidence in ui_main_mp.cpp. They are NOT interchangeable with UIMENU_*.
+enum uiMenuCommandSp_t : __int32
+{
+    UISP_NONE             = 0x0,
+    UISP_FULLSCREEN_ERROR = 0x1,   // no MP counterpart
+    UISP_MAIN             = 0x2,   // MP's UIMENU_MAIN is 1
+    UISP_PAUSEDMENU       = 0x3,   // no MP menu of this name
+    UISP_PREGAME          = 0x4,
+    UISP_ENDOFGAME        = 0x5,   // MP's UIMENU_ENDOFGAME is 0xA
+    UISP_QUICKMESSAGE     = 0x6,   // MP's UIMENU_WM_QUICKMESSAGE is 5
+    UISP_BRIEFING         = 0x8,   // SP campaign-only
+    UISP_VICTORYSCREEN    = 0x9,   // SP campaign-only
+    UISP_SAVEGAMELOADING  = 0xB,   // SP campaign-only
+    UISP_SAVEGAMESAVING   = 0xC,   // SP campaign-only
+    UISP_SCOREBOARD       = 0xD,   // MP's UIMENU_SCOREBOARD is 7
+    UISP_MENU_PLAYERCARD  = 0xE,   // MP's UIMENU_GAMERCARD is 8
+    UISP_MAIN_SYSTEMLINK  = 0x11,
+    UISP_XBOXLIVE_LOBBY           = 0x13,
+    UISP_XBOXLIVE_PRIVATE_LOBBY   = 0x14,
+    UISP_SYSTEMLINK_LOBBY         = 0x15,
+    UISP_MAIN_ONLINE              = 0x16,
+    UISP_INVALID          = 0x7F,  // reaches the switch default -> returns 0
+};
+
+// SP-native entry point. Callers that know they are on the SP path and have an SP value (e.g.
+// Com_Init's error path, transcribed from the SP binary) must call this. The MP-signature
+// UI_SetActiveMenu below translates UIMENU_* -> UISP_* and forwards here, so shared MP-enum
+// call sites keep working unmodified.
+int __cdecl UI_SetActiveMenuSp(int localClientNum, uiMenuCommandSp_t menu);
+uiMenuCommandSp_t __cdecl UI_SpMenuFromMpMenu(uiMenuCommand_t menu);
+#endif
+
 int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu);
 char *__cdecl UI_TranslateIntegerToOrdinal(int integer);
 int __cdecl UI_Popup(int localClientNum, const char *menu);

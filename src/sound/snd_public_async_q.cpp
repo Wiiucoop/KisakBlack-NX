@@ -8,6 +8,11 @@
 #include "snd_local.h"
 #include "snd_public_async.h"
 #include <cgame/cg_sound.h>
+#ifdef KISAK_SP
+#include <client/client.h>
+#include <client/splitscreen.h>
+#include <client_mp/cl_main_mp.h>
+#endif
 
 void __cdecl SND_InitCommands()
 {
@@ -795,7 +800,20 @@ void __cdecl SND_NotifyProcess(const snd_notify *cmd)
             break;
         case SND_NOTIFY_LENGTH:
             //PIXBeginNamedEvent(-1, "CG_ScriptSndLengthNotify");
+#ifdef KISAK_SP
+            // Retail SP 0x004534C0 sends this exact reliable client command
+            // only for the first active local client while fully connected.
+            // `ent` was installed as the length-notify payload by SND_Play.
+            if ( clientUIActives[0].connectionState == CA_ACTIVE && CL_LocalClient_IsFirstActive(0) )
+            {
+                const int entNum = static_cast<int>(cmd->context.length.ent);
+                const int lengthMs = cmd->context.ent_update.handle.handle;
+                CL_AddReliableCommand(0, va("sl %i %i", entNum, lengthMs));
+                Com_Printf(15, "SP sound notify client length: ent %d length %d\n", entNum, lengthMs);
+            }
+#else
             //BLOPS_NULLSUB();
+#endif
             //if ( g_DXDeviceThread == GetCurrentThreadId() )
                 goto LABEL_8;
             break;

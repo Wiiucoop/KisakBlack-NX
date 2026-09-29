@@ -2,6 +2,9 @@
 
 #include <universal/dvar.h>
 #include <game/pathnode.h>
+#ifdef KISAK_MP
+void SV_ApplyCustomMatchBots();
+#endif
 
 struct bot_threat_t // sizeof=0x38
 {                                       // XREF: bot_info_t/r

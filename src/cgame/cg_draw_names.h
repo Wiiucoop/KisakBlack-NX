@@ -1,4 +1,8 @@
 #pragma once
+#ifdef KISAK_SP
+void CG_RegisterLookAtDvars_SP();
+void CG_DrawLookAtText_SP(int localClientNum);
+#endif
 #include <bgame/bg_local.h>
 #include "cg_weapons.h"
 

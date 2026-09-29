@@ -396,6 +396,9 @@ extern const dvar_s *cg_canSeeFriendlyFrustumMinDistance;
 extern const dvar_s *cg_watersheeting;
 extern const dvar_s *cg_debug_triggers;
 extern const dvar_s *cg_cameraWaterClip;
+#ifdef KISAK_SP
+extern const dvar_s *cg_cameraUseTagCamera;
+#endif
 extern const dvar_s *cg_cameraVehicleExitTweenTime;
 extern const dvar_s *cg_vehicle_piece_damagesfx_threshold;
 extern const dvar_s *cg_debugLocHit;

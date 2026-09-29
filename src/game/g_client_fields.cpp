@@ -36,7 +36,12 @@ const char *g_scoreboardColumnNames[18] =
 // rebased on offsetof(gclient_s, sess) (sess.sessionState was at 9896).
 #define GCLIENT_X86(x86) ((int)((x86) - 9896 + offsetof(gclient_s, sess)))
 
-const client_fields_s fields[42] =
+// Sized by its initializer list: 42 entries for MP (unchanged), 44 for SP
+// (the KISAK_SP downs/revives entries before the NULL sentinel).
+// The bounds asserts in Scr_SetClientField/Scr_GetClientField below use
+// ARRAY_COUNT-style sizeof arithmetic, so they follow automatically (0x29 in
+// MP, exactly as before).
+const client_fields_s fields[] =
 {
   {
     "sessionteam",
@@ -73,6 +78,17 @@ const client_fields_s fields[42] =
   { "kills", GCLIENT_X86(10280), { 4 }, F_INT, 0u, ClientScr_SetKills, NULL },
   { "deaths", GCLIENT_X86(10288), { 4 }, F_INT, 0u, ClientScr_SetDeaths, NULL },
   { "assists", GCLIENT_X86(10284), { 4 }, F_INT, 0u, ClientScr_SetAssists, NULL },
+#ifdef KISAK_SP
+  // Retail SP's table at 0x00A527A8 contains direct integer fields at
+  // gclient+0x1BA4 (downs) and +0x1BA8 (revives), between assists and
+  // headshots. The MP-derived gclient_s lacks those two score members and its
+  // 10720-byte stride is hardcoded in snapshot/game code, so growing the
+  // structure would corrupt client traversal. The handlers preserve the SP
+  // script contract in two otherwise-unused per-session scoreboard-cache
+  // slots without changing that ABI.
+  { "downs", 0, { 0 }, F_INT, 0u, ClientScr_SetDowns_SP, ClientScr_GetDowns_SP },
+  { "revives", 0, { 0 }, F_INT, 0u, ClientScr_SetRevives_SP, ClientScr_GetRevives_SP },
+#endif
   { "defends", GCLIENT_X86(10336), { 4 }, F_INT, 0u, ClientScr_SetDefends, NULL },
   { "plants", GCLIENT_X86(10340), { 4 }, F_INT, 0u, ClientScr_SetPlants, NULL },
   { "defuses", GCLIENT_X86(10344), { 4 }, F_INT, 0u, ClientScr_SetDefuses, NULL },
@@ -187,6 +203,14 @@ const client_fields_s fields[42] =
 };
 
 
+
+#ifdef KISAK_SP
+bool Scr_IsClientNameField(unsigned int offset)
+{
+    return offset < sizeof(fields) / sizeof(fields[0]) - 1
+        && !strcmp(fields[offset].name, "name");
+}
+#endif
 
 void __cdecl ClientScr_ReadOnly(gclient_s *pSelf, const client_fields_s *pField)
 {
@@ -502,6 +526,11 @@ void __cdecl ClientScr_SetScore(gclient_s *pSelf, const client_fields_s *__forma
     {
         __debugbreak();
     }
+#ifdef KISAK_SP
+    // Retail SP ClientScr_SetScore (0x007D5CD0) stores the raw script value: zombie points run
+    // far past MP's +/-30000 clamp.
+    intValue = score;
+#else
     if ( score < 0 )
     {
         if ( score < -30000 )
@@ -518,6 +547,7 @@ void __cdecl ClientScr_SetScore(gclient_s *pSelf, const client_fields_s *__forma
             v3.intValue = score;
         intValue = v3.intValue;
     }
+#endif
     pSelf->sess.cs.score.score = intValue;
     CalculateRanks();
 }
@@ -577,6 +607,33 @@ void __cdecl ClientScr_SetAssists(gclient_s *pSelf, const client_fields_s *__for
         ClientScr_SetColumnValue(pSelf, SB_TYPE_ASSISTS).intValue;
 }
 
+#ifdef KISAK_SP
+void __cdecl ClientScr_SetDowns_SP(gclient_s *pSelf, const client_fields_s *__formal)
+{
+    pSelf->sess.scoreboardColumnCache[SB_TYPE_INVALID] = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
+    // Retail SP networks score.downs/revives/headshots (clientState netfields at 0x00A5C1B0).
+    // The MP score_s kept here has no such members, so SP carries them in scoreboardColumns[0..2],
+    // which SP never assigns column types to; CG_DrawClientScore reads them back from there.
+    pSelf->sess.cs.score.scoreboardColumns[0] = pSelf->sess.scoreboardColumnCache[SB_TYPE_INVALID];
+}
+
+void __cdecl ClientScr_GetDowns_SP(gclient_s *pSelf, const client_fields_s *__formal)
+{
+    Scr_AddInt(pSelf->sess.scoreboardColumnCache[SB_TYPE_INVALID], SCRIPTINSTANCE_SERVER);
+}
+
+void __cdecl ClientScr_SetRevives_SP(gclient_s *pSelf, const client_fields_s *__formal)
+{
+    pSelf->sess.scoreboardColumnCache[SB_TYPE_NONE] = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
+    pSelf->sess.cs.score.scoreboardColumns[1] = pSelf->sess.scoreboardColumnCache[SB_TYPE_NONE];
+}
+
+void __cdecl ClientScr_GetRevives_SP(gclient_s *pSelf, const client_fields_s *__formal)
+{
+    Scr_AddInt(pSelf->sess.scoreboardColumnCache[SB_TYPE_NONE], SCRIPTINSTANCE_SERVER);
+}
+#endif
+
 void __cdecl ClientScr_SetDefends(gclient_s *pSelf, const client_fields_s *__formal)
 {
     ClientScr_SetColumnValue(pSelf, SB_TYPE_DEFENDS);
@@ -634,7 +691,11 @@ void __cdecl ClientScr_SetX2Score(gclient_s *pSelf, const client_fields_s *__for
 
 void __cdecl ClientScr_SetHeadshots(gclient_s *pSelf, const client_fields_s *__formal)
 {
+#ifdef KISAK_SP
+    pSelf->sess.cs.score.scoreboardColumns[2] = ClientScr_SetColumnValue(pSelf, SB_TYPE_HEADSHOTS).intValue;
+#else
     ClientScr_SetColumnValue(pSelf, SB_TYPE_HEADSHOTS);
+#endif
 }
 
 
@@ -971,7 +1032,7 @@ void __cdecl Scr_SetClientField(gclient_s *client, int offset)
     {
         __debugbreak();
     }
-    if ( (unsigned int)offset >= 0x29
+    if ( (unsigned int)offset >= sizeof(fields) / sizeof(fields[0]) - 1 // 0x29 in MP, unchanged
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\g_client_fields.cpp",
                     910,
@@ -1011,7 +1072,7 @@ void __cdecl Scr_GetClientField(gclient_s *client, int offset)
     {
         __debugbreak();
     }
-    if ( (unsigned int)offset >= 0x29
+    if ( (unsigned int)offset >= sizeof(fields) / sizeof(fields[0]) - 1 // 0x29 in MP, unchanged
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\g_client_fields.cpp",
                     941,

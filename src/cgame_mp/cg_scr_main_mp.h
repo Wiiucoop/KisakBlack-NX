@@ -11,6 +11,29 @@ struct cscr_mp_data_t // sizeof=0x10
     int demo_playerSwitch;              // XREF: CScr_SetUniqueClientScripts(ScriptFunctions *)+2B6/w
 };
 
+#ifdef KISAK_SP
+// SP counterpart of cscr_mp_data_t: the six client script handles retail SP
+// keeps OUTSIDE cscr_data_t, written by FUN_00408ee0 (SP's
+// CScr_SetUniqueClientScripts) to six consecutive dwords at 0x02ff838c. The
+// order below is that write order, so the layout matches; the names are ours
+// (no attested symbols exist for them) and are flagged as such.
+// TODO(SP): nothing in this reconstruction READS these yet -- the SP callback
+// dispatchers that would consume them (AI footsteps, script exploders, the
+// zombie eye callback, the weapon death/damage effect callbacks) are not
+// implemented. They are stored so the producer/consumer slot counts stay
+// aligned and so the handles are available once those dispatchers exist.
+struct cscr_sp_data_t // sizeof=0x18
+{
+    int aiFootstep;                     // 0x02ff838c  clientscripts/_footsteps::playAIFootstep
+    int activateExploder;               // 0x02ff8390  _callbacks::callback_activate_exploder
+    int deactivateExploder;             // 0x02ff8394  _callbacks::callback_deactivate_exploder
+    int zombieEyeCallback;              // 0x02ff8398  _zombiemode|_zombietron::zombie_eye_callback
+    int weaponDeathEffects;             // 0x02ff839c  _callbacks::CodeCallback_PlayWeaponDeathEffects
+    int weaponDamageEffects;            // 0x02ff83a0  _callbacks::CodeCallback_PlayWeaponDamageEffects
+};
+extern cscr_sp_data_t cg_scr_sp_data;
+#endif // KISAK_SP
+
 struct cached_tag_mat_t;
 struct cent_field_s;
 struct centity_s;

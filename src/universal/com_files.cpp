@@ -2837,6 +2837,24 @@ void __cdecl FS_Flush(int f)
 
 void __cdecl Com_GetBspFilename(char *filename, unsigned int size, const char *mapname)
 {
+#ifdef KISAK_SP
+    // SP zones store BSPs under bare "maps/", not "maps/mp/".
+    // Evidence (zone data, read by decompressing the retail .ff files):
+    //   frontend.ff  contains "maps/frontend.d3dbsp"  (1 hit); "maps/mp/frontend.d3dbsp" 0 hits in ANY zone.
+    //   pentagon.ff  contains "maps/pentagon.d3dbsp";  cuba.ff contains "maps/cuba.d3dbsp".
+    // Corroborated inside this engine: DB_FindXAssetHeader's own spec-ops name fixup
+    // (db_registry.cpp:1331-1334) already builds "maps/%s" for non-"_mp_" names and
+    // "maps/mp/%s" only for "_mp_" ones - i.e. both conventions are known to coexist.
+    // Prevents: CM_LoadMap -> DB_FindXAssetHeader(ASSET_TYPE_CLIPMAP_PVS, ...) miss ->
+    //   DB_CreateDefaultEntry -> Com_Error(ERR_DROP, "Couldn't find the bsp for this map. ...")
+    //   at db_registry.cpp:1795-1801, which during Com_LoadFrontEnd's "map frontend" becomes
+    //   a Sys_Error("Error during initialization"). Audit finding B1 (frontend-map-load audit).
+    // Single choke point: every caller (sv_init_mp.cpp:625/661/687, sv_ccmds_mp.cpp:375,
+    // sv_game.cpp:685, cl_cgame_mp.cpp:1112, cg_servercmds_mp.cpp:105,
+    // com_bsp_load_obj.cpp:171) goes through this function and wants the same answer.
+    Com_sprintf(filename, size, "maps/%s.d3dbsp", mapname);
+#else
     Com_sprintf(filename, size, "maps/mp/%s.d3dbsp", mapname);
+#endif
 }
 

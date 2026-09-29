@@ -9,6 +9,7 @@
 #include "g_combat_mp.h"
 #include <game/g_load_utils.h>
 #include "actor_mp.h"
+#include <bgame/bg_perks.h>
 #include <qcommon/cm_world.h>
 
 void __cdecl G_Trigger(gentity_s *self, gentity_s *other)
@@ -178,7 +179,11 @@ void __cdecl init_trigger_radius(gentity_s *ent, float radius, float height)
     InitSentientTrigger(ent);
     ent->r.contents |= 0x200000u;
     ent->item[1].ammoCount = 1023;
+#ifdef KISAK_SP
+    ent->trigger.perk = BG_SP_PERK_COUNT;
+#else
     ent->trigger.perk = 52;
+#endif
     ent->s.un3.item = 0;
     ent->s.un1.scale = -1;
     ent->s.otherEntityNum = 1023;

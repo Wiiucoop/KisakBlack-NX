@@ -22,7 +22,7 @@ void __cdecl UI_ClearDisplayedServers()
     sharedUiInfo.serverStatus.numDisplayServers = 0;
     sharedUiInfo.serverStatus.numPlayersOnServers = 0;
     sharedUiInfo.serverStatus.serverCount = LAN_GetServerCount(ui_netSource->current.integer);
-    memset(sharedUiInfo.serverStatus.displayServersFriendNameInd, 0, 0x100u);
+    memset(sharedUiInfo.serverStatus.displayServersFriendNameInd, 0, sizeof(sharedUiInfo.serverStatus.displayServersFriendNameInd));
 }
 
 int numclean;
@@ -600,7 +600,8 @@ void __cdecl UI_StartServerRefresh(int localClientNum, int contextIndex, int ful
     Dvar_SetStringByName(dvarName, v6);
     if (full)
     {
-        *(_QWORD *)&sharedUiInfo.serverStatusInfo.lines[30][7] = 1;
+        sharedUiInfo.serverStatus.refreshActive = 1;
+        sharedUiInfo.serverStatus.currentServer = 0;
         sharedUiInfo.serverStatus.nextDisplayRefresh = uiInfo->uiDC.realTime + 1000;
         UI_ClearDisplayedServers();
         LAN_MarkServerDirty(ui_netSource->current.integer, -1, 1u);
@@ -643,8 +644,9 @@ void __cdecl UI_ServersSort(__int64 column)
     {
         sharedUiInfo.serverStatus.sortKey = column;
         qsort(
-            &sharedUiInfo.serverStatusInfo.lines[31][1],
-            sharedUiInfo.serverStatus.numDisplayServers, sizeof((&sharedUiInfo.serverStatusInfo.lines[31][1])[0]),
+            sharedUiInfo.serverStatus.displayServers,
+            sharedUiInfo.serverStatus.numDisplayServers,
+            sizeof(sharedUiInfo.serverStatus.displayServers[0]),
             (int(__cdecl *)(const void *, const void *))UI_ServersQsortCompare);
     }
 }

@@ -1,9 +1,20 @@
 #pragma once
+#ifdef KISAK_SP
+// Port-local stance permissions. Retail's bits22..24 collide with retained MP
+// weapon flags, so use previously unused bits29..31 of the SP 32-bit netfield.
+enum : unsigned int
+{
+    SP_PMF_NO_STAND = 0x20000000u,
+    SP_PMF_NO_CROUCH = 0x40000000u,
+    SP_PMF_NO_PRONE = 0x80000000u
+};
+#endif
 
 #include <qcommon/ent.h>
 #include <game/teams.h>
 #include <sound/snd.h>
 #include "bg_animation.h"
+#include "bg_actor_constants.h"
 #include <game/g_scr_vehicle.h>
 #include "bg_mantle.h"
 #include <gfx_d3d/r_shader_constant_set.h>
@@ -950,7 +961,7 @@ struct bgs_t // sizeof=0xBF00
     // padding byte
     clientInfo_t clientinfo[32];        // XREF: G_PlayerVehiclePositionAndBlend(gentity_s *,gentity_s *)+A5/o
                                         // G_PlayerController(gentity_s const *,int * const)+62/o ...
-    actorInfo_t actorinfo[16];          // XREF: Actor_PostThink(actor_s *)+81/o
+    actorInfo_t actorinfo[MAX_ACTORS];  // XREF: Actor_PostThink(actor_s *)+81/o
                                         // Actor_Negotiation_Think(actor_s *)+2EC/o
 };
 

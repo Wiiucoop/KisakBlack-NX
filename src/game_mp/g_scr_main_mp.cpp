@@ -1,4 +1,28 @@
+#include <server_mp/sv_offline_stats.h>
+#include <game/g_sp_crosshair.h>
 #include "g_scr_main_mp.h"
+#include <qcommon/com_gamemodes.h>
+#ifdef KISAK_SP
+#include <qcommon/common.h>                // zombiemode, SpawnVar
+#include <game/g_load_utils.h>             // G_ParseSpawnVars, G_SpawnString, parse point
+#include <game/actor_state.h>              // Actor_PushState / Actor_PopState
+#include <game/actor_aim.h>                // Actor_FillWeaponParms, retail getweaponforwarddir actor branch
+#include <universal/q_shared.h>            // I_strnicmp, I_stricmp, I_strncpyz
+#include <bgame/bg_weapons_def.h>          // BG_GetWeaponDef, BG_GetWeaponIndexForName
+#include <xanim/xanim.h>                   // XAnim scripted root-motion alignment
+#include <clientscript/cscr_animtree.h>    // Scr_GetAnimsIndex, retail SP anim-tree identity handoff
+#include <universal/com_math.h>            // matrix/root-motion helpers
+#include <cstddef>                         // offsetof, for the WeaponDef layout asserts
+#include <cmath>                           // nearbyint, matching retail x87 FISTP rounding
+#include <cgame_mp/cg_animscripted_mp.h>  // integrated SP animation-command transport
+#include <client/client.h>                 // retail SP player-count connection-state gate
+#include <physics/destructible.h>
+#endif
+#ifdef KISAK_SP
+// GScr_LoadGameTypeScript's "%s" selector is ui_gametype on SP, not g_gametype -- see the
+// retail-verified note there. Declared in ui/ui_main.h:404.
+#include <ui/ui_main.h>
+#endif
 #include <clientscript/cscr_vm.h>
 #include "g_main_mp.h"
 #include <cgame/cg_scr_main.h>
@@ -22,6 +46,11 @@
 #include <qcommon/dobj_management.h>
 #include <xanim/dobj_utils.h>
 #include <game/actor_script_cmd.h>
+#include <game/actor_threat.h>
+#ifdef KISAK_SP
+#include <game/actor_event_listeners.h>
+#endif
+#include <game_mp/actor_mp.h>
 #include "g_combat_mp.h"
 #include <game/g_mover.h>
 #include <server_mp/sv_init_mp.h>
@@ -40,6 +69,10 @@
 #include "g_active_mp.h"
 #include <game/actor_spawner.h>
 #include <gfx_d3d/r_reflection_probe.h>
+#ifdef KISAK_SP
+#include <gfx_d3d/r_cinematic.h>
+#include <gfx_d3d/r_dvars.h>
+#endif
 #include "g_cmds_mp.h"
 #include <client_mp/g_client_mp.h>
 #include <client_mp/sv_client_mp.h>
@@ -70,6 +103,9 @@
 #include <stringed/stringed_hooks.h>
 #include <gfx_d3d/r_dpvs.h>
 #include <sound/snd_bank.h>
+#ifdef KISAK_SP
+#include <sound/snd_utils.h>
+#endif
 #include <gfx_d3d/r_primarylights.h>
 
 scr_data_t g_scr_data;
@@ -159,78 +195,314 @@ void __cdecl Scr_LoadPreGame()
     }
 }
 
+// SP script-path prefixes. SP's compiled GSC assets live under bare "maps/" and
+// "maps/gametypes/", never "maps/mp/...". Evidence, measured by decompressing the shipped
+// zones and reading each asset's payload length (so "exists" is a real asset, not a stray
+// string match):
+//   maps/_destructible      1793 B in code_post_gfx.ff   (MP: maps/mp/_destructible, common_mp.ff)
+//   maps/_callbacksetup     2701 B in code_post_gfx.ff   (MP: maps/mp/gametypes/_callbacksetup, 2141 B)
+//   maps/frontend.gsc       7926 B in frontend.ff        (MP: maps/mp/<map>)
+//   maps/gametypes/cmp.gsc    17 B in code_post_gfx.ff   (see the TODO in GScr_LoadGameTypeScript)
+//   animscripts/dog_combat.gsc 7682 B in common.ff       (MP: maps/mp/animscripts/<name>)
+//   animscripts/traverse/*     9 assets in common.ff and frontend.ff
+//                                                        (MP: maps/mp/animscripts/traverse/*, 11 in common_mp.ff)
+// None of the MP spellings appear in ANY zone SP loads, so every one of these is a guaranteed
+// Com_Error(ERR_DROP, "Could not find script '%s'") at GScr_LoadScriptAndLabel
+// (g_scr_main_mp.cpp:243) once SV_SpawnServer("frontend") reaches G_InitGame -> GScr_LoadScripts.
+// Audit finding B3 (frontend-map-load audit).
+// TODO(SP): the CodeCallback_* LABELS inside maps/_callbacksetup are unverified. Compiled GSC
+// stores no plaintext label names (control: the string "CodeCallback" has zero hits in BOTH the
+// SP and MP zones, so the scan is blind here rather than the labels being absent), so all that
+// is proven is that the SP script exists and is larger than MP's. If a label is genuinely
+// missing, GScr_LoadScriptAndLabel will Com_Error "Could not find label '<X>' in script
+// 'maps/_callbacksetup'" - which names the exact missing label, so a run settles it instantly.
+// The MP path fatals strictly earlier ("Could not find script"), so this is unambiguously an
+// improvement either way. Ghidra is unavailable in this session.
+#ifdef KISAK_SP
+#define GSCR_DESTRUCTIBLE_SCRIPT  "maps/_destructible"
+#define GSCR_CALLBACKSETUP_SCRIPT "maps/_callbacksetup"
+#define GSCR_GAMETYPE_DIR         "maps/gametypes/"
+#define GSCR_LEVEL_DIR            "maps/"
+#define GSCR_ANIMSCRIPTS_DIR      "animscripts/"
+#else
+#define GSCR_DESTRUCTIBLE_SCRIPT  "maps/mp/_destructible"
+#define GSCR_CALLBACKSETUP_SCRIPT "maps/mp/gametypes/_callbacksetup"
+#define GSCR_GAMETYPE_DIR         "maps/mp/gametypes/"
+#define GSCR_LEVEL_DIR            "maps/mp/"
+#define GSCR_ANIMSCRIPTS_DIR      "maps/mp/animscripts/"
+#endif
+
 void __cdecl GScr_LoadGameTypeScript()
 {
     char filename[68]; // [esp+0h] [ebp-48h] BYREF
 
-    Com_sprintf(filename, 0x40u, "maps/mp/gametypes/%s", g_gametype->current.string);
+#ifdef KISAK_SP
+    // *** RETAIL-VERIFIED 2026-08-26 against GScr_LoadGameTypeScript (0x006124b0), read by
+    //     disassembly and by read_memory on every string operand. Two facts about THIS load were
+    //     wrong and are corrected here; a third is confirmed. ***
+    //
+    //  (a) THE LABEL IS "init", NOT "main". Retail 0x00612a78 pushes 0x00a0ff44, which reads
+    //      byte-for-byte as "init\0". This is safe to change unconditionally: bEnforceExists is
+    //      already 0 on this path, so a missing label cannot become a Com_Error either way.
+    //
+    //  (b) THE "%s" SELECTOR IS ui_gametype, NOT g_gametype. Retail 0x00612a52 loads the cached
+    //      dvar pointer DAT_02562a14 and 0x00612a61 reads its +0x18 (current.string) straight
+    //      into the va() call at 0x00612a6a. DAT_02562a14 is identified by the registrar
+    //      string-table walk, run against this binary this pass: its sole WRITE is 0x00836079,
+    //      and the name pushed for the register call one earlier (0x00836056) is 0x009c69c0,
+    //      which reads "ui_gametype". Retail registers it as a string dvar with value "" and
+    //      flags 0 -- exactly this tree's ui_main.cpp:3389. The next registration in program
+    //      order is 0x009c3cb0 ("ui_mapname"), which is the expected neighbour.
+    //      Retail additionally guards the WHOLE block on the pointer being non-NULL
+    //      (0x00612a5d TEST EAX,EAX / JZ 0x00612a8c), which is transcribed below -- ui_gametype
+    //      is registered by UI init, and this runs from the server side.
+    //
+    //  (c) CONFIRMED, no change needed: retail stores this handle with NO error check at all.
+    //      The Scr_LoadScript at 0x00612a73 is not tested, and the Scr_GetFunctionHandle result
+    //      at 0x00612a7f is stored to 0x01c8750c at 0x00612a87 with no TEST/Com_Error --
+    //      unlike all the CodeCallback_* sites around it. That independently VINDICATES this
+    //      file's existing bEnforceExists = 0 under KISAK_SP, which had been reasoned to from
+    //      asset contents rather than from the binary.
+    //
+    // The original bEnforceExists reasoning, retained because it is still true and still the
+    // reason a future pass must not "restore" the 1:
+    // bEnforceExists is 0 on SP: SP has no usable campaign gametype script, so requiring one is
+    // an unconditional fatal.
+    // Evidence: SP ships maps/gametypes/{cmp,arc,bnk,zom,sop}.txt but a .gsc for cmp only, and
+    // that cmp.gsc is EMPTY - its stored payload is 17 bytes, of which the 9-byte zlib stream
+    // (78 9c 63 00 00 00 01 00 01) inflates to a single 0x00 byte. There is no room for a "main"
+    // label, so even with the path corrected this load can only ever produce
+    // Com_Error(ERR_DROP, "Could not find label 'main' in script 'maps/gametypes/cmp'").
+    // Additionally g_gametype is currently stomped to "dm" before we get here (see the TODO(SP)
+    // in SV_SetGametype, sv_game.cpp), and no dm/tdm script exists in any SP zone.
+    // Keeping the load (rather than deleting it) means a zone that DOES ship a real gametype
+    // script - e.g. a zombie map's own .ff - still works; it just no longer fatals when absent.
+    // The consumer is guarded to match: Scr_LoadGameType (below) skips its assert+exec when the
+    // handle is 0, so this does not repeat the "suppress the load, leave the consumer running"
+    // mistake.
+    // RESOLVED, replacing the old "unconfirmed whether retail SP calls this at all" note: retail
+    // SP does call it, from GScr_LoadGameTypeScript (0x006124b0), and the block is reached
+    // whenever ui_gametype is registered.
+    //
+    // RUNTIME-CONFIRMED 2026-08-26 (90s SP run of this build, console_mp.log): G_InitGame DOES
+    // reach GScr_LoadScripts on the frontend load -- the log carries exactly one new line,
+    // `Error: Could not load rawfile "maps/gametypes/.gsc"`, which is this call with
+    // ui_gametype's registered default of "". So ui_gametype is non-NULL here (the guard does not
+    // trip) and bEnforceExists = 0 correctly keeps the miss non-fatal. That both answers the old
+    // open question and exercises the whole callback block: the same log has ZERO
+    // "Could not find label" and ZERO "Could not find script" lines in 630 KB.
+    //
+    // Loose end for a future pass, recorded because the log makes it visible: ls_gametype is
+    // "cmp" at this moment while ui_gametype is still "". Reading ui_gametype is what retail
+    // does and is not the bug; something else is meant to populate it before a level load, and
+    // nothing in this tree does. Until then this load can only ever miss -- which is the same
+    // outcome the old g_gametype spelling had, so this is not a regression.
+    if ( ui_gametype )
+    {
+        Com_sprintf(filename, 0x40u, GSCR_GAMETYPE_DIR "%s", ui_gametype->current.string);
+        g_scr_data.gametype.main = GScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "init", 0);
+    }
+    else
+    {
+        // Retail simply skips the store here (it never writes 0x01c8750c on this path). Zeroing
+        // is the equivalent for a function that re-runs per level load, and it is what
+        // Scr_LoadGameType's own handle==0 guard below already expects.
+        g_scr_data.gametype.main = 0;
+    }
+#else
+    Com_sprintf(filename, 0x40u, GSCR_GAMETYPE_DIR "%s", g_gametype->current.string);
     g_scr_data.gametype.main = GScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "main", 1);
+#endif
     g_scr_data.gametype.startupgametype = GScr_LoadScriptAndLabel(
                                                                                     SCRIPTINSTANCE_SERVER,
-                                                                                    "maps/mp/gametypes/_callbacksetup",
+                                                                                    GSCR_CALLBACKSETUP_SCRIPT,
                                                                                     "CodeCallback_StartGameType",
                                                                                     1);
     g_scr_data.gametype.playerconnect = GScr_LoadScriptAndLabel(
                                                                                 SCRIPTINSTANCE_SERVER,
-                                                                                "maps/mp/gametypes/_callbacksetup",
+                                                                                GSCR_CALLBACKSETUP_SCRIPT,
                                                                                 "CodeCallback_PlayerConnect",
                                                                                 1);
     g_scr_data.gametype.playerdisconnect = GScr_LoadScriptAndLabel(
                                                                                      SCRIPTINSTANCE_SERVER,
-                                                                                     "maps/mp/gametypes/_callbacksetup",
+                                                                                     GSCR_CALLBACKSETUP_SCRIPT,
                                                                                      "CodeCallback_PlayerDisconnect",
                                                                                      1);
     g_scr_data.gametype.playerdamage = GScr_LoadScriptAndLabel(
                                                                              SCRIPTINSTANCE_SERVER,
-                                                                             "maps/mp/gametypes/_callbacksetup",
+                                                                             GSCR_CALLBACKSETUP_SCRIPT,
                                                                              "CodeCallback_PlayerDamage",
                                                                              1);
     g_scr_data.gametype.playerkilled = GScr_LoadScriptAndLabel(
                                                                              SCRIPTINSTANCE_SERVER,
-                                                                             "maps/mp/gametypes/_callbacksetup",
+                                                                             GSCR_CALLBACKSETUP_SCRIPT,
                                                                              "CodeCallback_PlayerKilled",
                                                                              1);
     g_scr_data.gametype.actordamage = GScr_LoadScriptAndLabel(
                                                                             SCRIPTINSTANCE_SERVER,
-                                                                            "maps/mp/gametypes/_callbacksetup",
+                                                                            GSCR_CALLBACKSETUP_SCRIPT,
                                                                             "CodeCallback_ActorDamage",
                                                                             1);
     g_scr_data.gametype.actorkilled = GScr_LoadScriptAndLabel(
                                                                             SCRIPTINSTANCE_SERVER,
-                                                                            "maps/mp/gametypes/_callbacksetup",
+                                                                            GSCR_CALLBACKSETUP_SCRIPT,
                                                                             "CodeCallback_ActorKilled",
                                                                             1);
     g_scr_data.gametype.vehicledamage = GScr_LoadScriptAndLabel(
                                                                                 SCRIPTINSTANCE_SERVER,
-                                                                                "maps/mp/gametypes/_callbacksetup",
+                                                                                GSCR_CALLBACKSETUP_SCRIPT,
                                                                                 "CodeCallback_VehicleDamage",
                                                                                 1);
+#ifndef KISAK_SP
+    // SP retail divergence (2026-08-07). SP's callbacksetup script does not define this callback.
+    // Verified by inflating SP's maps/_callbacksetup.gsc out of code_post_gfx.ff (2693 -> 11697
+    // bytes) and counting: it defines exactly 18 CodeCallback_* functions, and
+    // "VehicleRadiusDamage" occurs ZERO times ("VehicleDamage" occurs 4). MP control:
+    // common_mp.ff's maps/mp/gametypes/_callbacksetup.gsc does define it. Every one of the other 12
+    // labels this file requests IS present in the SP script, so this is a single genuine gap, not
+    // a wrong path. GScr_LoadScriptAndLabel passes bEnforceExists = 1, making this a hard
+    // Com_Error(ERR_DROP) inside G_InitGame on the frontend load.
+    // See the matching early-return in Scr_VehicleRadiusDamage below -- guarded as a coherent unit.
     g_scr_data.gametype.vehicleradiusdamage = GScr_LoadScriptAndLabel(
                                                                                             SCRIPTINSTANCE_SERVER,
-                                                                                            "maps/mp/gametypes/_callbacksetup",
+                                                                                            GSCR_CALLBACKSETUP_SCRIPT,
                                                                                             "CodeCallback_VehicleRadiusDamage",
                                                                                             1);
+#endif
     g_scr_data.gametype.playerlaststand = GScr_LoadScriptAndLabel(
                                                                                     SCRIPTINSTANCE_SERVER,
-                                                                                    "maps/mp/gametypes/_callbacksetup",
+                                                                                    GSCR_CALLBACKSETUP_SCRIPT,
                                                                                     "CodeCallback_PlayerLastStand",
                                                                                     1);
 
     g_scr_data.levelnotify = GScr_LoadScriptAndLabel(
                                         SCRIPTINSTANCE_SERVER,
-                                        "maps/mp/gametypes/_callbacksetup",
+                                        GSCR_CALLBACKSETUP_SCRIPT,
                                         "CodeCallback_LevelNotify",
                                         1);
     g_scr_data.faceeventnotify = GScr_LoadScriptAndLabel(
                          SCRIPTINSTANCE_SERVER,
-                         "maps/mp/gametypes/_callbacksetup",
+                         GSCR_CALLBACKSETUP_SCRIPT,
                          "CodeCallback_FaceEventNotify",
                          0);
+#ifdef KISAK_SP
+    // *** RETAIL-VERIFIED 2026-08-27 against GScr_LoadGameTypeScript (0x006124b0) by disassembly
+    //     plus read_memory on every string operand. ***
+    //
+    // These are retail slots 18 and 19, emitted in exactly this position -- immediately before
+    // CodeCallback_GlassSmash (slot 20) and after the maps/gametypes/<ui_gametype> handle
+    // (slot 17). Ordering transcribed from the binary, not assumed.
+    //
+    //   0x00612ab2  PUSH 0x9e6b68 ("CodeCallback_MenuMessage")  / PUSH 0x9d6aa8
+    //               ("maps/_callbacksetup") / CALL 0x004e3470
+    //   0x00612ac7  TEST EDI,EDI / JNZ 0x00612ae4 -> the fallthrough calls Com_Error(0x00651d90)
+    //               with 0x9a7c7c ("\x15Could not find label '%s' in script '%s'")
+    //   0x00612aea  MOV [0x01c87514],EDI
+    //
+    //   0x00612b10  PUSH 0x9eeee0 ("CodeCallback_Dec20Message") / PUSH 0x9d6aa8 / CALL 0x004e3470
+    //   0x00612b25  TEST EDI,EDI / JNZ 0x00612b42 -> same Com_Error tail
+    //   0x00612b48  MOV [0x01c87518],EDI
+    //
+    // So bEnforceExists = 1 on BOTH -- read out of the binary, not inferred. Contrast the
+    // gametype handle at 0x00612a87 (MOV [0x01c8750c],EAX with no preceding TEST), which is why
+    // that one stays 0 above, and CodeCallback_GlassSmash at 0x00612b5e..0x00612b67 (again no
+    // TEST), which is why the load below stays 0.
+    //
+    // HAZARD, recorded deliberately: bEnforceExists = 1 makes a missing label a hard
+    // Com_Error(ERR_DROP) inside G_InitGame, i.e. the frontend load dies. Both labels were found
+    // in the extracted SP code_post_gfx/maps/_callbacksetup.gsc (CodeCallback_MenuMessage taking
+    // two params, with CodeCallback_Dec20Message immediately after), and the count cross-check in
+    // the note below holds: retail asks _callbacksetup for exactly eighteen labels and the
+    // inflated SP script defines exactly eighteen CodeCallback_* functions. If a future run ever
+    // does drop here, the error names the exact missing label -- fall back to 0 on that one and
+    // guard its consumer on handle != 0.
+    g_scr_data.menumessage = GScr_LoadScriptAndLabel(
+                                        SCRIPTINSTANCE_SERVER,
+                                        GSCR_CALLBACKSETUP_SCRIPT,
+                                        "CodeCallback_MenuMessage",
+                                        1);
+    g_scr_data.dec20message = GScr_LoadScriptAndLabel(
+                                        SCRIPTINSTANCE_SERVER,
+                                        GSCR_CALLBACKSETUP_SCRIPT,
+                                        "CodeCallback_Dec20Message",
+                                        1);
+#endif
     g_scr_data.glassSmash = GScr_LoadScriptAndLabel(
                                         SCRIPTINSTANCE_SERVER,
-                                        "maps/mp/gametypes/_callbacksetup",
+                                        GSCR_CALLBACKSETUP_SCRIPT,
                                         "CodeCallback_GlassSmash",
                                         0);
+#ifdef KISAK_SP
+    // TODO(SP): retail's callback list is LONGER than this one. Recorded here rather than
+    // transcribed, deliberately -- see the reason at the bottom.
+    //
+    // The full retail list was read out of GScr_LoadGameTypeScript (0x006124b0) this pass by
+    // disassembly plus a read_memory on every single string operand (no decompiler inference).
+    // In retail order, with the script each is loaded from and whether the site carries the
+    // Com_Error check (i.e. this file's bEnforceExists):
+    //
+    //     maps/_callbacksetup:
+    //       1  CodeCallback_SaveRestored            enforce 1   *** NOT LOADED HERE ***
+    //       2  CodeCallback_StartGameType           enforce 1
+    //       3  CodeCallback_PlayerConnect           enforce 1
+    //       4  CodeCallback_PlayerDisconnect        enforce 1
+    //       5  CodeCallback_ActorDamage             enforce 1
+    //       6  CodeCallback_PlayerDamage            enforce 1
+    //       7  CodeCallback_PlayerKilled            enforce 1
+    //       8  CodeCallback_ActorKilled             enforce 1
+    //       9  CodeCallback_PlayerRevive            enforce 1   *** NOT LOADED HERE ***
+    //      10  CodeCallback_PlayerLastStand         enforce 1
+    //      11  CodeCallback_LevelNotify             enforce 1
+    //      12  CodeCallback_VehicleDamage           enforce 1
+    //      13  CodeCallback_ActorShouldReact        enforce 1   *** NOT LOADED HERE ***
+    //      14  CodeCallback_FaceEventNotify         enforce 0
+    //      15  CodeCallback_DisconnectedDuringLoad  enforce 1   *** NOT LOADED HERE ***
+    //     maps/_destructible:
+    //      16  CodeCallback_DestructibleEvent       enforce 1   (this tree loads it, but from
+    //                                                            GScr_LoadScripts instead)
+    //     maps/gametypes/<ui_gametype>:
+    //      17  init                                 enforce 0   (implemented above)
+    //     maps/_callbacksetup:
+    //      18  CodeCallback_MenuMessage             enforce 1   (LOADED as of 2026-08-27)
+    //      19  CodeCallback_Dec20Message            enforce 1   (LOADED as of 2026-08-27)
+    //      20  CodeCallback_GlassSmash              enforce 0
+    //
+    // Cross-check worth keeping: retail requests exactly EIGHTEEN labels from _callbacksetup
+    // (1-15 plus 18-20), and this file's own note at GScr_LoadGameTypeScript records that SP's
+    // inflated maps/_callbacksetup.gsc defines exactly eighteen CodeCallback_* functions. Those
+    // two independent counts agreeing is a strong sign the list above is complete and that every
+    // one of the six missing labels really does exist in SP's script.
+    //
+    // *** DISCREPANCY WITH THE HANDOFF NOTE THIS PASS WAS GIVEN, recorded because the next pass
+    //     will meet the same note: it listed these as bare names -- "SaveRestored",
+    //     "StartGameType", "PlayerConnect", ... -- with the CodeCallback_ prefix present on
+    //     DestructibleEvent only. In the binary EVERY one of the nineteen carries the
+    //     CodeCallback_ prefix. The note's ORDER and its enforce-0 positions (FaceEventNotify,
+    //     GlassSmash, and the gametype handle) are correct; only the spellings were short. ***
+    //
+    // UPDATE 2026-08-27: MenuMessage and Dec20Message ARE now loaded, above, exactly per the
+    // rule the paragraph below lays down -- their storage (scr_data_t::menumessage /
+    // ::dec20message) and their consumer (Cmd_MenuLevelMessage_f, g_cmds_mp.cpp, dispatched from
+    // ClientCommand on "mlvl") landed in the same change. Dec20Message has storage but still no
+    // consumer; it is loaded only because retail loads it and the label is present, so its handle
+    // costs nothing.
+    //
+    // WHY THE REMAINING FOUR ARE NOT ADDED: three of them (SaveRestored, ActorShouldReact,
+    // DisconnectedDuringLoad) have no field in scr_data_t_unnamed_type_gametype at all, and the
+    // fourth (playerrevive) has a field that NOTHING in this tree reads. Adding them therefore
+    // buys no behaviour, while each one is a new bEnforceExists=1 site, i.e. a new hard
+    // Com_Error(ERR_DROP) at level load if any single assumption about SP's shipped
+    // _callbacksetup is wrong. That trade is the wrong way round. A future pass that wants them
+    // should add the storage fields and their consumers first, and land the loads as part of that
+    // unit.
+    //
+    // ALSO NOT DONE, deliberately: retail loads CodeCallback_DestructibleEvent from inside THIS
+    // function (slot 16), where this tree loads it from GScr_LoadScripts. Both run inside the
+    // same Scr_BeginLoadScripts/Scr_EndLoadScripts window with the same script, label and
+    // enforce flag, so moving it is pure restructuring with no behavioural difference. Retail's
+    // ordering of the ActorDamage/PlayerDamage/VehicleDamage group also differs from this file's;
+    // each load is independent, so that too is cosmetic.
+#endif
 }
 
 int __cdecl GScr_LoadScriptAndLabel(scriptInstance_t inst, const char *filename, const char *label, int bEnforceExists)
@@ -260,20 +532,63 @@ void __cdecl    GScr_LoadScripts(scriptInstance_t inst)
     g_scr_data.findstruct = GScr_LoadScriptAndLabel(inst, "codescripts/struct", "findstruct", 1);
     g_scr_data.destructible_callback = GScr_LoadScriptAndLabel(
         inst,
-        "maps/mp/_destructible",
+        GSCR_DESTRUCTIBLE_SCRIPT,
         "CodeCallback_DestructibleEvent",
         1);
+#ifndef KISAK_SP
     g_scr_data.updatespawnpoints = GScr_LoadScriptAndLabel(
         inst,
         "maps/mp/gametypes/_spawning",
         "CodeCallback_UpdateSpawnPoints",
         1);
+#else
+    // MP spawn-point management has no SP counterpart and no SP asset to point at.
+    // Evidence: "_spawning.gsc" occurs exactly once across all shipped zones - in common_mp.ff -
+    // and zero times in every SP zone (code_pre_gfx, code_post_gfx, common, patch, frontend).
+    // Neither "maps/_spawning" nor "maps/gametypes/_spawning" exists. With bEnforceExists=1 this
+    // is a guaranteed Com_Error(ERR_DROP, "Could not find script 'maps/mp/gametypes/_spawning'")
+    // inside G_InitGame -> GScr_LoadScripts. Audit finding B3 (frontend-map-load audit).
+    // Consumer checked, per this project's "guard the coherent unit" rule: the ONLY reader of
+    // g_scr_data.updatespawnpoints is Scr_UpdateSpawnPoints (below), which is guarded to match,
+    // and its only three callers are in radiant_remote.cpp (the live-Radiant dev bridge), not on
+    // any boot or gameplay path.
+    g_scr_data.updatespawnpoints = 0;
+#endif
+#ifdef KISAK_SP
+    // Retail SP (GScr_LoadScripts 0x00580370) picks the animscript set by the `zombiemode` dvar --
+    // the same dvar, read the same way (its +0x18 current.enabled), that gates the dog set inside
+    // GScr_LoadScriptsAndAnimsForEntities:
+    //     if (!zombiemode) LoadHuman(); else { LoadZombie(); LoadZombieDog(); }
+    // and it does NOT load the dog set here. The dog set is LAZY: it is loaded only if the map
+    // actually contains an actor_* classname matching dog/hound, from the entity walk below. That
+    // is why the frontend -- which has no dogs -- must not pay for dog_*.gsc at all.
+    //
+    // This tree previously called GScr_LoadDogAnimScripts unconditionally on every map, which
+    // meant every SP actor was initialised by animscripts/dog_init: g_animScriptTable held one
+    // entry and Actor_SetDefaults wrote species 0 into it. That is what left human actors without
+    // an `animname` and produced ~4,400 script exceptions per frontend run.
+    if ( !zombiemode->current.enabled )
+    {
+        GScr_LoadHumanAnimScripts(inst);
+    }
+    else
+    {
+        GScr_LoadZombieAnimScripts(inst);
+        GScr_LoadZombieDogAnimScripts(inst);
+    }
+#else
     GScr_LoadDogAnimScripts(inst);
+#endif
 
     GScr_SetScriptsForPathNodes();
     GScr_LoadPreGameScript();
     GScr_LoadGameTypeScript();
     GScr_LoadLevelScript();
+#ifdef KISAK_SP
+    // Must run AFTER the level script (it walks the map's own entity string) and before the
+    // post-compile pass. Retail has it in the same relative position.
+    GScr_LoadScriptsAndAnimsForEntities(inst);
+#endif
     Scr_PostCompileScripts(inst);
     GScr_PostLoadScripts(inst);
 
@@ -287,12 +602,276 @@ void __cdecl    GScr_LoadDogAnimScripts(scriptInstance_t inst)
   GScr_LoadSingleAnimScript (inst, &g_scr_data.dogAnim.init, "dog_init");
   GScr_LoadSingleAnimScript (inst, &g_scr_data.dogAnim.pain, "dog_pain");
   GScr_LoadSingleAnimScript (inst, &g_scr_data.dogAnim.move, "dog_move");
+#ifdef KISAK_SP
+  // *** RESOLVED 2026-08-28. The TODO(SP) that used to sit in the #ifndef block below asked
+  //     whether retail SP loads a DIFFERENT dog animscript list or skips the dog set entirely.
+  //     Ghidra was available this pass and the answer is neither. ***
+  //
+  // Retail SP splits animscript loading into two passes that must agree entry-for-entry (a
+  // "Script function count mismatch" Com_Error at 0x007e2f20 welds them). The dog set is
+  //     LOAD pass  0x007ee760  -- Com_sprintf("animscripts/%s", name) + GScr_LoadScriptAndLabel
+  //     SET  pass  0x007ef000  -- GScr_SetSingleAnimScript into the dog AnimScriptList
+  // Both were disassembled and they agree on EIGHT entries in this exact order:
+  //     dog_combat, dog_death, dog_init, dog_pain, dog_move, dog_scripted, dog_stop, dog_flashed
+  // i.e. SP's set is MP's set minus dog_jump/dog_turn PLUS dog_scripted. The SET pass also gives
+  // the member offsets, which pin dog_scripted to AnimScriptList::scripted (+0x98) -- see the
+  // offset table in Game/Server/game/actor_animapi.h.
+  //
+  // bEnforceExists = 1 is safe here: animscripts/dog_scripted.gsc is present in BOTH common.ff
+  // and frontend.ff, extracted and listed with tools/gsc_extract.py this pass (the same scan that
+  // re-confirmed dog_jump.gsc and dog_turn.gsc are absent from every SP zone).
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.dogAnim.scripted, "dog_scripted");
+#endif
   GScr_LoadSingleAnimScript (inst, &g_scr_data.dogAnim.stop, "dog_stop");
   GScr_LoadSingleAnimScript (inst, &g_scr_data.dogAnim.flashed, "dog_flashed");
+#ifndef KISAK_SP
+  // SP retail divergence (2026-08-07). SP's dog animscript set has different MEMBERSHIP, not just
+  // a different path prefix -- animscripts/dog_jump.gsc and animscripts/dog_turn.gsc ship ONLY in
+  // common_mp.ff. Verified by scanning all 139 shipped zones case-insensitively, with
+  // animscripts/dog_combat.gsc as a positive control (it is present in common.ff, frontend.ff AND
+  // common_mp.ff, so the scan does reach SP zones). GScr_LoadSingleAnimScript passes
+  // bEnforceExists = 1, so each of these is a guaranteed Com_Error(ERR_DROP, "Could not find
+  // script") inside G_InitGame during the frontend load. Independently found by two auditors via
+  // different methods; a third confirmed dog_jump is a whole-binary zero in the SP executable.
+  //
+  // Consumers deliberately NOT guarded, having been checked rather than assumed: the three uses in
+  // Game/Server/game/actor_dog_exposed.cpp (:173, :176, :315) compare self->pAnimScriptFunc against
+  // the ADDRESS of these members (&g_scr_data.dogAnim.jump), never dereferencing the handle. An
+  // address comparison is well-defined whatever the handle holds; it simply never matches. This is
+  // the coherent-unit check the project requires after an earlier fix guarded a load but left its
+  // consumers walking unpopulated data.
+  //
+  // RESOLVED 2026-08-28: retail SP's dog set is now read directly from the SP binary and is
+  // reproduced in the #ifdef KISAK_SP block above. Skipping these two on SP was correct.
   GScr_LoadSingleAnimScript (inst, &g_scr_data.dogAnim.jump, "dog_jump");
   GScr_LoadSingleAnimScript (inst, &g_scr_data.dogAnim.turn, "dog_turn");
-  g_animScriptTable[0] = &g_scr_data.dogAnim;
+#endif
+  g_animScriptTable[AI_SPECIES_DOG] = &g_scr_data.dogAnim;
 }
+
+#ifdef KISAK_SP
+// ===========================================================================
+// SP ANIMSCRIPT SETS. Recovered 2026-08-28 from the retail SP binary. Retail splits animscript
+// loading into two passes over one shared handle array -- a LOAD pass that compiles each script
+// and appends its handle, and a SET pass that walks the array back out in the SAME order and
+// stores each handle into its named AnimScriptList member. G_InitGame welds the two with a
+// "Script function count mismatch" Com_Error (0x007e2f20) if they ever disagree.
+//
+//   species     LOAD        SET         list base    entries
+//   human       0x007ee3b0  0x007eeda0  0x01c79b64   23 + 2 standalone handles
+//   dog         0x007ee760  0x007ef000  0x01c7a024    8
+//   zombie      0x007ee8b0  0x007ef090  0x01c7a4e4    7 + 1 standalone handle
+//   zombie_dog  0x007ee9e0  0x007ef190  0x01c7a9a4    9
+//
+// This tree keeps its own SINGLE-pass shape (GScr_LoadSingleAnimScript both compiles and stores).
+// That is a deliberate divergence: the only thing retail's split buys is the count cross-check,
+// which cannot desynchronise here because there is one call site per member. The observable
+// behaviour -- which scripts are compiled, into which member, under which condition -- is
+// reproduced exactly, and the load ORDER is kept identical so the two can be diffed later.
+//
+// Every script named below was confirmed present in the zones this build actually mounts by
+// extracting common.ff and frontend.ff with tools/gsc_extract.py. That matters because
+// GScr_LoadSingleAnimScript passes bEnforceExists = 1, making a missing script a Com_Error
+// inside G_InitGame rather than a log line.
+// ===========================================================================
+
+void __cdecl    GScr_LoadHumanAnimScripts(scriptInstance_t inst)
+{
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.combat, "combat");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.concealment_crouch, "concealment_crouch");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.concealment_prone, "concealment_prone");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.concealment_stand, "concealment_stand");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.cover_arrival, "cover_arrival");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.cover_crouch, "cover_crouch");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.cover_left, "cover_left");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.cover_pillar, "cover_pillar");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.cover_prone, "cover_prone");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.cover_right, "cover_right");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.cover_stand, "cover_stand");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.cover_wide_left, "cover_wide_left");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.cover_wide_right, "cover_wide_right");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.death, "death");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.grenade_return_throw, "grenade_return_throw");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.init, "init");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.pain, "pain");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.react, "react");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.move, "move");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.scripted, "scripted");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.stop, "stop");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.grenade_cower, "grenade_cower");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.humanAnim.flashed, "flashed");
+
+  // Two standalone handles, both at label "init" rather than "main", and both given as explicit
+  // paths instead of going through the "animscripts/%s" format (retail loads them with EDI set
+  // directly at 0x007ee72a and 0x007ee73d).
+  g_scr_data.scripted = GScr_LoadScriptAndLabel(inst, "animscripts/scripted", "init", 1);
+  g_scr_data.init_mode_sp = GScr_LoadScriptAndLabel(inst, "animscripts/init_mode_sp", "init", 1);
+
+  g_animScriptTable[AI_SPECIES_HUMAN] = &g_scr_data.humanAnim;
+}
+
+void __cdecl    GScr_LoadZombieAnimScripts(scriptInstance_t inst)
+{
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieAnim.combat, "zombie_combat");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieAnim.death, "zombie_death");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieAnim.init, "zombie_init");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieAnim.pain, "zombie_pain");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieAnim.move, "zombie_move");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieAnim.scripted, "zombie_scripted");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieAnim.stop, "zombie_stop");
+
+  // The zombie branch's counterpart to the human branch's animscripts/scripted -- same global.
+  g_scr_data.scripted = GScr_LoadScriptAndLabel(inst, "animscripts/zombie_scripted", "init", 1);
+
+  g_animScriptTable[AI_SPECIES_ZOMBIE] = &g_scr_data.zombieAnim;
+}
+
+void __cdecl    GScr_LoadZombieDogAnimScripts(scriptInstance_t inst)
+{
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieDogAnim.combat, "zombie_dog_combat");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieDogAnim.death, "zombie_dog_death");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieDogAnim.init, "zombie_dog_init");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieDogAnim.pain, "zombie_dog_pain");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieDogAnim.move, "zombie_dog_move");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieDogAnim.scripted, "zombie_dog_scripted");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieDogAnim.stop, "zombie_dog_stop");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieDogAnim.flashed, "zombie_dog_flashed");
+  GScr_LoadSingleAnimScript (inst, &g_scr_data.zombieDogAnim.turn, "zombie_dog_turn");
+
+  g_animScriptTable[AI_SPECIES_ZOMBIE_DOG] = &g_scr_data.zombieDogAnim;
+}
+
+// ===========================================================================
+// GScr_LoadScriptsAndAnimsForEntities -- retail SP 0x005efbb0, called from GScr_LoadScripts at
+// 0x0058042a. Absent from this MP-derived tree entirely: MP has no per-AI-type script layer.
+//
+// Retail walks the map's entity string once and dispatches on each entity's `classname`:
+//
+//  * classname starting "actor_"  -> load aitype/<classname+6>.gsc at three labels, "main",
+//    "precache" and "spawner"; and, the FIRST time a classname containing "dog" or "hound" is
+//    seen while zombiemode is off, load the dog animscript set. That gate is the only thing in
+//    retail SP that loads dog_*.gsc at all, which is why GScr_LoadScripts no longer does.
+//
+//  * classname "node_negotiation_begin" -> load animscripts/traverse/<animscript>.
+//    DELIBERATELY NOT REPRODUCED. That branch is the LOAD half of retail's two-pass split, and
+//    this tree already does the entire job in GScr_SetScriptsForPathNode above -- the direct
+//    counterpart of retail's SET half at 0x007eec60, matching it down to the
+//    "Pathnode (%s) at (%g %g %g) cannot find animscript '%s'" text and the Hunk_FindDataForFile
+//    dedupe. Porting it here would double-load every traverse script.
+//
+//  * classname "misc_mg42" / "misc_turret" -> load the turret animscript named by the weapon def
+//    behind the entity's `weaponinfo` key. NOT reproduced -- see the TODO(SP) below.
+//
+// WHY THIS FUNCTION MATTERS. aitype/<name>.gsc is where an SP actor's identity lives: it sets
+// self.type (which routes through ActorScr_SetSpecies to pick the species, and therefore the
+// animscript set), plus team, health and weapons, and it supplies the `spawner` and `precache`
+// entry points. With no aitype loaded, spawning an actor from a spawner produces nothing. That is
+// exactly the frontend interrogator failure: maps/frontend_anim.gsc's window_ambient_anims does
+//     interrogator = simple_spawn_single("hudson");
+//     interrogator.animname = "generic";
+// and needs aitype/hudson_int_silhoutte.gsc, which ships in frontend.ff and whose main() sets
+// self.type = "human". The spawn returned undefined, the field assignment threw, and the enclosing
+// while(1) then called anim_loop_aligned(undefined, ...) forever -- about 4,400 script exceptions
+// per run, every one of them downstream of this single missing call.
+// ===========================================================================
+
+void __cdecl    GScr_LoadScriptsAndAnimsForEntities(scriptInstance_t inst)
+{
+    SpawnVar spawnVar;                  // retail's [esp+9Ch] local; sizeof(SpawnVar) == 0xA0C
+    const char *classname;
+    const char *aitype;
+    char filename[64];
+    AITypeScript *typeScript;
+    bool bDogAnimsLoaded;
+
+    bDogAnimsLoaded = 0;
+
+    // The cursor is at the start of the entity string on entry: SV_InitGameVM calls
+    // G_ResetEntityParsePoint() before G_InitGame, and every other walker in this tree
+    // (G_SpawnEntitiesFromString, G_LoadStructs) resets on the way OUT rather than in. Retail
+    // relies on the same invariant -- it opens with a bare G_ParseSpawnVars and treats a false
+    // return as "no entities". This first parse consumes worldspawn, which retail also discards.
+    if ( !G_ParseSpawnVars(&spawnVar) )
+        Com_Error(ERR_DROP, "GScr_LoadScriptsAndAnimsForEntities: no entities");
+
+    while ( G_ParseSpawnVars(&spawnVar) )
+    {
+        if ( !G_SpawnString(&spawnVar, "classname", "", &classname) )
+            continue;
+
+        if ( I_strnicmp(classname, "actor_", 6) )
+            continue;
+
+        aitype = classname + 6;
+
+        // DEDUPE, and simultaneously the thing that makes the loaded handles reachable.
+        // Retail dedupes with a GSC array used as a set (Scr_AllocArray up front, an
+        // add-if-absent probe per name at 0x0059b7f0, a free at the end). This tree has a better
+        // fit already in use two functions below in GScr_SetScriptsForPathNode: the
+        // Hunk_FindDataForFile / Hunk_SetDataForFile file-data registry. Using it here is not
+        // just a dedupe -- registry type 0 keyed by the aitype name is EXACTLY where retail keeps
+        // these too. Retail registers them in its SET pass, GScr_SetScriptsAndAnimsForEntities
+        // (0x008071e0): Hunk_FindDataForFile(0, classname+6) as its own skip-if-present test,
+        // Hunk_AllocLow(0xC), stores [+0]=main [+4]=precache [+8]=spawner, then
+        // Hunk_SetDataForFile(0, name, block, alloc). Retail therefore dedupes TWICE -- the GSC
+        // array in the load pass and this registry in the set pass -- and collapsing the two
+        // into one lookup here is sound. It is also where Actor_FinishSpawning
+        // (actor_mp.cpp:841) reads them back:
+        //     typeScript = (AITypeScript *)Hunk_FindDataForFile(0, classname + 6);
+        //     iassert(typeScript); iassert(typeScript->main);
+        //     Scr_ExecEntThread(ent, typeScript->main, 0);
+        // and AITypeScript is { int main; int precache; int spawner; } -- the same three labels
+        // retail loads here, in the same order. So loading without registering would leave every
+        // spawned actor asserting on a null typeScript.
+        //
+        // Hunk_SetDataForFile STORES THE POINTER, it does not copy (com_memory.cpp: the body is
+        // `fileData->data = data;`), so the AITypeScript has to outlive this frame -- hence the
+        // hunk allocation rather than a local. It also asserts !Hunk_FindDataForFileInternal on
+        // the way in, so the Find above is required, not merely an optimisation.
+        if ( Hunk_FindDataForFile(0, aitype) )
+            continue;
+
+        // The dog gate sits INSIDE the dedupe in retail too (the add-if-absent probe at
+        // 0x005efc6a guards everything that follows), and it tests the FULL classname rather than
+        // classname+6 -- harmless either way, since "actor_" contains neither substring.
+        if ( !zombiemode->current.enabled
+            && !bDogAnimsLoaded
+            && (strstr(classname, "dog") || strstr(classname, "hound")) )
+        {
+            GScr_LoadDogAnimScripts(inst);
+            bDogAnimsLoaded = 1;
+        }
+
+        Com_sprintf(filename, sizeof(filename), "aitype/%s", aitype);
+        typeScript = (AITypeScript *)GScr_AnimscriptAlloc(sizeof(AITypeScript));
+        // bEnforceExists = 0 is a DELIBERATE SOFTENING OF RETAIL, not retail's shape. An earlier
+        // revision of this comment said retail's behaviour "was not established"; it since has
+        // been. Retail's LOAD half is non-fatal (Com_Printf "Could not find script '%s'", stores
+        // a null handle), but its SET half -- GScr_SetScriptsAndAnimsForEntities, 0x008071e0 --
+        // then raises Com_Error(1, "Could not find label '%s' in script '%s'") for each of the
+        // three handles, so on retail a missing aitype script kills the load outright.
+        //
+        // The softer reading is kept on purpose: a map naming an actor type whose script did not
+        // ship should cost that one NPC, not the whole boot. The cost is not silent either way --
+        // Actor_FinishSpawning asserts on a null ->main, so it becomes a stop at spawn instead of
+        // a stop at load. Revisit if SP ever needs retail's fail-fast behaviour.
+        typeScript->main = GScr_LoadScriptAndLabel(inst, filename, "main", 0);
+        typeScript->precache = GScr_LoadScriptAndLabel(inst, filename, "precache", 0);
+        typeScript->spawner = GScr_LoadScriptAndLabel(inst, filename, "spawner", 0);
+        Hunk_SetDataForFile(0, aitype, typeScript, (void *(__cdecl *)(int))GScr_AnimscriptAlloc);
+    }
+
+    // TODO(SP): the misc_mg42 / misc_turret branch (retail 0x005efdaf-0x005efe7d) is not ported.
+    // Retail reads the entity's "weaponinfo" key, resolves it to a weapon def, requires
+    // weapClass == WEAPCLASS_TURRET (7), and then loads animscripts/<def+0x79C> at label "main".
+    // The blocker is that +0x79C in the SP WeaponDef is not mapped to a field in this tree's
+    // WeaponDef, and guessing an offset would be a silent wrong-pointer read. Nothing on the
+    // frontend path needs it. To finish: identify the char* member at SP WeaponDef +0x79C, then
+    // mirror the shape above. Retail's two failure paths are both Com_PrintError, not Com_Error.
+
+    G_ResetEntityParsePoint();
+}
+#endif // KISAK_SP
 
 void __cdecl    GScr_LoadSingleAnimScript(scriptInstance_t inst, scr_animscript_t *pAnim, const char *name)
 {
@@ -301,7 +880,7 @@ void __cdecl    GScr_LoadSingleAnimScript(scriptInstance_t inst, scr_animscript_
     iassert(pAnim);
     iassert(name);
 
-    Com_sprintf(filename, sizeof(filename), "maps/mp/animscripts/%s", name);
+    Com_sprintf(filename, sizeof(filename), GSCR_ANIMSCRIPTS_DIR "%s", name);
 
     pAnim->name = GScr_AllocString(name);
     pAnim->func = GScr_LoadScriptAndLabel(inst, filename, "main", 1);
@@ -338,7 +917,7 @@ void __cdecl GScr_SetScriptsForPathNode(scriptInstance_t inst, pathnode_t *loadN
                 loadNode->constant.animscriptfunc = (int)Hunk_FindDataForFile(1, animscript);
                 if ( !loadNode->constant.animscriptfunc )
                 {
-                    Com_sprintf(filename, 0x40u, "maps/mp/animscripts/traverse/%s", animscript);
+                    Com_sprintf(filename, 0x40u, GSCR_ANIMSCRIPTS_DIR "traverse/%s", animscript);
                     loadNode->constant.animscriptfunc = GScr_LoadScriptAndLabel(inst, filename, "main", 1);
                     Hunk_SetDataForFile(
                         1,
@@ -396,7 +975,7 @@ int GScr_LoadLevelScript()
     const dvar_s *mapname; // [esp+44h] [ebp-4h]
 
     mapname = _Dvar_RegisterString("mapname", (char *)"", 0x44u, "The current map name");
-    Com_sprintf(filename, 0x40u, "maps/mp/%s", mapname->current.string);
+    Com_sprintf(filename, 0x40u, GSCR_LEVEL_DIR "%s", mapname->current.string);
     result = GScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "main", 0);
     g_scr_data.levelscript = result;
     return result;
@@ -407,10 +986,22 @@ int GScr_LoadPreGameScript()
     int result; // eax
     char filename[68]; // [esp+0h] [ebp-48h] BYREF
 
+#ifdef KISAK_SP
+    // MP pre-game (lobby countdown) script. No SP counterpart exists: neither
+    // "maps/mp/gametypes/_pregame" nor "maps/_pregame" nor "maps/gametypes/_pregame" appears in
+    // any SP zone. bEnforceExists is already 0 so this was never fatal - it is skipped only to
+    // avoid a pointless lookup and to record the finding. Consumer is provably null-safe:
+    // Scr_LoadPreGame (g_scr_main_mp.cpp) tests `if (g_scr_data.pregamescript)` before exec'ing,
+    // and the whole branch is additionally gated on Pregame_ShouldLoadPregame().
+    // Audit finding B3 (frontend-map-load audit).
+    g_scr_data.pregamescript = 0;
+    return 0;
+#else
     Com_sprintf(filename, 0x40u, "maps/mp/gametypes/_pregame");
     result = GScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "main", 0);
     g_scr_data.pregamescript = result;
     return result;
+#endif
 }
 
 void __cdecl GScr_PostLoadScripts(scriptInstance_t inst)
@@ -2212,10 +2803,38 @@ void __cdecl ScrCmd_attach(scr_entref_t entref)
             }
         }
     }
+#ifdef KISAK_SP
+    // THE NULL DEREF. This else runs whenever the 5th (stowed-weapon-name) argument is absent,
+    // INCLUDING when ent->client is null -- the && above short-circuits into here rather than
+    // skipping the block. On a non-player entity that is a write through a null pointer.
+    //
+    // It is unreachable in MP because attach() is only ever called on players there, and it was
+    // unreachable in this tree until aitype/animscript code started running on AI: every SP
+    // character script attaches a head model (character/c_usa_interrogation_sillhouette.gsc:6
+    // `self attach(self.headModel, "", true)`) and animscripts/shared.gsc:145 attaches the
+    // weapon model on every AI weapon change. Measured: EXCEPTION_ACCESS_VIOLATION at
+    // OpenBlops.exe+0x398688 == ScrCmd_attach+0x198 == this line, EAX/ECX = 0, which the SP
+    // unhandled-exception filter reports as a bare "Com_ERROR: Fatal Error".
+    //
+    // Retail SP is immune for a stronger reason: its ScrCmd_attach (0x007f1a10) ENDS at the
+    // G_EntAttach check. It reads three parameters (model, tag, ignoreCollision), calls
+    // G_EntDetach / G_EntAttach with the two Scr_Error paths above, and returns. There is no
+    // 4th or 5th parameter, no stowedWeapon, and no dobjDirty -- stowed weapons are an MP-only
+    // feature. So on SP the whole tail could be deleted; it is only guarded here, to keep an
+    // SP player attach marking its dobj dirty exactly as it does today.
+    //
+    // The same defect is live in MP as a latent null deref on any non-player attach. Not fixed
+    // there: MP output must stay byte-identical.
+    else if ( ent->client )
+    {
+        ent->client->ps.stowedWeapon = 0;
+    }
+#else
     else
     {
         ent->client->ps.stowedWeapon = 0;
     }
+#endif
     if ( ent->client )
         level_bgs.clientinfo[ent->s.number].dobjDirty = 1;
 }
@@ -2788,6 +3407,13 @@ void __cdecl ScrCmd_PlayerLinkToDelta(scr_entref_t entref)
         ent->client->ps.linkFlags |= 2u;
     else
         ent->client->ps.linkFlags &= ~2u;
+#ifdef KISAK_SP
+    // Retail SP 0x007f2ed9. The delta link is the semantic opposite of
+    // playerlinktoabsolute and clears its flag. Without this, the tag-camera
+    // orientation override in CG_OffsetFirstPersonView (0x007923ab) never stops
+    // and PM_UpdateViewAngles' linked-clamp arm never opens.
+    ent->client->ps.pm_flags &= ~0x4000000u;
+#endif
     ent->client->prevLinkAnglesSet = 0;
     parent->r.svFlags &= ~1u;
     if ( numParam > 8 )
@@ -3228,6 +3854,21 @@ void __cdecl ScrCmd_PlaySound(scr_entref_t entref)
     gentity_s *Entity; // eax
     unsigned int AliasId; // [esp-Ch] [ebp-Ch]
 
+#ifdef KISAK_SP
+    // Retail SP 0x007F45D0 accepts zero or more arguments. Argument 0 is the
+    // alias, argument 1 is an optional notify string, and later arguments are
+    // intentionally ignored (animscripts/face.gsc passes a third boolean).
+    unsigned int notifyString = 0;
+    AliasId = 0;
+    const int numParam = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    if ( numParam > 0 )
+        AliasId = SND_HashName(Scr_GetString(0, SCRIPTINSTANCE_SERVER));
+    if ( numParam > 1 )
+        notifyString = Scr_GetConstString(1u, SCRIPTINSTANCE_SERVER);
+    Entity = GetEntity(entref);
+    if ( Entity && AliasId )
+        G_PlaySoundAlias(Entity, AliasId, notifyString, 0);
+#else
     if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 1 )
     {
         NumParam = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
@@ -3238,7 +3879,36 @@ void __cdecl ScrCmd_PlaySound(scr_entref_t entref)
     AliasId = SND_FindAliasId(String);
     Entity = GetEntity(entref);
     G_PlaySoundAlias(Entity, AliasId, 0, 0);
+#endif
 }
+
+#ifdef KISAK_SP
+// Retail SP builtin method "stopsound" -- methods_3 idx 56, handler 0x00807B30.
+// Transcribed from that decompile: GetEntity, SND_FindAliasId(Scr_GetString(0)),
+// then (only when the alias resolves) a G_TempEntity(ent->r.currentOrigin,
+// EV_STOP_SOUND_ALIAS) carrying the alias in s.loopSoundId and the source entity
+// in s.otherEntityNum. Field writes are the same three G_PlaySoundAlias
+// (g_utils_mp.cpp:2015) performs, at the same SP gentity_s offsets
+// (r.currentOrigin +0x11C, s.loopSoundId +0x7C, s.otherEntityNum +0xC4).
+// NOTE: unlike G_PlaySoundAlias, the SP body does NOT set tmp->r.svFlags |= 8 --
+// verified absent from 0x00807B30's decompile, not an omission here.
+// The client half already exists: cg_event.cpp:503 handles EV_STOP_SOUND_ALIAS.
+void __cdecl ScrCmd_StopSound(scr_entref_t entref)
+{
+    gentity_s *ent; // [esp+0h] [ebp-8h]
+    gentity_s *tmp; // [esp+4h] [ebp-4h]
+    unsigned int AliasId;
+
+    ent = GetEntity(entref);
+    AliasId = SND_FindAliasId(Scr_GetString(0, SCRIPTINSTANCE_SERVER));
+    if ( AliasId )
+    {
+        tmp = G_TempEntity(ent->r.currentOrigin, EV_STOP_SOUND_ALIAS);
+        tmp->s.loopSoundId = AliasId;
+        AssignToSmallerType<short>(&tmp->s.otherEntityNum, ent->s.number);
+    }
+}
+#endif
 
 void __cdecl ScrCmd_PlaySoundOnTag(scr_entref_t entref)
 {
@@ -3644,8 +4314,94 @@ void __cdecl ScrCmd_SetNormalHealth(scr_entref_t entref)
         Com_PrintError(24, "ERROR: Cannot setnormalhealth to 0 or below.\n");
 }
 
+#ifdef KISAK_SP
+// Local adapter for the reviewed SP-only piece path at 0x0062F780.
+static float GScr_DamageDestructiblePiece_SP(gentity_s *self, const float *dir,
+    const float *point, float damage, int mod, int index)
+{
+    if (!self->destructible)
+        return 0.0f;
+    const DestructibleDef *def = self->destructible->ddef;
+    if (index >= def->numPieces)
+        return damage;
+    if (def->clientOnly)
+        return 0.0f;
+    float hitdir[3];
+    Vec3Copy(dir, hitdir);
+    Vec3NormalizeFast(hitdir);
+    const DestructiblePiece &piece = def->pieces[index];
+    damage *= piece.bulletDamageScale;
+    const float entityDamage = piece.entityDamageTransfer > 0.0f
+        ? damage * piece.entityDamageTransfer : 0.0f;
+    if (DamagePiece(self, (unsigned char)index, (int)damage, point, hitdir, mod, true, -1, NULL, 0))
+    {
+        DestructibleBulletDamageEvent(self, point, hitdir, mod);
+        G_DObjUpdate(self);
+    }
+    return entityDamage;
+}
+#endif
+
 void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
 {
+#ifdef KISAK_SP
+    // Retail 0x007F5080: SP has no separate inflictor/headshot/dflags/weapon
+    // slots. Zombie melee supplies (damage, origin, attacker, 0, "MOD_MELEE").
+    const unsigned int argc = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    if (argc < 2 || argc > 6)
+    {
+        Scr_Error("Usage: doDamage( <health>, <source position>, <attacker>, <destructible_piece_index>, <means of death> )\n", 0);
+        return;
+    }
+    hitLocation_t hitLoc = HITLOC_NONE;
+    if (argc == 6)
+        hitLoc = (hitLocation_t)G_GetHitLocationIndexFromString(
+            Scr_GetConstLowercaseString(5, SCRIPTINSTANCE_SERVER));
+    const char *modName = NULL;
+    if (argc >= 5 && Scr_GetType(4, SCRIPTINSTANCE_SERVER) == VAR_STRING)
+        modName = Scr_GetString(4, SCRIPTINSTANCE_SERVER);
+    int pieceIndex = -1;
+    if (argc >= 4 && Scr_GetType(3, SCRIPTINSTANCE_SERVER) == VAR_INTEGER)
+        pieceIndex = Scr_GetInt(3, SCRIPTINSTANCE_SERVER);
+    gentity_s *attacker = NULL;
+    if (argc >= 3 && (Scr_GetType(2, SCRIPTINSTANCE_SERVER) == VAR_POINTER
+        || Scr_GetType(2, SCRIPTINSTANCE_SERVER) == VAR_ENTITY))
+        attacker = Scr_GetEntity(2);
+    gentity_s *ent = GetEntity(entref);
+    float damage = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+    float source[3], from[3];
+    Scr_GetVector(1, source, SCRIPTINSTANCE_SERVER);
+    if ((LODWORD(source[0]) & 0x7F800000) == 0x7F800000
+        || (LODWORD(source[1]) & 0x7F800000) == 0x7F800000
+        || (LODWORD(source[2]) & 0x7F800000) == 0x7F800000)
+        Scr_Error(va("Source Damage vector is invalid : %f %f %f", source[0], source[1], source[2]), 0);
+    const float *origin = ent->client ? ent->client->ps.origin : ent->r.currentOrigin;
+    Vec3Sub(origin, source, from);
+    if (Vec3Normalize(from) == 0.0f)
+    {
+        from[0] = from[1] = 0.0f;
+        from[2] = 1.0f;
+    }
+    meansOfDeath_t mod = MOD_UNKNOWN;
+    if (modName)
+    {
+        for (int i = 0; i < MOD_NUM; ++i)
+        {
+            if (!I_stricmp(modName, SL_ConvertToString(*modNames[i], SCRIPTINSTANCE_SERVER)))
+            {
+                mod = (meansOfDeath_t)i;
+                break;
+            }
+        }
+    }
+    if (ent->destructible)
+    {
+        damage = pieceIndex < 0
+            ? (float)DestructibleRadiusDamage(ent, source, damage, 10.0f, 400.0f, MOD_EXPLOSIVE, attacker)
+            : GScr_DamageDestructiblePiece_SP(ent, from, source, damage, mod, pieceIndex);
+    }
+    G_Damage(ent, attacker, attacker, from, source, (int)damage, 0, mod, -1, hitLoc, 0, 0, 0);
+#else
     char *String; // eax
     const char *v2; // eax
     gclient_s *client; // edx
@@ -3777,6 +4533,7 @@ $LN9_44:
             Scr_Error("Usage: doDamage( <health>, <source position>, <attacker>, <inflictor>, <mod> )\n", 0);
             break;
     }
+#endif
 }
 
 void __cdecl ScrCmd_GetVelocity(scr_entref_t entref)
@@ -4517,7 +5274,31 @@ void __cdecl GScr_ConnectPaths(scr_entref_t entref)
         v2 = va("entity of type '%s' cannot connect paths \n\n", v1);
         Scr_Error(v2, 0);
     }
+#ifdef KISAK_SP
+    const int flagsBefore = ent->flags;
+    const unsigned int disconnectedLinksBefore = ent->disconnectedLinks;
+    Com_Printf(
+        15,
+        "ZM_BARRICADE connectpaths_begin ent=%d flags=0x%08X disconnected=%u\n",
+        ent->s.number,
+        flagsBefore,
+        disconnectedLinksBefore);
+#endif
     Path_ConnectPathsForEntity(ent);
+#ifdef KISAK_SP
+    // Behavior-neutral Zombies barricade probe. The shipped spawner script
+    // calls connectpaths() only after the board-tear animation finishes. This
+    // records whether that wrapper reached the native dynamic-path pipeline
+    // and whether it consumed the entity's disconnected-link chain.
+    Com_Printf(
+        15,
+        "ZM_BARRICADE connectpaths ent=%d flags=0x%08X->0x%08X disconnected=%u->%u\n",
+        ent->s.number,
+        flagsBefore,
+        ent->flags,
+        disconnectedLinksBefore,
+        ent->disconnectedLinks);
+#endif
 }
 
 // LWSS ADD
@@ -5680,6 +6461,12 @@ void __cdecl Scr_UpdateSpawnPoints()
 {
     unsigned __int16 callback; // [esp+0h] [ebp-4h]
 
+#ifdef KISAK_SP
+    // Consumer half of the maps/mp/gametypes/_spawning guard in GScr_LoadScripts: on SP the
+    // handle is always 0 because the script does not ship, so do not hand 0 to Scr_ExecThread.
+    if ( !g_scr_data.updatespawnpoints )
+        return;
+#endif
     callback = Scr_ExecThread(SCRIPTINSTANCE_SERVER, g_scr_data.updatespawnpoints, 0);
     Scr_FreeThread(callback, SCRIPTINSTANCE_SERVER);
 }
@@ -6451,6 +7238,110 @@ void Scr_BulletTrace()
         Scr_AddArrayStringIndexed(scr_const.surfacetype, SCRIPTINSTANCE_SERVER);
     }
 }
+
+#ifdef KISAK_SP
+// Retail SP server-function table entry 0x00B766D8 pairs "groundtrace" with
+// handler 0x00807C00. Its argument parsing and result struct are identical to
+// Scr_BulletTrace, but the two content masks are SP-specific: 0x0280ECB3 when
+// parameter 2 is true and 0x00802CB3 when false.
+static void __cdecl Scr_GroundTrace_SP()
+{
+    float start[3];
+    float end[3];
+    float endpos[3];
+    float normal[3];
+    trace_t trace = {};
+    int ignoreEntNum = ENTITYNUM_NONE;
+    int clipMask;
+
+    Scr_GetVector(0, start, SCRIPTINSTANCE_SERVER);
+    Scr_GetVector(1, end, SCRIPTINSTANCE_SERVER);
+    clipMask = Scr_GetInt(2, SCRIPTINSTANCE_SERVER) ? 0x0280ECB3 : 0x00802CB3;
+
+    if ( Scr_GetType(3, SCRIPTINSTANCE_SERVER) == VAR_POINTER
+        && Scr_GetPointerType(3, SCRIPTINSTANCE_SERVER) == VAR_ENTITY )
+    {
+        ignoreEntNum = Scr_GetEntity(3)->s.number;
+    }
+
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) == 5 && Scr_GetInt(4, SCRIPTINSTANCE_SERVER) )
+        clipMask &= ~0x20;
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) == 6 && Scr_GetInt(5, SCRIPTINSTANCE_SERVER) )
+        clipMask &= ~0x10;
+
+    G_LocationalTrace(&trace, start, end, ignoreEntNum, clipMask, 0, 0);
+
+    Scr_MakeArray(SCRIPTINSTANCE_SERVER);
+    Scr_AddFloat(trace.fraction, SCRIPTINSTANCE_SERVER);
+    Scr_AddArrayStringIndexed(scr_const.fraction, SCRIPTINSTANCE_SERVER);
+
+    Vec3Lerp(start, end, trace.fraction, endpos);
+    Scr_AddVector(endpos, SCRIPTINSTANCE_SERVER);
+    Scr_AddArrayStringIndexed(scr_const.position, SCRIPTINSTANCE_SERVER);
+
+    const unsigned __int16 hitEntId = Trace_GetEntityHitId(&trace);
+    if ( hitEntId == ENTITYNUM_NONE || hitEntId == ENTITYNUM_WORLD )
+        Scr_AddUndefined(SCRIPTINSTANCE_SERVER);
+    else
+        Scr_AddEntity(&g_entities[hitEntId], SCRIPTINSTANCE_SERVER);
+    Scr_AddArrayStringIndexed(scr_const.entity, SCRIPTINSTANCE_SERVER);
+
+    if ( trace.fraction < 1.0f )
+    {
+        Scr_AddVector(trace.normal.vec.v, SCRIPTINSTANCE_SERVER);
+        Scr_AddArrayStringIndexed(scr_const.normal, SCRIPTINSTANCE_SERVER);
+        const int surfaceTypeIndex = static_cast<unsigned char>((trace.sflags & 0x3F00000) >> 20);
+        Scr_AddString((char *)Com_SurfaceTypeToName(surfaceTypeIndex), SCRIPTINSTANCE_SERVER);
+    }
+    else
+    {
+        normal[0] = end[0] - start[0];
+        normal[1] = end[1] - start[1];
+        normal[2] = end[2] - start[2];
+        Vec3Normalize(normal);
+        Scr_AddVector(normal, SCRIPTINSTANCE_SERVER);
+        Scr_AddArrayStringIndexed(scr_const.normal, SCRIPTINSTANCE_SERVER);
+        Scr_AddConstString(scr_const.none, SCRIPTINSTANCE_SERVER);
+    }
+    Scr_AddArrayStringIndexed(scr_const.surfacetype, SCRIPTINSTANCE_SERVER);
+}
+
+// Local implementation name only: the retail C identifier is unattested.
+// Retail SP's server-function record at 0x00B76B1C pairs "ropesetflag" with
+// handler 0x007FDD90.  Its body independently proves the complete command
+// contract: exactly three arguments, six accepted flag strings, booleanized
+// argument 2, and broadcast rope command '# S <id> <mask> <onoff>'.
+static void __cdecl Scr_RopeSetFlag_SP()
+{
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 3 )
+        Scr_Error("Incorrect number of parameters", false);
+
+    const int ropeId = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
+    const char *flagName = Scr_GetString(1, SCRIPTINSTANCE_SERVER);
+    int flag;
+
+    if ( !I_stricmp(flagName, "keep_ent_anchors") )
+        flag = 0x10;
+    else if ( !I_stricmp(flagName, "collide") )
+        flag = 0x01;
+    else if ( !I_stricmp(flagName, "detach_opposite_anchor") )
+        flag = 0x20;
+    else if ( !I_stricmp(flagName, "force_update") )
+        flag = 0x40;
+    else if ( !I_stricmp(flagName, "no_wind") )
+        flag = 0x80;
+    else if ( !I_stricmp(flagName, "no_lod") )
+        flag = 0x100;
+    else
+        return;
+
+    const int onoff = Scr_GetInt(2, SCRIPTINSTANCE_SERVER) != 0;
+    SV_GameSendServerCommand(
+        -1,
+        SV_CMD_RELIABLE,
+        va("%c %d %d %d %d", 0x23, 0x53, ropeId, flag, onoff));
+}
+#endif
 
 void Scr_BulletTracePassed()
 {
@@ -8061,8 +8952,13 @@ void Scr_PrecacheModel()
     modelName = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
     if (!*modelName)
         Scr_ParamError(0, "Model name string is empty", SCRIPTINSTANCE_SERVER);
+#ifndef KISAK_SP
+    // Retail SP Scr_PrecacheModel (0x007FA850) goes directly from the empty-name
+    // check to G_ModelIndex.  The MP-only default-asset rejection turns the
+    // shipped Zombies sentinel precachemodel("fx") into a fatal script error.
     if (useFastFile->current.enabled)
         Scr_ErrorOnDefaultAsset(ASSET_TYPE_XMODEL, modelName);
+#endif
     G_ModelIndex(modelName);
 }
 
@@ -8815,7 +9711,19 @@ void Scr_PlayFXOnTag()
     v2 = strchr(v1, 0x22u);
     if ( v2 )
         Scr_ParamError(2u, "cannot use \" characters in tag names\n", SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+    // Retail SP Scr_PlayFXOnTag (BlackOps.exe 0x007fd380) accepts tag_origin
+    // unconditionally -- the bone-index check is guarded by
+    // `if (tag != scr_const.tag_origin)`, same idiom as this tree's own
+    // ScrCmd_PlaySoundOnTag above. Without the bypass, frontend.gsc:1498/1504
+    // play_aligned_fx() threw "tag 'tag_origin' does not exist" on
+    // p_int_battery / p_int_security_camera (models with no real tag_origin
+    // bone). Whether retail MP also has the bypass is unverified (only the SP
+    // binary is available) -- MP arm left untouched.
+    if ( tag != scr_const.tag_origin && SV_DObjGetBoneIndex(ent, tag) < 0 )
+#else
     if ( SV_DObjGetBoneIndex(ent, tag) < 0 )
+#endif
     {
         SV_DObjDumpInfo(ent);
         v3 = G_ModelName(ent->model);
@@ -10119,6 +11027,13 @@ void __cdecl GScr_SetDepthOfField(scr_entref_t entref)
         Scr_ParamError(2u, "far start must be >= 0", SCRIPTINSTANCE_SERVER);
     if ( dofFarEnd < 0.0 )
         Scr_ParamError(3u, "far end must be >= 0", SCRIPTINSTANCE_SERVER);
+#ifndef KISAK_SP
+    // MP-only validation. Retail SP GScr_SetDepthOfField (BlackOps.exe
+    // 0x00802eb0, decompiled 2026-08-22) has NEITHER of these two checks --
+    // both va() format strings are absent from the SP binary. SP scripts
+    // legitimately pass values outside these ranges (frontend.gsc:580-587
+    // uses NearBlur=6, FarBlur=9.4), which threw here and killed the
+    // set_default_dof thread.
     if ( dofNearBlur < 4.0 || dofNearBlur > 10.0 )
     {
         v1 = va("near blur should be between %g and %g", 4.0, 10.0);
@@ -10129,6 +11044,9 @@ void __cdecl GScr_SetDepthOfField(scr_entref_t entref)
         v2 = va("far blur should be >= %g and <= near blur", 0.0);
         Scr_ParamError(5u, v2, SCRIPTINSTANCE_SERVER);
     }
+#else
+    (void)v1; (void)v2;
+#endif
     if ( dofNearStart >= dofNearEnd )
     {
         dofNearStart = 0.0f;
@@ -10277,6 +11195,15 @@ void __cdecl GScr_PlaceSpawnPoint(scr_entref_t entref)
     gentity_s *pEnt; // [esp+80h] [ebp-10h]
     float vStart[3]; // [esp+84h] [ebp-Ch] BYREF
 
+#ifdef KISAK_SP
+    // Retail SP GScr_PlaceSpawnPoint (BlackOps.exe 0x00806680) uses this
+    // mask for each of its three capsule traces.  The extra 0x4000 bit is an
+    // SP-only binary divergence; do not change MP spawn placement with it.
+    constexpr int spawnTraceMask = 0x281c011;
+#else
+    constexpr int spawnTraceMask = 0x2818011;
+#endif
+
     //col_context_t::col_context_t(&context);
     pEnt = GetEntity(entref);
     vStart[0] = pEnt->r.currentOrigin[0];
@@ -10293,7 +11220,7 @@ void __cdecl GScr_PlaceSpawnPoint(scr_entref_t entref)
         playerMaxs,
         vEnd,
         pEnt->s.number,
-        0x2818011,
+        spawnTraceMask,
         &context);
     Vec3Lerp(vStart, vEnd, trace.fraction, vStart);
     vEnd[0] = vStart[0];
@@ -10306,7 +11233,7 @@ void __cdecl GScr_PlaceSpawnPoint(scr_entref_t entref)
         playerMaxs,
         vEnd,
         pEnt->s.number,
-        0x2818011,
+        spawnTraceMask,
         &context);
     EntityHitId = Trace_GetEntityHitId(&trace);
     pEnt->s.groundEntityNum = EntityHitId;
@@ -10319,7 +11246,7 @@ void __cdecl GScr_PlaceSpawnPoint(scr_entref_t entref)
         playerMaxs,
         vStart,
         pEnt->s.number,
-        0x2818011,
+        spawnTraceMask,
         &context);
     if ( trace.allsolid )
         Com_PrintWarning(
@@ -11383,7 +12310,8 @@ bool __cdecl GScr_IsItemPurchasedForClientNum(unsigned int clientNum, unsigned i
     }
     return clientNum < 0x20
             && itemIndex < 0x100
-            && ((1 << (itemIndex & 7)) & svs.clients[clientNum].purchasedItems[(int)itemIndex >> 3]) == 1 << (itemIndex & 7);
+            && (Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH)
+                || ((1 << (itemIndex & 7)) & svs.clients[clientNum].purchasedItems[(int)itemIndex >> 3]) == 1 << (itemIndex & 7));
 }
 
 void __cdecl GScr_IsItemLocked(scr_entref_t entref)
@@ -11492,6 +12420,20 @@ void GScr_GetGameTypeEnumFromName()
     }
     else
     {
+#ifdef KISAK_MP
+        // Private Gun Game still evaluates the AAR enum, although private AAR
+        // setters discard it. Use the existing FFA index; never extend the
+        // ranked statistics enum or enable wagers just to run this gametype.
+        if (Dvar_GetBool("xblive_privatematch")
+            && !Dvar_GetBool("xblive_rankedmatch")
+            && !Dvar_GetBool("xblive_wagermatch")
+            && !Dvar_GetBool("xblive_basictraining")
+            && (!I_stricmp(gameTypeName, "gun") || !I_stricmp(gameTypeName, "hcgun")))
+        {
+            Scr_AddInt(1, SCRIPTINSTANCE_SERVER);
+            return;
+        }
+#endif
         endIndex = 16;
         gameModeEnum = lbTypeEnum;
     }
@@ -11543,9 +12485,81 @@ void __cdecl GScr_GetLoadoutItemFromProfile(scr_entref_t entref)
     Scr_AddInt(item, SCRIPTINSTANCE_SERVER);
 }
 
+
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+static gentity_s *GScr_OfflineDStatPath(scr_entref_t entref, bool write, ddlState_t *state)
+{
+    gentity_s *player = GetEntity(entref);
+    if (!player->client) Scr_Error("dstat: entity must be a player", 0);
+    if (!SV_OfflineStatsReady(player->s.number)) Scr_Error("dstat: player stats are not ready", 0);
+    const unsigned int argc = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    const unsigned int depth = argc - (write ? 1 : 0);
+    if (argc < (write ? 2u : 1u) || depth > 8)
+        Scr_Error("dstat: expected 1 to 8 path elements and, for setdstat, one value", 0);
+    *state = *LiveStats_GetRootDDLState();
+    if (!state->ddl) Scr_Error("dstat: stats schema is unavailable", 0);
+    for (unsigned int index = 0; index < depth; ++index)
+    {
+        const int type = Scr_GetType(index, SCRIPTINSTANCE_SERVER);
+        if (type == 2)
+        {
+            if (state->member && state->member->arraySize > 1 && state->arrayIndex == -1
+                && state->member->enumIndex == -1)
+                Scr_Error("dstat: array index must be an integer", 0);
+            const char *name = Scr_GetString(index, SCRIPTINSTANCE_SERVER);
+            if (!DDL_MoveToName(state, state, name))
+                Scr_Error(va("dstat: unknown member '%s'", name), 0);
+        }
+        else if (type == 6)
+        {
+            const int element = Scr_GetInt(index, SCRIPTINSTANCE_SERVER);
+            if (!state->member || state->member->arraySize <= 1 || state->member->enumIndex != -1 || state->arrayIndex != -1
+                || element < 0 || element >= state->member->arraySize)
+                Scr_Error("dstat: invalid array index", 0);
+            if (!DDL_MoveToIndex(state, state, element, 1))
+                Scr_Error("dstat: unable to resolve array index", 0);
+        }
+        else Scr_Error("dstat: path elements must be strings or integers", 0);
+    }
+    SV_OfflineStatsBuffer(player->s.number, state); // Validate complete leaf and extent before IO.
+    return player;
+}
+
+static unsigned __int64 GScr_OfflineDStatUInt64(const char *text)
+{
+    unsigned __int64 value = 0;
+    if (!text || !*text) Scr_Error("setdstat: expected unsigned decimal 64-bit string", 0);
+    for (; *text; ++text)
+    {
+        if (*text < '0' || *text > '9') Scr_Error("setdstat: invalid unsigned decimal 64-bit string", 0);
+        const unsigned int digit = *text - '0';
+        if (value > (0xffffffffffffffffULL - digit) / 10)
+            Scr_Error("setdstat: unsigned 64-bit value overflow", 0);
+        value = value * 10 + digit;
+    }
+    return value;
+}
+#endif
+
 void __cdecl GScr_GetDStat(scr_entref_t entref)
 {
-#ifdef KISAK_LIVE
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    ddlState_t state;
+    gentity_s *player = GScr_OfflineDStatPath(entref, false, &state);
+    switch (state.member->type)
+    {
+    case 0: case 1: case 2:
+        Scr_AddInt(SV_GetClientDIntStat(player->s.number, &state), SCRIPTINSTANCE_SERVER);
+        break;
+    case 3:
+        Scr_AddString(va("%llu", SV_GetClientDInt64Stat(player->s.number, &state)), SCRIPTINSTANCE_SERVER);
+        break;
+    case 5:
+        Scr_AddString(SV_GetClientDStringStat(player->s.number, &state), SCRIPTINSTANCE_SERVER);
+        break;
+    default: Scr_Error("getdstat: unsupported stat type", 0);
+    }
+#elif defined(KISAK_LIVE)
     char *String; // eax
     char *v2; // eax
     const char *v3; // eax
@@ -11621,7 +12635,7 @@ void __cdecl GScr_GetDStat(scr_entref_t entref)
                 Scr_AddInt(ClientDIntStat, SCRIPTINSTANCE_SERVER);
                 break;
             case 3:
-                LODWORD(v7) = SV_GetClientDInt64Stat(playerEnt->s.number, &searchState);
+                v7 = SV_GetClientDInt64Stat(playerEnt->s.number, &searchState);
                 v8 = va("%llu", v7);
                 Scr_AddString(v8, SCRIPTINSTANCE_SERVER);
                 break;
@@ -11648,7 +12662,12 @@ void __cdecl GScr_GetDStat(scr_entref_t entref)
 
 void GScr_GetMaxActiveContracts()
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Online contract slots are unavailable in the direct-connect server mode.
+    Scr_AddInt(0, SCRIPTINSTANCE_SERVER);
+#else
     Scr_AddInt(3, SCRIPTINSTANCE_SERVER);
+#endif
 }
 
 void __cdecl GScr_GetIndexForActiveContract(scr_entref_t entref)
@@ -12074,6 +13093,20 @@ void Gscr_GetCustomClassLoadoutModifier()
 
 void __cdecl GScr_SetDStat(scr_entref_t entref)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    ddlState_t state;
+    gentity_s *player = GScr_OfflineDStatPath(entref, true, &state);
+    const unsigned int valueIndex = Scr_GetNumParam(SCRIPTINSTANCE_SERVER) - 1;
+    const int valueType = Scr_GetType(valueIndex, SCRIPTINSTANCE_SERVER);
+    if (state.member->type <= 2 && valueType == 6)
+        SV_SetClientDIntStat(player->s.number, &state, Scr_GetInt(valueIndex, SCRIPTINSTANCE_SERVER));
+    else if (state.member->type == 3 && valueType == 2)
+        SV_SetClientDInt64Stat(player->s.number, &state,
+            GScr_OfflineDStatUInt64(Scr_GetString(valueIndex, SCRIPTINSTANCE_SERVER)));
+    else if (state.member->type == 5 && valueType == 2)
+        SV_SetClientDStringStat(player->s.number, &state, Scr_GetString(valueIndex, SCRIPTINSTANCE_SERVER));
+    else Scr_Error("setdstat: value type does not match the DDL member", 0);
+#else
     char *String; // eax
     char *v2; // eax
     const char *v3; // eax
@@ -12202,6 +13235,7 @@ void __cdecl GScr_SetDStat(scr_entref_t entref)
     {
         Scr_Error("setdstat: Only string or integer values are acceptable.", 0);
     }
+#endif
 }
 
 void GScr_UploadStats()
@@ -13773,6 +14807,14 @@ void GScr_ClientSysSetState()
     char szConfigString[1024]; // [esp+41Ch] [ebp-408h] BYREF
     int i; // [esp+820h] [ebp-4h]
 
+    // Base 1538 here (and in the paired registration/PlayerCmd_ClientSysSetState
+    // functions) vs retail SP's raw 0x5e1=1505 (Ghidra-verified 2026-08-22, same
+    // pass that fixed the Info_SetValueForKey bug below) is the same class of
+    // divergence as openmainmenu's 2548-vs-2503 base: this tree's own
+    // "reconstruction" configstring layout, used self-consistently by every
+    // ClientSys read/write site in this tree, not a retail address. Flagged
+    // explicitly (unlike openmainmenu's case, this one previously had no
+    // comment at all) so it isn't mistaken for an unnoticed bug.
     i = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
     if ( (unsigned int)i <= 8 )
     {
@@ -13791,8 +14833,16 @@ void GScr_ClientSysSetState()
                         str[j] = 33;
                 }
             }
-            Info_SetValueForKey(szConfigString, "s", str);
-            v2 = va("%c %i %s", 57, i, szConfigString);
+            // Retail SP 0x008048f0 sends the sanitized value as a bare token --
+            // no Info_SetValueForKey wrapping (verified 2026-08-22: retail's
+            // decompile has no such call). The client parser
+            // (CG_ParseClientSystemStateChange, cg_servercmds_mp.cpp) only
+            // desanitizes the raw string; it never unwraps an "s" info key, so
+            // wrapping here sent every state change (including
+            // maps/_music.gsc's setMusicState) as literal "\s\<value>" instead
+            // of "<value>", which is why client-side exact-match dispatch on
+            // the state name was failing.
+            v2 = va("%c %i %s", 57, i, str);
             SV_GameSendServerCommand(-1, SV_CMD_RELIABLE, v2);
         }
         else
@@ -15822,6 +16872,1606 @@ void GScr_SetPlayerStatsForMatchRecording()
 #endif
 }
 
+#ifdef KISAK_SP
+// Pulled in only for the SP builtin bodies below (GScr_IsAssetLoaded_SP needs
+// DB_FindXAssetEntry + the DB hash critical section). Deliberately inside the
+// KISAK_SP guard so the MP translation unit is not perturbed at all.
+#include <database/db_registry.h>
+#include <win32/win_common.h>
+
+// ===========================================================================
+// TODO(SP-STUB) -- deliberate no-op stubs for retail-SP script builtins.
+//
+// WHAT THESE ARE: placeholders, NOT implementations. Every one of them does
+// nothing at all except print a one-time warning naming itself. They exist
+// solely so that the SP script set LINKS: LinkThread (cscr_compiler.cpp:271)
+// raises a fatal "unknown function" CompileError on the first builtin name a
+// compiled script references that Scr_GetFunction / Scr_GetMethod cannot
+// resolve, so one missing name stops the whole SP boot dead. Registering the
+// names lets the boot continue far enough to find out what is actually
+// executed, and the one-shot warnings are the evidence that should drive which
+// of these get real bodies first. Grep TODO(SP-STUB) to enumerate them all.
+//
+// WHY AN EMPTY BODY IS STACK-SAFE (verified, not assumed): the VM cleans up
+// after a builtin itself. cscr_vm.cpp:5588-5599 pops and RemoveRefToValue()s
+// any parameters the builtin did not consume (outparamcount is still set), and
+// cscr_vm.cpp:5606-5611 pushes a fresh slot of type 0 == VAR_UNDEFINED
+// (cscr_variable.h:19) whenever the builtin pushed no return value
+// (inparamcount == 0). So a builtin that touches nothing leaves a correct
+// stack and evaluates to undefined in value position -- which is what we want
+// here: honest and visible, rather than a guessed value that would look like it
+// worked. That is also why the existing FUNCTION_NULLSUB / METHOD_NULLSUB are
+// safe; we still use one distinct symbol per name so each is individually
+// identifiable in the console log and in a stack trace.
+//
+// THE type FIELD IS 0 ON EVERY ROW. 0 means "not a developer command". A 1
+// there makes any use of the builtin in value position outside a /# ... #/
+// block a hard CompileError (cscr_compiler.cpp:2844), so 0 is the permissive
+// choice that cannot reintroduce the failure this pass is fixing. It is NOT a
+// claim that retail SP marks each of these 0 (though all 10 rows re-read from
+// the retail tables during this pass did carry 0).
+//
+// THE ADDRESSES in the row comments are the retail SP handler for that name,
+// taken from a scan of SP's two builtin tables (server methods at 0x00A54218,
+// server functions in the 0x00B76xxx block). 10 of the 92 were re-verified
+// row-by-row against the binary during this pass and matched exactly; the
+// other 82 were NOT re-verified here and should be sanity-checked before
+// anyone decompiles from them.
+// ===========================================================================
+
+// Channel 24 == "parserscript" (con_channels.cpp:11, builtinChannels[24]) --
+// the channel every other Com_PrintWarning in this file already uses, including
+// GScr_SetTurretAccuracy's "no longer has any effect" warning, which is the
+// same kind of message as this one.
+static void GScr_SPStub_ReportOnce(const char *name, const char *spHandler, const char *retDesc, bool *pReported)
+{
+    if ( *pReported )
+        return;
+    *pReported = true;
+    Com_PrintWarning(
+        24,
+        "WARNING: TODO(SP-STUB) script builtin '%s' (retail SP handler %s) was called "
+        "but is an unimplemented stub: it does no work at all and evaluates to %s. "
+        "This warning prints once per builtin name.\n",
+        name,
+        spHandler,
+        retDesc);
+}
+
+// ===========================================================================
+// TODO(SP-STUB) RETURN-SHAPE MACROS -- read this before adding a row.
+//
+// WHY THE PLAIN (undefined-returning) MACROS ARE NOT ALWAYS ENOUGH. A builtin
+// that pushes nothing evaluates to VAR_UNDEFINED (cscr_vm.cpp:5606-5611), and
+// the VM makes reading undefined in three very common positions a FATAL script
+// error, not a soft failure:
+//   * `x.size`  -> Scr_EvalSizeValue, cscr_variable.cpp:4249-4252,
+//                  "size cannot be applied to undefined"
+//   * `x[i]`    -> Scr_EvalArray,     cscr_variable.cpp:6048-6062,
+//                  "undefined is not an array, string, or vector"
+//   * `if (x)`  -> Scr_CastBool,      cscr_variable.cpp:4522-4529,
+//                  "cannot cast undefined to bool"
+// Those three killed the SP `frontend` boot (getaiarray/getspawnerarray read
+// with .size from maps/_vehicle::setup_ai). The macros below fix the RETURN
+// SHAPE only. They are still stubs: none of them does any work, and the value
+// each returns is the value retail would produce for the empty/idle case, not
+// a computed answer.
+//
+// THE STACK CONTRACT, verified rather than assumed: Scr_MakeArray /
+// Scr_AddInt / Scr_AddFloat / Scr_AddString / Scr_AddVector all route through
+// IncInParam (cscr_vm.cpp:3294-3305), which calls Scr_ClearOutParams to drop
+// the builtin's arguments and then sets inparamcount = 1. The post-builtin
+// epilogue at cscr_vm.cpp:5588-5611 therefore takes its `if (inparamcount)`
+// branch and does NOT additionally push an undefined, so exactly one value is
+// left on the stack -- the same path every already-working returning builtin
+// in this file uses (e.g. GScr_GetWatcherWeapons above, which likewise calls
+// Scr_MakeArray and may then add zero elements).
+//
+// AN EMPTY ARRAY IS A WELL-FORMED VALUE, not a special case: Scr_AllocArray
+// (cscr_variable.cpp:2460-2487) sets the array's element count field
+// (u.o.u.entnum) to 0, and Scr_EvalSizeValue reads exactly that field, so
+// `arr.size` is 0 and `for (i = 0; i < arr.size; i++)` simply does not run --
+// which is what retail does on a map with no AI, no spawners and no dynents.
+//
+// PER-NAME REASONING for every non-array value lives on that name's own row
+// below. Where no value could be justified, the row deliberately still uses
+// the plain undefined-returning macro and says so.
+// ===========================================================================
+
+#define SP_STUB_FUNCTION(symbol, gscName, spHandler)                             \
+    static void __cdecl symbol()                                                 \
+    {                                                                            \
+        static bool s_reported = false;                                          \
+        GScr_SPStub_ReportOnce(gscName, spHandler, "undefined", &s_reported);     \
+    }
+
+#define SP_STUB_METHOD(symbol, gscName, spHandler)                               \
+    static void __cdecl symbol(scr_entref_t)                                     \
+    {                                                                            \
+        static bool s_reported = false;                                          \
+        GScr_SPStub_ReportOnce(gscName, spHandler, "undefined", &s_reported);     \
+    }
+
+// Returns an EMPTY array. Still a stub -- it never enumerates anything.
+#define SP_STUB_FUNCTION_ARRAY(symbol, gscName, spHandler)                       \
+    static void __cdecl symbol()                                                 \
+    {                                                                            \
+        static bool s_reported = false;                                          \
+        GScr_SPStub_ReportOnce(gscName, spHandler, "an EMPTY array", &s_reported);\
+        Scr_MakeArray(SCRIPTINSTANCE_SERVER);                                    \
+    }
+
+// Returns a fixed integer. Still a stub -- nothing is measured or queried.
+#define SP_STUB_FUNCTION_INT(symbol, gscName, spHandler, value)                  \
+    static void __cdecl symbol()                                                 \
+    {                                                                            \
+        static bool s_reported = false;                                          \
+        GScr_SPStub_ReportOnce(gscName, spHandler, "the fixed integer "           \
+                               #value, &s_reported);                             \
+        Scr_AddInt((value), SCRIPTINSTANCE_SERVER);                              \
+    }
+
+#define SP_STUB_METHOD_INT(symbol, gscName, spHandler, value)                    \
+    static void __cdecl symbol(scr_entref_t)                                     \
+    {                                                                            \
+        static bool s_reported = false;                                          \
+        GScr_SPStub_ReportOnce(gscName, spHandler, "the fixed integer "           \
+                               #value, &s_reported);                             \
+        Scr_AddInt((value), SCRIPTINSTANCE_SERVER);                              \
+    }
+
+// Returns a fixed string. Still a stub -- nothing is looked up.
+#define SP_STUB_FUNCTION_STRING(symbol, gscName, spHandler, value)               \
+    static void __cdecl symbol()                                                 \
+    {                                                                            \
+        static bool s_reported = false;                                          \
+        GScr_SPStub_ReportOnce(gscName, spHandler, "the fixed string \"" value    \
+                               "\"", &s_reported);                               \
+        Scr_AddString((value), SCRIPTINSTANCE_SERVER);                           \
+    }
+
+#define SP_STUB_METHOD_STRING(symbol, gscName, spHandler, value)                 \
+    static void __cdecl symbol(scr_entref_t)                                     \
+    {                                                                            \
+        static bool s_reported = false;                                          \
+        GScr_SPStub_ReportOnce(gscName, spHandler, "the fixed string \"" value    \
+                               "\"", &s_reported);                               \
+        Scr_AddString((value), SCRIPTINSTANCE_SERVER);                           \
+    }
+
+// Returns the zero vector. Still a stub -- nothing is sampled.
+#define SP_STUB_METHOD_ZEROVEC(symbol, gscName, spHandler)                       \
+    static void __cdecl symbol(scr_entref_t)                                     \
+    {                                                                            \
+        static bool s_reported = false;                                          \
+        float zero[3] = { 0.0f, 0.0f, 0.0f };                                    \
+        GScr_SPStub_ReportOnce(gscName, spHandler, "the zero vector (0,0,0)",     \
+                               &s_reported);                                     \
+        Scr_AddVector(zero, SCRIPTINSTANCE_SERVER);                              \
+    }
+
+// --- real SP builtin implementations ---------------------------------------
+
+// getplayers( [team] ) -- SP only.
+//
+// Retail SP handler is 0x007f0a10; it could NOT be read for this pass (the
+// Ghidra project was offline), so the body below is derived from the shipped SP
+// script corpus plus the two entity-array builtins already rebuilt in this file:
+// GScr_GetCorpseArray (:1575) and GScr_GetTeamPlayersAlive (:9979).
+//
+// This replaces an empty-array stub, and the stub was a hard CIRCULAR DEADLOCK,
+// not merely a wrong return value:
+//   maps/_utility.gsc:10248 wait_for_first_player() branches on players.size == 0
+//     into `level waittill( "first_player_ready" )`;
+//   "first_player_ready" is notified at maps/_callbackglobal.gsc:1366, and only
+//     after `self waittill( "spawned_player" )` at :1362;
+//   "spawned_player" is notified at :1170, which is downstream of spawnPlayer()'s
+//     own wait_for_first_player() at :1130.
+// So with an empty array the player never reaches `self Spawn( self.origin,
+// self.angles )` at :1139, and every script gated on wait_for_first_player parks
+// forever (maps/frontend, _load, _audio, _art, _createfx, _vehicle,
+// _spawn_manager, ...). Both escapes are closed: level.custom_spawnPlayer is
+// never assigned anywhere in the corpus, and synchronize_players() returns early
+// because getnumconnectedplayers/getnumexpectedplayers both stub to 0.
+//
+// Argument forms in the corpus, through the maps/_utility.gsc:9867 get_players()
+// wrapper: 406x no argument, 13x "all", 4x "allies" (all four in
+// maps/_gameskill.gsc, none in the frontend closure). No argument and "all" are
+// treated identically here -- every connected client.
+//
+// CAVEAT, deliberately not hidden: the allies=2 / axis=1 mapping is copied from
+// GScr_GetTeamPlayersAlive, where it is verified for MP. It is NOT verified
+// against retail SP, and SP may not populate sess.cs.team at all -- in which case
+// getplayers("allies") returns empty. That affects only the four _gameskill.gsc
+// sites; the no-arg and "all" forms that gate the boot do not consult team.
+void GScr_GetPlayers_SP()
+{
+    gentity_s *ent; // [esp+0h] [ebp-10h]
+    unsigned __int16 team; // [esp+4h] [ebp-Ch]
+    int iTeamNum; // [esp+8h] [ebp-8h]
+    int i; // [esp+Ch] [ebp-4h]
+
+    // NOTE: the argument must be read BEFORE Scr_MakeArray -- Scr_MakeArray calls
+    // IncInParam, which calls Scr_ClearOutParams and pops the inparams.
+    iTeamNum = -1;
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+    {
+        team = (unsigned __int16)Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+        if ( team == scr_const.allies )
+        {
+            iTeamNum = 2;
+        }
+        else if ( team == scr_const.axis )
+        {
+            iTeamNum = 1;
+        }
+        else if ( team != scr_const.all )
+        {
+            Scr_Error(
+                va("Illegal team string '%s'. Must be all, allies, or axis.",
+                   SL_ConvertToString(team, SCRIPTINSTANCE_SERVER)),
+                0);
+        }
+    }
+
+    Scr_MakeArray(SCRIPTINSTANCE_SERVER);
+
+    for ( i = 0; i < com_maxclients->current.integer; ++i )
+    {
+        ent = &g_entities[i];
+        if ( !ent->r.inuse || !ent->client )
+            continue;
+        if ( ent->client->sess.connected != CON_CONNECTED )
+            continue;
+        if ( iTeamNum >= 0 && ent->client->sess.cs.team != iTeamNum )
+            continue;
+        Scr_AddEntity(ent, SCRIPTINSTANCE_SERVER);
+        Scr_AddArray(SCRIPTINSTANCE_SERVER);
+    }
+}
+
+// getnumconnectedplayers() -- retail SP 0x0068e8b0, with SP's raw state
+// constants mapped onto the reconstruction's enums. Retail counts a row only
+// when its server sign-on state is SP CS_ACTIVE (raw 4) and its paired local
+// connection state is CA_ACTIVE (raw 10). This tree retains MP's shifted
+// SignonState, where raw 4 is CS_CLIENTLOADING and CS_ACTIVE is 5.
+static void __cdecl GScr_GetNumConnectedPlayers_SP()
+{
+    int count = 0;
+    const bool localClientActive = IsDedicatedServer() ||
+        CL_GetLocalClientConnectionState(0) == CA_ACTIVE;
+
+    if ( localClientActive )
+    {
+        for ( int i = 0; i < com_maxclients->current.integer; ++i )
+        {
+            if ( svs.clients[i].header.state == CS_ACTIVE )
+                ++count;
+        }
+    }
+
+    Scr_AddInt(count, SCRIPTINSTANCE_SERVER);
+}
+
+// getnumexpectedplayers() -- retail SP 0x005e6b20.
+//
+// During a running non-menu local server retail returns at least one even
+// before the local client reaches CA_ACTIVE. That deliberate expected=1 /
+// connected=0 mismatch makes maps/_callbackglobal.gsc wait for the client.
+// The old paired zero stubs made the equality test succeed early and skipped
+// the player-spawn synchronization. Retail's fallback counts server clients
+// past their initial connection states; CS_CONNECTED is the semantic boundary
+// after accounting for SP's one-step-smaller SignonState enum.
+static void __cdecl GScr_GetNumExpectedPlayers_SP()
+{
+    int count = 0;
+
+    if (IsDedicatedServer())
+    {
+        for (int i = 0; i < com_maxclients->current.integer; ++i)
+            if (svs.clients[i].header.state >= CS_CONNECTED)
+                ++count;
+        // Keep the script's wait-for-players barrier closed until somebody joins.
+        Scr_AddInt(count > 0 ? count : 1, SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    if ( !Com_IsMenuLevel(0) && com_sv_running &&
+         com_sv_running->current.enabled )
+    {
+        count = 1;
+    }
+    else
+    {
+        for ( int i = 0; i < com_maxclients->current.integer; ++i )
+        {
+            if ( svs.clients[i].header.state >= CS_CONNECTED )
+                ++count;
+        }
+    }
+
+    Scr_AddInt(count, SCRIPTINSTANCE_SERVER);
+}
+
+// ---------------------------------------------------------------------------
+// getdifficulty() -- SP only. REAL BODY (this row used to be an undefined-
+// returning TODO(SP-STUB)).
+//
+// EVIDENCE, all decompiled/read from BlackOps.exe this session:
+//   * retail SP handler 0x007f07e0 is one statement:
+//         Scr_AddString( nameTable[ g_gameskill->current.integer ], 0 )
+//     -- the dvar pointer is the global at 0x02899cdc and +0x18 is dvar_s::current
+//     (dvar_s in this tree: name 0x0, description 0x4, hash 0x8, flags 0xC,
+//     type 0x10, current 0x18 -- so +0x18 == current.integer, matching).
+//   * nameTable is the pointer array at 0x00b75ecc. Its four entries were read
+//     out of the image byte-for-byte: 0x00a21a9c "easy", 0x00a3d5e8 "medium",
+//     0x009debc4 "hard", 0x009c7324 "fu".
+//   * the dvar is registered by SP's SV_Init (0x00698260, first registration in
+//     the function) as Dvar_RegisterInt("g_gameskill", 1, 0, 3, 0x1064, "").
+//     The 0..3 domain is exactly the table's length, so retail can never index
+//     out of range and needs no bounds check -- and it has none.
+//
+// This replaces an `undefined` return, which was fatal in three positions
+// (see the RETURN-SHAPE header above) -- e.g. maps/_vehicledrive.gsc:213
+// switches on the result, and Scr_CastBool/switch on undefined throws.
+static void __cdecl GScr_GetDifficulty_SP()
+{
+    // Same order as the retail table at 0x00b75ecc; index is g_gameskill.
+    static const char *const s_difficultyNames[4] = { "easy", "medium", "hard", "fu" };
+    Scr_AddString(s_difficultyNames[Dvar_GetInt("g_gameskill")], SCRIPTINSTANCE_SERVER);
+}
+
+// ---------------------------------------------------------------------------
+// isassetloaded( <assetTypeName>, <assetName> ) -- SP only. REAL BODY (this row
+// used to be a fixed-0 TODO(SP-STUB)).
+//
+// EVIDENCE: retail SP handler 0x007faad0 reads both parameters as const strings
+// and tail-calls 0x00694550, which:
+//   * linearly I_stricmp's the type name against the pointer table at
+//     0x00b73bb0 with loop bound 0x2B == 43 -- the exact length of this tree's
+//     g_assetNames[43] (db_assetnames.h), which is also what its own error text
+//     names: "type %s is not a valid asset type: see g_assetNames in
+//     db_assetnames.h\n", raised with Com_Error(4, ...). errorParm_t here has
+//     ERR_SCRIPT == 4, so ERR_SCRIPT is the faithful level, not ERR_DROP.
+//   * then, inside Sys_EnterCriticalSection(0x46) / Sys_LeaveCriticalSection,
+//     calls 0x007a2a20 and returns (result != 0). 0x007a2a20 was decompiled: it
+//     hashes the name, walks a 0x10-byte-stride pool bucket chain comparing the
+//     entry's type word against the type and I_stricmp'ing the name -- i.e. it
+//     is DB_FindXAssetEntry(type, name), which this tree has at
+//     db_registry.cpp:1781.
+// The critical-section ORDINAL differs between the two builds (retail SP 0x46,
+// this tree's CRITSECT_DBHASH == 0x4A); the named constant is the port, since
+// db_registry.cpp's own DB_FindXAssetEntry call sites take CRITSECT_DBHASH.
+static void __cdecl GScr_IsAssetLoaded_SP()
+{
+    const char *typeName; // [esp+8h] [ebp-Ch]
+    const char *assetName; // [esp+4h] [ebp-8h]
+    int type; // [esp+0h] [ebp-4h]
+    bool loaded;
+
+    typeName = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    assetName = Scr_GetString(1u, SCRIPTINSTANCE_SERVER);
+    for ( type = 0; type < 43; ++type )
+    {
+        if ( !I_stricmp(typeName, g_assetNames[type]) )
+            break;
+    }
+    if ( type == 43 )
+        Com_Error(ERR_SCRIPT, "type %s is not a valid asset type: see g_assetNames in db_assetnames.h\n", typeName);
+    Sys_EnterCriticalSection(CRITSECT_DBHASH);
+    loaded = DB_FindXAssetEntry((XAssetType)type, assetName) != 0;
+    Sys_LeaveCriticalSection(CRITSECT_DBHASH);
+    Scr_AddInt(loaded, SCRIPTINSTANCE_SERVER);
+}
+
+// ---------------------------------------------------------------------------
+// setsaveddvar( <dvarName>, <value> ) -- SP only. REAL BODY (this row used to be
+// a no-op TODO(SP-STUB)).
+//
+// EVIDENCE: retail SP handler 0x007f06a0, decompiled this session. It is the
+// server-side twin of CScr_SetSavedDvar (0x007850a0, already named in the Ghidra
+// project); the plate on 0x007f06a0 records the disambiguation. Structure:
+//   name  = Scr_GetString(0)
+//   value = (Scr_GetType(1) == 3 /* VAR_ISTRING */)
+//             ? Scr_ConstructMessageString(1, numParam-1, "Dvar Value", buf, 1024)
+//             : Scr_GetString(1)
+//   copy value into a 1024-byte scratch, mapping '"' -> '\''
+//   if (!Dvar_IsValidName(name))          Scr_Error(va("Dvar %s has an invalid dvar name", name))
+//   else if (!(dvar = Dvar_FindVar(name))) Scr_Error(va("SetSavedDvar(): The dvar \"%s\" does not exist.", name))
+//   else if (!(dvar->flags & 0x1000))      Scr_Error("SetSavedDvar can only be called on dvars with the SAVED flag set")
+//   else Dvar_SetFromStringByNameFromSource(name, buf, 2, 0)
+// dvar_s::flags is at +0xC in this tree, matching the decompile's
+// `*(uint *)(dvar + 0xc) & 0x1000`; 0x1000 is the flag this tree's own
+// Com_DvarDump prints as "V" (dvar_cmds.cpp:582) and is exactly the bit
+// g_gameskill carries (0x1064). Source 2 == DVAR_SOURCE_SCRIPT (dvar.h:7).
+//
+// The copy is bounded to the real 1024-byte destination rather than reproducing
+// retail's erroneous 0x4000 loop bound. All observable validation behavior is
+// otherwise preserved; the SP dvar owners register the required saved dvars.
+static void __cdecl GScr_SetSavedDvar_SP()
+{
+    const char *v0; // eax
+    int numParam; // eax
+    char messageString[1024]; // BYREF
+    char cleaned[1024]; // BYREF
+    const char *dvarName;
+    const char *dvarValue;
+    const dvar_s *dvar;
+    int i;
+
+    dvarName = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    if ( Scr_GetType(1u, SCRIPTINSTANCE_SERVER) == 3 )
+    {
+        numParam = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+        Scr_ConstructMessageString(1, numParam - 1, "Dvar Value", messageString, 0x400u);
+        dvarValue = messageString;
+    }
+    else
+    {
+        dvarValue = Scr_GetString(1u, SCRIPTINSTANCE_SERVER);
+    }
+
+    memset(cleaned, 0, sizeof(cleaned));
+    for ( i = 0; i < (int)sizeof(cleaned) - 1 && dvarValue[i]; ++i )
+    {
+        cleaned[i] = dvarValue[i];
+        if ( cleaned[i] == '"' )
+            cleaned[i] = '\'';
+    }
+
+    if ( !Dvar_IsValidName(dvarName) )
+    {
+        v0 = va("Dvar %s has an invalid dvar name", dvarName);
+        Scr_Error(v0, 0);
+        return;
+    }
+    dvar = Dvar_FindVar(dvarName);
+    if ( !dvar )
+    {
+        v0 = va("SetSavedDvar(): The dvar \"%s\" does not exist.", dvarName);
+        Scr_Error(v0, 0);
+        return;
+    }
+    if ( (dvar->flags & 0x1000) == 0 )
+    {
+        Scr_Error("SetSavedDvar can only be called on dvars with the SAVED flag set", 0);
+        return;
+    }
+    Dvar_SetFromStringByNameFromSource(dvarName, cleaned, DVAR_SOURCE_SCRIPT, 0);
+}
+
+// ---------------------------------------------------------------------------
+// watersimenable( <bool> ) -- SP only. REAL BODY (this row used to be a no-op
+// TODO(SP-STUB)).
+//
+// EVIDENCE: retail SP handler 0x007fa500 is three statements and was decompiled
+// verbatim this session:
+//   if (Scr_GetNumParam() != 1) Scr_Error("watersimenable() called with wrong params.\n");
+//   Dvar_SetBoolByName("r_watersim_enabled", Scr_GetInt(0) != 0);
+// The dvar exists in this reconstruction with that exact name, registered by
+// r_water_sim.cpp:264 and read at r_water_sim.cpp:576/711/2121, so this body is
+// fully wired up here rather than being a write into the void.
+static void __cdecl GScr_WaterSimEnable_SP()
+{
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 1 )
+        Scr_Error("watersimenable() called with wrong params.\n", 0);
+    Dvar_SetBoolByName("r_watersim_enabled", Scr_GetInt(0, SCRIPTINSTANCE_SERVER) != 0);
+}
+
+// ---------------------------------------------------------------------------
+// start3dcinematic(<name>[, <looping>[, <inmemory>[, <startPaused>]]]) /
+// stop3dcinematic() / pause3dcinematic(<bool>) -- SP only. REAL BODIES (these
+// rows used to be no-op TODO(SP-STUB)s). Root cause of "bink video doesn't
+// work": maps/frontend.gsc:597 calls Start3DCinematic("frontend",1,1) as
+// literally the first thing that happens once a player is active in the SP
+// main menu, and the stub silently dropped it.
+//
+// EVIDENCE (Ghidra-researched 2026-08-22): retail SP handlers are thin GSC
+// wrappers, not a separate "3D" rendering subsystem:
+//   - start3dcinematic  0x007fbd50: builds a playbackFlags byte and broadcasts
+//     "%c %s %i" (0x3c='<', name, flags) via SV_GameSendServerCommand(-1, ...).
+//   - stop3dcinematic   0x007fbf40: broadcasts "%c" (0x2e='.').
+//   - pause3dcinematic  0x007fbef0: broadcasts "%c %i" (0x3b=';', pauseBool).
+// The client's CG_DeployServerCommand (0x0078daf0, cases '<'/'.'/';') consumes
+// these and drives the SAME single-instance fullscreen-Bink pipeline this
+// reconstruction already has (cinematicGlob / R_Cinematic_* in r_cinematic.cpp)
+// -- confirmed by decompiling the client-side handlers themselves:
+//   case '.' -> R_Cinematic_StopPlayback(); Dvar_SetBool(cg_cinematicFullscreen, true);
+//   case ';' -> atoi(Cmd_Argv(1))==0 ? resume(fromScript=0) : pause(fromScript=1)
+//   case '<' -> R_Cinematic_StartPlayback_Internal(Cmd_Argv(1), atoi(Cmd_Argv(2)), 0);
+//               Dvar_SetBool(cg_cinematicFullscreen, false);
+// (the "3D" in the name just means "displayed via a material's cinematicSampler
+// on in-world geometry", e.g. maps/frontend.gsc's TV-monitor shader constants --
+// not a second concurrent-slot engine subsystem. See ORCHESTRATOR.md/
+// SP_MAIN_MENU_BOOTCHAIN.md for the full research trail.)
+//
+// This reconstruction is a fully-integrated SP client+server process (SP has
+// no dedicated-server mode), so the network round-trip is collapsed to a
+// direct broadcast the local client always receives -- the client-side cases
+// are added to cg_servercmds_mp.cpp's CG_DeployServerCommand switch exactly
+// like the existing "openmainmenu"/case 0x62 precedent.
+//
+// start3dcinematic's exact flag computation (decompiled from 0x007fbd50):
+// base flags = 0x42 (loop bit 0x02 + "useCustomSkipLogic" bit 0x40, both ON by
+// default); numParam==1 leaves them as-is; numParam>=2 reads isLooping
+// (Scr_GetInt(1)) and clears the loop bit if it's explicitly false; numParam>=3
+// reads isInMemory (Scr_GetInt(2)) and ORs in bit 0x08 (R_Cinematic_BinkOpenPath
+// already branches on this bit to load via DB_FindXAssetHeader instead of the
+// filesystem); numParam==4 reads an undocumented start-paused bool
+// (Scr_GetInt(3)) that, if true, hard-overwrites flags to 0x42|0x80 *before*
+// the isLooping/isInMemory logic re-applies (retail's switch falls through
+// case 4 -> 3 -> 2 in that order, so this ordering is exact, not approximated).
+// Finally, if <name> case-insensitively matches one of a fixed retail mission
+// whitelist, bit 0x01 is OR'd in (pairs with bit 0x40 to select
+// "useCustomSkipLogic" timing in R_Cinematic_Advance -- neither of our SP
+// main-menu call sites match this list, so it's inert for the menu boot chain,
+// but is ported for fidelity since other maps may rely on it).
+static const char *const g_start3DCinematicWhitelist[] = {
+    "mid_cuba_1", "mid_cuba_3", "mid_vorkuta_2", "mid_vorkuta_3",
+    "mid_flashpoint_1", "mid_flashpoint_2", "mid_hue_city_2", "mid_river_1",
+    "wmd_load", "mid_rebirth_2", "int_hudson_explains",
+    "int_reznov_disappearing_flashback",
+};
+
+static void __cdecl GScr_Start3DCinematic_SP()
+{
+    int numParam;
+    unsigned int flags;
+    const char *name;
+    unsigned int i;
+
+    numParam = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    flags = 0x42u;
+    switch ( numParam )
+    {
+        case 1:
+            break;
+        case 4:
+            if ( Scr_GetInt(3, SCRIPTINSTANCE_SERVER) )
+                flags = 0xC2u;
+            // fallthrough
+        case 3:
+            if ( Scr_GetInt(2, SCRIPTINSTANCE_SERVER) )
+                flags |= 8u;
+            // fallthrough
+        case 2:
+            if ( !Scr_GetInt(1, SCRIPTINSTANCE_SERVER) )
+                flags &= ~2u;
+            break;
+        default:
+            Scr_Error("start3DCinematic takes one, two, or three parameters: start3DCinematic(<cinematic name>, <looping>, <inmemory>)", 0);
+            return;
+    }
+    name = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    for ( i = 0; i < ARRAY_COUNT(g_start3DCinematicWhitelist); ++i )
+    {
+        if ( !I_stricmp(name, g_start3DCinematicWhitelist[i]) )
+        {
+            flags |= 1u;
+            break;
+        }
+    }
+    SV_GameSendServerCommand(-1, SV_CMD_RELIABLE, va("%c %s %i", '<', name, flags));
+}
+
+// Manual local adapter name, not a recovered retail symbol. Retail 0x00805340
+// broadcasts '>' without reading script arguments; registration 0x00B77308.
+static void __cdecl GScr_CleanupSpawnedDynEnts_SP()
+{
+    SV_SendServerCommand(0, SV_CMD_RELIABLE, "%c", '>');
+}
+
+static void __cdecl GScr_Stop3DCinematic_SP()
+{
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 0 )
+        Scr_Error("stop3DCinematic takes no parameters: stop3DCinematic()", 0);
+    SV_GameSendServerCommand(-1, SV_CMD_RELIABLE, va("%c", '.'));
+}
+
+static void __cdecl GScr_Pause3DCinematic_SP()
+{
+    int pause;
+
+    pause = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
+    SV_GameSendServerCommand(-1, SV_CMD_RELIABLE, va("%c %i", ';', pause));
+}
+
+// Retail SP 0x007f0840 converts the script team strings to the bit flags used
+// by Actor_FirstActor/Actor_NextActor.  TEAM_SPECTATOR is this reconstruction's
+// semantic name for retail SP's neutral team value (3).
+static int __cdecl GScr_GetAITeamFlag_SP(const char *team, const char *functionName)
+{
+    if ( !I_stricmp(team, "axis") )
+        return 1 << TEAM_AXIS;
+    if ( !I_stricmp(team, "allies") )
+        return 1 << TEAM_ALLIES;
+    if ( !I_stricmp(team, "neutral") )
+        return 1 << TEAM_SPECTATOR;
+    if ( !I_stricmp(team, "all") )
+        return (1 << TEAM_AXIS) | (1 << TEAM_ALLIES) | (1 << TEAM_SPECTATOR);
+
+    Scr_Error(
+        va("unknown team '%s' in %s (should be axis, allies, or neutral)", team, functionName),
+        SCRIPTINSTANCE_SERVER);
+    return 0;
+}
+
+// Retail SP 0x007f08d0 ORs every supplied team argument. With no arguments it
+// supplies 0xe, selecting axis, allies and neutral.
+static int __cdecl GScr_GetAITeamFlags_SP(const char *functionName)
+{
+    const unsigned int count = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    int teamFlags = 0;
+
+    for ( unsigned int i = 0; i < count; ++i )
+        teamFlags |= GScr_GetAITeamFlag_SP(Scr_GetString(i, SCRIPTINSTANCE_SERVER), functionName);
+
+    if ( !teamFlags )
+        teamFlags = (1 << TEAM_AXIS) | (1 << TEAM_ALLIES) | (1 << TEAM_SPECTATOR);
+    return teamFlags;
+}
+
+// Retail helper 0x005886b0 returns true for the two dog species (1 and 3).
+static bool __cdecl GScr_IsDogSpecies_SP(AISpecies species)
+{
+    return species == AI_SPECIES_DOG || species == AI_SPECIES_ZOMBIE_DOG;
+}
+
+// Retail SP 0x007f0970. The old placeholder returned an empty array, so zombie
+// scripts could not discover live actors for barrier, goal or cleanup work.
+static void __cdecl GScr_GetAIArray_SP()
+{
+    const int teamFlags = GScr_GetAITeamFlags_SP("getaiarray");
+
+    Scr_MakeArray(SCRIPTINSTANCE_SERVER);
+    for ( actor_s *actor = Actor_FirstActor(teamFlags); actor; actor = Actor_NextActor(actor, teamFlags) )
+    {
+        if ( !actor->Physics.bIsAlive || actor->delayedDeath || GScr_IsDogSpecies_SP(actor->species) )
+            continue;
+
+        Scr_AddEntity(actor->ent, SCRIPTINSTANCE_SERVER);
+        Scr_AddArray(SCRIPTINSTANCE_SERVER);
+    }
+}
+// issentient(<value>) -- exact retail SP 0x007f00a0 body.  The former fixed
+// false stub was observably wrong for players and actors and fired immediately
+// before the frontend's late idle-camera branch.
+static void __cdecl GScr_SPStubFn_issentient()
+{
+    int result = 0;
+    gentity_s *ent = NULL;
+    const int type = Scr_GetType(0, SCRIPTINSTANCE_SERVER);
+    int pointerType = -1;
+    if ( type == 1 )
+    {
+        pointerType = Scr_GetPointerType(0, SCRIPTINSTANCE_SERVER);
+        if ( pointerType == 19 )
+        {
+            ent = Scr_GetEntity(0);
+            result = ent->sentient != NULL;
+        }
+    }
+    Com_Printf(
+        15,
+        "SP issentient: type %d pointerType %d ent %d result %d\n",
+        type,
+        pointerType,
+        ent ? ent->s.number : -1,
+        result);
+    Scr_AddInt(result, SCRIPTINSTANCE_SERVER);
+}
+    // getplayers: NO LONGER A STUB. The empty-array stub that used to sit here
+    // deadlocked the whole SP script layer (see the deadlock note above the real
+    // implementation, GScr_GetPlayers_SP, earlier in this file).
+// ---------------------------------------------------------------------------
+// getstartorigin( <origin>, <angles>, <anim> ) -- SP only. REAL BODY (this row
+// used to be a no-op TODO(SP-STUB)).
+//
+// EVIDENCE: retail SP handler 0x005c8770, re-decompiled and fully disassembled
+// (stack-slot-verified, not just decompiler heuristics) 2026-08-28.
+// - `time` fed to XAnimGetAbsDelta is the hardcoded literal 0.0f (FLDZ).
+// - AnglesToAxis writes the first three rows of a 4x3 transform. Retail then
+//   copies Scr_GetVector(0)'s authored origin into the fourth row before
+//   MatrixTransformVector43. The earlier audit mistook that fourth row for a
+//   dead local and incorrectly reduced the result to world zero.
+// - The shipped frontend idle-drift path calls this immediately before it
+//   links the player to its temporary model. Returning world zero therefore
+//   moved that model, and the camera, outside the interrogation room.
+void GScr_GetStartOrigin_SP()
+{
+    float origin[3];
+    float angles[3];
+    float transform[4][3];
+    float rotation[2];
+    float translation[3];
+    float result[3];
+
+    Scr_GetVector(0, origin, SCRIPTINSTANCE_SERVER);
+    Scr_GetVector(1u, angles, SCRIPTINSTANCE_SERVER);
+    const scr_anim_s anim = Scr_GetAnim(2u, 0, SCRIPTINSTANCE_SERVER);
+    const XAnim_s *anims = Scr_GetAnims(anim.tree, SCRIPTINSTANCE_SERVER);
+
+    AnglesToAxis(angles, transform);
+    transform[3][0] = origin[0];
+    transform[3][1] = origin[1];
+    transform[3][2] = origin[2];
+    XAnimGetAbsDelta(anims, anim.index, rotation, translation, 0.0f);
+    MatrixTransformVector43(translation, transform, result);
+
+    Com_Printf(
+        15,
+        "SP getstartorigin: tree %u anim %u origin (%.2f %.2f %.2f) delta (%.2f %.2f %.2f) result (%.2f %.2f %.2f)\n",
+        anim.tree,
+        anim.index,
+        origin[0],
+        origin[1],
+        origin[2],
+        translation[0],
+        translation[1],
+        translation[2],
+        result[0],
+        result[1],
+        result[2]);
+    Scr_AddVector(result, SCRIPTINSTANCE_SERVER);
+}
+// Retail SP 0x007f0b20. Unlike getaiarray, this accepts at most one team string
+// followed by a species string and includes dog species when explicitly asked.
+static void __cdecl GScr_GetAISpeciesArray_SP()
+{
+    const unsigned int count = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    int teamFlags = (1 << TEAM_AXIS) | (1 << TEAM_ALLIES) | (1 << TEAM_SPECTATOR);
+    AISpecies species = AI_SPECIES_ALL;
+
+    if ( count )
+        teamFlags = GScr_GetAITeamFlag_SP(Scr_GetString(0, SCRIPTINSTANCE_SERVER), "getaiarray");
+
+    if ( count >= 2 )
+    {
+        const unsigned __int16 speciesName = Scr_GetConstString(1, SCRIPTINSTANCE_SERVER);
+        if ( speciesName != scr_const.all )
+        {
+            species = AI_SPECIES_FIRST;
+            for ( ; species < MAX_AI_SPECIES; ++species )
+            {
+                if ( speciesName == *g_AISpeciesNames[species] )
+                    break;
+            }
+
+            if ( species == MAX_AI_SPECIES )
+            {
+                Scr_ParamError(
+                    1,
+                    va(
+                        "unknown species '%s' (should be human, dog, or all)",
+                        SL_ConvertToString(speciesName, SCRIPTINSTANCE_SERVER)),
+                    SCRIPTINSTANCE_SERVER);
+                return;
+            }
+        }
+    }
+
+    Scr_MakeArray(SCRIPTINSTANCE_SERVER);
+    for ( actor_s *actor = Actor_FirstActor(teamFlags); actor; actor = Actor_NextActor(actor, teamFlags) )
+    {
+        if ( !actor->Physics.bIsAlive || actor->delayedDeath )
+            continue;
+        if ( species != AI_SPECIES_ALL && actor->species != species )
+            continue;
+
+        Scr_AddEntity(actor->ent, SCRIPTINSTANCE_SERVER);
+        Scr_AddArray(SCRIPTINSTANCE_SERVER);
+    }
+}
+// ---------------------------------------------------------------------------
+// WeaponFightDist( <weapon> ) / WeaponMaxDist( <weapon> ) -- SP only. REAL BODIES
+// (both rows used to be undefined-returning TODO(SP-STUB)s).
+//
+// EVIDENCE: retail SP handlers 0x007fc870 and 0x007fc8c0, disassembled 2026-08-28. They are the
+// same four statements and differ only in the member read:
+//     name = Scr_GetString(0, 0);
+//     w    = BG_GetWeaponIndexForName(name);            // 0x005c25c0
+//     if ( !w )
+//         Scr_Error("unknown weapon", 0);               // 0x00644900, string at 0x009a682c
+//     Scr_AddFloat(BG_GetWeaponDef(w)-><+0x70c | +0x710>, 0);   // 0x00425770, 0x0065e540
+//
+// THE OFFSET MAPPING IS PROVEN, NOT INFERRED. Retail actor_s/WeaponDef offsets do not transfer
+// to this tree in general, so +0x70c/+0x710 were not simply trusted:
+//   * a temporary static_assert(offsetof(WeaponDef, fightDist) == 0x70c) and the matching one for
+//     maxDist == 0x710 were compiled against this tree's WeaponDef and both passed;
+//   * independently, retail's own weapon-def field table names these two: the row pointing at the
+//     string "fightDist" (0x009cf640) carries offset 0x7f0 and type 7, and "maxDist" (0x00a0dc1c)
+//     carries 0x7f4 and type 7 -- byte-identical to this tree's own rows in
+//     bg_weapons_load_obj.cpp ({ "fightDist", 2032, 7 } and { "maxDist", 2036, 7 }).
+// The two figures differ because the field table is indexed from the outer parsed struct while
+// BG_GetWeaponDef returns the inner WeaponDef; the 0xE4 delta is consistent across both fields.
+// The static_asserts are kept below so the coupling breaks loudly if WeaponDef is ever reordered.
+//
+// WHY THESE TWO MATTER MORE THAN THEIR CALL COUNT SUGGESTS. Two GSC references each, both in
+// animscripts/init.gsc's SetWeaponDist -- but SetWeaponDist multiplies what they return:
+//     primaryweapon_fightdist_min = WeaponFightDist(self.primaryweapon);
+//     self.primaryweapon_fightdist_minSq = primaryweapon_fightdist_min * primaryweapon_fightdist_min;
+// so an undefined return is not a soft miss, it is
+//     pair 'undefined' and 'undefined' has unmatching types (animscripts/init.gsc:535)
+// and it kills the thread. SetWeaponDist is reached from animscripts/shared::placeWeaponOn
+// (shared.gsc:94, through call_overloaded_func), which animscripts/init.gsc main() calls at its
+// line 186 -- so main() aborted there and every SP actor stopped before its animset and animtree
+// setup. That is what made Actor_FinishSpawningAll's precache phase unshippable: with actors
+// half-initialised, the first anim they played indexed a tree they did not own and tripped
+// `animIndex < anims->size` in xanim. These two builtins are the upstream fix.
+static void __cdecl GScr_WeaponFightDist_SP()
+{
+    const char *name; // [esp+0h] [ebp-8h]
+    int weaponIndex; // [esp+4h] [ebp-4h]
+
+    name = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    weaponIndex = BG_GetWeaponIndexForName(name);
+    if ( !weaponIndex )
+        Scr_Error("unknown weapon", 0);
+    Scr_AddFloat(BG_GetWeaponDef(weaponIndex)->fightDist, SCRIPTINSTANCE_SERVER);
+}
+
+static void __cdecl GScr_WeaponMaxDist_SP()
+{
+    const char *name; // [esp+0h] [ebp-8h]
+    int weaponIndex; // [esp+4h] [ebp-4h]
+
+    name = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    weaponIndex = BG_GetWeaponIndexForName(name);
+    if ( !weaponIndex )
+        Scr_Error("unknown weapon", 0);
+    Scr_AddFloat(BG_GetWeaponDef(weaponIndex)->maxDist, SCRIPTINSTANCE_SERVER);
+}
+
+#ifndef KISAK_NX // nx-port: x86 layout asserts; the fields are read by name
+static_assert(offsetof(WeaponDef, fightDist) == 0x70c,
+              "WeaponFightDist reads retail SP WeaponDef +0x70c. If fightDist has moved, this "
+              "tree's WeaponDef no longer matches the layout that offset was verified against.");
+static_assert(offsetof(WeaponDef, maxDist) == 0x710,
+              "WeaponMaxDist reads retail SP WeaponDef +0x710. See the note above.");
+#endif
+
+// ---------------------------------------------------------------------------
+// getspawnerarray() -- SP only. REAL BODY (this row used to be an empty-array
+// TODO(SP-STUB), and the reasoning on that stub was wrong -- see below).
+//
+// EVIDENCE: retail SP handler 0x007f0be0, decompiled 2026-08-28. The whole body:
+//     if ( Scr_GetNumParam(0) )
+//         Scr_Error("cannot call getspawnerarray with parameters", 0);
+//     Scr_MakeArray(0);
+//     for ( i = 0; i < <level.num_entities, DAT_01c0314c>; ++i ) {
+//         ent = &g_pLevelGentities[i];                  // stride 0x34c
+//         if ( ent-><byte +0xdd> && ent-><short +0xbe> == 0x11 ) {
+//             Scr_AddEntity(ent, 0);
+//             Scr_AddArray(0);                          // FUN_004f1f00
+//         }
+//     }
+// Offsets are mapped SEMANTICALLY, never arithmetically: +0xdd is the in-use
+// flag (r.inuse, the same test GScr_GetPlayers_SP above makes) and +0xbe is
+// s.eType. Retail's raw eType value is 0x11 while this tree's enum gives
+// ET_ACTOR_SPAWNER == 0x12, because the MP eType enum inserts an extra entry --
+// the SYMBOL is what SP_actor_spawner (actor_spawner.cpp:269) actually stores,
+// so the symbol is what is compared here. That divergence is already documented
+// on GScr_CodeSpawnerSpawn_Common below, which makes the identical comparison.
+//
+// The argument check must run BEFORE Scr_MakeArray, for the reason spelled out
+// on GScr_GetPlayers_SP: Scr_MakeArray calls IncInParam, which calls
+// Scr_ClearOutParams and pops the inparams.
+//
+// WHY THIS STOPPED BEING OPTIONAL. The retired stub's note read "frontend has no
+// spawners -> empty". That is false, and measurably so: the frontend map carries
+// actor_Hudson_int_silhoutte and actor_Mason_int_escape spawners, whose aitype
+// scripts ship in frontend.ff. The empty array quietly disabled
+// maps/_load_common.gsc's update_script_forcespawn_based_on_flags(), which is
+//     spawners = GetSpawnerArray();
+//     for (i = 0; i < spawners.size; i++)
+//         if (spawners[i] has_spawnflag(level.SPAWNFLAG_ACTOR_SCRIPTFORCESPAWN))
+//             spawners[i].script_forcespawn = 1;
+// -- the ONLY writer of script_forcespawn on a map-placed spawner. With the loop
+// never running, maps/_utility.gsc's spawn_ai() always took its DoSpawn
+// (CHECK_SPAWN) branch instead of StalingradSpawn (FORCE_SPAWN), and SpawnActor
+// then refused the spawn outright:
+//     couldn't spawn from hudson because player can see spawnpoint (96 16 -127.875)
+// which is unavoidable in the frontend, where the player is looking straight at
+// the chair. So the interrogator never spawned, and every downstream
+// maps/_anim.gsc exception followed from that. The refusal was invisible without
+// developer 1 because SpawnActor reports it through Com_DPrintf on channel 18.
+static void __cdecl GScr_GetSpawnerArray_SP()
+{
+    gentity_s *ent; // [esp+0h] [ebp-8h]
+    int i; // [esp+4h] [ebp-4h]
+
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+        Scr_Error("cannot call getspawnerarray with parameters", 0);
+
+    Scr_MakeArray(SCRIPTINSTANCE_SERVER);
+
+    for ( i = 0; i < level.num_entities; ++i )
+    {
+        ent = &g_entities[i];
+        if ( !ent->r.inuse || ent->s.eType != ET_ACTOR_SPAWNER )
+            continue;
+        Scr_AddEntity(ent, SCRIPTINSTANCE_SERVER);
+        Scr_AddArray(SCRIPTINSTANCE_SERVER);
+    }
+}
+// ---------------------------------------------------------------------------
+// getstartangles( <origin>, <angles>, <anim> ) -- SP only. REAL BODY (this
+// row used to be a no-op TODO(SP-STUB)).
+//
+// EVIDENCE: retail SP handler 0x004dcfc0, decompiled AND disassembled
+// alongside getstartorigin (same evidence base: hardcoded time=0.0f, dead
+// `origin` argument). GetStartAngles decodes the same time=0.0 delta's
+// rotation half via an atan2 double-angle unpack, then composes it onto
+// AnglesToAxis(anglesArg) and converts back to angles. At the identity
+// rotation retail's own explicit guard substitutes on a raw-zero delta
+// (`(rotXY==(0,0)) -> force (0,1)`, needed to avoid a divide-by-zero in the
+// atan2 decode -- itself evidence that time=0 commonly yields exactly this
+// identity case), the composed result is angles unchanged. Verified retail
+// output for the common (multi-frame anim) case: argument 1 (angles) passed
+// straight through. NOT reproduced: the single-frame (numframes==0) edge
+// case, same caveat as GetStartOrigin.
+void GScr_GetStartAngles_SP()
+{
+    float origin[3]; // read to match retail's call shape; proven dead store there too
+    float angles[3];
+
+    Scr_GetVector(0, origin, SCRIPTINSTANCE_SERVER);
+    Scr_GetVector(1u, angles, SCRIPTINSTANCE_SERVER);
+    Scr_GetAnim(2u, 0, SCRIPTINSTANCE_SERVER);
+    Scr_AddVector(angles, SCRIPTINSTANCE_SERVER);
+}
+// Retail 0x007FBF20 / dispatch record 0x00B76CD8. Descriptive reconstruction name.
+static void GScr_GetCinematicTimeRemaining_SP()
+{
+    if (!r_reflectionProbeGenerate->current.enabled)
+        Scr_AddFloat(R_Cinematic_GetRemainingSeconds_SP(), SCRIPTINSTANCE_SERVER);
+}
+// ---------------------------------------------------------------------------
+// codespawn( <classname>, <origin>, [spawnflags], [?], [?], [destructibledef] )
+// -- SP only. REAL BODY (this row used to be a no-op TODO(SP-STUB)).
+//
+// EVIDENCE: retail SP handler 0x007f15c0, decompiled 2026-08-22. Param reads
+// verified index-by-index: Scr_GetConstString(0)=classname,
+// Scr_GetVector(1)=origin, Scr_GetInt(2)=spawnflags (only if numParam >= 3),
+// params 3 and 4 are NEVER read (the zeros in the 6-arg GSC call shape are
+// ignored), Scr_GetConstString(5)=destructible-def name (only if numParam > 5).
+// Core flow is identical to this tree's MP GScr_Spawn (above, :1843): G_Spawn
+// -> Scr_SetString(classname) -> currentOrigin/spawnflags -> G_CallSpawnEntity
+// -> Scr_AddEntity on success / Scr_Error(va("unable to spawn \"%s\" entity"))
+// on failure -- same error string in both binaries. Every retail failure path
+// is a hard Scr_Error; the handler never silently evaluates to undefined.
+//
+// DOCUMENTED DIVERGENCES from retail 0x007f15c0 (each an omission, none
+// changes the success path for the frontend's `Spawn("script_model", org)`):
+//  - map-range origin check (Vec3InNetworkRange vs map-center global
+//    0x02889744, 2^17 XY / 2^16 Z, else "outside of map ranges" Scr_Error):
+//    omitted -- the center global has no ported counterpart; error-path only.
+//  - ++spawn-budget counter (retail 0x01c88de8, ++ unless classname ==
+//    "script_origin"): omitted -- its only consumer is the `oktospawn`
+//    builtin (0x007f1580), still a stub in this table.
+//  - *(u8*)(ent+0x33e) = 1: omitted -- SP-only gentity byte with no
+//    counterpart in this tree's MP-shaped gentity_s; purpose unestablished.
+//  - param 5 destructible-def (retail G_SetDestructibleDefByName 0x004fb3d0:
+//    configstring scan/register at 0xBD7+i then ent flags |= 0x20000,
+//    ent+0xd7 = i; ent->model = 1): not ported -- warn-once and continue.
+//  - post-spawn `if (ent->item) ent->model = G_ModelIndex(worldModel)`
+//    (retail +0x150 item-def pointer): omitted -- that pointer field has no
+//    counterpart here, and item classnames aren't codespawned by the corpus.
+//  - retail SP's G_CallSpawnEntity refuses "actor_*" classnames with
+//    Com_Error "cannot spawn AI directly; use spawners instead" -- this
+//    tree's shared G_CallSpawnEntity (g_spawn_mp.cpp:557) has no such guard;
+//    left as is (shared MP code path).
+//  - dispatch table: retail SP has 14 entries (adds info_player_start/
+//    info_player_respawn/info_volume/trigger_lookat/trigger_damage/
+//    script_vehicle/spawn_manager over this tree's 7-entry
+//    s_bspOrDynamicSpawns). script_model/script_origin -- everything the
+//    frontend codespawns -- are present in both.
+static void __cdecl GScr_CodeSpawn_SP()
+{
+    char *v0; // eax
+    const char *v1; // eax
+    float *currentOrigin; // [esp+0h] [ebp-1Ch]
+    float origin[3]; // [esp+4h] [ebp-18h] BYREF
+    int iSpawnFlags; // [esp+10h] [ebp-Ch]
+    unsigned __int16 classname; // [esp+14h] [ebp-8h]
+    gentity_s *ent; // [esp+18h] [ebp-4h]
+
+    classname = (unsigned __int16)Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+    Scr_GetVector(1u, origin, SCRIPTINSTANCE_SERVER);
+    if ( (unsigned int)Scr_GetNumParam(SCRIPTINSTANCE_SERVER) <= 2 )
+        iSpawnFlags = 0;
+    else
+        iSpawnFlags = Scr_GetInt(2u, SCRIPTINSTANCE_SERVER);
+    ent = G_Spawn();
+    Scr_SetString(&ent->classname, classname, SCRIPTINSTANCE_SERVER);
+    currentOrigin = ent->r.currentOrigin;
+    ent->r.currentOrigin[0] = origin[0];
+    currentOrigin[1] = origin[1];
+    currentOrigin[2] = origin[2];
+    ent->spawnflags = iSpawnFlags;
+    if ( (unsigned int)Scr_GetNumParam(SCRIPTINSTANCE_SERVER) > 5 )
+    {
+        // See DOCUMENTED DIVERGENCES above -- destructible-def wiring not
+        // ported yet; retail would configstring-register the def here.
+        static bool s_destructibleWarned = false;
+        if ( !s_destructibleWarned )
+        {
+            s_destructibleWarned = true;
+            Com_PrintWarning(
+                1,
+                "TODO(SP): codespawn destructibledef param ignored (retail 0x004fb3d0 not ported); entity spawns without destructible\n");
+        }
+    }
+    if ( G_CallSpawnEntity(ent) )
+    {
+        Scr_AddEntity(ent, SCRIPTINSTANCE_SERVER);
+    }
+    else
+    {
+        v0 = SL_ConvertToString(classname, SCRIPTINSTANCE_SERVER);
+        v1 = va("unable to spawn \"%s\" entity", v0);
+        Scr_Error(v1, 0);
+    }
+}
+// Retail SP 0x007F1180.  Fact 1 is the global-function table's literal
+// name/handler pair.  Fact 2 is the body-level XAnim layout: it resolves the
+// supplied animation, filters XAnimNotifyInfo records by their time-distance
+// in seconds, calculates absolute root-motion at the notify fraction, and
+// emits one four-element script array per match.
+//
+// This is gameplay-significant for Zombies.  zombie_init.gsc uses the result
+// to populate cover-transition arrival/exit metadata; the former empty-array
+// stub discarded every notetrack and left traversal/path state incomplete.
+static void __cdecl GScr_GetNotetracksInDelta_SP()
+{
+    const scr_anim_s anim = Scr_GetAnim(0, 0, SCRIPTINSTANCE_SERVER);
+    const float targetTime = Scr_GetFloat(1, SCRIPTINSTANCE_SERVER);
+    const float maxDeltaSeconds = Scr_GetNumParam(SCRIPTINSTANCE_SERVER) == 3
+        ? Scr_GetFloat(2, SCRIPTINSTANCE_SERVER)
+        : 0.15f;
+
+    Scr_MakeArray(SCRIPTINSTANCE_SERVER);
+
+    const XAnim_s *anims = Scr_GetAnims(anim.tree, SCRIPTINSTANCE_SERVER);
+    const XAnimParts *parts = anims->entries[anim.index].parts;
+    const XAnimNotifyInfo *notify = parts->notify;
+    if ( !notify )
+        return;
+
+    const float animLength = static_cast<float>(parts->numframes) / parts->framerate;
+    for ( unsigned int notifyIndex = 0; notifyIndex < parts->notifyCount; ++notifyIndex, ++notify )
+    {
+        if ( std::fabs(animLength * notify->time - animLength * targetTime) > maxDeltaSeconds )
+            continue;
+
+        float rotation[2];
+        float translation[3];
+        XAnimGetAbsDelta(anims, anim.index, rotation, translation, notify->time);
+
+        Scr_MakeArray(SCRIPTINSTANCE_SERVER);
+        Scr_AddString(parts->name, SCRIPTINSTANCE_SERVER);
+        Scr_AddArray(SCRIPTINSTANCE_SERVER);
+        Scr_AddConstString(notify->name, SCRIPTINSTANCE_SERVER);
+        Scr_AddArray(SCRIPTINSTANCE_SERVER);
+        Scr_AddFloat(notify->time, SCRIPTINSTANCE_SERVER);
+        Scr_AddArray(SCRIPTINSTANCE_SERVER);
+        Scr_AddVector(translation, SCRIPTINSTANCE_SERVER);
+        Scr_AddArray(SCRIPTINSTANCE_SERVER);
+        Scr_AddArray(SCRIPTINSTANCE_SERVER);
+    }
+}
+// getdifficulty / isassetloaded are IMPLEMENTED -- see GScr_GetDifficulty_SP and
+// GScr_IsAssetLoaded_SP above. Their stub rows were removed from this block.
+SP_STUB_FUNCTION(GScr_SPStubFn_codeplayloopedfx,          "codeplayloopedfx", "0x007fd4e0")
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/_utility:11018 -- return CodePlayLoopedFX(effectid, repeat, position, cull, forward, up);
+SP_STUB_FUNCTION(GScr_SPStubFn_gettimescale,              "gettimescale", "0x007f26d0")
+    // NOTE: LEFT UNDEFINED ON PURPOSE: 1.0 is the engine default (dvar `timescale`,
+    //       common.cpp:2359) but settimescale IS really implemented here (GScr_SetTimeScale,
+    //       same file), so a CONSTANT 1.0 would silently disagree with it. Reading the real
+    //       dvar would be an implementation, not a return-shape fix.
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/flamer_util:1823 -- current_timescale = GetTimeScale();
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_isgodmode, "isgodmode", "0x007f00f0", 0)
+    // RETURNS 0: JUDGEMENT: godmode is off unless a cheat turns it on, and nothing in this
+    //            stub set can turn it on. Used only as a predicate (7/7 sites).
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. animscripts/banzai:1104 -- if ( IsGodMode( player ) )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_issaverecentlyloaded, "issaverecentlyloaded", "0x007fb020", 0)
+    // RETURNS 0: JUDGEMENT: the frontend map is not entered by loading a save. 0 keeps
+    //            maps/_autosave.gsc:233/406 on their normal path rather than the
+    //            'save error - recently loaded' early-out.
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/_autosave:233 -- if( isSaveRecentlyLoaded() )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_numremoteclients, "numremoteclients", "0x00642850", 0)
+    // RETURNS 0: EVIDENCE, not judgement: single-player has no remote clients. The corpus is
+    //            written for exactly this -- maps/_utility.gsc:10433 wait_network_frame() is
+    //            `if (NumRemoteClients()) { ...snapshot handshake... } else { wait(0.1); }`,
+    //            and 0 takes the non-networked branch. This also makes the getsnapshotindexarray
+    //            / snapshotacknowledged pair below unreachable.
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/_load_common:2279 -- if(NumRemoteClients())
+SP_STUB_FUNCTION(GScr_SPStubFn_visionsetlaststand,        "visionsetlaststand", "0x007ff800")
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/_laststand:132 -- self VisionSetLastStand( "zombie_last_stand", 1 );
+SP_STUB_FUNCTION(GScr_SPStubFn_anglelerp,                 "anglelerp", "0x007f9ab0")
+    // NOTE: LEFT UNDEFINED ON PURPOSE: pure float math (animscripts/balcony.gsc:286 builds a
+    //       vector from three AngleLerp results). No constant is defensible.
+    // TODO(SP-STUB) 3 GSC ref(s), e.g. animscripts/balcony:286 -- newAngles = ( AngleLerp(startAngles[0], angles[0], lerpVar), AngleLerp(startAngles[1], angles[1], lerpVar), An
+SP_STUB_FUNCTION(GScr_SPStubFn_codespawnfx,               "codespawnfx", "0x007fd780")
+    // TODO(SP-STUB) 3 GSC ref(s), e.g. maps/_utility:11067 -- return CodeSpawnFx(effect, position, forward, up);
+static void GScr_SP_distance2dsquared()
+{
+    // Retail 0x007f92c0: two SERVER vectors, squared y/x deltas, no sqrt.
+    // Zombie window melee compares this result before issuing DoDamage.
+    float from[3], to[3];
+    Scr_GetVector(0, from, SCRIPTINSTANCE_SERVER);
+    Scr_GetVector(1, to, SCRIPTINSTANCE_SERVER);
+    const float dx = to[0] - from[0];
+    const float dy = to[1] - from[1];
+    Scr_AddFloat(dy * dy + dx * dx, SCRIPTINSTANCE_SERVER);
+}
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_findpath, "findpath", "0x0040a420", 0)
+    // RETURNS 0: JUDGEMENT: no pathfinding is performed by this stub, so 'no path found' is
+    //            the honest answer. Callers treat 0 as 'unreachable' and skip.
+    // TODO(SP-STUB) 3 GSC ref(s), e.g. animscripts/revive:290 -- if( findpath( current_ai.origin, self.predictedRevivePoint ) )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_hascollectible, "hascollectible", "0x00804a30", 0)
+    // RETURNS 0: JUDGEMENT: no collectible state is tracked by any code in this tree, so 'the
+    //            player has none' is the only self-consistent answer. Note maps/_collectibles
+    //            gsc:187 is `while (HasCollectible(offset_start))` -- 0 terminates that loop,
+    //            1 would spin it forever.
+    // TODO(SP-STUB) 3 GSC ref(s), e.g. maps/_collectibles:28 -- if ( HasCollectible( int( map_collectibles[i].script_parameters ) ) )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_oktospawn, "oktospawn", "0x007f1580", 1)
+    // RETURNS 1: JUDGEMENT (value chosen, not measured), but 0 is provably wrong: the corpus
+    //            helper maps/_utility.gsc:10497 is `while (!OkToSpawn()) wait(0.05);` with no
+    //            escape, so returning 0 parks that thread forever. This is a spawn-budget gate
+    //            whose limiting resource is the live AI count, which is 0 on frontend, so the
+    //            gate is open. 1 == 'go ahead'.
+    // TODO(SP-STUB) 3 GSC ref(s), e.g. maps/_utility:10490 -- while( GetTime() < timer && !OkToSpawn() )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_savegamenocommit, "savegamenocommit", "0x007fae80", -1)
+    // RETURNS -1: JUDGEMENT, but the truthful direction: the corpus treats a negative id as
+    //             failure (maps/_autosave.gsc:247 `if (saveId < 0) ... return false;`). This stub
+    //             does not save anything, so reporting failure is honest AND stops the script
+    //             from later calling commitSave() with a fabricated id.
+    // TODO(SP-STUB) 3 GSC ref(s), e.g. maps/_autosave:223 -- saveId = saveGameNoCommit( filename, descriptionString, "$default", true );
+SP_STUB_FUNCTION(GScr_SPStubFn_codespawnvehicle,          "codespawnvehicle", "0x007f1730")
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_utility:10969 -- return CodeSpawnVehicle( modelname, targetname, vehicletype, origin, angles, destructibledef );
+SP_STUB_FUNCTION_ARRAY(GScr_SPStubFn_getanynodearray, "getanynodearray", "0x00484140")
+    // RETURNS EMPTY ARRAY: 3 of 3 corpus sites read it as an array (.size / [i]).
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_dds:1081 -- nodeArray = GetAnyNodeArray( self.origin, 100 );
+SP_STUB_FUNCTION_ARRAY(GScr_SPStubFn_getdynmodels, "getdynmodels", "0x0042a210")
+    // RETURNS EMPTY ARRAY: 2 of 2 corpus sites read it as an array (maps/_createdynents.gsc:8/41).
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_createdynents:8 -- dyn_models = GetDynModels();
+SP_STUB_FUNCTION_ARRAY(GScr_SPStubFn_getmiscmodels, "getmiscmodels", "0x004eaee0")
+    // RETURNS EMPTY ARRAY: 2 of 2 corpus sites read it as an array (maps/_createdynents.gsc:18/52).
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_createdynents:18 -- misc_models = GetMiscModels();
+    // getnumconnectedplayers/getnumexpectedplayers: NO LONGER STUBS. Retail's
+    // unequal 0/1 pre-connect state is required by synchronize_players(); see
+    // the real implementations above.
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_getpersistentprofilevar, "getpersistentprofilevar", "0x007fa420", 0)
+    // RETURNS 0: JUDGEMENT, supported by the corpus: maps/_callbackglobal.gsc:830 reads
+    //            `killedSoFar = 1 + GetPersistentProfileVar( 0, 0 ); // index 0, default=0` --
+    //            the script's own comment names 0 as the default for an unset profile var.
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. animscripts/banzai:1486 -- if ( GetPersistentProfileVar(1,1) == 1 )
+SP_STUB_FUNCTION_ARRAY(GScr_SPStubFn_getspawnerteamarray, "getspawnerteamarray", "0x007f0df0")
+    // RETURNS EMPTY ARRAY: 3 of 3 corpus sites read it as an array; maps/_load.gsc:1274
+    //                      `spawners = GetSpawnerTeamArray("allies"); ... spawners.size` sits in the
+    //                      same maps/_load boot path that faulted.
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_load:1274 -- spawners = GetSpawnerTeamArray( "allies" );
+SP_STUB_FUNCTION(GScr_SPStubFn_getweaponaccuracy,         "getweaponaccuracy", "0x007fcb90")
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. animscripts/shared:2617 -- primaryweapon_accuracy = getweaponaccuracy(self, self.primaryweapon);
+SP_STUB_FUNCTION_STRING(GScr_SPStubFn_getweaponclipmodel, "getweaponclipmodel", "0x007f10b0", "")
+    // RETURNS "": EVIDENCE-backed: the corpus's own sentinel for 'this weapon has no clip model'
+    //             is the empty string -- animscripts/init.gsc:42 `if (getWeaponClipModel(weapon)
+    //             != "")`. "" therefore means 'none' rather than naming a model that does not
+    //             exist.
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. animscripts/init:42 -- if ( getWeaponClipModel( weapon ) != "" )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_isnodeoccupied, "isnodeoccupied", "0x0067e850", 0)
+    // RETURNS 0: EVIDENCE-backed: nodes are occupied by AI, and there is no AI. 0 = free.
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_spawner:1364 -- if ( IsNodeOccupied(target_nodes[i]) || is_true(target_nodes[i].node_claimed) )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_issavesuccessful, "issavesuccessful", "0x007faff0", 0)
+    // RETURNS 0: JUDGEMENT, but the truthful direction: savegame/savegamenocommit are no-op
+    //            stubs, so no save has succeeded. maps/_autosave.gsc:285 try_to_autosave_now()
+    //            is `if (!issavesuccessful()) return false;` -- 0 aborts the autosave cleanly
+    //            instead of continuing on to commitSave() with a save that does not exist.
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_autosave:285 -- if( !issavesuccessful() )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_weaponisgasweapon, "weaponisgasweapon", "0x007fc500", 0)
+    // RETURNS 0: JUDGEMENT: 0 = 'not a gas weapon', the conservative branch.
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. animscripts/shared:79 -- if( weaponIsGasWeapon( self.weapon ) )
+SP_STUB_FUNCTION(GScr_SPStubFn_weaponmaxgibdistance,      "weaponmaxgibdistance", "0x007fc360")
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. animscripts/death:1804 -- maxDist = WeaponMaxGibDistance( self.damageWeapon );
+SP_STUB_FUNCTION(GScr_SPStubFn_bulletspread,              "bulletspread", "0x005e9d20")
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. animscripts/utility:1383 -- endpos = bulletSpread( self GetTagOrigin( "tag_flash" ), shootPos, 4 );
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_canspawnturret, "canspawnturret", "0x007f1940", 0)
+    // RETURNS 0: JUDGEMENT: capability query with no turret subsystem behind it; 0 = 'no'.
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. animscripts/cover_wall:59 -- && canspawnturret())
+SP_STUB_FUNCTION(GScr_SPStubFn_codespawnturret,           "codespawnturret", "0x007f18c0")
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_utility:10995 -- return CodeSpawnTurret(classname, origin, weaponinfoname);
+SP_STUB_FUNCTION_ARRAY(GScr_SPStubFn_entsearch, "entsearch", "0x005f63c0")
+    // RETURNS EMPTY ARRAY: 3 of 3 corpus sites read it as an array (.size / [i]).
+    //                      An entity search that finds nothing genuinely yields an empty array.
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_utility:13158 -- ents = entsearch( mask, origin, radius );
+SP_STUB_FUNCTION_ARRAY(GScr_SPStubFn_getallvehiclenodes, "getallvehiclenodes", "0x006270e0")
+    // RETURNS EMPTY ARRAY: 2 of 2 corpus sites read it as an array -- maps/_vehicle.gsc:3395
+    //                      `paths = GetAllVehicleNodes(); ... paths.size` and :3785 array_combine().
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_vehicle:3785 -- triggers = array_combine( getallvehiclenodes(), getentarray( "script_origin", "classname" ) );
+SP_STUB_FUNCTION_ARRAY(GScr_SPStubFn_getdestructibledefs, "getdestructibledefs", "0x005ca550")
+    // RETURNS EMPTY ARRAY: its 1 corpus site reads it as an array (maps/_createdynents.gsc:59).
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_createdynents:59 -- destructible_defs = GetDestructibleDefs();
+SP_STUB_FUNCTION(GScr_SPStubFn_getsnapshotindexarray,     "getsnapshotindexarray", "0x007ff1b0")
+    // NOTE: LEFT UNDEFINED ON PURPOSE despite the name: its ONE corpus site
+    //       (maps/_utility.gsc:10435) never reads it with .size or [], it only passes it to
+    //       snapshotacknowledged -- so undefined does not fault there. It is also unreachable
+    //       now that numremoteclients returns 0 (the whole block is behind `if(NumRemoteClients())`
+    //       at maps/_utility.gsc:10433). Making it an array would rest on the name alone.
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_utility:10435 -- snapshot_ids = getsnapshotindexarray();
+SP_STUB_FUNCTION_ARRAY(GScr_SPStubFn_getvehiclenodearray, "getvehiclenodearray", "0x0060d8c0")
+    // RETURNS EMPTY ARRAY: its 1 corpus site reads it as an array (maps/_utility.gsc:13607,
+    //                      .size + array_thread).
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_utility:13607 -- nodes = GetVehicleNodeArray( strName, strKey );
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_iscoopepd, "iscoopepd", "0x00804680", 0)
+    // RETURNS 0: JUDGEMENT: this is the SP campaign, not co-op.
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_utility:9541 -- if ( isCoopEPD() )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_isturretactive, "isturretactive", "0x007fc910", 0)
+    // RETURNS 0: JUDGEMENT, but note the hazard: maps/_mgturret.gsc:898 is
+    //            `while (!(IsTurretActive(turret)))` so 0 parks that thread instead of
+    //            faulting. Parking is the lesser failure; 1 would be a fabricated 'yes'.
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_mgturret:898 -- while( !( IsTurretActive( turret ) ) )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_modelhasphyspreset, "modelhasphyspreset", "0x004db8d0", 0)
+    // RETURNS 0: JUDGEMENT: 0 = 'this model has no physics preset', which sends
+    //            animscripts/death.gsc:579 down the no-ragdoll-hat path.
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. animscripts/death:579 -- if( !IsDefined( self.hatModel ) || !ModelHasPhysPreset( self.hatModel ) )
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_playerpositionvalid, "playerpositionvalid", "0x007f87f0", 0)
+    // RETURNS 0: JUDGEMENT, but the safe direction: maps/_callbackglobal.gsc:392 is
+    //            `if (!playerpositionvalid(spawn_pos)) { spawn_pos = player.origin; ... }` with
+    //            the corpus's own comment 'we know this position is valid'. A stub cannot
+    //            validate anything, so claiming validity would be a lie; 0 takes the fallback.
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_callbackglobal:392 -- if( !playerpositionvalid( spawn_pos ) )
+SP_STUB_FUNCTION(GScr_SPStubFn_snapshotacknowledged,      "snapshotacknowledged", "0x007ff230")
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_utility:10441 -- acked = snapshotacknowledged(snapshot_ids);
+SP_STUB_FUNCTION_INT(GScr_SPStubFn_weapondogibbing, "weapondogibbing", "0x007fc320", 0)
+    // RETURNS 0: JUDGEMENT: 0 = 'this weapon does not gib', the conservative branch.
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. animscripts/death:1807 -- else if( IsDefined(self.damageWeapon) && self.damageWeapon != "none" && WeaponDoGibbing( self.damageWeapon ) )
+// ---------------------------------------------------------------------------
+// TODO(SP-STUB), SECOND PASS -- builtin FUNCTIONS the first pass missed.
+//
+// WHY THESE WERE MISSED, because the failure mode matters more than the names:
+// the first pass's corpus scanner (scratchpad needscan.py) discarded any call
+// that was the first token on its line ("if not before: continue"), a test
+// meant to skip GSC function DEFINITIONS. It also skipped every
+// statement-position call -- `    savegame();`, `    missionFailed();`,
+// `    setSavedDvar( ... );` -- which is precisely the shape a void builtin
+// call takes. Method calls always have a receiver in front of them, so the
+// method side was unaffected; the function side lost 34 names. A definition is
+// now identified by starting at COLUMN 0 instead. (A second defect in the same
+// scanner: it blanked comments but not STRING LITERAL bodies, so identifiers
+// written inside assert/print messages read as live call sites. Both are fixed
+// in the scratchpad methscan.py / linkcheck.py successors.)
+//
+// SOURCE. SP's Scr_GetFunction is FUN_0052BF80 and it chains TWO tables, where
+// this tree's Scr_GetFunction has only one:
+//   1. 0x00A55E80, 6 entries, dispatcher FUN_0051A180 -- a threat-bias
+//      function table with NO counterpart anywhere in this tree (all 6 names
+//      absent). It sits 4 pad bytes after the threat-bias METHOD table at
+//      0x00A55E40, whose 5 names are equally unrepresented here.
+//   2. 0x00B75EE0, 437 entries, dispatcher FUN_00516310 -- the table this
+//      file's functions[] corresponds to (both start with
+//      "createprintchannel"). Bound 0x147B == 437*12-1.
+// 30 of the 34 below come from table 2 and 4 from table 1; the trailing
+// comment on each row names which.
+//
+// type == 0 ON EVERY ROW, and for THREE of them that is a DELIBERATE
+// DIVERGENCE from retail rather than a match: "recordline" (SP idx 13),
+// "setdebugorigin" (SP idx 361) and "setdebugangles" (SP idx 362) carry type 1
+// (developer command) in retail SP. 0 is used here because a type-1 builtin
+// whose return value is read outside a /# ... #/ block is a hard CompileError
+// (cscr_compiler.cpp:2847), i.e. the exact class of failure this pass exists
+// to remove; 0 is strictly more permissive and cannot reintroduce it. The
+// other 31 rows carry 0 in retail SP too.
+//
+// Placeholders, NOT implementations -- see the TODO(SP-STUB) header above
+// BuiltinFunctionDef functions[] for the VM stack-safety argument. Note that
+// six of these (recordline, updategamerprofile, setuinextlevel, prefetchlevel,
+// splitviewallowed and, on the method side, setenginevolume) point at
+// 0x00651A30 in retail SP -- the binary's shared do-nothing routine -- so for
+// those the no-op body is faithful rather than a placeholder.
+// ---------------------------------------------------------------------------
+
+// setsaveddvar is IMPLEMENTED -- see GScr_SetSavedDvar_SP above.
+SP_STUB_FUNCTION(GScr_SPStubFn_badplace_cylinder, "badplace_cylinder", "0x00800060")
+    // TODO(SP-STUB) 13 GSC ref(s) in the frontend closure, e.g. maps/_interactive_objects:733 badplace_cylinder("", 5, P, 64, 64);
+static int GScr_GetThreatBiasGroupIndex_SP(unsigned __int16 groupName)
+{
+    for ( int groupIndex = 0; groupIndex < g_threatBias.threatGroupCount; ++groupIndex )
+    {
+        if ( g_threatBias.groupName[groupIndex] == groupName )
+            return groupIndex;
+    }
+    return -1;
+}
+
+static int GScr_RequireThreatBiasGroup_SP(unsigned int parameter)
+{
+    const unsigned __int16 groupName = Scr_GetConstString(parameter, SCRIPTINSTANCE_SERVER);
+    const int groupIndex = GScr_GetThreatBiasGroupIndex_SP(groupName);
+    if ( groupIndex < 0 )
+    {
+        Scr_Error(
+            va("Invalid threat bias group '%s'.\n", Scr_GetString(parameter, SCRIPTINSTANCE_SERVER)),
+            SCRIPTINSTANCE_SERVER);
+    }
+    return groupIndex;
+}
+
+// Retail SP's dedicated threat-function table pairs these bodies with
+// 0x00819290..0x008193D0. The binary bodies operate on the same 16-name,
+// 16x16-score layout already reconstructed as g_threatBias, while
+// Actor_UpdateSingleThreat consumes the resulting indices and scores.
+static void __cdecl GScr_GetThreatBias_SP()
+{
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 2 )
+        Scr_ParamError(0, "getthreatbias [group for] [group against]", SCRIPTINSTANCE_SERVER);
+
+    const int groupFor = GScr_RequireThreatBiasGroup_SP(0);
+    const int groupAgainst = GScr_RequireThreatBiasGroup_SP(1);
+    Scr_AddInt(Actor_GetThreatBias(groupFor, groupAgainst), SCRIPTINSTANCE_SERVER);
+}
+// start3dcinematic / stop3dcinematic are IMPLEMENTED -- see GScr_Start3DCinematic_SP /
+// GScr_Stop3DCinematic_SP above.
+SP_STUB_FUNCTION(GScr_SPStubFn_recordline, "recordline", "0x00651a30")
+    // TODO(SP-STUB) 4 GSC ref(s) in the frontend closure, e.g. animscripts/corner:871 RecordLine( self.origin, ramboOutPos, ( 1,1,1 ), "Script", self );
+SP_STUB_FUNCTION(GScr_SPStubFn_missionfailed, "missionfailed", "0x007fbd00")
+    // TODO(SP-STUB) 4 GSC ref(s) in the frontend closure, e.g. maps/_callbackglobal:943 missionfailed();
+struct SPChangeLevelState
+{
+    int changePending;
+    int reloadDelayTime;
+    int exitTime;
+    char nextMap[64];
+};
+
+static SPChangeLevelState s_spChangeLevel;
+
+static int GScr_ChangeLevelMsec_SP(float seconds)
+{
+    // Retail stores the single-precision product, adds the double constant
+    // 2^-30, then uses x87 FISTP under the process round-to-nearest mode
+    // (0x007FBC04..0x007FBC2D and 0x007FBC87..0x007FBCB3).
+    const float milliseconds = seconds * 1000.0f;
+    return (int)std::nearbyint((double)milliseconds + 9.31322574615479e-10);
+}
+
+static bool GScr_CanChangeLevel_SP()
+{
+    // Retail 0x007FBBB0 and its scheduler 0x007E30B0 both require a live
+    // player and g_reloading == 0. The field id and health offset are
+    // independently corroborated by this reconstruction's G_Find callers
+    // and gentity_s layout.
+    gentity_s *player = G_Find(NULL, 356, scr_const.player);
+    return player && player->health > 0 && g_reloading && g_reloading->current.integer == 0;
+}
+
+static void GScr_ChangeLevel_SP()
+{
+    if (!GScr_CanChangeLevel_SP())
+    {
+        Com_Printf(15, "SP ChangeLevel ignored: no live player or reload already active\n");
+        return;
+    }
+
+    const int argc = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    if (argc != 1)
+    {
+        if (argc != 2)
+        {
+            s_spChangeLevel.exitTime = GScr_ChangeLevelMsec_SP(Scr_GetFloat(2, SCRIPTINSTANCE_SERVER));
+            if (s_spChangeLevel.exitTime < 0)
+                Scr_ParamError(1, "exitTime cannot be negative", SCRIPTINSTANCE_SERVER);
+        }
+        level.savepersist = Scr_GetInt(1, SCRIPTINSTANCE_SERVER);
+    }
+
+    const char *map = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    if (argc < 3 && g_changelevel_time && g_changelevel_time->current.value >= 0.0f)
+        s_spChangeLevel.exitTime = GScr_ChangeLevelMsec_SP(g_changelevel_time->current.value);
+
+    s_spChangeLevel.changePending = 1;
+    I_strncpyz(s_spChangeLevel.nextMap, map, sizeof(s_spChangeLevel.nextMap));
+    Com_Printf(15, "SP ChangeLevel queued: map '%s', exitTime %i, savepersist %i\n",
+        s_spChangeLevel.nextMap, s_spChangeLevel.exitTime, level.savepersist);
+}
+
+void __cdecl GScr_ResetChangeLevel_SP()
+{
+    memset(&s_spChangeLevel, 0, sizeof(s_spChangeLevel));
+    if (g_reloading)
+        Dvar_SetInt((dvar_s *)g_reloading, 0);
+}
+
+void __cdecl GScr_UpdateChangeLevel_SP()
+{
+    if (s_spChangeLevel.changePending)
+    {
+        s_spChangeLevel.changePending = 0;
+        if (GScr_CanChangeLevel_SP())
+        {
+            // Retail 0x007E30B0: the first command drives the optional fade,
+            // the second tells the client the total transition duration.
+            if (s_spChangeLevel.exitTime != 0)
+            {
+                SV_GameSendServerCommand(-1, SV_CMD_RELIABLE,
+                    va("%c 1 %i %i", 0x55, 250, s_spChangeLevel.exitTime + 750));
+            }
+            SV_GameSendServerCommand(-1, SV_CMD_RELIABLE,
+                va("%c 0 %i\n", 0x71, s_spChangeLevel.exitTime + 1000));
+
+            s_spChangeLevel.reloadDelayTime = level.time + s_spChangeLevel.exitTime + 1000;
+            Dvar_SetInt((dvar_s *)g_reloading, 4);
+            Com_Printf(15, "SP ChangeLevel scheduled: map '%s', execute at %i (now %i)\n",
+                s_spChangeLevel.nextMap, s_spChangeLevel.reloadDelayTime, level.time);
+        }
+    }
+
+    // Retail checker 0x0041DE40 uses a strict less-than comparison.
+    if (s_spChangeLevel.reloadDelayTime != 0 && s_spChangeLevel.reloadDelayTime < level.time)
+    {
+        s_spChangeLevel.reloadDelayTime = 0;
+        if (!s_spChangeLevel.nextMap[0])
+        {
+            Com_Printf(15, "SP ChangeLevel executing: disconnect\n");
+            Cbuf_AddText(0, "disconnect\n");
+        }
+        else if (Dvar_GetBool("sv_cheats"))
+        {
+            Com_Printf(15, "SP ChangeLevel executing: spdevmap %s\n", s_spChangeLevel.nextMap);
+            Cbuf_AddText(0, va("spdevmap %s\n", s_spChangeLevel.nextMap));
+        }
+        else
+        {
+            Com_Printf(15, "SP ChangeLevel executing: spmap %s\n", s_spChangeLevel.nextMap);
+            Cbuf_AddText(0, va("spmap %s\n", s_spChangeLevel.nextMap));
+        }
+    }
+}
+static void __cdecl GScr_SetThreatBias_SP()
+{
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 3 )
+        Scr_ParamError(0, "setthreatbias [threatener] [threatened] [threat]", SCRIPTINSTANCE_SERVER);
+
+    const int threatener = GScr_RequireThreatBiasGroup_SP(0);
+    const int threatened = GScr_RequireThreatBiasGroup_SP(1);
+    g_threatBias.threatTable[threatener][threatened] = Scr_GetInt(2, SCRIPTINSTANCE_SERVER);
+}
+SP_STUB_FUNCTION(GScr_SPStubFn_savegame, "savegame", "0x007fad20")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. maps/_autosave:80 SaveGame( "levelstart", &"AUTOSAVE_LEVELSTART", imagename, true );
+SP_STUB_FUNCTION(GScr_SPStubFn_missionsuccess, "missionsuccess", "0x007fbcd0")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. maps/_endmission:220 MissionSuccess( "credits", false );
+SP_STUB_FUNCTION(GScr_SPStubFn_setmissiondvar, "setmissiondvar", "0x005c31c0")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. maps/_endmission:358 SetMissionDvar( dvar, string );
+// pause3dcinematic is IMPLEMENTED -- see GScr_Pause3DCinematic_SP above.
+SP_STUB_FUNCTION(GScr_SPStubFn_bullettracer, "bullettracer", "0x00682430")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. maps/flamer_util:301 BulletTracer(spot, eye, 1);
+SP_STUB_FUNCTION(GScr_SPStubFn_setpersistentprofilevar, "setpersistentprofilevar", "0x007fa3a0")
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. animscripts/banzai:1493 SetPersistentProfileVar(1,1);
+SP_STUB_FUNCTION(GScr_SPStubFn_updategamerprofile, "updategamerprofile", "0x00651a30")
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. animscripts/banzai:1494 UpdateGamerProfile();
+SP_STUB_FUNCTION(GScr_SPStubFn_commitsave, "commitsave", "0x007fb040")
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. maps/_autosave:269 commitSave( saveId );
+SP_STUB_FUNCTION(GScr_SPStubFn_setuinextlevel, "setuinextlevel", "0x00651a30")
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. maps/_endmission:173 SetUINextLevel( level.missionSettings get_level_name( nextlevel_index ) );
+SP_STUB_FUNCTION(GScr_SPStubFn_prefetchlevel, "prefetchlevel", "0x00651a30")
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. maps/_endmission:293 prefetchLevel( level.missionSettings get_level_name( nextlevel_index ) );
+static void __cdecl GScr_CreateThreatBiasGroup_SP()
+{
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 1 )
+        Scr_ParamError(0, "createthreatbiasgroup [name]", SCRIPTINSTANCE_SERVER);
+
+    const unsigned __int16 groupName = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+    if ( GScr_GetThreatBiasGroupIndex_SP(groupName) >= 0 )
+        return;
+
+    if ( g_threatBias.threatGroupCount >= 16 )
+    {
+        Com_PrintWarning(
+            18,
+            "Too many threat groups, can't create '%s'\n",
+            SL_ConvertToString(groupName, SCRIPTINSTANCE_SERVER));
+        return;
+    }
+
+    Scr_SetString(
+        &g_threatBias.groupName[g_threatBias.threatGroupCount],
+        groupName,
+        SCRIPTINSTANCE_SERVER);
+    ++g_threatBias.threatGroupCount;
+}
+SP_STUB_FUNCTION(GScr_SPStubFn_setcollectible, "setcollectible", "0x00804a60")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_collectibles:173 SetCollectible( int( self.script_parameters ) );
+SP_STUB_FUNCTION(GScr_SPStubFn_forcelevelend, "forcelevelend", "0x00804ab0")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_cooplogic:36 forcelevelend();
+SP_STUB_FUNCTION(GScr_SPStubFn_setdebugangles, "setdebugangles", "0x00803da0")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_debug:1455 setdebugangles( camera.angles );
+SP_STUB_FUNCTION(GScr_SPStubFn_setdebugorigin, "setdebugorigin", "0x00803d80")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_debug:1456 setdebugorigin( camera.origin +( 0, 0, -60 ) );
+SP_STUB_FUNCTION(GScr_SPStubFn_reportclientdisconnected, "reportclientdisconnected", "0x00804d70")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_introscreen:867 ReportClientDisconnected(level._disconnected_clients[i]);
+// watersimenable is IMPLEMENTED -- see GScr_WaterSimEnable_SP above.
+static void __cdecl GScr_ThreatBiasGroupExists_SP()
+{
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 1 )
+        Scr_ParamError(0, "threatbiasgroupexists [name]", SCRIPTINSTANCE_SERVER);
+
+    const unsigned __int16 groupName = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+    Scr_AddInt(GScr_GetThreatBiasGroupIndex_SP(groupName) >= 0, SCRIPTINSTANCE_SERVER);
+}
+SP_STUB_FUNCTION(GScr_SPStubFn_badplace_delete, "badplace_delete", "0x00800010")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_stealth_behavior:2173 badplace_delete( "_stealth_" + self.ai_number + "_prone" );
+SP_STUB_FUNCTION(GScr_SPStubFn_activateclientexploder, "activateclientexploder", "0x007fda90")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_utility:1859 ActivateClientExploder(level._exploder_ids[num]);
+SP_STUB_FUNCTION(GScr_SPStubFn_deactivateclientexploder, "deactivateclientexploder", "0x007fdac0")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_utility:1879 DeactivateClientExploder(level._exploder_ids[num]);
+SP_STUB_FUNCTION(GScr_SPStubFn_splitviewallowed, "splitviewallowed", "0x00651a30")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_utility:9853 SplitViewAllowed( player GetEntityNumber(), toggle, time );
+SP_STUB_FUNCTION(GScr_SPStubFn_badplace_arc, "badplace_arc", "0x00800160")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_vehicle:4846 badplace_arc( "", bp_duration, self.origin, bp_radius * 1.9, bp_height, bp_direction, bp_angle_left, bp_...
+SP_STUB_FUNCTION(GScr_SPStubFn_refreshhudammocounter, "refreshhudammocounter", "0x00804810")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_weaponobjects:581 RefreshHudAmmoCounter();
+// Retail SP 0x008052D0: this builtin has no arguments or return value; it queues the
+// client command that performs the executable handoff to BlackOpsMP.exe.  The shipped
+// frontend script reaches it from DoStartMultiplayerSequence after a mission selection.
+static void __cdecl GScr_StartMultiplayerGame_SP()
+{
+    Com_Printf(15, "SP startmultiplayergame: queueing startMultiplayer\n");
+    Cbuf_AddText(0, "startMultiplayer\n");
+}
+
+// Retail server builtin 0x007FC800, paired directly with the
+// "weapondualwieldweaponname" table string at 0x00B76E34.  The local C name
+// is descriptive only; no matching retail C symbol is attested in the source.
+static void __cdecl GScr_WeaponDualWieldWeaponName_SP()
+{
+    const char *weaponName = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    const unsigned int weaponIndex = G_GetWeaponIndexForName((char *)weaponName);
+    Scr_VerifyWeaponIndex(weaponIndex, (char *)weaponName);
+
+    const WeaponDef *weapDef = BG_GetWeaponDef(weaponIndex);
+    if (weapDef->bDualWield && weapDef->dualWieldWeaponIndex)
+        Scr_AddString((char *)BG_WeaponName(weapDef->dualWieldWeaponIndex), SCRIPTINSTANCE_SERVER);
+    else
+        Scr_AddConstString(scr_const.none, SCRIPTINSTANCE_SERVER);
+}
+
+// Retail SP functions table 0x00B75EE0 pairs the self-naming strings
+// "disablegrenadesuicide"/"enablegrenadesuicide" with 0x00804D40/0x00804D50. The two handler
+// bodies are single dword stores of one/zero to the same global at 0x01C08AE8. ClientEvents reads
+// that global in its grenade-suicide event arm; g_active_mp.cpp carries the corresponding consumer.
+static void __cdecl GScr_DisableGrenadeSuicide_SP()
+{
+    G_SetGrenadeSuicideDisabled_SP(true);
+}
+
+static void __cdecl GScr_EnableGrenadeSuicide_SP()
+{
+    G_SetGrenadeSuicideDisabled_SP(false);
+}
+
+// The retail functions table pairs "setailimit", "getailimit" and
+// "resetailimit" with 0x00804AD0, 0x00804B10 and 0x00804D60. The setter
+// accepts 0..32 inclusive, the getter returns the shared dword, and reset
+// stores zero. SpawnActor is the independently verified consumer.
+static void __cdecl GScr_SetAILimit_SP()
+{
+    const int limit = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
+    if ( limit < 0 || limit > 32 )
+        Scr_ParamError(0, "SetAILimit must take a value between 0 and 32 inclusive.", SCRIPTINSTANCE_SERVER);
+    G_SetAILimit_SP(limit);
+}
+
+static void __cdecl GScr_GetAILimit_SP()
+{
+    Scr_AddInt(G_GetAILimit_SP(), SCRIPTINSTANCE_SERVER);
+}
+
+static void __cdecl GScr_ResetAILimit_SP()
+{
+    G_SetAILimit_SP(0);
+}
+#endif // KISAK_SP
+
 BuiltinFunctionDef functions[] =
 {
   { "createprintchannel", GScr_CreatePrintChannel, 1 },
@@ -15846,6 +18496,11 @@ BuiltinFunctionDef functions[] =
   { "getnode", Scr_GetNode, 0 },
   { "getnodearray", Scr_GetNodeArray, 0 },
   { "getallnodes", Scr_GetAllNodes, 0 },
+#ifdef KISAK_SP
+  { "setenablenode", Scr_SetEnableNode, 0 },   // retail SP 0x00642a80
+  { "linknodes", Scr_LinkNodes, 0 },           // retail SP 0x00563f90
+  { "unlinknodes", Scr_UnlinkNodes, 0 },       // retail SP 0x00522eb0
+#endif
   { "getatrloaded", GScr_GetAnimTreesLoaded, 0 },
   { "findanimbyname", GScr_FindAnimByName, 0 },
   { "spawn", GScr_Spawn, 0 },
@@ -15908,6 +18563,10 @@ BuiltinFunctionDef functions[] =
   { "missile_createrepulsororigin", Scr_MissileCreateRepulsorOrigin, 0 },
   { "missile_deleteattractor", Scr_MissileDeleteAttractor, 0 },
   { "bullettrace", Scr_BulletTrace, 0 },
+#ifdef KISAK_SP
+  { "groundtrace", Scr_GroundTrace_SP, 0 },                              // IMPLEMENTED from SP table entry 0x00B766D8, handler 0x00807C00
+  { "ropesetflag", Scr_RopeSetFlag_SP, 0 },                              // IMPLEMENTED from SP table record 0x00B76B1C, handler 0x007FDD90
+#endif
   { "bullettracepassed", Scr_BulletTracePassed, 0 },
   { "sighttracepassed", Scr_SightTracePassed, 0 },
   { "physicstrace", Scr_PhysicsTrace, 0 },
@@ -16019,6 +18678,9 @@ BuiltinFunctionDef functions[] =
   { "weaponstartammo", GScr_WeaponStartAmmo, 0 },
   { "weaponmaxammo", GScr_WeaponMaxAmmo, 0 },
   { "weaponaltweaponname", GScr_WeaponAltWeaponName, 0 },
+#ifdef KISAK_SP
+  { "weapondualwieldweaponname", GScr_WeaponDualWieldWeaponName_SP, 0 },            // IMPLEMENTED from SP 0x007FC800
+#endif
   { "getwatcherweapons", GScr_GetWatcherWeapons, 0 },
   { "getretrievableweapons", GScr_GetRetrievableWeapons, 0 },
   { "getweaponmindamagerange", GScr_GetWeaponMinDamageRange, 0 },
@@ -16222,6 +18884,110 @@ BuiltinFunctionDef functions[] =
   { "starthostmigration", FUNCTION_NULLSUB, 0 }, // (Stubbing these out because who cares)
   { "reportfilm", FUNCTION_NULLSUB, 0 },
   // LWSS END
+#ifdef KISAK_SP
+  // TODO(SP-STUB): retail-SP builtin FUNCTIONS referenced by the SP script
+  // corpus and absent from this table. Each handler below is a no-op stub that
+  // warns once and evaluates to undefined -- NOT an implementation. See the
+  // TODO(SP-STUB) header above this array for why an empty body is stack-safe
+  // and for what a future pass still owes. Verified before adding: none of
+  // these names was already present in functions[]. Trailing comment on each
+  // row is the retail SP handler address for that name.
+  { "getaiarray", GScr_GetAIArray_SP, 0 },                                         // IMPLEMENTED from SP 0x007f0970
+  { "issentient", GScr_SPStubFn_issentient, 0 },                                    // TODO(SP-STUB) SP 0x007f00a0
+  { "getplayers", GScr_GetPlayers_SP, 0 },                                          // real impl; SP 0x007f0a10
+  { "getstartorigin", GScr_GetStartOrigin_SP, 0 },                                  // IMPLEMENTED from SP handler 0x005c8770
+  { "getaispeciesarray", GScr_GetAISpeciesArray_SP, 0 },                           // IMPLEMENTED from SP 0x007f0b20
+  { "getspawnerarray", GScr_GetSpawnerArray_SP, 0 },                                 // IMPLEMENTED from SP 0x007f0be0
+  { "getstartangles", GScr_GetStartAngles_SP, 0 },                                  // IMPLEMENTED from SP handler 0x004dcfc0
+  { "getcinematictimeremaining", GScr_GetCinematicTimeRemaining_SP, 0 }, // SP 0x007FBF20
+  { "codespawn", GScr_CodeSpawn_SP, 0 },                                            // IMPLEMENTED from SP handler 0x007f15c0
+  { "getnotetracksindelta", GScr_GetNotetracksInDelta_SP, 0 },                    // SP 0x007f1180
+  { "getdifficulty", GScr_GetDifficulty_SP, 0 },                                    // IMPLEMENTED from SP 0x007f07e0 (name table 0x00b75ecc + g_gameskill)
+  { "isassetloaded", GScr_IsAssetLoaded_SP, 0 },                                    // IMPLEMENTED from SP 0x007faad0 -> 0x00694550 -> DB_FindXAssetEntry
+  { "codeplayloopedfx", GScr_SPStubFn_codeplayloopedfx, 0 },                        // TODO(SP-STUB) SP 0x007fd4e0
+  { "gettimescale", GScr_SPStubFn_gettimescale, 0 },                                // TODO(SP-STUB) SP 0x007f26d0
+  { "isgodmode", GScr_SPStubFn_isgodmode, 0 },                                      // TODO(SP-STUB) SP 0x007f00f0
+  { "issaverecentlyloaded", GScr_SPStubFn_issaverecentlyloaded, 0 },                // TODO(SP-STUB) SP 0x007fb020
+  { "numremoteclients", GScr_SPStubFn_numremoteclients, 0 },                        // TODO(SP-STUB) SP 0x00642850
+  { "visionsetlaststand", GScr_SPStubFn_visionsetlaststand, 0 },                    // TODO(SP-STUB) SP 0x007ff800
+  { "anglelerp", GScr_SPStubFn_anglelerp, 0 },                                      // TODO(SP-STUB) SP 0x007f9ab0
+  { "codespawnfx", GScr_SPStubFn_codespawnfx, 0 },                                  // TODO(SP-STUB) SP 0x007fd780
+  { "distance2dsquared", GScr_SP_distance2dsquared, 0 },                           // SP 0x007f92c0
+  { "findpath", GScr_SPStubFn_findpath, 0 },                                        // TODO(SP-STUB) SP 0x0040a420
+  { "hascollectible", GScr_SPStubFn_hascollectible, 0 },                            // TODO(SP-STUB) SP 0x00804a30
+  { "oktospawn", GScr_SPStubFn_oktospawn, 0 },                                      // TODO(SP-STUB) SP 0x007f1580
+  { "savegamenocommit", GScr_SPStubFn_savegamenocommit, 0 },                        // TODO(SP-STUB) SP 0x007fae80
+  { "codespawnvehicle", GScr_SPStubFn_codespawnvehicle, 0 },                        // TODO(SP-STUB) SP 0x007f1730
+  { "getanynodearray", GScr_SPStubFn_getanynodearray, 0 },                          // TODO(SP-STUB) SP 0x00484140
+  { "getdynmodels", GScr_SPStubFn_getdynmodels, 0 },                                // TODO(SP-STUB) SP 0x0042a210
+  { "getmiscmodels", GScr_SPStubFn_getmiscmodels, 0 },                              // TODO(SP-STUB) SP 0x004eaee0
+  { "getnumconnectedplayers", GScr_GetNumConnectedPlayers_SP, 0 },                  // IMPLEMENTED from SP 0x0068e8b0
+  { "getnumexpectedplayers", GScr_GetNumExpectedPlayers_SP, 0 },                    // IMPLEMENTED from SP 0x005e6b20
+  { "getpersistentprofilevar", GScr_SPStubFn_getpersistentprofilevar, 0 },          // TODO(SP-STUB) SP 0x007fa420
+  { "getspawnerteamarray", GScr_SPStubFn_getspawnerteamarray, 0 },                  // TODO(SP-STUB) SP 0x007f0df0
+  { "getweaponaccuracy", GScr_SPStubFn_getweaponaccuracy, 0 },                      // TODO(SP-STUB) SP 0x007fcb90
+  { "getweaponclipmodel", GScr_SPStubFn_getweaponclipmodel, 0 },                    // TODO(SP-STUB) SP 0x007f10b0
+  { "isnodeoccupied", GScr_SPStubFn_isnodeoccupied, 0 },                            // TODO(SP-STUB) SP 0x0067e850
+  { "issavesuccessful", GScr_SPStubFn_issavesuccessful, 0 },                        // TODO(SP-STUB) SP 0x007faff0
+  { "weaponfightdist", GScr_WeaponFightDist_SP, 0 },                                // IMPLEMENTED from SP 0x007fc870
+  { "weaponisgasweapon", GScr_SPStubFn_weaponisgasweapon, 0 },                      // TODO(SP-STUB) SP 0x007fc500
+  { "weaponmaxdist", GScr_WeaponMaxDist_SP, 0 },                                    // IMPLEMENTED from SP 0x007fc8c0
+  { "weaponmaxgibdistance", GScr_SPStubFn_weaponmaxgibdistance, 0 },                // TODO(SP-STUB) SP 0x007fc360
+  { "bulletspread", GScr_SPStubFn_bulletspread, 0 },                                // TODO(SP-STUB) SP 0x005e9d20
+  { "canspawnturret", GScr_SPStubFn_canspawnturret, 0 },                            // TODO(SP-STUB) SP 0x007f1940
+  { "codespawnturret", GScr_SPStubFn_codespawnturret, 0 },                          // TODO(SP-STUB) SP 0x007f18c0
+  { "entsearch", GScr_SPStubFn_entsearch, 0 },                                      // TODO(SP-STUB) SP 0x005f63c0
+  { "getallvehiclenodes", GScr_SPStubFn_getallvehiclenodes, 0 },                    // TODO(SP-STUB) SP 0x006270e0
+  { "getdestructibledefs", GScr_SPStubFn_getdestructibledefs, 0 },                  // TODO(SP-STUB) SP 0x005ca550
+  { "getsnapshotindexarray", GScr_SPStubFn_getsnapshotindexarray, 0 },              // TODO(SP-STUB) SP 0x007ff1b0
+  { "getvehiclenodearray", GScr_SPStubFn_getvehiclenodearray, 0 },                  // TODO(SP-STUB) SP 0x0060d8c0
+  { "iscoopepd", GScr_SPStubFn_iscoopepd, 0 },                                      // TODO(SP-STUB) SP 0x00804680
+  { "isturretactive", GScr_SPStubFn_isturretactive, 0 },                            // TODO(SP-STUB) SP 0x007fc910
+  { "modelhasphyspreset", GScr_SPStubFn_modelhasphyspreset, 0 },                    // TODO(SP-STUB) SP 0x004db8d0
+  { "playerpositionvalid", GScr_SPStubFn_playerpositionvalid, 0 },                  // TODO(SP-STUB) SP 0x007f87f0
+  { "snapshotacknowledged", GScr_SPStubFn_snapshotacknowledged, 0 },                // TODO(SP-STUB) SP 0x007ff230
+  { "weapondogibbing", GScr_SPStubFn_weapondogibbing, 0 },                          // TODO(SP-STUB) SP 0x007fc320
+  { "setsaveddvar", GScr_SetSavedDvar_SP, 0 },                            // IMPLEMENTED from SP functions 0x00B75EE0 idx 81, handler 0x007f06a0
+  { "badplace_cylinder", GScr_SPStubFn_badplace_cylinder, 0 },            // TODO(SP-STUB) SP functions 0x00B75EE0 idx 345, 0x00800060
+  { "getthreatbias", GScr_GetThreatBias_SP, 0 },                         // IMPLEMENTED from SP 0x00819320
+  { "start3dcinematic", GScr_Start3DCinematic_SP, 0 },                    // IMPLEMENTED from SP functions 0x00B75EE0 idx 295, handler 0x007fbd50
+  { "stop3dcinematic", GScr_Stop3DCinematic_SP, 0 },                      // IMPLEMENTED from SP functions 0x00B75EE0 idx 296, handler 0x007fbf40
+  { "cleanupspawneddynents", GScr_CleanupSpawnedDynEnts_SP, 0 },          // Retail SP 0x00805340; real client cleanup via '>'.
+  { "recordline", GScr_SPStubFn_recordline, 0 },                          // TODO(SP-STUB) SP functions 0x00B75EE0 idx 13, 0x00651a30, retail type 1 -> 0 here
+  { "missionfailed", GScr_SPStubFn_missionfailed, 0 },                    // TODO(SP-STUB) SP functions 0x00B75EE0 idx 293, 0x007fbd00
+  { "changelevel", GScr_ChangeLevel_SP, 0 },                              // IMPLEMENTED from SP handler 0x007FBBB0 + scheduler/checker 0x007E30B0/0x0041DE40
+  { "setthreatbias", GScr_SetThreatBias_SP, 0 },                         // IMPLEMENTED from SP 0x008193D0
+  { "savegame", GScr_SPStubFn_savegame, 0 },                              // TODO(SP-STUB) SP functions 0x00B75EE0 idx 239, 0x007fad20
+  { "missionsuccess", GScr_SPStubFn_missionsuccess, 0 },                  // TODO(SP-STUB) SP functions 0x00B75EE0 idx 292, 0x007fbcd0
+  { "setmissiondvar", GScr_SPStubFn_setmissiondvar, 0 },                  // TODO(SP-STUB) SP functions 0x00B75EE0 idx 294, 0x005c31c0
+  { "pause3dcinematic", GScr_Pause3DCinematic_SP, 0 },                    // IMPLEMENTED from SP functions 0x00B75EE0 idx 297, handler 0x007fbef0
+  { "bullettracer", GScr_SPStubFn_bullettracer, 0 },                      // TODO(SP-STUB) SP functions 0x00B75EE0 idx 302, 0x00682430
+  { "setpersistentprofilevar", GScr_SPStubFn_setpersistentprofilevar, 0 }, // TODO(SP-STUB) SP functions 0x00B75EE0 idx 397, 0x007fa3a0
+  { "updategamerprofile", GScr_SPStubFn_updategamerprofile, 0 },          // TODO(SP-STUB) SP functions 0x00B75EE0 idx 368, 0x00651a30
+  { "commitsave", GScr_SPStubFn_commitsave, 0 },                          // TODO(SP-STUB) SP functions 0x00B75EE0 idx 243, 0x007fb040
+  { "setuinextlevel", GScr_SPStubFn_setuinextlevel, 0 },                  // TODO(SP-STUB) SP functions 0x00B75EE0 idx 391, 0x00651a30
+  { "prefetchlevel", GScr_SPStubFn_prefetchlevel, 0 },                    // TODO(SP-STUB) SP functions 0x00B75EE0 idx 274, 0x00651a30
+  { "createthreatbiasgroup", GScr_CreateThreatBiasGroup_SP, 0 },         // IMPLEMENTED from SP 0x00819290
+  { "setcollectible", GScr_SPStubFn_setcollectible, 0 },                  // TODO(SP-STUB) SP functions 0x00B75EE0 idx 408, 0x00804a60
+  { "forcelevelend", GScr_SPStubFn_forcelevelend, 0 },                    // TODO(SP-STUB) SP functions 0x00B75EE0 idx 414, 0x00804ab0
+  { "setdebugangles", GScr_SPStubFn_setdebugangles, 0 },                  // TODO(SP-STUB) SP functions 0x00B75EE0 idx 362, 0x00803da0, retail type 1 -> 0 here
+  { "setdebugorigin", GScr_SPStubFn_setdebugorigin, 0 },                  // TODO(SP-STUB) SP functions 0x00B75EE0 idx 361, 0x00803d80, retail type 1 -> 0 here
+  { "reportclientdisconnected", GScr_SPStubFn_reportclientdisconnected, 0 }, // TODO(SP-STUB) SP functions 0x00B75EE0 idx 388, 0x00804d70
+  { "watersimenable", GScr_WaterSimEnable_SP, 0 },                        // IMPLEMENTED from SP functions 0x00B75EE0 idx 393, handler 0x007fa500
+  { "threatbiasgroupexists", GScr_ThreatBiasGroupExists_SP, 0 },         // IMPLEMENTED from SP 0x008192D0
+  { "badplace_delete", GScr_SPStubFn_badplace_delete, 0 },                // TODO(SP-STUB) SP functions 0x00B75EE0 idx 344, 0x00800010
+  { "activateclientexploder", GScr_SPStubFn_activateclientexploder, 0 },  // TODO(SP-STUB) SP functions 0x00B75EE0 idx 254, 0x007fda90
+  { "deactivateclientexploder", GScr_SPStubFn_deactivateclientexploder, 0 }, // TODO(SP-STUB) SP functions 0x00B75EE0 idx 255, 0x007fdac0
+  { "splitviewallowed", GScr_SPStubFn_splitviewallowed, 0 },              // TODO(SP-STUB) SP functions 0x00B75EE0 idx 401, 0x00651a30
+  { "badplace_arc", GScr_SPStubFn_badplace_arc, 0 },                      // TODO(SP-STUB) SP functions 0x00B75EE0 idx 346, 0x00800160
+  { "refreshhudammocounter", GScr_SPStubFn_refreshhudammocounter, 0 },    // TODO(SP-STUB) SP functions 0x00B75EE0 idx 387, 0x00804810
+  { "startmultiplayergame", GScr_StartMultiplayerGame_SP, 0 },           // IMPLEMENTED from retail SP handler 0x008052d0
+  { "disablegrenadesuicide", GScr_DisableGrenadeSuicide_SP, 0 },        // IMPLEMENTED from SP functions table entry 0x00B77284, handler 0x00804D40
+  { "enablegrenadesuicide", GScr_EnableGrenadeSuicide_SP, 0 },          // IMPLEMENTED from SP functions table entry 0x00B77290, handler 0x00804D50
+  { "setailimit", GScr_SetAILimit_SP, 0 },                              // IMPLEMENTED from SP functions table entry 0x00B77254, handler 0x00804AD0
+  { "getailimit", GScr_GetAILimit_SP, 0 },                              // IMPLEMENTED from SP functions table entry 0x00B77260, handler 0x00804B10
+  { "resetailimit", GScr_ResetAILimit_SP, 0 },                          // IMPLEMENTED from SP functions table entry 0x00B77278, handler 0x00804D60
+#endif // KISAK_SP
 };
 
 
@@ -16437,6 +19203,36 @@ void __cdecl GScr_SetAnim(scr_entref_t entref)
     GScr_SetAnimInternal(entref, 1);
 }
 
+#ifdef KISAK_SP
+static int G_StoreAnimCommand_SP(
+    const gentity_s *ent,
+    int type,
+    unsigned int animIndex,
+    unsigned int rootAnimIndex,
+    float weight,
+    float goalTime,
+    float rate,
+    int flags)
+{
+    // Retail 0x004E7D80 clamps only the snapshotted command. The server XAnim
+    // call still receives the original GSC values.
+    const float storedWeight = weight < 0.0f ? 0.0f : (weight > 1.0f ? 1.0f : weight);
+    const float storedGoalTime = goalTime < 0.0f ? 0.0f : (goalTime > 1.5f ? 1.5f : goalTime);
+    const float storedRate = rate < 0.0f ? 0.0f : (rate > 3.0f ? 3.0f : rate);
+    const int commandTime = level.time ? level.time : 50;
+    return CG_StoreServerAnimCommand_SP(
+        ent->s.number,
+        commandTime,
+        type,
+        animIndex,
+        rootAnimIndex,
+        storedWeight,
+        storedGoalTime,
+        storedRate,
+        flags);
+}
+#endif
+
 void __cdecl GScr_SetAnimInternal(scr_entref_t entref, char flags)
 {
     unsigned int v2; // [esp+1Ch] [ebp-38h]
@@ -16492,7 +19288,11 @@ $LN7_51:
             obj = Com_GetServerDObj(ent->s.number);
             if ( !obj )
                 Scr_ObjectError("No model exists.", SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+            cmdIndex = G_StoreAnimCommand_SP(ent, 3, anim.index, 0, goalWeight, goalTime, rate, flags);
+#else
             cmdIndex = 0;
+#endif
             if ( (flags & 1) != 0 )
             {
                 if ( goalWeight <= 0.001 )
@@ -16551,6 +19351,737 @@ double __cdecl GScr_GetOptionalFloat(unsigned int iParamIndex, float fDefault)
         return fDefault;
 }
 
+#ifdef KISAK_SP
+// ===========================================================================
+// SP-only server anim script methods.
+//
+// Retail SP's builtin method table (0x00A54218) holds its anim script methods
+// in the index range 103..135; the MP reconstruction only ever had "setanim"
+// (SP idx 114, 0x00801640 -> GScr_SetAnimInternal, already above). Everything
+// below is transcribed from the SP decompiles of the addresses named on each
+// function, using GScr_SetAnimInternal as the established server-side shape.
+// Not every slot in that index range was identified -- see the table comment
+// next to the entries themselves for exactly which ones were.
+//
+// Retail's G_StoreAnimCommand (SP 0x004E7D80) is reconstructed as the exact
+// 44-byte command layout plus an integrated server/client ring. The client
+// applies it at the same DObj lifecycle points found in the binary. Command
+// types are 1 = clear, 3 = anim, 4 = knob, 5 = knob-all, 6 = set-time.
+//
+// One retail-only diagnostic remains deliberately omitted:
+//
+//  1. TODO(SP): each method has a debug-print block emitting
+//     "%s (tree=%s anim=%s root=%s weight=%f time=%f rate=%f level time=%d)\n"
+//     via Com_Printf channel 0x13, entered only when the dvar at 0x01B4C758
+//     has current.integer == ent->s.number, and then only when the dvar at
+//     0x01BFCFB8 has current.enabled == 0 or the new goal weight differs from
+//     XAnimGetWeight's by more than 0.001. Neither dvar was identified by
+//     name, so the block is omitted rather than guessed at.
+//
+// The "%s" in that print is a per-variant literal ("SetAnimKnob",
+// "SetAnimKnobLimited", "SetAnimKnobRestart", "SetAnimKnobLimitedRestart",
+// "SetAnimKnobAll", "SetFlaggedAnim", "ClearAnim", ...), and those literals
+// are the only attestation for the symbol names chosen here. GScr_GetAnimTime
+// and GScr_SetAnimTime have no such literal and are named purely from their
+// script command names. The GScr_ prefix throughout is by symmetry with the
+// CScr_ client family in cgame/cg_scr_main.cpp, not an attested symbol.
+//
+// flags bit 0 selects the XAnimSetComplete* entry point over the plain one,
+// flags bit 1 is bRestart. So 0 = Limited, 1 = plain, 2 = LimitedRestart,
+// 3 = Restart -- read directly out of SP's own name selection in each
+// *Internal, and matching the client family's use of the same values.
+// ===========================================================================
+
+// SP 0x00800660. G_StoreAnimCommand type 1.
+void __cdecl GScr_ClearAnim(scr_entref_t entref)
+{
+    XAnimTree_s *tree; // [esp+8h]
+    float blendTime; // [esp+Ch]
+    scr_anim_s anim; // [esp+10h]
+    gentity_s *ent; // [esp+14h]
+
+    ent = GetEntity(entref);
+    tree = GScr_GetEntAnimTree(ent);
+    anim = Scr_GetAnim(0, tree, SCRIPTINSTANCE_SERVER);
+    blendTime = Scr_GetFloat(1u, SCRIPTINSTANCE_SERVER);
+    const int cmdIndex = G_StoreAnimCommand_SP(ent, 1, anim.index, 0, 0.0f, blendTime, 1.0f, 1);
+    XAnimClearTreeGoalWeights(tree, anim.index, blendTime, cmdIndex);
+}
+
+// SP 0x00800880. G_StoreAnimCommand type 4.
+// Differs from GScr_SetAnimInternal only in the XAnim entry points and in
+// having no upper bound on the weight (SetAnim rejects weight > 1, SetAnimKnob
+// does not) -- both read straight off 0x00800880.
+void __cdecl GScr_SetAnimKnobInternal(scr_entref_t entref, char flags)
+{
+    unsigned int notifyType; // [esp+20h]
+    float rate; // [esp+30h]
+    XAnimTree_s *tree; // [esp+34h]
+    DObj *obj; // [esp+38h]
+    int cmdIndex; // [esp+3Ch]
+    float goalWeight; // [esp+40h]
+    float goalTime; // [esp+44h]
+    int error; // [esp+48h]
+    scr_anim_s anim; // [esp+4Ch]
+    gentity_s *ent; // [esp+50h]
+
+    ent = GetEntity(entref);
+    tree = GScr_GetEntAnimTree(ent);
+    rate = 1.0f;
+    goalTime = 0.2f;
+    goalWeight = 1.0f;
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+    {
+        anim = Scr_GetAnim(0, tree, SCRIPTINSTANCE_SERVER);
+        XAnimGetParamValue(tree, anim.index, "rate", &rate);
+        XAnimGetParamValue(tree, anim.index, "goaltime", &goalTime);
+        XAnimGetParamValue(tree, anim.index, "goalweight", &goalWeight);
+    }
+    switch ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+    {
+        case 1:
+            goto LN_ANIM;
+        case 2:
+            goto LN_WEIGHT;
+        case 3:
+            goto LN_TIME;
+        case 4:
+            goto LN_RATE;
+        default:
+            Scr_Error("too many parameters", 0);
+LN_RATE:
+            rate = GScr_GetOptionalFloat(3u, rate);
+            if ( rate < 0.0 )
+                Scr_ParamError(3u, "must set nonnegative rate", SCRIPTINSTANCE_SERVER);
+LN_TIME:
+            goalTime = GScr_GetOptionalFloat(2u, goalTime);
+            if ( goalTime < 0.0 )
+                Scr_ParamError(2u, "must set nonnegative goal time", SCRIPTINSTANCE_SERVER);
+LN_WEIGHT:
+            goalWeight = GScr_GetOptionalFloat(1u, goalWeight);
+            if ( goalWeight < 0.0 )
+                Scr_ParamError(1u, "must set nonnegative weight", SCRIPTINSTANCE_SERVER);
+LN_ANIM:
+            anim = Scr_GetAnim(0, tree, SCRIPTINSTANCE_SERVER);
+            cmdIndex = G_StoreAnimCommand_SP(ent, 4, anim.index, 0, goalWeight, goalTime, rate, flags);
+            obj = Com_GetServerDObj(ent->s.number);
+            if ( !obj )
+                Scr_ObjectError("No model exists.", SCRIPTINSTANCE_SERVER);
+            if ( goalWeight <= 0.001 )
+                notifyType = 0;
+            else
+                notifyType = 2;
+            if ( (flags & 1) != 0 )
+            {
+                error = XAnimSetCompleteGoalWeightKnob(
+                                    obj,
+                                    anim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    0,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            else
+            {
+                error = XAnimSetGoalWeightKnob(
+                                    obj,
+                                    anim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    0,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            if ( error )
+                GScr_HandleAnimError(error);
+            else
+                G_FlagAnimForUpdate(ent);
+            return;
+    }
+}
+
+// SP 0x00800CC0
+void __cdecl GScr_SetAnimKnob(scr_entref_t entref)
+{
+    GScr_SetAnimKnobInternal(entref, 1);
+}
+
+// SP 0x00800CE0
+void __cdecl GScr_SetAnimKnobLimited(scr_entref_t entref)
+{
+    GScr_SetAnimKnobInternal(entref, 0);
+}
+
+// SP 0x00800D00
+void __cdecl GScr_SetAnimKnobRestart(scr_entref_t entref)
+{
+    GScr_SetAnimKnobInternal(entref, 3);
+}
+
+// SP 0x00800D40. G_StoreAnimCommand type 5.
+// Parameters shift by one against the non-All form: 0 = anim, 1 = root anim,
+// 2 = weight, 3 = goal time, 4 = rate; 2..5 parameters accepted.
+void __cdecl GScr_SetAnimKnobAllInternal(scr_entref_t entref, char flags)
+{
+    unsigned int notifyType; // [esp+20h]
+    float rate; // [esp+40h]
+    XAnimTree_s *tree; // [esp+4Ch]
+    DObj *obj; // [esp+54h]
+    int cmdIndex; // [esp+58h]
+    float goalWeight; // [esp+5Ch]
+    float goalTime; // [esp+60h]
+    int error; // [esp+64h]
+    scr_anim_s anim; // [esp+6Ch]
+    scr_anim_s rootAnim; // [esp+74h]
+    gentity_s *ent; // [esp+78h]
+
+    ent = GetEntity(entref);
+    tree = GScr_GetEntAnimTree(ent);
+    rate = 1.0f;
+    goalTime = 0.2f;
+    goalWeight = 1.0f;
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+    {
+        anim = Scr_GetAnim(0, tree, SCRIPTINSTANCE_SERVER);
+        XAnimGetParamValue(tree, anim.index, "rate", &rate);
+        XAnimGetParamValue(tree, anim.index, "goaltime", &goalTime);
+        XAnimGetParamValue(tree, anim.index, "goalweight", &goalWeight);
+    }
+    switch ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+    {
+        case 2:
+            goto LN_ANIM;
+        case 3:
+            goto LN_WEIGHT;
+        case 4:
+            goto LN_TIME;
+        case 5:
+            goto LN_RATE;
+        default:
+            Scr_Error("incorrect number of parameters", 0);
+LN_RATE:
+            rate = GScr_GetOptionalFloat(4u, rate);
+            if ( rate < 0.0 )
+                Scr_ParamError(4u, "must set nonnegative rate", SCRIPTINSTANCE_SERVER);
+LN_TIME:
+            goalTime = GScr_GetOptionalFloat(3u, goalTime);
+            if ( goalTime < 0.0 )
+                Scr_ParamError(3u, "must set nonnegative goal time", SCRIPTINSTANCE_SERVER);
+LN_WEIGHT:
+            goalWeight = GScr_GetOptionalFloat(2u, goalWeight);
+            if ( goalWeight < 0.0 )
+                Scr_ParamError(2u, "must set nonnegative weight", SCRIPTINSTANCE_SERVER);
+LN_ANIM:
+            rootAnim = Scr_GetAnim(1u, tree, SCRIPTINSTANCE_SERVER);
+            anim = Scr_GetAnim(0, tree, SCRIPTINSTANCE_SERVER);
+            if ( rootAnim.tree != anim.tree )
+                Scr_Error("root anim is not in the same anim tree", 0);
+            if ( rootAnim.index == anim.index )
+                Scr_Error("root anim is not an ancestor of the anim", 0);
+            cmdIndex = G_StoreAnimCommand_SP(
+                ent,
+                5,
+                anim.index,
+                rootAnim.index,
+                goalWeight,
+                goalTime,
+                rate,
+                flags);
+            obj = Com_GetServerDObj(ent->s.number);
+            if ( !obj )
+                Scr_ObjectError("No model exists.", SCRIPTINSTANCE_SERVER);
+            if ( goalWeight <= 0.001 )
+                notifyType = 0;
+            else
+                notifyType = 2;
+            if ( (flags & 1) != 0 )
+            {
+                error = XAnimSetCompleteGoalWeightKnobAll(
+                                    obj,
+                                    anim.index,
+                                    rootAnim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    0,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            else
+            {
+                error = XAnimSetGoalWeightKnobAll(
+                                    obj,
+                                    anim.index,
+                                    rootAnim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    0,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            if ( error )
+                GScr_HandleAnimError(error);
+            else
+                G_FlagAnimForUpdate(ent);
+            return;
+    }
+}
+
+// SP 0x00801170
+void __cdecl GScr_SetAnimKnobAll(scr_entref_t entref)
+{
+    GScr_SetAnimKnobAllInternal(entref, 1);
+}
+
+// SP 0x008011B0
+void __cdecl GScr_SetAnimKnobAllRestart(scr_entref_t entref)
+{
+    GScr_SetAnimKnobAllInternal(entref, 3);
+}
+
+// SP 0x00801660
+void __cdecl GScr_SetAnimLimited(scr_entref_t entref)
+{
+    PROF_SCOPED("SetAnimLimited");
+    GScr_SetAnimInternal(entref, 0);
+}
+
+// SP 0x00801680
+void __cdecl GScr_SetAnimRestart(scr_entref_t entref)
+{
+    PROF_SCOPED("SetAnimRestart");
+    GScr_SetAnimInternal(entref, 3);
+}
+
+// SP 0x008016C0
+void __cdecl GScr_GetAnimTime(scr_entref_t entref)
+{
+    XAnimTree_s *tree; // [esp+8h]
+    scr_anim_s anim; // [esp+Ch]
+    gentity_s *ent; // [esp+10h]
+
+    ent = GetEntity(entref);
+    tree = GScr_GetEntAnimTree(ent);
+    anim = Scr_GetAnim(0, tree, SCRIPTINSTANCE_SERVER);
+    if ( !XAnimHasTime(XAnimGetAnims(tree), anim.index) )
+        Scr_ParamError(0, "blended nonsynchronized animation has no concept of time", SCRIPTINSTANCE_SERVER);
+    Scr_AddFloat(XAnimGetTime(tree, anim.index), SCRIPTINSTANCE_SERVER);
+}
+
+// SP 0x00801870. G_StoreAnimCommand type 4.
+// The flagged forms take the notify string as parameter 0 and shift every
+// other parameter up by one; they also require a strictly positive weight
+// ("must set positive weight", not "must set nonnegative weight") and reject
+// animations with no concept of time.
+void __cdecl GScr_SetFlaggedAnimKnobInternal(scr_entref_t entref, char flags)
+{
+    unsigned int notifyType; // [esp+20h]
+    unsigned int notifyName; // [esp+24h]
+    float rate; // [esp+30h]
+    XAnimTree_s *tree; // [esp+34h]
+    DObj *obj; // [esp+38h]
+    int cmdIndex; // [esp+3Ch]
+    float goalWeight; // [esp+40h]
+    float goalTime; // [esp+44h]
+    int error; // [esp+48h]
+    scr_anim_s anim; // [esp+4Ch]
+    gentity_s *ent; // [esp+50h]
+
+    ent = GetEntity(entref);
+    tree = GScr_GetEntAnimTree(ent);
+    rate = 1.0f;
+    goalTime = 0.2f;
+    goalWeight = 1.0f;
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) > 1 )
+    {
+        anim = Scr_GetAnim(1u, tree, SCRIPTINSTANCE_SERVER);
+        XAnimGetParamValue(tree, anim.index, "rate", &rate);
+        XAnimGetParamValue(tree, anim.index, "goaltime", &goalTime);
+        XAnimGetParamValue(tree, anim.index, "goalweight", &goalWeight);
+    }
+    switch ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+    {
+        case 2:
+            goto LN_ANIM;
+        case 3:
+            goto LN_WEIGHT;
+        case 4:
+            goto LN_TIME;
+        case 5:
+            goto LN_RATE;
+        default:
+            Scr_Error("too many parameters", 0);
+LN_RATE:
+            rate = GScr_GetOptionalFloat(4u, rate);
+            if ( rate < 0.0 )
+                Scr_ParamError(4u, "must set nonnegative rate", SCRIPTINSTANCE_SERVER);
+LN_TIME:
+            goalTime = GScr_GetOptionalFloat(3u, goalTime);
+            if ( goalTime < 0.0 )
+                Scr_ParamError(3u, "must set nonnegative goal time", SCRIPTINSTANCE_SERVER);
+LN_WEIGHT:
+            goalWeight = GScr_GetOptionalFloat(2u, goalWeight);
+            if ( goalWeight <= 0.0 )
+                Scr_ParamError(2u, "must set positive weight", SCRIPTINSTANCE_SERVER);
+LN_ANIM:
+            anim = Scr_GetAnim(1u, tree, SCRIPTINSTANCE_SERVER);
+            notifyName = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+            if ( !XAnimHasTime(XAnimGetAnims(tree), anim.index) )
+                Scr_ParamError(1u, "blended nonsynchronized animation has no concept of time", SCRIPTINSTANCE_SERVER);
+            obj = Com_GetServerDObj(ent->s.number);
+            if ( !obj )
+                Scr_ObjectError("No model exists.", SCRIPTINSTANCE_SERVER);
+            cmdIndex = G_StoreAnimCommand_SP(ent, 4, anim.index, 0, goalWeight, goalTime, rate, flags);
+            if ( goalWeight <= 0.001 )
+                notifyType = 0;
+            else
+                notifyType = 2;
+            if ( (flags & 1) != 0 )
+            {
+                error = XAnimSetCompleteGoalWeightKnob(
+                                    obj,
+                                    anim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    notifyName,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            else
+            {
+                error = XAnimSetGoalWeightKnob(
+                                    obj,
+                                    anim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    notifyName,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            if ( error )
+                GScr_HandleAnimError(error);
+            else
+                G_FlagAnimForUpdate(ent);
+            return;
+    }
+}
+
+// SP 0x00801CF0
+void __cdecl GScr_SetFlaggedAnimKnob(scr_entref_t entref)
+{
+    GScr_SetFlaggedAnimKnobInternal(entref, 1);
+}
+
+// SP 0x00801D30
+void __cdecl GScr_SetFlaggedAnimKnobRestart(scr_entref_t entref)
+{
+    GScr_SetFlaggedAnimKnobInternal(entref, 3);
+}
+
+// SP 0x00801D50
+void __cdecl GScr_SetFlaggedAnimKnobLimitedRestart(scr_entref_t entref)
+{
+    GScr_SetFlaggedAnimKnobInternal(entref, 2);
+}
+
+// SP 0x00801D70. G_StoreAnimCommand type 5.
+// The usage-error string is passed in by the caller in SP -- the two wrappers
+// supply distinct texts.
+void __cdecl GScr_SetFlaggedAnimKnobAllInternal(scr_entref_t entref, char flags, const char *pszUsageError)
+{
+    unsigned int notifyType; // [esp+20h]
+    unsigned int notifyName; // [esp+24h]
+    float rate; // [esp+40h]
+    XAnimTree_s *tree; // [esp+4Ch]
+    DObj *obj; // [esp+54h]
+    int cmdIndex; // [esp+58h]
+    float goalWeight; // [esp+5Ch]
+    float goalTime; // [esp+60h]
+    int error; // [esp+64h]
+    scr_anim_s anim; // [esp+6Ch]
+    scr_anim_s rootAnim; // [esp+74h]
+    gentity_s *ent; // [esp+78h]
+
+    ent = GetEntity(entref);
+    tree = GScr_GetEntAnimTree(ent);
+    rate = 1.0f;
+    goalTime = 0.2f;
+    goalWeight = 1.0f;
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) > 1 )
+    {
+        anim = Scr_GetAnim(1u, tree, SCRIPTINSTANCE_SERVER);
+        XAnimGetParamValue(tree, anim.index, "rate", &rate);
+        XAnimGetParamValue(tree, anim.index, "goaltime", &goalTime);
+        XAnimGetParamValue(tree, anim.index, "goalweight", &goalWeight);
+    }
+    switch ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+    {
+        case 3:
+            goto LN_ANIM;
+        case 4:
+            goto LN_WEIGHT;
+        case 5:
+            goto LN_TIME;
+        case 6:
+            goto LN_RATE;
+        default:
+            Scr_Error(pszUsageError, 0);
+LN_RATE:
+            rate = GScr_GetOptionalFloat(5u, rate);
+            if ( rate < 0.0 )
+                Scr_ParamError(5u, "must set nonnegative rate", SCRIPTINSTANCE_SERVER);
+LN_TIME:
+            goalTime = GScr_GetOptionalFloat(4u, goalTime);
+            if ( goalTime < 0.0 )
+                Scr_ParamError(4u, "must set nonnegative goal time", SCRIPTINSTANCE_SERVER);
+LN_WEIGHT:
+            goalWeight = GScr_GetOptionalFloat(3u, goalWeight);
+            if ( goalWeight <= 0.0 )
+                Scr_ParamError(3u, "must set positive weight", SCRIPTINSTANCE_SERVER);
+LN_ANIM:
+            rootAnim = Scr_GetAnim(2u, tree, SCRIPTINSTANCE_SERVER);
+            anim = Scr_GetAnim(1u, tree, SCRIPTINSTANCE_SERVER);
+            notifyName = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+            if ( !XAnimHasTime(XAnimGetAnims(tree), anim.index) )
+                Scr_ParamError(1u, "blended nonsynchronized animation has no concept of time", SCRIPTINSTANCE_SERVER);
+            if ( rootAnim.tree != anim.tree )
+                Scr_Error("root anim is not in the same anim tree", 0);
+            if ( rootAnim.index == anim.index )
+                Scr_Error("root anim is not an ancestor of the anim", 0);
+            cmdIndex = G_StoreAnimCommand_SP(
+                ent,
+                5,
+                anim.index,
+                rootAnim.index,
+                goalWeight,
+                goalTime,
+                rate,
+                flags);
+            obj = Com_GetServerDObj(ent->s.number);
+            if ( !obj )
+                Scr_ObjectError("No model exists.", SCRIPTINSTANCE_SERVER);
+            if ( goalWeight <= 0.001 )
+                notifyType = 0;
+            else
+                notifyType = 2;
+            if ( (flags & 1) != 0 )
+            {
+                error = XAnimSetCompleteGoalWeightKnobAll(
+                                    obj,
+                                    anim.index,
+                                    rootAnim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    notifyName,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            else
+            {
+                error = XAnimSetGoalWeightKnobAll(
+                                    obj,
+                                    anim.index,
+                                    rootAnim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    notifyName,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            if ( error )
+                GScr_HandleAnimError(error);
+            else
+                G_FlagAnimForUpdate(ent);
+            return;
+    }
+}
+
+// SP 0x008021C0
+void __cdecl GScr_SetFlaggedAnimKnobAll(scr_entref_t entref)
+{
+    GScr_SetFlaggedAnimKnobAllInternal(entref, 1, "illegal call to SetFlaggedAnimKnobAll()\n");
+}
+
+// SP 0x008021F0
+void __cdecl GScr_SetFlaggedAnimKnobAllRestart(scr_entref_t entref)
+{
+    GScr_SetFlaggedAnimKnobAllInternal(entref, 3, "illegal call to SetFlaggedAnimKnobAllRestart()\n");
+}
+
+// SP 0x00802220. G_StoreAnimCommand type 3 (same as GScr_SetAnimInternal).
+void __cdecl GScr_SetFlaggedAnimInternal(scr_entref_t entref, char flags)
+{
+    unsigned int notifyType; // [esp+20h]
+    unsigned int notifyName; // [esp+24h]
+    float rate; // [esp+30h]
+    XAnimTree_s *tree; // [esp+34h]
+    DObj *obj; // [esp+38h]
+    int cmdIndex; // [esp+3Ch]
+    float goalWeight; // [esp+40h]
+    float goalTime; // [esp+44h]
+    int error; // [esp+48h]
+    scr_anim_s anim; // [esp+4Ch]
+    gentity_s *ent; // [esp+50h]
+
+    ent = GetEntity(entref);
+    tree = GScr_GetEntAnimTree(ent);
+    rate = 1.0f;
+    goalTime = 0.2f;
+    goalWeight = 1.0f;
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) > 1 )
+    {
+        anim = Scr_GetAnim(1u, tree, SCRIPTINSTANCE_SERVER);
+        XAnimGetParamValue(tree, anim.index, "rate", &rate);
+        XAnimGetParamValue(tree, anim.index, "goaltime", &goalTime);
+        XAnimGetParamValue(tree, anim.index, "goalweight", &goalWeight);
+    }
+    switch ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+    {
+        case 2:
+            goto LN_ANIM;
+        case 3:
+            goto LN_WEIGHT;
+        case 4:
+            goto LN_TIME;
+        case 5:
+            goto LN_RATE;
+        default:
+            Scr_Error("incorrect number of parameters", 0);
+LN_RATE:
+            rate = GScr_GetOptionalFloat(4u, rate);
+            if ( rate < 0.0 )
+                Scr_ParamError(4u, "must set nonnegative rate", SCRIPTINSTANCE_SERVER);
+LN_TIME:
+            goalTime = GScr_GetOptionalFloat(3u, goalTime);
+            if ( goalTime < 0.0 )
+                Scr_ParamError(3u, "must set nonnegative goal time", SCRIPTINSTANCE_SERVER);
+LN_WEIGHT:
+            goalWeight = GScr_GetOptionalFloat(2u, goalWeight);
+            if ( goalWeight <= 0.0 )
+                Scr_ParamError(2u, "must set positive weight", SCRIPTINSTANCE_SERVER);
+LN_ANIM:
+            anim = Scr_GetAnim(1u, tree, SCRIPTINSTANCE_SERVER);
+            notifyName = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+            if ( !XAnimHasTime(XAnimGetAnims(tree), anim.index) )
+                Scr_ParamError(1u, "blended nonsynchronized animation has no concept of time", SCRIPTINSTANCE_SERVER);
+            cmdIndex = G_StoreAnimCommand_SP(ent, 3, anim.index, 0, goalWeight, goalTime, rate, flags);
+            obj = Com_GetServerDObj(ent->s.number);
+            if ( !obj )
+                Scr_ObjectError("No model exists.", SCRIPTINSTANCE_SERVER);
+            if ( goalWeight <= 0.001 )
+                notifyType = 0;
+            else
+                notifyType = 2;
+            if ( (flags & 1) != 0 )
+            {
+                error = XAnimSetCompleteGoalWeight(
+                                    obj,
+                                    anim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    notifyName,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            else
+            {
+                error = XAnimSetGoalWeight(
+                                    obj,
+                                    anim.index,
+                                    goalWeight,
+                                    goalTime,
+                                    rate,
+                                    notifyName,
+                                    notifyType,
+                                    (flags & 2) != 0,
+                                    cmdIndex);
+            }
+            if ( error )
+                GScr_HandleAnimError(error);
+            else
+                G_FlagAnimForUpdate(ent);
+            return;
+    }
+}
+
+// SP 0x008026A0
+void __cdecl GScr_SetFlaggedAnim(scr_entref_t entref)
+{
+    GScr_SetFlaggedAnimInternal(entref, 1);
+}
+
+// SP 0x008026C0
+void __cdecl GScr_SetFlaggedAnimLimited(scr_entref_t entref)
+{
+    GScr_SetFlaggedAnimInternal(entref, 0);
+}
+
+// SP 0x008026E0
+void __cdecl GScr_SetFlaggedAnimRestart(scr_entref_t entref)
+{
+    GScr_SetFlaggedAnimInternal(entref, 3);
+}
+
+// SP 0x008027D0. G_StoreAnimCommand type 6.
+void __cdecl GScr_SetAnimTime(scr_entref_t entref)
+{
+    XAnim_s *anims; // eax
+    int NumParam; // eax
+    XAnimTree_s *tree; // [esp+8h]
+    scr_anim_s anim; // [esp+Ch]
+    gentity_s *ent; // [esp+10h]
+    float time; // [esp+14h]
+
+    ent = GetEntity(entref);
+    time = 0.0f;
+    tree = GScr_GetEntAnimTree(ent);
+    NumParam = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    if ( NumParam != 1 )
+    {
+        if ( NumParam != 2 )
+            Scr_Error("too many parameters", 0);
+        time = Scr_GetFloat(1u, SCRIPTINSTANCE_SERVER);
+        if ( time < 0.0 )
+        {
+            Scr_ParamError(1u, "must be > 0", SCRIPTINSTANCE_SERVER);
+            time = 0.0f;
+        }
+        else if ( time > 1.0 )
+        {
+            Scr_ParamError(1u, "must be < 1", SCRIPTINSTANCE_SERVER);
+            time = 1.0f;
+        }
+    }
+    anim = Scr_GetAnim(0, tree, SCRIPTINSTANCE_SERVER);
+    anims = XAnimGetAnims(tree);
+    if ( !XAnimHasTime(anims, anim.index) )
+        Scr_ParamError(0, "not a timed animation", SCRIPTINSTANCE_SERVER);
+    if ( time == 1.0 && XAnimIsLooped(anims, anim.index) )
+        Scr_ParamError(1u, "cannot set time 1 on looping animation", SCRIPTINSTANCE_SERVER);
+    const int cmdIndex = G_StoreAnimCommand_SP(ent, 6, anim.index, 0, 1.0f, time, 1.0f, 1);
+    XAnimSetTime(tree, anim.index, time, static_cast<unsigned __int16>(cmdIndex));
+    G_FlagAnimForUpdate(ent);
+}
+#endif
+
 void __cdecl G_SetAnimTree(gentity_s *ent, scr_animtree_t *animtree)
 {
     XAnimTree_s *oldAnimTree; // [esp+0h] [ebp-4h]
@@ -16569,7 +20100,17 @@ void __cdecl G_SetAnimTree(gentity_s *ent, scr_animtree_t *animtree)
     if ( !animtree )
     {
         if ( !oldAnimTree )
+#ifdef KISAK_SP
+        {
+            // Keep the dedicated snapshot field clear without touching sound.
+            ent->s.animTreeIndex = 0;
+            if ( ent->actor )
+                g_scr_data.actorXAnimTrees[G_GetActorIndex(ent->actor)] = 0;
             return;
+        }
+#else
+            return;
+#endif
         ent->pAnimTree = 0;
         goto LABEL_10;
     }
@@ -16581,6 +20122,40 @@ LABEL_10:
         if ( oldAnimTree )
             Com_XAnimFreeSmallTree(oldAnimTree);
     }
+#ifdef KISAK_SP
+    // Retail keeps a parallel per-actor tree table and moves that pointer into
+    // the corpse slot.  Keep it synchronized with the entity-owned tree when
+    // useAnimTree replaces or clears an actor's species-specific animation set.
+    if ( ent->actor )
+        g_scr_data.actorXAnimTrees[G_GetActorIndex(ent->actor)] = ent->pAnimTree;
+
+    // Retail 0x00502830 publishes a separate animation byte at entityState
+    // +0xD0. Our MP-compatible layout carries it in trailing padding instead.
+    XAnimTree_s *publishedTree = G_GetEntAnimTree(ent);
+    const unsigned int treeIndex = publishedTree
+                                 ? Scr_GetAnimsIndex(XAnimGetAnims(publishedTree), SCRIPTINSTANCE_SERVER)
+                                 : 0;
+    if ( treeIndex > 0x7F
+        && !Assert_MyHandler(
+                    "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\g_scr_main_mp.cpp",
+                    18729,
+                    0,
+                    "%s\n\t(treeIndex) = %i",
+                    "treeIndex <= MAX_XANIMTREE_NUM - 1",
+                    treeIndex) )
+    {
+        __debugbreak();
+    }
+    ent->s.animTreeIndex = static_cast<unsigned char>(treeIndex);
+    Com_Printf(
+        15,
+        "SP animtree publish: ent %d index %u anims %s\n",
+        ent->s.number,
+        treeIndex,
+        publishedTree && XAnimGetAnims(publishedTree)->debugName
+            ? XAnimGetAnims(publishedTree)->debugName
+            : "<none>");
+#endif
 }
 
 void __cdecl GScr_UseAnimTree(scr_entref_t entref)
@@ -16635,6 +20210,1330 @@ static void METHOD_NULLSUB(scr_entref_t ref)
 
 }
 
+#ifdef KISAK_SP
+// --- TODO(SP-STUB) method stubs, registered at the end of methods_3[] ------
+// Same deal as the function stubs: see the TODO(SP-STUB) header immediately
+// above BuiltinFunctionDef functions[] for the full rationale, the VM
+// return/parameter contract that makes an empty body safe, and the
+// SP_STUB_METHOD macro these expand through.
+// ---------------------------------------------------------------------------
+// Local implementation name only; the reconstructed MP source has no attested
+// C/C++ symbol for this retail-only player method.  Retail SP's method record
+// at 0x00A54D04 pairs the exact script name "playweapondeatheffects" with
+// handler 0x00808210.  The handler's command-specific diagnostics independently
+// identify its body: it resolves parameter 0 as a weapon, emits SP event 0xC1,
+// and carries the source entity, weapon index, and optional parameter 1 in the
+// temporary entity state.  Use semantic entityState_s fields here because the
+// reconstructed MP layout is not byte-identical to retail SP's layout.
+static void __cdecl GScr_SPMethod_playweapondeatheffects(scr_entref_t entref)
+{
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) < 1 )
+        Scr_Error("PlayWeaponDeathEffects <weaponName>.\n", false);
+
+    char *weaponName = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    const unsigned int weapon = G_GetWeaponIndexForName(weaponName);
+    if ( !weapon )
+    {
+        Scr_Error(
+            va("PlayWeaponDeathEffects called with unknown weapon name %s\n", weaponName),
+            false);
+    }
+
+    gentity_s *source = GetEntity(entref);
+    gentity_s *tempEnt = G_TempEntity(vec3_origin, static_cast<entity_event_t>(0xC1));
+    tempEnt->s.groundEntityNum = source->s.number;
+    tempEnt->s.weapon = static_cast<unsigned __int16>(weapon);
+
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) == 2 )
+        tempEnt->s.eventParm = static_cast<unsigned __int16>(Scr_GetInt(1, SCRIPTINSTANCE_SERVER));
+}
+
+// Retail SP method record 0x00A545C0 pairs "setdeathcontents" with handler
+// 0x007F54E0.  Its two command-specific diagnostics identify the method, while
+// the body requires exactly one integer argument, rejects non-AI entities, and
+// writes actor_s::deathContents.  Actor_Death_Think later copies this value to
+// the dead actor entity before relinking it.
+static void __cdecl GScr_SPMethod_setdeathcontents(scr_entref_t entref)
+{
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 1 )
+        Scr_Error("setdeathcontents takes one parameter\n", false);
+
+    gentity_s *ent = GetEntity(entref);
+    if ( !ent->actor )
+        Scr_Error("setdeathcontents must be called on an AI only.", false);
+
+    ent->actor->deathContents = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
+}
+
+// Retail SP's server-method table record at 0x00A54E78 pairs the exact script
+// name "haseyes" with handler 0x008062E0.  The body independently identifies
+// the command through its "HasEyes() called with wrong params" diagnostic and
+// toggles entityState_s::lerp.eFlags bit 0x20000 from its sole integer argument.
+// Use the semantic field here; the reconstructed MP and retail SP layouts are
+// not assumed to be byte-identical.
+static void __cdecl GScr_SPMethod_haseyes(scr_entref_t entref)
+{
+    gentity_s *ent = GetEntity(entref);
+
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 1 )
+    {
+        Scr_Error("HasEyes() called with wrong params.\n", false);
+        return;
+    }
+
+    if ( Scr_GetInt(0, SCRIPTINSTANCE_SERVER) )
+        ent->s.lerp.eFlags |= 0x20000u;
+    else
+        ent->s.lerp.eFlags &= ~0x20000u;
+}
+
+// Local implementation name only: there is no attested C/C++ symbol for this
+// retail-only command in the reconstructed source.  Retail SP's methods_3
+// record at 0x00A54F68 pairs "setphysparams" with handler 0x00806BF0.  Its
+// body independently identifies the command with three exact diagnostics,
+// reads three floats, sets the AI entity bounds to
+// (-radius,-radius,minZ)/(radius,radius,maxZ), then copies those bounds into
+// the actor physics state.  The current source exposes those same semantic
+// fields, avoiding any assumption that the MP and SP byte offsets match.
+static void __cdecl GScr_SPMethod_setphysparams(scr_entref_t entref)
+{
+    if ( !zombiemode->current.enabled )
+    {
+        Scr_Error("Invalid call to SetPhysParams()\n", false);
+        return;
+    }
+
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 3 )
+        Scr_Error("setphysparams takes three parameters\n", false);
+
+    gentity_s *ent = GetEntity(entref);
+    if ( !ent->actor )
+        Scr_Error("setphysparams must be called on an AI only.", false);
+
+    const float radius = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+    const float minZ = Scr_GetFloat(1, SCRIPTINSTANCE_SERVER);
+    const float maxZ = Scr_GetFloat(2, SCRIPTINSTANCE_SERVER);
+
+    ent->r.mins[0] = -radius;
+    ent->r.mins[1] = -radius;
+    ent->r.mins[2] = minZ;
+    ent->r.maxs[0] = radius;
+    ent->r.maxs[1] = radius;
+    ent->r.maxs[2] = maxZ;
+    Vec3Copy(ent->r.mins, ent->actor->Physics.vMins);
+    Vec3Copy(ent->r.maxs, ent->actor->Physics.vMaxs);
+}
+
+// Retail SP methods_3 record 0x00A54CE0 pairs "settransported" with handler
+// 0x007FA6A0.  The body matches the adjacent reconstructed setburn and
+// setelectrified methods: validate a non-negative time and a live client,
+// convert seconds to milliseconds, then send reliable server command 0x5D.
+// The local implementation name does not claim an unattested retail C symbol.
+static void __cdecl GScr_SPMethod_settransported(scr_entref_t entref)
+{
+    int clientNum = -1;
+    const float transportedTime = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+    if ( transportedTime < 0.0f )
+        Scr_ParamError(1u, "Time must be positive", SCRIPTINSTANCE_SERVER);
+
+    gentity_s *ent = GetEntity(entref);
+    if ( ent && ent->r.inuse && ent->client )
+        clientNum = ent->s.number;
+    else
+        Scr_Error("settransported() called on an invalid client entity.\n", false);
+
+    SV_GameSendServerCommand(
+        clientNum,
+        SV_CMD_RELIABLE,
+        va("%c %i", 0x5D, static_cast<int>(transportedTime * 1000.0f)));
+}
+
+// <entity> setclientflagasval( <value> ) -- SP only. REAL BODY (this row used to
+// be a no-op TODO(SP-STUB) with 109 corpus call sites).
+//
+// EVIDENCE: retail SP handler 0x008064e0 sits immediately after GScr_SetClientFlag
+// (0x00806400, already named in the Ghidra project and verified against this
+// file's own GScr_SetClientFlag at :17127). The two decompile to the same shape,
+// which is what pins the fields:
+//     GScr_SetClientFlag      : v = Scr_GetInt(0); if (v < 0x10)    { client ? client+0xE4 |= 1<<v : ent+0x8 |= 1<<v; }
+//     setclientflagasval      : v = Scr_GetInt(0); if (v < 0x10000) { client ? client+0xE4 = (client+0xE4 & 0xFFFF0000) | v
+//                                                                            : ent+0x8    = (ent+0x8    & 0xFFFF0000) | v; }
+// client+0xE4 is gclient_s::ps.eFlags2 and ent+0x8 is gentity_s::s.lerp.eFlags2 --
+// confirmed numerically in THIS tree, not assumed: offsetof(gclient_s, ps) == 0
+// and offsetof(playerState_s, eFlags2) == 0xE4, measured by compiling an
+// offsetof probe against these headers. So this builtin overwrites the LOW 16
+// BITS of eFlags2 with the value, leaving the high 16 alone -- i.e. it sets the
+// whole 16-flag client-flag word at once instead of one bit at a time.
+//
+// RETAIL QUIRK PRESERVED VERBATIM: the range check is `< 0x10000` (16 bits of
+// payload) but the diagnostic still says "(0 - 15)", copied from setclientflag.
+// Kept exactly, wording included, because that is what retail prints.
+static void __cdecl GScr_SetClientFlagAsVal_SP(scr_entref_t entref)
+{
+    const char *v1; // eax
+    gentity_s *pSelf; // [esp+0h] [ebp-8h]
+    int val; // [esp+4h] [ebp-4h]
+
+    pSelf = GetEntity(entref);
+    val = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
+    if ( (unsigned int)val < 0x10000 )
+    {
+        if ( pSelf->client )
+            pSelf->client->ps.eFlags2 = pSelf->client->ps.eFlags2 & 0xFFFF0000 | val;
+        else
+            pSelf->s.lerp.eFlags2 = pSelf->s.lerp.eFlags2 & 0xFFFF0000 | val;
+    }
+    else
+    {
+        v1 = va("SetClientFlagAsVal: Index %i out of range (0 - %i)\n", val, 15);
+        Scr_ParamError(0, v1, SCRIPTINSTANCE_SERVER);
+    }
+}
+
+// Local implementation name only; retail's C symbol is not attested in the source tree.
+// The script method identity is nevertheless binary-exact: methods_3 entry 289 at
+// 0x00A54FA4 pairs the literal "gib" with handler 0x00806EB0, whose body carries both
+// Gib-specific diagnostics below and emits event 0xCA with the same bit layout.
+static void __cdecl GScr_SPMethod_gib(scr_entref_t entref)
+{
+    gentity_s *ent = GetEntity(entref);
+    unsigned int eventParm = 0;
+
+    const unsigned int direction = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+    if ( direction == scr_const.freeze )
+        eventParm = 0x100;
+    else if ( direction == scr_const.up )
+        eventParm = 0x200;
+
+    if ( Scr_GetPointerType(1u, SCRIPTINSTANCE_SERVER) != VAR_ARRAY )
+    {
+        Scr_ParamError(
+            1u,
+            va("Parameter (%s) must be an array", Scr_GetTypeName(1u, SCRIPTINSTANCE_SERVER)),
+            SCRIPTINSTANCE_SERVER);
+    }
+
+    const unsigned int arrayId = Scr_GetObject(1u, SCRIPTINSTANCE_SERVER);
+    int arrayIndex = 0;
+    for ( unsigned int id = FindFirstSibling(SCRIPTINSTANCE_SERVER, arrayId);
+          id;
+          id = FindNextSibling(SCRIPTINSTANCE_SERVER, id), ++arrayIndex )
+    {
+        if ( GetValueType(SCRIPTINSTANCE_SERVER, id) != VAR_INTEGER )
+        {
+            Scr_Error(
+                va("Array passed to gib contained member [%i] - valid types are int.", arrayIndex),
+                false);
+        }
+
+        const int tag = GetVariableValueAddress(SCRIPTINSTANCE_SERVER, id)->u.intValue;
+        if ( (unsigned int)tag > 7u )
+        {
+            Scr_Error("Gib tag array passed to 'Gib' contains value out of range 0 -> 7", false);
+            return;
+        }
+        eventParm |= 1u << tag;
+    }
+
+    // Retail SP's event 0xCA is EV_GIB. The reconstructed MP event enum differs, so retain
+    // the observed SP wire value here instead of substituting the MP enum's EV_GIB value.
+    G_AddEvent(ent, 0xCAu, eventParm);
+}
+
+// Local implementation name only; no matching C symbol is attested in the
+// reconstructed source. Retail SP methods_3 entry 256 at 0x00A54E18 pairs the
+// literal "resetmissiledetonationtime" with handler 0x007FCA60. The handler
+// operates only on a missile with a valid weapon. An explicit script argument
+// is seconds; without one, timed-detonation weapons recover the player or AI
+// fuse selected by the same ownership rule used by InitGrenadeTimer.
+static void __cdecl GScr_SPMethod_resetmissiledetonationtime(scr_entref_t entref)
+{
+    gentity_s *missile = GetEntity(entref);
+    if ( missile->s.eType != ET_MISSILE || !missile->s.weapon )
+        return;
+
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) )
+    {
+        missile->nextthink = level.time
+            + (int)(Scr_GetFloat(0, SCRIPTINSTANCE_SERVER) * 1000.0f);
+        return;
+    }
+
+    const WeaponDef *weapDef = BG_GetWeaponDef(missile->s.weapon);
+    if ( !weapDef || !weapDef->timedDetonation )
+        return;
+
+    const bool hasPlayerOwner = missile->r.ownerNum.isDefined() && missile->r.ownerNum.ent()->client;
+    missile->nextthink = level.time + (hasPlayerOwner ? weapDef->fuseTime : weapDef->aiFuseTime);
+}
+
+// Local implementation name only; retail's exact C symbol is not attested in
+// this tree. SP methods_3 entry 41 at 0x00A54404 pairs "getcentroid" with
+// handler 0x007F35D0, which calls the line-for-line source counterpart
+// G_EntityCentroid and returns the resulting vector to script.
+static void __cdecl GScr_SPMethod_getcentroid(scr_entref_t entref)
+{
+    float centroid[3];
+    G_EntityCentroid(GetEntity(entref), centroid);
+    Scr_AddVector(centroid, SCRIPTINSTANCE_SERVER);
+}
+
+// Retail's G_CalcMuzzlePoints also has scr_vehicle, actor, and turret branches.
+// This reconstruction has the exact client branch and an attested actor helper;
+// fail explicitly for the two still-missing branches instead of returning the
+// uninitialized weaponParms data left by the MP-only helper.
+static bool GScr_SPFillWeaponParms(gentity_s *ent, weaponParms *wp)
+{
+    Weapon_SetWeaponParamsWeapon(wp, ent->s.weapon);
+
+    if ( ent->client )
+    {
+        G_CalcMuzzlePoints(ent, wp, 1);
+    }
+    else if ( ent->actor )
+    {
+        Actor_FillWeaponParms(ent->actor, wp);
+    }
+    else
+    {
+        Scr_ObjectError(
+            "SP weapon parameters are not implemented for this entity type",
+            SCRIPTINSTANCE_SERVER);
+        return false;
+    }
+
+    return true;
+}
+
+// Retail SP methods_3 entry 149 at 0x00A54914 pairs the literal
+// "getweaponforwarddir" with handler 0x00510F50. It initializes weaponParms,
+// calls the attested G_CalcMuzzlePoints(ent, &wp, 1), and returns wp.forward.
+static void __cdecl GScr_SPMethod_getweaponforwarddir(scr_entref_t entref)
+{
+    weaponParms wp;
+    if ( !GScr_SPFillWeaponParms(GetEntity(entref), &wp) )
+        return;
+    Scr_AddVector(wp.forward, SCRIPTINSTANCE_SERVER);
+}
+
+// Retail SP methods_3 entry 148 at 0x00A54908 pairs "getweaponmuzzlepoint"
+// with handler 0x005BA610. Its body is the same weaponParms path as the method
+// above and returns wp.muzzleTrace (+0x24) instead of wp.forward (+0x00).
+static void __cdecl GScr_SPMethod_getweaponmuzzlepoint(scr_entref_t entref)
+{
+    weaponParms wp;
+    if ( !GScr_SPFillWeaponParms(GetEntity(entref), &wp) )
+        return;
+    Scr_AddVector(wp.muzzleTrace, SCRIPTINSTANCE_SERVER);
+}
+
+SP_STUB_METHOD(GScr_SPStubMeth_itemweaponsetoptions,  "itemweaponsetoptions", "0x007f3b50")
+    // TODO(SP-STUB) 47 GSC ref(s), e.g. animscripts/random_weapon:508 -- weapon ItemWeaponSetOptions(9);
+// Per-entity scripted-animation state -- SP only. Retail stores a 100-byte
+// alignment record at gentity+0x2A0. The shared MP/SP gentity_s has no semantic
+// counterpart, so SP keeps the minimum observable state in a side table.
+struct ScriptedAnimAlign_SP
+{
+    bool active;
+    bool updatedOnce;
+    unsigned int updateCount;
+    unsigned __int16 animIndex;
+    unsigned __int16 rootIndex;
+    float baseAxis[4][3];
+    float originOffset[3];
+    float angleOffset[3];
+};
+static ScriptedAnimAlign_SP g_scriptedAnimAlign_SP[1024]; // 1024 == this file's established MAX_GENTITIES bound (see entref.entnum asserts)
+
+struct ScriptedAnimParams_SP
+{
+    unsigned int notifyName;
+    float origin[3];
+    float angles[3];
+    scr_anim_s anim;
+    unsigned int mode;
+    scr_anim_s root;
+    float rate;
+    float goalTime;
+};
+
+static ScriptedAnimParams_SP GScr_ReadScriptedAnimParams_SP(gentity_s *ent)
+{
+    ScriptedAnimParams_SP params = {};
+    XAnimTree_s *tree = GScr_GetEntAnimTree(ent);
+    const int numParam = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+
+    params.rate = 1.0f;
+    params.goalTime = 0.0f;
+    if ( numParam > 4 )
+    {
+        params.mode = Scr_GetConstString(4u, SCRIPTINSTANCE_SERVER);
+        const char *modeName = SL_ConvertToString(params.mode, SCRIPTINSTANCE_SERVER);
+        if ( I_stricmp(modeName, "normal") && I_stricmp(modeName, "deathplant") )
+            Scr_Error(va("Illegal mode %s for animScripted. Valid modes are normal and deathplant", modeName), SCRIPTINSTANCE_SERVER);
+    }
+    if ( numParam > 5 && Scr_GetType(5u, SCRIPTINSTANCE_SERVER) )
+        params.root = Scr_GetAnim(5u, tree, SCRIPTINSTANCE_SERVER);
+    if ( numParam > 6 && Scr_GetType(6u, SCRIPTINSTANCE_SERVER) )
+        params.rate = Scr_GetFloat(6u, SCRIPTINSTANCE_SERVER);
+    if ( numParam > 7 && Scr_GetType(7u, SCRIPTINSTANCE_SERVER) )
+        params.goalTime = Scr_GetFloat(7u, SCRIPTINSTANCE_SERVER);
+
+    params.anim = Scr_GetAnim(3u, tree, SCRIPTINSTANCE_SERVER);
+    Scr_GetVector(2u, params.angles, SCRIPTINSTANCE_SERVER);
+    Scr_GetVector(1u, params.origin, SCRIPTINSTANCE_SERVER);
+    params.notifyName = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+    return params;
+}
+
+static void GScr_ApplyScriptedAnim_SP(gentity_s *ent, const ScriptedAnimParams_SP &params, bool dontInterpolate)
+{
+    DObj *obj = Com_GetServerDObj(ent->s.number);
+    if ( !obj )
+        Scr_ObjectError("No model exists.", SCRIPTINSTANCE_SERVER);
+
+    ScriptedAnimAlign_SP &align = g_scriptedAnimAlign_SP[ent->s.number];
+    memset(&align, 0, sizeof(align));
+    align.animIndex = params.anim.index;
+    align.rootIndex = params.root.index;
+    AnglesToAxis(params.angles, align.baseAxis);
+    align.baseAxis[3][0] = params.origin[0];
+    align.baseAxis[3][1] = params.origin[1];
+    align.baseAxis[3][2] = params.origin[2];
+
+    Com_Printf(
+        15,
+        "SP scripted anim apply: ent %d anim %u from (%.2f %.2f %.2f) to (%.2f %.2f %.2f)\n",
+        ent->s.number,
+        params.anim.index,
+        ent->r.currentOrigin[0],
+        ent->r.currentOrigin[1],
+        ent->r.currentOrigin[2],
+        params.origin[0],
+        params.origin[1],
+        params.origin[2]);
+
+    // Retail 0x007D4FF0 publishes a separate type-2 command before strictly
+    // clearing the supplied root subtree.  This order matters: the client can
+    // otherwise retain actor locomotion weights which blend over the scripted
+    // leaf even though that leaf itself reports weight 1 and advances time.
+    if ( params.root.linkPointer && obj->localTree )
+    {
+        const int rootCmdIndex = G_StoreAnimCommand_SP(
+            ent,
+            2,
+            params.root.index,
+            0,
+            0.0f,
+            0.2f,
+            1.0f,
+            1);
+        XAnimClearTreeGoalWeightsStrict(obj->localTree, params.root.index, 0.2f, rootCmdIndex);
+    }
+
+    // Retail restarts non-looping clips when interpolation is enabled. Passing
+    // dontInterpolate straight through as bRestart inverted this rule and could
+    // leave an existing enter clip at its old/end time.
+    const bool restart = !dontInterpolate
+                      && obj->localTree
+                      && !XAnimIsLooped(obj->localTree->anims, params.anim.index);
+    // Retail's actor preparation helper (0x007D4FF0) raises the actor's
+    // parent blend nodes before the leaf is started.  That helper depends on
+    // SP-only actor layout which this reconstruction does not carry.  A plain
+    // XAnimSetGoalWeight leaves those allocated parents at weight zero, so
+    // XAnimUpdateTimeAndNotetrack prunes the branch before reaching the leaf
+    // (observed live on ch_frontend_guy_01_enter: leaf weight/rate 1, time 0).
+    // The engine's complete variant performs the same required ancestor walk.
+    const int cmdIndex = G_StoreAnimCommand_SP(
+        ent,
+        3,
+        params.anim.index,
+        0,
+        1.0f,
+        params.goalTime,
+        params.rate,
+        1 | (restart ? 2 : 0));
+    const int error = XAnimSetCompleteGoalWeight(
+        obj,
+        params.anim.index,
+        1.0f,
+        params.goalTime,
+        params.rate,
+        params.notifyName,
+        2,
+        restart,
+        cmdIndex);
+    if ( error )
+        GScr_HandleAnimError(error);
+    else
+        G_FlagAnimForUpdate(ent);
+
+    // Retail 0x0044ECE0 stores the difference between the entity's current
+    // transform and the animation's aligned root transform. Its per-frame
+    // consumer (0x00501350) gradually consumes that correction while following
+    // root motion. Keep the same state here rather than a one-time position
+    // snap, which Actor_PreThink can immediately undo.
+    float rotation[2];
+    float translation[3];
+    float animatedOrigin[3];
+    float yawAxis[3][3];
+    float animatedAxis[3][3];
+    float animatedAngles[3];
+    XAnimCalcAbsDelta(obj, params.anim.index, rotation, translation);
+    MatrixTransformVector43(translation, align.baseAxis, animatedOrigin);
+    YawToAxis(static_cast<float>(RotationToYaw(rotation)), yawAxis);
+    MatrixMultiply(yawAxis, align.baseAxis, animatedAxis);
+    AxisToAngles(animatedAxis, animatedAngles);
+    for ( int i = 0; i < 3; ++i )
+    {
+        align.originOffset[i] = ent->r.currentOrigin[i] - animatedOrigin[i];
+        align.angleOffset[i] = AngleNormalize180(ent->r.currentAngles[i] - animatedAngles[i]);
+    }
+    align.active = true;
+}
+
+void __cdecl GScr_StartScriptedAnim_SP(scr_entref_t entref, bool startActorThread, bool dontInterpolate)
+{
+    gentity_s *ent = GetEntity(entref);
+    if ( !Com_GetServerDObj(ent->s.number) )
+        Scr_ObjectError("No model exists.", SCRIPTINSTANCE_SERVER);
+
+    const ScriptedAnimParams_SP params = GScr_ReadScriptedAnimParams_SP(ent);
+    actor_s *actor = ent->actor;
+    if ( actor && !actor->Physics.bIsAlive )
+        Scr_Error("tried to play a scripted animation on a dead AI", SCRIPTINSTANCE_SERVER);
+
+    if ( actor && startActorThread )
+    {
+        Com_Printf(15, "SP scripted anim dispatch: ent %d actor thread, anim %u\n", ent->s.number, params.anim.index);
+        Actor_PushState(actor, AIS_SCRIPTEDANIM);
+        Actor_KillAnimScript(actor);
+
+        Scr_AddFloat(params.goalTime, SCRIPTINSTANCE_SERVER);
+        Scr_AddFloat(params.rate, SCRIPTINSTANCE_SERVER);
+        if ( params.root.linkPointer )
+            Scr_AddAnim(params.root, SCRIPTINSTANCE_SERVER);
+        else
+            Scr_AddUndefined(SCRIPTINSTANCE_SERVER);
+        if ( params.mode )
+            Scr_AddConstString(params.mode, SCRIPTINSTANCE_SERVER);
+        else
+            Scr_AddUndefined(SCRIPTINSTANCE_SERVER);
+        Scr_AddAnim(params.anim, SCRIPTINSTANCE_SERVER);
+        Scr_AddVector(const_cast<float *>(params.angles), SCRIPTINSTANCE_SERVER);
+        Scr_AddVector(const_cast<float *>(params.origin), SCRIPTINSTANCE_SERVER);
+        Scr_AddConstString(params.notifyName, SCRIPTINSTANCE_SERVER);
+
+        const unsigned __int16 thread = Scr_ExecEntThread(ent, g_scr_data.scripted, 8u);
+        Com_Printf(15, "SP scripted anim thread: ent %d handle %u script %d\n", ent->s.number, thread, g_scr_data.scripted);
+        Scr_FreeThread(thread, SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    Com_Printf(
+        15,
+        "SP scripted anim dispatch: ent %d %s direct, anim %u\n",
+        ent->s.number,
+        actor ? "actor" : "entity",
+        params.anim.index);
+
+    GScr_ApplyScriptedAnim_SP(ent, params, dontInterpolate);
+
+    // Retail also has a generic per-frame consumer for non-actor scripted
+    // movers. That path is not reconstructed yet, so retain the established
+    // one-shot alignment fallback for those entities. Actors must use the
+    // state-driven correction path above; snapping them is immediately undone
+    // by Actor_PreThink and was the original frontend-chair failure mode.
+    if ( !actor )
+    {
+        G_SetOrigin(ent, params.origin);
+        G_SetAngle(ent, params.angles);
+        SV_LinkEntity(ent);
+    }
+}
+
+void __cdecl GScr_AnimScripted_SP(scr_entref_t entref)
+{
+    const int numParam = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    if ( numParam < 4 || numParam > 8 )
+        Scr_Error("Incorrect number of parameters for animscripted command", SCRIPTINSTANCE_SERVER);
+    GScr_StartScriptedAnim_SP(entref, true, false);
+}
+
+bool __cdecl GScr_IsScriptedAnimActive_SP(const gentity_s *ent)
+{
+    return ent && static_cast<unsigned int>(ent->s.number) < 1024u && g_scriptedAnimAlign_SP[ent->s.number].active;
+}
+
+void __cdecl GScr_UpdateScriptedAnim_SP(gentity_s *ent)
+{
+    if ( !ent || static_cast<unsigned int>(ent->s.number) >= 1024u )
+        return;
+
+    ScriptedAnimAlign_SP &align = g_scriptedAnimAlign_SP[ent->s.number];
+    if ( !align.active )
+        return;
+
+    DObj *obj = Com_GetServerDObj(ent->s.number);
+    if ( !obj || !obj->localTree || !align.animIndex )
+    {
+        Com_Printf(
+            15,
+            "SP scripted anim update aborted: ent %d obj %p tree %p anim %u\n",
+            ent->s.number,
+            obj,
+            obj ? obj->localTree : NULL,
+            align.animIndex);
+        align.active = false;
+        return;
+    }
+
+    float rotation[2];
+    float translation[3];
+    float alignedOrigin[3];
+    float origin[3];
+    float yawAxis[3][3];
+    float animatedAxis[3][3];
+    float angles[3];
+    XAnimCalcAbsDelta(obj, align.animIndex, rotation, translation);
+    MatrixTransformVector43(translation, align.baseAxis, alignedOrigin);
+    Vec3Copy(alignedOrigin, origin);
+    YawToAxis(static_cast<float>(RotationToYaw(rotation)), yawAxis);
+    MatrixMultiply(yawAxis, align.baseAxis, animatedAxis);
+    AxisToAngles(animatedAxis, angles);
+
+    // 0x00501350 consumes at most 0.25 units of positional correction per
+    // update. This preserves the retail transition from the actor's spawn
+    // transform onto the scene-aligned root-motion track.
+    const float offsetLength = Vec3Length(align.originOffset);
+    if ( offsetLength > 0.0f )
+    {
+        const float fraction = offsetLength > 0.25f ? 0.25f / offsetLength : 1.0f;
+        for ( int i = 0; i < 3; ++i )
+        {
+            const float consumed = align.originOffset[i] * fraction;
+            origin[i] += consumed;
+            align.originOffset[i] -= consumed;
+        }
+    }
+
+    // Retail initializes the SP-only gentity field at +0x328 to 540.0f in
+    // 0x0056AC90 (store at 0x0056AD07), then 0x00501350 multiplies it by the
+    // fixed 0.05-second server tick before consuming the angular correction.
+    // Keep the proven 27-degree step in SP side state instead of reading an
+    // unrelated field from the shared MP-derived gentity_s layout.
+    const float angleCorrectionStep = 540.0f * 0.05f;
+    for ( int i = 0; i < 3; ++i )
+    {
+        float consumed = align.angleOffset[i];
+        if ( consumed > angleCorrectionStep )
+            consumed = angleCorrectionStep;
+        else if ( consumed < -angleCorrectionStep )
+            consumed = -angleCorrectionStep;
+        angles[i] = AngleNormalize360(angles[i] + consumed);
+        align.angleOffset[i] -= consumed;
+    }
+
+    if ( ent->actor )
+    {
+        // Retail actor root update 0x007D53F0 writes the calculated transform
+        // directly. Actor_Think (retail 0x0049E280) publishes trBase and links
+        // after the state callback; calling G_SetOrigin/G_SetAngle here clears
+        // the authored scripted-scene transform that retail keeps in trDelta.
+        Vec3Copy(origin, ent->r.currentOrigin);
+        Vec3Copy(angles, ent->r.currentAngles);
+        Vec3Copy(align.baseAxis[3], ent->s.lerp.pos.trDelta);
+        AxisToAngles(align.baseAxis, ent->s.lerp.apos.trDelta);
+    }
+    else
+    {
+        G_SetOrigin(ent, origin);
+        G_SetAngle(ent, angles);
+        SV_LinkEntity(ent);
+    }
+
+    if ( !align.updateCount || align.updateCount == 19 || align.updateCount == 99 || align.updateCount == 499 )
+    {
+        Com_Printf(
+            15,
+            "SP scripted anim update %u: ent %d anim %u time %.3f weight %.3f flags 0x%x aligned (%.2f %.2f %.2f) pos (%.2f %.2f %.2f) angles (%.2f %.2f %.2f) correction %.2f->%.2f angleCorrection (%.2f %.2f %.2f) trDelta (%.2f %.2f %.2f)\n",
+            align.updateCount + 1,
+            ent->s.number,
+            align.animIndex,
+            XAnimGetTime(obj->localTree, align.animIndex),
+            XAnimGetWeight(obj->localTree, align.animIndex),
+            ent->flags,
+            alignedOrigin[0],
+            alignedOrigin[1],
+            alignedOrigin[2],
+            origin[0],
+            origin[1],
+            origin[2],
+            angles[0],
+            angles[1],
+            angles[2],
+            offsetLength,
+            Vec3Length(align.originOffset),
+            align.angleOffset[0],
+            align.angleOffset[1],
+            align.angleOffset[2],
+            ent->s.lerp.pos.trDelta[0],
+            ent->s.lerp.pos.trDelta[1],
+            ent->s.lerp.pos.trDelta[2]);
+    }
+    if ( align.updateCount == 19 )
+        SV_DObjDisplayAnim(ent, "SP scripted anim tree at update 20:\n");
+    ++align.updateCount;
+
+    // Retail deliberately skips the completion test on the first update.
+    if ( !align.updatedOnce )
+    {
+        align.updatedOnce = true;
+    }
+    else if ( XAnimHasFinished(obj->localTree, align.animIndex) )
+    {
+        const unsigned int finishedAnimIndex = align.animIndex;
+        Com_Printf(
+            15,
+            "SP scripted anim finished: ent %d anim %u updates %u time %.3f\n",
+            ent->s.number,
+            align.animIndex,
+            align.updateCount,
+            XAnimGetTime(obj->localTree, align.animIndex));
+        const int cmdIndex = G_StoreAnimCommand_SP(
+            ent,
+            3,
+            finishedAnimIndex,
+            0,
+            1.0f,
+            0.2f,
+            1.0f,
+            1);
+        XAnimSetCompleteGoalWeight(obj, finishedAnimIndex, 1.0f, 0.2f, 1.0f, 0, 0, 0, cmdIndex);
+        memset(&align, 0, sizeof(align));
+    }
+}
+
+bool __cdecl GScr_RunScriptedMover_SP(gentity_s *ent)
+{
+    if ( !GScr_IsScriptedAnimActive_SP(ent) )
+        return false;
+
+    // Retail G_RunMover's active scripted-animation branch first consumes
+    // root motion into currentOrigin/currentAngles, then links that physical
+    // transform. G_SetOrigin/G_SetAngle leave that extracted transform in
+    // trBase for snapshots. Retail 0x0066aa60 then stores the authored scene
+    // base in trDelta (entity offsets +0x24 and +0x48), not trBase. The SP
+    // client evaluates snapshot trBase directly into centity pose; reversing
+    // these fields pins the rendered mover to its authored origin.
+    GScr_UpdateScriptedAnim_SP(ent);
+    if ( !GScr_IsScriptedAnimActive_SP(ent) )
+        return false;
+
+    ScriptedAnimAlign_SP &align = g_scriptedAnimAlign_SP[ent->s.number];
+    ent->s.lerp.pos.trType = TR_INTERPOLATE;
+    ent->s.lerp.apos.trType = TR_INTERPOLATE;
+    G_RunThink(ent);
+
+    ent->s.lerp.pos.trDelta[0] = align.baseAxis[3][0];
+    ent->s.lerp.pos.trDelta[1] = align.baseAxis[3][1];
+    ent->s.lerp.pos.trDelta[2] = align.baseAxis[3][2];
+    AxisToAngles(align.baseAxis, ent->s.lerp.apos.trDelta);
+    return true;
+}
+
+void __cdecl GScr_ClearScriptedAnim_SP(gentity_s *ent)
+{
+    if ( ent && static_cast<unsigned int>(ent->s.number) < 1024u )
+        g_scriptedAnimAlign_SP[ent->s.number].active = false;
+}
+
+void __cdecl GScr_StopAnimScripted_SP(scr_entref_t entref)
+{
+    gentity_s *ent = GetEntity(entref);
+    if ( ent->actor
+        && ent->actor->eSimulatedState[ent->actor->simulatedStateLevel] == AIS_SCRIPTEDANIM )
+    {
+        Actor_PopState(ent->actor);
+    }
+
+    float blendTime = (Scr_GetNumParam(SCRIPTINSTANCE_SERVER) >= 1 && Scr_GetType(0, SCRIPTINSTANCE_SERVER))
+                            ? Scr_GetFloat(0, SCRIPTINSTANCE_SERVER)
+                            : 0.2f;
+
+    ScriptedAnimAlign_SP &align = g_scriptedAnimAlign_SP[ent->s.number];
+    if ( align.active )
+    {
+        DObj *obj = Com_GetServerDObj(ent->s.number);
+        if ( obj )
+            XAnimSetGoalWeight(obj, align.animIndex, 0.0f, blendTime, 1.0f, 0, 0, 0, 0);
+        align.active = false;
+    }
+}
+// ---------------------------------------------------------------------------
+// <player> playerlinktoabsolute( <parent> [, <tag>] ) -- SP only. REAL BODY
+// (this row used to be a no-op TODO(SP-STUB) with 15 corpus call sites).
+//
+// This is the builtin the SP frontend uses to put the player ON the menu camera.
+// While it was a no-op the player stayed wherever spawnPlayer left them, which
+// is consistent with the reported "positioned under the main-menu level".
+// NOTE: inferred from what the builtin does, NOT from a run -- I cannot run the
+// game.
+//
+// EVIDENCE: retail SP handler 0x007f2f80, decompiled this session. Verbatim
+// order of operations:
+//     self  = GetEntity(entref)
+//     if (Scr_GetType(0) != 1 || Scr_GetPointerType(0) != 0x13) Scr_ParamError(0, "Not an entity")
+//     if (!self->client)                                        Scr_ObjectError("Not a player entity")
+//     parent  = Scr_GetEntity(0)
+//     tagName = 0
+//     if (Scr_GetNumParam() > 1 && Scr_GetType(1) != 0) {
+//         tagName = Scr_GetConstLowercaseString(1); if (tagName == scr_const._) tagName = 0; }
+//     client+0x1C9C = 1.0f;  *(byte *)(client+0x1CA0) = 1;
+//     client+0x000C |= 0x4000000;
+//     client+0x0458 = client+0x045C = client+0x0460 = 0;
+//     client+0x0454 |= 1;
+//     if (!G_EntLinkTo(self, parent, tagName)) Scr_Error("Failed to link entity")
+//
+// FIELD IDENTIFICATION -- by structure, never by raw offset, because the two
+// builds' layouts differ (measured: gentity_s is 0x2F8 here vs a 0x34C stride in
+// the retail image, and retail's ps.linkFlags sits 4 bytes later than this
+// tree's). What pins each field:
+//   * 0x454 / 0x458..0x460 is an int flag word IMMEDIATELY followed by a vec3
+//     that gets zeroed. Retail's own playerlinkto (0x007f2880) manipulates the
+//     SAME pair with bit 2 and then either zeroes the vec3 or fills it via
+//     AxisToAngles -- which is line-for-line this file's ScrCmd_PlayerLinkToDelta
+//     (:2805) doing `ps.linkFlags |= 2` / `Vec3Clear(ps.linkAngles)` /
+//     `AxisToAngles(parentAxis, ps.linkAngles)`. So 0x454 == ps.linkFlags and
+//     0x458 == ps.linkAngles.
+//   * 0x1C9C float=1.0 immediately followed by 0x1CA0 byte=1 is
+//     gclient_s::linkAnglesFrac / gclient_s::linkAnglesLocked, which are adjacent
+//     in that order in g_main_mp.h:73-74. The independent confirmation is
+//     g_scr_vehicle.cpp:2041-2042, which UNDOES exactly this state as a unit:
+//     `client->ps.linkFlags &= ~1u; client->linkAnglesLocked = 0;`. So linkFlags
+//     bit 1 and linkAnglesLocked are the paired "view is welded to the parent"
+//     state, and "absolute" linking is precisely turning that pair on with
+//     frac = 1.0. Both fields are live in this tree: linkAnglesFrac feeds
+//     QuatLerp in g_utils_mp.cpp:1253.
+//   * 0xC is playerState_s::pm_flags -- measured by offsetof probe against these
+//     headers (== 12), and the classic commandTime/pm_type/bobCycle/pm_flags
+//     prologue.
+//
+// HONEST CAVEAT on `ps.pm_flags |= 0x4000000`: it is set for fidelity, but NO
+// code in this reconstruction reads pm_flags bit 26 (tree-wide grep: zero
+// readers, and every pm_flags clear-mask in bg_pmove preserves it). So today it
+// is inert here. It is left in rather than dropped so that whoever ports SP's
+// pmove finds the producer already correct.
+//
+// Retail does NOT bounds-check ent->flags & FL_SUPPORTS_LINKTO here (unlike this
+// file's ScrCmd_PlayerLinkToDelta, which iasserts it); G_EntLinkToInternal
+// asserts it anyway at g_utils_mp.cpp:783. Not added, to stay faithful.
+static void __cdecl GScr_PlayerLinkToAbsolute_SP(scr_entref_t entref)
+{
+    unsigned int tagName; // [esp+8h] [ebp-Ch]
+    gentity_s *parent; // [esp+4h] [ebp-8h]
+    gentity_s *ent; // [esp+0h] [ebp-4h]
+
+    ent = GetEntity(entref);
+    if ( Scr_GetType(0, SCRIPTINSTANCE_SERVER) != 1 || Scr_GetPointerType(0, SCRIPTINSTANCE_SERVER) != 19 )
+        Scr_ParamError(0, "Not an entity", SCRIPTINSTANCE_SERVER);
+    if ( !ent->client )
+        Scr_ObjectError("Not a player entity", SCRIPTINSTANCE_SERVER);
+
+    parent = Scr_GetEntity(0);
+    tagName = 0;
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) > 1 && Scr_GetType(1u, SCRIPTINSTANCE_SERVER) )
+    {
+        tagName = Scr_GetConstLowercaseString(1u, SCRIPTINSTANCE_SERVER);
+        if ( tagName == scr_const._ )
+            tagName = 0;
+    }
+
+    // "absolute" == the player's view is welded to the parent: follow the
+    // parent's angle delta in full (frac 1.0) and lock out the delta blend.
+    ent->client->linkAnglesFrac = 1.0f;
+    ent->client->linkAnglesLocked = 1;
+    ent->client->ps.pm_flags |= 0x4000000u; // see caveat above: inert in this tree today
+    Vec3Clear(ent->client->ps.linkAngles);
+    ent->client->ps.linkFlags |= 1u;
+
+    if ( !G_EntLinkTo(ent, parent, tagName) )
+        Scr_Error("Failed to link entity", 0);
+}
+
+SP_STUB_METHOD(GScr_SPStubMeth_playerlinkto,          "playerlinkto", "0x007f2880")
+    // TODO(SP-STUB) 11 GSC ref(s), e.g. maps/_utility:8076 -- self playerlinkto( linker, "", fraction, right_arc, left_arc, top_arc, bottom_arc, hit_geo );
+SP_STUB_METHOD(GScr_SPStubMeth_lookatentity,          "lookatentity", "0x008061b0")
+    // TODO(SP-STUB) 10 GSC ref(s), e.g. animscripts/death:46 -- self LookAtEntity();
+SP_STUB_METHOD(GScr_SPStubMeth_setblur,               "setblur", "0x007f9f90")
+    // TODO(SP-STUB) 8 GSC ref(s), e.g. maps/_utility:10067 -- players[i] SetBlur( amount, time );
+SP_STUB_METHOD(GScr_SPStubMeth_getvisionsetnaked,     "getvisionsetnaked", "0x007ff550")
+    // TODO(SP-STUB) 7 GSC ref(s), e.g. maps/_autosave:71 -- players[i].savedVisionSet = players[i] GetVisionSetNaked();
+SP_STUB_METHOD(GScr_SPStubMeth_bloodimpact,           "bloodimpact", "0x006050d0")
+    // TODO(SP-STUB) 6 GSC ref(s), e.g. animscripts/utility:2725 -- self BloodImpact( "none" );
+SP_STUB_METHOD(GScr_SPStubMeth_setplayercollision,    "setplayercollision", "0x00806d40")
+    // TODO(SP-STUB) 6 GSC ref(s), e.g. animscripts/death:2015 -- self SetPlayerCollision(false);
+// self stopsounds() -- SP only. REAL BODY (this row used to be a no-op TODO(SP-STUB)).
+//
+// EVIDENCE: retail SP handler 0x007f4a50, decompiled 2026-09-17. Body: entref decode
+// (>>16 != 0 -> Scr_ObjectError "not an entity" -- matches this tree's GetEntity()),
+// clear bit 0 of the 16-bit word at gentity+0xDA, then G_AddEvent(ent, EV_STOPSOUNDS=7, 0).
+// EV_STOPSOUNDS is already fully handled client-side (cg_event.cpp:572-575:
+// SND_StopSoundsOnEnt + CG_SndKillAutoSimEnt), so the event dispatch is the builtin's
+// entire observable gameplay effect and is ported verbatim below.
+//
+// DOCUMENTED DIVERGENCE from retail: the bit-0 clear at +0xDA is NOT ported. That word is
+// the same offset the sibling SP builtins ScrCmd_PlayLoopSound (0x007f48a0, clears the same
+// bit right before writing s.loopSoundId) and startragdoll/disableclientlinkto (0x005fdda0,
+// 0x007f25a0, OR bits 0x2 / 0x200 into it) all read-modify-write, so it is SP-internal
+// per-entity flag storage, not this tree's netcode entityState_s::clientLinkInfo (that
+// struct's offset 0xDA match is coincidental: ScrCmd_StopLoopSound's SP body, the one other
+// function that writes the *source-attested* field at this position -- MP source
+// g_scr_main_mp.cpp's ScrCmd_StopLoopSound sets r.broadcastTime -- never touches +0xDA at
+// all, proving the two are unrelated storage). No consumer of the bit was found anywhere in
+// the binary (no TEST/CMP against it turned up in a full field-access scan), so there is no
+// established C symbol or observable behavior to port it to. Omitted until a consumer or
+// source name is identified.
+static void __cdecl GScr_SPMethod_stopsounds(scr_entref_t entref)
+{
+    gentity_s *ent = GetEntity(entref);
+    G_AddEvent(ent, EV_STOPSOUNDS, 0);
+}
+SP_STUB_METHOD(GScr_SPStubMeth_useweaponhidetags,     "useweaponhidetags", "0x007fe370")
+    // TODO(SP-STUB) 6 GSC ref(s), e.g. maps/_rusher:273 -- self.leftGunModel UseWeaponHideTags( self.weapon );
+// Retail SP 0x008053C0 resolves self, reads parameter 0 as a server const string,
+// and forwards the entity number plus event string to Actor_EventListener_Add.
+static void __cdecl GScr_SPMethod_AddAIEventListener(scr_entref_t entref)
+{
+    gentity_s *ent = GetEntity(entref);
+    const unsigned __int16 eventString = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+    Actor_EventListener_Add(ent->s.number, eventString);
+}
+SP_STUB_METHOD(GScr_SPStubMeth_dontinterpolate,       "dontinterpolate", "0x007f3200")
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. animscripts/dog_combat:1015 -- self dontInterpolate();
+SP_STUB_METHOD(GScr_SPStubMeth_magicgrenade,          "magicgrenade", "0x007f3bd0")
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/_spiderhole:467 -- guy MagicGrenade( tag, target.origin, 3 );
+SP_STUB_METHOD(GScr_SPStubMeth_magicgrenademanual,    "magicgrenademanual", "0x007f3e20")
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. animscripts/banzai:400 -- attacker MagicGrenadeManual( grenadeOrigin, velocity, 0 );
+SP_STUB_METHOD(GScr_SPStubMeth_makefakeai,            "makefakeai", "0x00610130")
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/_drone:507 -- drone makefakeai();
+SP_STUB_METHOD(GScr_SPStubMeth_visionsetlaststand,    "visionsetlaststand", "0x007ff900")
+    // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/_laststand:132 -- self VisionSetLastStand( "zombie_last_stand", 1 );
+SP_STUB_METHOD(GScr_SPStubMeth_visionsetnaked,        "visionsetnaked", "0x007ff420")
+    // TODO(SP-STUB) 3 GSC ref(s), e.g. maps/_callbackglobal:187 -- player VisionSetNaked( player.savedVisionSet, 0.1 );
+// ---------------------------------------------------------------------------
+// self CodeSpawnerSpawn( [flag], [targetname] ) / self CodeSpawnerForceSpawn(...)
+// -- SP only. REAL BODIES (these rows used to be no-op TODO(SP-STUB)s).
+//
+// EVIDENCE: retail SP handlers 0x007f3250 (spawn) and 0x007f33c0 (forcespawn),
+// decompiled 2026-08-22; the two are byte-for-byte identical except the
+// forceSpawn argument passed to SpawnActor (0x00526e50). Retail flow: entref
+// decode (>>16 != 0 -> Scr_ObjectError "not an entity" -- exactly what this
+// tree's GetEntity() does), eType check against the actor-spawner entity type
+// (retail SP raw 0x11; this tree's enum has ET_ACTOR_SPAWNER = 0x12 because
+// the MP eType enum inserts an extra entry -- the SYMBOL is what SP_actor_spawner
+// (actor_spawner.cpp:269) actually stores, so the symbol is correct here),
+// once-per-frame gate on the dword retail keeps at gentity+0x218 (== this
+// tree's spawner.timestamp union slot: item_ent_t item[0].clipAmmoCount,
+// which SP_actor_spawner:270 initializes to -1), optional params
+// [0]=int flag, [1]=targetname const-string, then
+// SpawnActor(spawner, targetname, CHECK_SPAWN/FORCE_SPAWN, flag == 0).
+// NOTE param 0 selects get-enemy-info (flag==0 -> copy), NOT forcing --
+// forcing is the separate builtin. SpawnActor is already fully ported
+// (actor_spawner.cpp:89, verified statement-for-statement against retail
+// 0x00526e50). On success: gate := level.time, Scr_AddEntity(spawn); on NULL
+// or gated: nothing pushed -> undefined, which maps/_utility.gsc's DoSpawn
+// IsDefined() check expects.
+//
+// DOCUMENTED DIVERGENCES from retail:
+//  - spawn-budget counter ++ (0x01c88de8): omitted, same rationale as
+//    GScr_CodeSpawn_SP above (only consumer `oktospawn` is still a stub).
+//  - retail writes spawner's gentity+0x21c dword (this tree: item[0].index)
+//    into the spawned ent's svEntity-side record at +0xF8 (0x027f9808 +
+//    n*0x168). OPEN ITEM: that record dword is networked by
+//    MSG_WriteEntityDelta but its semantics are unestablished; no counterpart
+//    field is identified in this tree's svEntity_s. Omitted until mapped.
+static void __cdecl GScr_CodeSpawnerSpawn_Common(scr_entref_t entref, enumForceSpawn forceSpawn, const char *builtinName)
+{
+    char *v1; // eax
+    const char *v2; // eax
+    const char *nameStr; // [esp+0h] [ebp-10h]
+    unsigned int targetname; // [esp+4h] [ebp-Ch]
+    int flag; // [esp+8h] [ebp-8h]
+    gentity_s *spawner; // [esp+Ch] [ebp-4h]
+    gentity_s *spawn;
+
+    spawner = GetEntity(entref);
+    if ( spawner->s.eType != ET_ACTOR_SPAWNER )
+    {
+        if ( spawner->targetname )
+            nameStr = SL_ConvertToString(spawner->targetname, SCRIPTINSTANCE_SERVER);
+        else
+            nameStr = "<unnamed>";
+        v1 = SL_ConvertToString(spawner->classname, SCRIPTINSTANCE_SERVER);
+        v2 = va(
+            "%s can only be called on actor spawners\n"
+            "attempted to call %s on entity with name '%s' of type '%s' at (%.0f %.0f %.0f)\n",
+            builtinName,
+            builtinName,
+            nameStr,
+            v1,
+            spawner->r.currentOrigin[0],
+            spawner->r.currentOrigin[1],
+            spawner->r.currentOrigin[2]);
+        Scr_Error(v2, 0);
+        return;
+    }
+    if ( spawner->spawner.timestamp >= level.time )
+        return;                             // once-per-frame gate -> undefined
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) >= 1 )
+        flag = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
+    else
+        flag = 0;
+    if ( (unsigned int)Scr_GetNumParam(SCRIPTINSTANCE_SERVER) >= 2 )
+        targetname = (unsigned __int16)Scr_GetConstString(1u, SCRIPTINSTANCE_SERVER);
+    else
+        targetname = 0;
+    spawn = SpawnActor(spawner, targetname, forceSpawn, flag == 0);
+    if ( spawn )
+    {
+        spawner->spawner.timestamp = level.time;
+        Scr_AddEntity(spawn, SCRIPTINSTANCE_SERVER);
+    }
+}
+
+static void __cdecl GScr_CodeSpawnerSpawn_SP(scr_entref_t entref)
+{
+    GScr_CodeSpawnerSpawn_Common(entref, CHECK_SPAWN, "CodeSpawnerSpawn");
+}
+
+static void __cdecl GScr_CodeSpawnerForceSpawn_SP(scr_entref_t entref)
+{
+    // Retail 0x007f33c0: identical to 0x007f3250 but SpawnActor forceSpawn=1
+    // (skips the telefrag + player-visibility refusals).
+    GScr_CodeSpawnerSpawn_Common(entref, FORCE_SPAWN, "CodeSpawnerForceSpawn");
+}
+SP_STUB_METHOD_ZEROVEC(GScr_SPStubMeth_getaivelocity, "getaivelocity", "0x007f53e0")
+    // RETURNS (0,0,0): JUDGEMENT, corpus-supported: animscripts/turn.gsc:237-239 treats the result as
+    //                  a 3-vector (`velocity = (velocity[0], velocity[1], 0); LengthSquared(velocity)`)
+    //                  and uses it only to ask 'is this AI moving'. There is no AI, so zero velocity
+    //                  is the correct answer as well as the safe one.
+    // TODO(SP-STUB) 3 GSC ref(s), e.g. animscripts/shared:224 -- velocity = self GetAiVelocity();
+SP_STUB_METHOD(GScr_SPStubMeth_startfadingblur,       "startfadingblur", "0x007fa080")
+    // TODO(SP-STUB) 3 GSC ref(s), e.g. maps/_bulletcam:238 -- self StartFadingBlur(6, MOVE_TIME * BLUR_TIME );
+SP_STUB_METHOD(GScr_SPStubMeth_getdestructiblename,   "getdestructiblename", "0x007f1db0")
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_createdynents:1873 -- model_name = level.selected_object getdestructiblename();
+SP_STUB_METHOD(GScr_SPStubMeth_setexploderid,         "setexploderid", "0x00449e20")
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_load_common:369 -- temp_ent setexploderid(exploderId);
+// Retail SP setlookattext (0x0048CD50) is implemented in g_sp_crosshair.cpp.
+SP_STUB_METHOD(GScr_SPStubMeth_setmaxhealth,          "setmaxhealth", "0x007f5020")
+    // TODO(SP-STUB) 2 GSC ref(s), e.g. maps/_laststand:784 -- self SetMaxHealth( self.preMaxHealth );
+SP_STUB_METHOD(GScr_SPStubMeth_setvolfog,             "setvolfog", "0x007fee10")
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_load_common:2394 -- player SetVolFog( trigger.script_start_dist,
+SP_STUB_METHOD(GScr_SPStubMeth_getdebugeye,           "getdebugeye", "0x007f4310")
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. animscripts/utility:1184 -- Print3d ((self GetDebugEye()) + (0,0,8), stringtodraw, (1, 1, 1), 1, 0.2);
+// ---------------------------------------------------------------------------
+// <entity> getlinkedent() -- SP only. REAL BODY (this row used to be an
+// undefined-returning TODO(SP-STUB)).
+//
+// EVIDENCE: retail SP handler 0x007f2640 is, in full:
+//     ent = GetEntity(entref);
+//     if (ent+0x298) Scr_AddEntity(*(void **)(ent+0x298));
+// i.e. a null-guarded push of the FIRST member of a struct hanging off the
+// entity. The only such pointer on gentity_s in link-land is tagInfo, whose
+// first member is `gentity_s *parent` (bg_public.h:233-234) -- and this tree's
+// own code does exactly this dereference chain, e.g. g_items.cpp:352-356
+// `ent->tagInfo && ent->tagInfo->parent`, turret.cpp:104, g_mover.cpp:166.
+// "the ent I am linked to" IS tagInfo->parent, so the identification is both
+// structural and semantic.
+//
+// RETURN SHAPE: when the entity is not linked, retail pushes NOTHING, so the
+// call evaluates to undefined. That is deliberate and is what the corpus
+// expects -- maps/_utility.gsc:13572 assigns the result and IsDefined-guards it.
+// This body reproduces that exactly rather than substituting a placeholder.
+static void __cdecl GScr_GetLinkedEnt_SP(scr_entref_t entref)
+{
+    gentity_s *ent; // [esp+0h] [ebp-4h]
+
+    ent = GetEntity(entref);
+    if ( ent->tagInfo )
+        Scr_AddEntity(ent->tagInfo->parent, SCRIPTINSTANCE_SERVER);
+}
+
+SP_STUB_METHOD_INT(GScr_SPStubMeth_haspath, "haspath", "0x00802ad0", 0)
+    // RETURNS 0: JUDGEMENT: 0 = 'no path'. Its one site (animscripts/move.gsc:203) concatenates
+    //            the result into an assertex message, which faults on undefined.
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. animscripts/move:203 -- assertex( moveMode == "walk", "In move script, but moveMode is " + moveMode + ". Prev script: " + self.a.prevS
+static void __cdecl GScr_SPStubMeth_iswaitingonsound(scr_entref_t entref)
+{
+    // Retail SP 0x007F4AA0 is exactly (ent->soundNotifyString != 0). The
+    // reconstructed MP-shaped gentity stores that field in an SP sidecar.
+    Scr_AddInt(G_SPIsWaitingOnSound(GetEntity(entref)), SCRIPTINSTANCE_SERVER);
+}
+SP_STUB_METHOD(GScr_SPStubMeth_setdoublevision,       "setdoublevision", "0x007fa170")
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_utility:10092 -- players[i] SetDoubleVision( amount, time );
+SP_STUB_METHOD(GScr_SPStubMeth_setshadowhint,         "setshadowhint", "0x007f4c40")
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_vehicle:4286 -- self.mgturret[ 0 ] setshadowhint( "never" );
+SP_STUB_METHOD(GScr_SPStubMeth_setvehicleattachments, "setvehicleattachments", "0x00806350")
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_vehicle:2804 -- eModel SetVehicleAttachments( 1 );
+SP_STUB_METHOD(GScr_SPStubMeth_transmittargetname,    "transmittargetname", "0x005e6d50")
+    // TODO(SP-STUB) 1 GSC ref(s), e.g. maps/_load_common:373 -- temp_ent transmittargetname();
+// ===========================================================================
+// TODO(SP-STUB) -- retail-SP threat-bias methods. PLACEMENT IS A FALLBACK,
+// READ THIS BEFORE MOVING THEM.
+//
+// These three come from a retail-SP method table at 0x00A55E40 (5 entries:
+// getenemysqdist, getclosestenemysqdist, setthreatbiasgroup,
+// getthreatbiasgroup, isnotarget), reached through the 2nd link of SP's
+// Scr_GetMethod chain (SP dispatcher FUN_00546810). That table HAS NO
+// COUNTERPART ANYWHERE IN THIS TREE -- its name overlap with all seven repo
+// method tables is exactly ZERO, so there is no "right" table to put them in.
+// (The repo's 5th chain link, Helicopter_GetMethod / s_methods[], is a
+// different table entirely: retail SP has no helicopter method table at all
+// and folds those names into its vehicle table instead.)
+//
+// They are registered HERE, in methods_3[], purely because BuiltIn_GetMethod
+// is the LAST link of Scr_GetMethod's chain, so a name parked here still
+// resolves for every entity type -- exactly as SP's own dedicated table does.
+// This is a deliberate fallback placement, not an attribution claim: if a
+// real threat-bias subsystem is ever reconstructed, these belong in its own
+// table with its own dispatcher inserted into Scr_GetMethod.
+//
+// Placeholders, NOT implementations -- see the TODO(SP-STUB) header above
+// BuiltinFunctionDef functions[]. type == 0 matches retail SP on all three.
+// ===========================================================================
+
+static sentient_s *GScr_GetSentient_SP(scr_entref_t entref)
+{
+    gentity_s *ent = GetEntity(entref);
+    if ( !ent->sentient )
+    {
+        Scr_ObjectError("not a sentient", SCRIPTINSTANCE_SERVER);
+        return NULL;
+    }
+    return ent->sentient;
+}
+
+static void __cdecl GScr_SetThreatBiasGroup_SP(scr_entref_t entref)
+{
+    sentient_s *sentient = GScr_GetSentient_SP(entref);
+    if ( !sentient )
+        return;
+
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 1 )
+    {
+        sentient->iThreatBiasGroupIndex = 0;
+        return;
+    }
+
+    sentient->iThreatBiasGroupIndex = GScr_RequireThreatBiasGroup_SP(0);
+}
+
+static void __cdecl GScr_GetThreatBiasGroup_SP(scr_entref_t entref)
+{
+    sentient_s *sentient = GScr_GetSentient_SP(entref);
+    if ( !sentient )
+        return;
+
+    if ( sentient->iThreatBiasGroupIndex > 0 )
+    {
+        Scr_AddString(
+            SL_ConvertToString(
+                g_threatBias.groupName[sentient->iThreatBiasGroupIndex],
+                SCRIPTINSTANCE_SERVER),
+            SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    Scr_AddString("", SCRIPTINSTANCE_SERVER);
+}
+
+static void __cdecl GScr_GetClosestEnemySqDist_SP(scr_entref_t entref)
+{
+    sentient_s *self = GScr_GetSentient_SP(entref);
+    if ( !self )
+        return;
+
+    actor_s *actor = self->ent->actor;
+    if ( !actor )
+    {
+        Scr_ObjectError("not an actor", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    const team_t enemyTeam = Sentient_EnemyTeam(self->eTeam);
+    if ( enemyTeam == TEAM_FREE )
+        return;
+
+    float selfOrigin[3];
+    Sentient_GetOrigin(self, selfOrigin);
+    float closestSqDist = 100000000.0f;
+
+    const int enemyTeamFlags = 1 << enemyTeam;
+    for ( sentient_s *enemy = Sentient_FirstSentient(enemyTeamFlags);
+          enemy;
+          enemy = Sentient_NextSentient(enemy, enemyTeamFlags) )
+    {
+        const int sentientIndex = (int)(enemy - level.sentients);
+        if ( actor->sentientInfo[sentientIndex].lastKnownPosTime <= 0
+            || (enemy->ent->flags & FL_NOTARGET) != 0
+            || Actor_CheckIgnore(self, enemy) )
+        {
+            continue;
+        }
+
+        float enemyOrigin[3];
+        Sentient_GetOrigin(enemy, enemyOrigin);
+        const float dx = selfOrigin[0] - enemyOrigin[0];
+        const float dy = selfOrigin[1] - enemyOrigin[1];
+        const float dz = selfOrigin[2] - enemyOrigin[2];
+        const float sqDist = dx * dx + dy * dy + dz * dz;
+        if ( sqDist < closestSqDist )
+            closestSqDist = sqDist;
+    }
+
+    Scr_AddFloat(closestSqDist, SCRIPTINSTANCE_SERVER);
+}
+
+// Retail SP's dedicated threat-method table pairs the literal "isnotarget"
+// at 0x009C9FDC with handler 0x0067B6A0. The handler requires a sentient and
+// returns bit 2 of its owning entity's flags. Cmd_Notarget_f and
+// gentityFlags_t independently attest that bit as FL_NOTARGET.
+static void __cdecl GScr_SPMethod_isnotarget(scr_entref_t entref)
+{
+    gentity_s *ent = GetEntity(entref);
+    if ( !ent->sentient )
+    {
+        Scr_ObjectError("not a sentient", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    Scr_AddInt((ent->sentient->ent->flags & FL_NOTARGET) != 0, SCRIPTINSTANCE_SERVER);
+}
+
+// Retail SP table entry 0x00A54B9C pairs "setteamforentity" with handler
+// 0x008042D0. Unlike Sentient_SetTeam, this method writes the entity's compact
+// team byte directly. The body matches the attested GScr_SetTeamForTrigger
+// mapping without that method's trigger-class restriction.
+static void __cdecl GScr_SPMethod_setteamforentity(scr_entref_t entref)
+{
+    gentity_s *ent = GetEntity(entref);
+    const unsigned __int16 team = Scr_GetConstString(0, SCRIPTINSTANCE_SERVER);
+
+    if ( team == scr_const.allies )
+        ent->team = TEAM_ALLIES;
+    else if ( team == scr_const.axis )
+        ent->team = TEAM_AXIS;
+    else if ( team == scr_const.none )
+        ent->team = TEAM_FREE;
+    else
+        Scr_Error(
+            va(
+                "setteamforentity: invalid team used must be %s, %s or %s",
+                SL_ConvertToString(scr_const.allies, SCRIPTINSTANCE_SERVER),
+                SL_ConvertToString(scr_const.axis, SCRIPTINSTANCE_SERVER),
+                SL_ConvertToString(scr_const.none, SCRIPTINSTANCE_SERVER)),
+            SCRIPTINSTANCE_SERVER);
+}
+
+// Retail SP methods_3 entry 23 at 0x00A54350 pairs the literal
+// "playersetgroundreferenceent" with handler 0x007F27C0. The handler stores
+// ENTITYNUM_NONE for an undefined argument, otherwise requires an entity
+// pointer and stores its entity number in retail gclient_s +0x1D10. That
+// offset is inside this reconstruction's much larger MP-derived playerState_s,
+// so extending gclient_s is not layout-correct. Preserve the method state in
+// SP-only side storage until the full SP player-state layout/transport is
+// reconstructed; never alias an unrelated MP field.
+static int g_groundReferenceEntNum_SP[32];
+static bool g_groundReferenceEntNumInitialized_SP;
+
+void __cdecl GScr_ResetGroundReferenceState_SP()
+{
+    for ( int clientNum = 0; clientNum < 32; ++clientNum )
+        g_groundReferenceEntNum_SP[clientNum] = ENTITYNUM_NONE;
+    g_groundReferenceEntNumInitialized_SP = true;
+}
+
+static void GScr_EnsureGroundReferenceState_SP()
+{
+    if ( g_groundReferenceEntNumInitialized_SP )
+        return;
+
+    GScr_ResetGroundReferenceState_SP();
+}
+
+static void __cdecl GScr_SPMethod_playersetgroundreferenceent(scr_entref_t entref)
+{
+    gentity_s *player = GetEntity(entref);
+    if ( !player->client )
+    {
+        Scr_ObjectError("not a player entity", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    GScr_EnsureGroundReferenceState_SP();
+    const int clientNum = player->s.number;
+    if ( static_cast<unsigned int>(clientNum) >= 32u )
+    {
+        Scr_ObjectError("player entity index is outside the client range", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    if ( Scr_GetType(0, SCRIPTINSTANCE_SERVER) == VAR_UNDEFINED )
+    {
+        g_groundReferenceEntNum_SP[clientNum] = ENTITYNUM_NONE;
+        return;
+    }
+
+    if ( Scr_GetType(0, SCRIPTINSTANCE_SERVER) != VAR_POINTER
+        || Scr_GetPointerType(0, SCRIPTINSTANCE_SERVER) != VAR_ENTITY )
+    {
+        Scr_ParamError(0, "not an entity", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    g_groundReferenceEntNum_SP[clientNum] = Scr_GetEntity(0)->s.number;
+}
+
+// Added 2026-08-28. Every SP aitype/<name>.gsc calls this from spawner(), and
+// GScr_LoadScriptsAndAnimsForEntities now compiles those files, so an unregistered name is a
+// compile error that kills the boot. This is an ENTITY method, not an actor one -- retail keeps
+// it outside the 0x00A52058 actor table, at table slot 0x00a54a64.
+//
+// Retail 0x00803af0 read in full, recorded so a later pass need not re-derive it:
+//     ent = <entity from entref>;                            // "not an entity"
+//     if (ent-><short +0xbe> != 0x11)
+//         Scr_Error("setspawnerteam can only be applied to AI spawners");
+//     s = Scr_GetString(0);
+//     "axis" -> ent-><dword +0x214> = 1;  "allies" -> 2;  "neutral" -> 3;
+//     else Scr_ParamError(0, va("unknown team '%s', should be axis, allies, or neutral", s));
+// The two retail offsets are now mapped semantically: s.eType is independently
+// established by GetSpawnerArray/CodeSpawnerSpawn, and gentity_s::team is the
+// compact team field already proven by setteamforentity above.
+static void __cdecl GScr_SPStubMeth_setspawnerteam(scr_entref_t entref)
+{
+    gentity_s *spawner = GetEntity(entref);
+    if ( spawner->s.eType != ET_ACTOR_SPAWNER )
+    {
+        Scr_Error("setspawnerteam can only be applied to AI spawners", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    const char *team = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    if ( !I_stricmp(team, "axis") )
+        spawner->team = TEAM_AXIS;
+    else if ( !I_stricmp(team, "allies") )
+        spawner->team = TEAM_ALLIES;
+    else if ( !I_stricmp(team, "neutral") )
+        spawner->team = TEAM_SPECTATOR;
+    else
+        Scr_ParamError(
+            0,
+            va("unknown team '%s', should be axis, allies, or neutral", team),
+            SCRIPTINSTANCE_SERVER);
+}
+#endif // KISAK_SP
+
 BuiltinMethodDef methods_3[] =
 {
   { "attach", ScrCmd_attach, 0 },
@@ -16686,6 +21585,25 @@ BuiltinMethodDef methods_3[] =
   { "playsoundtoteam", ScrCmd_PlaySoundToTeam, 0 },
   { "playbattlechattertoteam", ScrCmd_PlayBattleChatterToTeam, 0 },
   { "playsoundtoplayer", ScrCmd_PlaySoundToPlayer, 0 },
+#ifdef KISAK_SP
+  // Present in retail SP's method table (0x00A54218) but not in any of this
+  // project's seven method tables. Index = slot index in that SP table.
+  { "stopsound", ScrCmd_StopSound, 0 },      // SP methods_3 idx 56, handler 0x00807B30
+  // SP idx 167 points at 0x00651A30, which is a single 0xC3 (RET) byte followed
+  // by 0xCC padding -- the COMDAT-folded empty stub this table reuses for every
+  // source-empty method. Verified by reading the bytes at that address directly,
+  // not inherited from the (unrelated) symbol Ghidra has parked on it.
+  { "setsoundblend", METHOD_NULLSUB, 0 },    // SP methods_3 idx 167, handler 0x00651A30
+  // The player-method table at 0x00A54E30 and its mirrored descriptor at
+  // 0x00B84B98 both pair this exact name with 0x00651A30. That handler is a
+  // single RET, so retail deliberately ignores the picture in this build.
+  { "givegamerpicture", METHOD_NULLSUB, 0 }, // SP player method, handler 0x00651A30
+  { "playweapondeatheffects", GScr_SPMethod_playweapondeatheffects, 0 }, // SP method record 0x00A54D04, handler 0x00808210
+  { "setdeathcontents", GScr_SPMethod_setdeathcontents, 0 }, // SP method record 0x00A545C0, handler 0x007F54E0
+  { "haseyes", GScr_SPMethod_haseyes, 0 }, // SP method record 0x00A54E78, handler 0x008062E0
+  { "setphysparams", GScr_SPMethod_setphysparams, 0 }, // SP methods_3 record 0x00A54F68, handler 0x00806BF0
+  { "settransported", GScr_SPMethod_settransported, 0 }, // SP methods_3 record 0x00A54CE0, handler 0x007FA6A0
+#endif
   { "playloopsound", ScrCmd_PlayLoopSound, 0 },
   { "stoploopsound", ScrCmd_StopLoopSound, 0 },
   { "playrumbleonentity", METHOD_NULLSUB, 0 },
@@ -16785,6 +21703,41 @@ BuiltinMethodDef methods_3[] =
   { "heliturretdogtrace", GScr_HeliTurretDogTrace, 0 },
   { "playersighttrace", GScr_PlayerSightTrace, 0 },
   { "visionsetlerpratio", GScr_VisionSetLerpRatio, 0 },
+  // NOT ADDED, deliberately: retail SP also registers "visionsetnaked" as a
+  // METHOD here (methods_3 idx 242, handler 0x007FF420), distinct from the
+  // plain function form it keeps in its server function table
+  // (0x00B76BE8 -> 0x007FF320, the all-clients loop) which this project
+  // already has as Scr_VisionSetNaked in functions[]. The method body itself
+  // is recoverable -- it is
+  //   SV_GetConfigstring(0x5ED, buf, 1024);
+  //   Info_SetValueForKey(buf, va("%i", ent->s.number), va("\"%s\" %i", name, ms));
+  //   SV_SetConfigstring(0x5ED, buf);
+  // -- but it cannot be transcribed correctly without also resolving two
+  // things that are outside this pass: (1) SP's configstring index for the
+  // naked visionset is 0x5ED (1517) while this tree's CS_VISIONSET_NAKED is
+  // 0x60E (1550) (sv_init_mp.h:49), so SP's whole configstring enum is shifted
+  // and neither index can just be substituted; (2) SP stores a per-client
+  // INFOSTRING there, while this tree's reader, CG_VisionSetConfigString_Naked
+  // (cg_visionsets.cpp:868), Com_Parse's the slot as a bare "<name> <duration>"
+  // pair. Writing either index with SP's format would be a live bug, not a
+  // partial implementation.
+  //
+  // Same story for "setvolfog" (SP methods_3 idx 247, handler 0x007FEE10),
+  // also already present here as a plain function (Scr_SetVolumetricFog in
+  // functions[]). SP's method body is that same parameter-parsing code plus an
+  // "invalid client entity" gate, but its terminal call to SP's Scr_SetFog
+  // (0x007FE4D0) passes two REGISTER arguments the reconstruction's
+  // Scr_SetFog has no parameters for: EAX = the "setVolFog" name string (which
+  // this tree's Scr_SetFog does take, as its first stack parameter) and
+  // ECX = the entity number the gate produced (which it does not take at all)
+  // -- see 0x007FF0FD-0x007FF190. Adding that parameter would change a
+  // signature shared with Scr_SetExponentialFog on the MP path.
+  //
+  // UPDATE, TODO(SP-STUB) pass: both "visionsetnaked" and "setvolfog" ARE now
+  // registered in this table under KISAK_SP -- but as TODO(SP-STUB) no-op
+  // stubs at the end of the array, NOT as implementations. Everything above
+  // still stands unchanged: their real bodies remain unwritten for exactly
+  // the reasons given, and the stubs exist only so the SP script set links.
   { "docowardswayanims", GScr_DoCowardsWayAnims, 0 },
   { "startpoisoning", GScr_StartPoisoning, 0 },
   { "stoppoisoning", GScr_StopPoisoning, 0 },
@@ -16799,7 +21752,39 @@ BuiltinMethodDef methods_3[] =
   // LWSS ADD FROM LATEST BLOPS RETAIL MP
   { "getgroundent", GScr_GetGroundEnt, 0 },
   // LWSS END
-  { "setanim", GScr_SetAnim, 0 },
+  { "setanim", GScr_SetAnim, 0 },          // SP methods_3 idx 114, handler 0x00801640
+#ifdef KISAK_SP
+  // Retail SP's anim block, methods_3 indices 103..135, listed in SP table
+  // order. This is a subset of that range, not the whole of it -- the index
+  // gaps below are SP entries deliberately left out of this pass, not entries
+  // that are absent from SP. Six of the skipped slots were identified and are
+  // simply out of scope here: idx 104 "clearanimlimited" (0x00800770),
+  // idx 108 "setanimknoblimitedrestart" (0x00800D20),
+  // idx 110 "setanimknoballlimited" (0x00801190),
+  // idx 112 "setanimknoballlimitedrestart" (0x008011D0),
+  // idx 117 "setanimlimitedrestart" (0x008016A0),
+  // idx 130 "setflaggedanimlimitedrestart" (0x00802700).
+  // The remaining skipped slots in the range (113, 119, 120, 122, 131..134)
+  // were not identified and no claim is made about them.
+  { "clearanim", GScr_ClearAnim, 0 },                                             // SP idx 103, 0x00800660
+  { "setanimknob", GScr_SetAnimKnob, 0 },                                         // SP idx 105, 0x00800CC0
+  { "setanimknoblimited", GScr_SetAnimKnobLimited, 0 },                           // SP idx 106, 0x00800CE0
+  { "setanimknobrestart", GScr_SetAnimKnobRestart, 0 },                           // SP idx 107, 0x00800D00
+  { "setanimknoball", GScr_SetAnimKnobAll, 0 },                                   // SP idx 109, 0x00801170
+  { "setanimknoballrestart", GScr_SetAnimKnobAllRestart, 0 },                     // SP idx 111, 0x008011B0
+  { "setanimlimited", GScr_SetAnimLimited, 0 },                                   // SP idx 115, 0x00801660
+  { "setanimrestart", GScr_SetAnimRestart, 0 },                                   // SP idx 116, 0x00801680
+  { "getanimtime", GScr_GetAnimTime, 0 },                                         // SP idx 118, 0x008016C0
+  { "setflaggedanimknob", GScr_SetFlaggedAnimKnob, 0 },                           // SP idx 121, 0x00801CF0
+  { "setflaggedanimknobrestart", GScr_SetFlaggedAnimKnobRestart, 0 },             // SP idx 123, 0x00801D30
+  { "setflaggedanimknoblimitedrestart", GScr_SetFlaggedAnimKnobLimitedRestart, 0 },// SP idx 124, 0x00801D50
+  { "setflaggedanimknoball", GScr_SetFlaggedAnimKnobAll, 0 },                     // SP idx 125, 0x008021C0
+  { "setflaggedanimknoballrestart", GScr_SetFlaggedAnimKnobAllRestart, 0 },       // SP idx 126, 0x008021F0
+  { "setflaggedanim", GScr_SetFlaggedAnim, 0 },                                   // SP idx 127, 0x008026A0
+  { "setflaggedanimlimited", GScr_SetFlaggedAnimLimited, 0 },                     // SP idx 128, 0x008026C0
+  { "setflaggedanimrestart", GScr_SetFlaggedAnimRestart, 0 },                     // SP idx 129, 0x008026E0
+  { "setanimtime", GScr_SetAnimTime, 0 },                                         // SP idx 135, 0x008027D0
+#endif
   { "useanimtree", GScr_UseAnimTree, 0 },
   { "ismartyrdomgrenade", GScr_IsMartyrdomGrenade, 0 },
   { "getentitynumber", GScr_GetEntityNumber, 0 },
@@ -16893,6 +21878,67 @@ BuiltinMethodDef methods_3[] =
   { "setpregameteam", GScr_SetPregameTeam, 0 },
   { "isdemoclient", GScr_isDemoClient, 0 },
   { "istestclient", GScr_isTestClient, 0 }
+#ifdef KISAK_SP
+  ,
+  // TODO(SP-STUB): retail-SP builtin METHODS referenced by the SP script
+  // corpus and absent from every table in the Scr_GetMethod chain. Each
+  // handler below is a no-op stub that warns once and evaluates to undefined
+  // -- NOT an implementation. See the TODO(SP-STUB) header above
+  // BuiltinFunctionDef functions[]. Verified before adding: none of these
+  // names was already present in methods_3[], nor in any of the six tables
+  // Scr_GetMethod consults first (Player_ / ScriptEnt_ / ScriptVehicle_ /
+  // HudElem_ / Helicopter_ / Actor_GetMethod). Trailing comment on each row
+  // is the retail SP handler address for that name.
+  { "setclientflagasval", GScr_SetClientFlagAsVal_SP, 0 },                          // IMPLEMENTED from SP 0x008064e0 (twin of GScr_SetClientFlag 0x00806400)
+  { "gib", GScr_SPMethod_gib, 0 },                                                  // IMPLEMENTED from SP methods_3 entry 289, handler 0x00806eb0
+  { "resetmissiledetonationtime", GScr_SPMethod_resetmissiledetonationtime, 0 },    // IMPLEMENTED from SP methods_3 entry 256, handler 0x007fca60
+  { "getcentroid", GScr_SPMethod_getcentroid, 0 },                                  // IMPLEMENTED from SP methods_3 entry 41, handler 0x007f35d0
+  { "getweaponforwarddir", GScr_SPMethod_getweaponforwarddir, 0 },                  // IMPLEMENTED for the retail player path from SP methods_3 entry 149, handler 0x00510f50
+  { "getweaponmuzzlepoint", GScr_SPMethod_getweaponmuzzlepoint, 0 },                // IMPLEMENTED for the retail player path from SP methods_3 entry 148, handler 0x005ba610
+  { "isnotarget", GScr_SPMethod_isnotarget, 0 },                                    // IMPLEMENTED from SP name-pointer table entry 0x00a55e70, handler 0x0067b6a0
+  { "setteamforentity", GScr_SPMethod_setteamforentity, 0 },                        // IMPLEMENTED from SP name-pointer table entry 0x00a54b9c, handler 0x008042d0
+  { "playersetgroundreferenceent", GScr_SPMethod_playersetgroundreferenceent, 0 },  // IMPLEMENTED from SP methods_3 entry 23, handler 0x007f27c0
+  { "itemweaponsetoptions", GScr_SPStubMeth_itemweaponsetoptions, 0 },              // TODO(SP-STUB) SP 0x007f3b50
+  { "animscripted", GScr_AnimScripted_SP, 0 },                                      // IMPLEMENTED (script_model path) from SP 0x00808690
+  { "stopanimscripted", GScr_StopAnimScripted_SP, 0 },                              // IMPLEMENTED from SP 0x004ce100
+  { "playerlinktoabsolute", GScr_PlayerLinkToAbsolute_SP, 0 },                      // IMPLEMENTED from SP 0x007f2f80
+  { "playerlinkto", GScr_SPStubMeth_playerlinkto, 0 },                              // TODO(SP-STUB) SP 0x007f2880
+  { "lookatentity", GScr_SPStubMeth_lookatentity, 0 },                              // TODO(SP-STUB) SP 0x008061b0
+  { "setspawnerteam", GScr_SPStubMeth_setspawnerteam, 0 },                          // IMPLEMENTED from SP 0x00803af0 (entity method, retail slot 0x00a54a64)
+  { "setblur", GScr_SPStubMeth_setblur, 0 },                                        // TODO(SP-STUB) SP 0x007f9f90
+  { "getvisionsetnaked", GScr_SPStubMeth_getvisionsetnaked, 0 },                    // TODO(SP-STUB) SP 0x007ff550
+  { "bloodimpact", GScr_SPStubMeth_bloodimpact, 0 },                                // TODO(SP-STUB) SP 0x006050d0
+  { "setplayercollision", GScr_SPStubMeth_setplayercollision, 0 },                  // TODO(SP-STUB) SP 0x00806d40
+  { "stopsounds", GScr_SPMethod_stopsounds, 0 },                                    // IMPLEMENTED from SP methods_3 entry 0x00A544C4, handler 0x007f4a50
+  { "useweaponhidetags", GScr_SPStubMeth_useweaponhidetags, 0 },                    // TODO(SP-STUB) SP 0x007fe370
+  { "addaieventlistener", GScr_SPMethod_AddAIEventListener, 0 },                   // IMPLEMENTED from SP 0x008053c0 -> 0x00504260
+  { "dontinterpolate", GScr_SPStubMeth_dontinterpolate, 0 },                        // TODO(SP-STUB) SP 0x007f3200
+  { "magicgrenade", GScr_SPStubMeth_magicgrenade, 0 },                              // TODO(SP-STUB) SP 0x007f3bd0
+  { "magicgrenademanual", GScr_SPStubMeth_magicgrenademanual, 0 },                  // TODO(SP-STUB) SP 0x007f3e20
+  { "makefakeai", GScr_SPStubMeth_makefakeai, 0 },                                  // TODO(SP-STUB) SP 0x00610130
+  { "visionsetlaststand", GScr_SPStubMeth_visionsetlaststand, 0 },                  // TODO(SP-STUB) SP 0x007ff900
+  { "visionsetnaked", GScr_SPStubMeth_visionsetnaked, 0 },                          // TODO(SP-STUB) SP 0x007ff420
+  { "codespawnerforcespawn", GScr_CodeSpawnerForceSpawn_SP, 0 },                    // IMPLEMENTED from SP handler 0x007f33c0
+  { "codespawnerspawn", GScr_CodeSpawnerSpawn_SP, 0 },                              // IMPLEMENTED from SP handler 0x007f3250
+  { "getaivelocity", GScr_SPStubMeth_getaivelocity, 0 },                            // TODO(SP-STUB) SP 0x007f53e0
+  { "startfadingblur", GScr_SPStubMeth_startfadingblur, 0 },                        // TODO(SP-STUB) SP 0x007fa080
+  { "getdestructiblename", GScr_SPStubMeth_getdestructiblename, 0 },                // TODO(SP-STUB) SP 0x007f1db0
+  { "setexploderid", GScr_SPStubMeth_setexploderid, 0 },                            // TODO(SP-STUB) SP 0x00449e20
+  { "setlookattext", G_SPSetLookAtText, 0 },                                       // Retail SP 0x0048CD50
+  { "setmaxhealth", GScr_SPStubMeth_setmaxhealth, 0 },                              // TODO(SP-STUB) SP 0x007f5020
+  { "setvolfog", GScr_SPStubMeth_setvolfog, 0 },                                    // TODO(SP-STUB) SP 0x007fee10
+  { "getdebugeye", GScr_SPStubMeth_getdebugeye, 0 },                                // TODO(SP-STUB) SP 0x007f4310
+  { "getlinkedent", GScr_GetLinkedEnt_SP, 0 },                                      // IMPLEMENTED from SP 0x007f2640 (returns ent->tagInfo->parent)
+  { "haspath", GScr_SPStubMeth_haspath, 0 },                                        // TODO(SP-STUB) SP 0x00802ad0
+  { "iswaitingonsound", GScr_SPStubMeth_iswaitingonsound, 0 },                      // TODO(SP-STUB) SP 0x007f4aa0
+  { "setdoublevision", GScr_SPStubMeth_setdoublevision, 0 },                        // TODO(SP-STUB) SP 0x007fa170
+  { "setshadowhint", GScr_SPStubMeth_setshadowhint, 0 },                            // TODO(SP-STUB) SP 0x007f4c40
+  { "setvehicleattachments", GScr_SPStubMeth_setvehicleattachments, 0 },            // TODO(SP-STUB) SP 0x00806350
+  { "transmittargetname", GScr_SPStubMeth_transmittargetname, 0 },                  // TODO(SP-STUB) SP 0x005e6d50
+  { "setthreatbiasgroup", GScr_SetThreatBiasGroup_SP, 0 },                // IMPLEMENTED from SP 0x008195A0
+  { "getthreatbiasgroup", GScr_GetThreatBiasGroup_SP, 0 },                // IMPLEMENTED from SP 0x00819630
+  { "getclosestenemysqdist", GScr_GetClosestEnemySqDist_SP, 0 },          // IMPLEMENTED from SP 0x00511750
+#endif // KISAK_SP
 };
 
 
@@ -17084,9 +22130,42 @@ void Scr_ParseGameTypeList_FastFile()
     const char *gametypesBuf; // [esp+3Ch] [ebp-8h] BYREF
     gameTypeScript_t *pGameType; // [esp+40h] [ebp-4h]
 
+    // SETTLED 2026-08-26 by the xrefs this marker was waiting on. The frontend-map-load audit was
+    // right and the asset-availability audit's caution, while correct in principle, resolves the
+    // same way once the xrefs are actually run. Both cited addresses in the older note were wrong
+    // by a dropped digit; the real ones are given below and were re-read byte-for-byte.
+    //
+    //   "maps/gametypes/%s"  @ 0x009bb05c -- EXACTLY ONE xref: GScr_LoadGameTypeScript
+    //                                        (0x00612a65). This is the fastfile/script path.
+    //   "maps/mp/gametypes"  @ 0x00a465cc -- EXACTLY ONE xref: UI_GetGameTypesList_LoadObj
+    //                                        (0x0084cc8e), where it is the first argument to
+    //                                        FS_GetFileList, i.e. the LOOSE-FILE dev path. That
+    //                                        is the whole reason the MP spelling survives in the
+    //                                        SP binary, and it is not a fastfile asset name.
+    //   The SP binary contains NO "maps/mp/gametypes/_gametypes.txt" literal at all. Its only
+    //   _gametypes.txt string is the format "%sgametypes/_gametypes.txt" @ 0x00a19940, whose sole
+    //   xref is UI_GetGameTypesList_FastFile (0x0084ce51), and retail passes "maps/" to it --
+    //   building "maps/gametypes/_gametypes.txt". That is the name the asset is stored under in
+    //   SP's zone, which is a property of the zone and not of the function reading it, so it
+    //   settles this server-side site too. The client-side twin in ui_utils.cpp:795-799 already
+    //   carries the identical substitution.
+    // The four literals below are all fastfile asset paths (one DB_FindXAssetHeader lookup plus
+    // its two warning strings, and the per-gametype description lookup), so all four take the
+    // prefix. They now go through GSCR_GAMETYPE_DIR, which this file already defines as
+    // "maps/gametypes/" under KISAK_SP and "maps/mp/gametypes/" otherwise -- the MP expansion is
+    // character-identical to what was here before.
+    // NOT touched: Scr_ParseGameTypeList_LoadObj's own "maps/mp/gametypes" literals above. Retail
+    // SP's LoadObj twin genuinely still uses the MP spelling (see the xref above), so changing
+    // those would be a regression, not a fix.
+    //
+    // HAZARD, unchanged and still valid: fixing the path is CORRECT but NOT SUFFICIENT. SP's
+    // shipped _gametypes.txt payload is literally "zom\r\nsop" (8 bytes), so "cmp" still fails
+    // Scr_IsValidGameType() and SV_SetGametype (sv_game.cpp) still stomps g_gametype to "dm".
+    // Do not read this change as "gametype loading now works" -- it makes the lookup reach the
+    // right asset, nothing more. See the related TODO(SP) in SV_SetGametype.
     memset((unsigned __int8 *)g_scr_data.gametype.list, 0, sizeof(g_scr_data.gametype.list));
     iNumGameTypes = 0;
-    gametypesFile = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, (char*)"maps/mp/gametypes/_gametypes.txt", 1, -1).rawfile;
+    gametypesFile = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, (char*)GSCR_GAMETYPE_DIR "_gametypes.txt", 1, -1).rawfile;
     if ( gametypesFile )
     {
         gametypesBuf = gametypesFile->buffer;
@@ -17103,7 +22182,7 @@ void Scr_ParseGameTypeList_FastFile()
             pGameType = &g_scr_data.gametype.list[iNumGameTypes];
             I_strncpyz(pGameType->pszScript, pszFileName->token, 64);
             I_strlwr(pGameType->pszScript);
-            fullname = va("maps/mp/gametypes/%s.txt", pszFileName->token);
+            fullname = va(GSCR_GAMETYPE_DIR "%s.txt", pszFileName->token);
             rawfile = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, fullname, 1, -1).rawfile;
             if ( rawfile )
                 v2 = strlen(rawfile->buffer);
@@ -17132,12 +22211,12 @@ void Scr_ParseGameTypeList_FastFile()
             {
                 if ( iFileLength > 0 )
                 {
-                    v1 = va("maps/mp/gametypes/%s.txt", pszFileName->token);
+                    v1 = va(GSCR_GAMETYPE_DIR "%s.txt", pszFileName->token);
                     Com_PrintWarning(24, "WARNING: GameType description file %s is too big to load.\n", v1);
                 }
                 else
                 {
-                    v0 = va("maps/mp/gametypes/%s.txt", pszFileName->token);
+                    v0 = va(GSCR_GAMETYPE_DIR "%s.txt", pszFileName->token);
                     Com_PrintWarning(
                         24,
                         "WARNING: Could not load GameType description file %s for gametype %s\n",
@@ -17174,6 +22253,15 @@ void __cdecl Scr_LoadGameType()
 {
     unsigned __int16 t; // [esp+0h] [ebp-4h]
 
+#ifdef KISAK_SP
+    // Consumer half of the bEnforceExists=0 change in GScr_LoadGameTypeScript. SP has no usable
+    // campaign gametype script (maps/gametypes/cmp.gsc is an empty 17-byte asset - see the
+    // evidence there), so the handle is normally 0 and the assert below would fire on every
+    // frontend/campaign spawn. If a zone ever does supply a real gametype script the handle is
+    // non-zero and this behaves exactly as MP. Audit finding B3 (frontend-map-load audit).
+    if ( !g_scr_data.gametype.main )
+        return;
+#endif
     if ( !g_scr_data.gametype.main
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\g_scr_main_mp.cpp",
@@ -17223,6 +22311,9 @@ void __cdecl Scr_PlayerDamage(
                 float *vPoint,
                 float *vDir,
                 hitLocation_t hitLoc,
+#ifdef KISAK_SP
+                int modelIndex,
+#endif
                 int timeOffset)
 {
     unsigned __int16 HitLocationString; // ax
@@ -17230,6 +22321,11 @@ void __cdecl Scr_PlayerDamage(
     unsigned __int16 callback; // [esp+0h] [ebp-4h]
 
     Scr_AddInt(timeOffset, SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+    // Retail Scr_PlayerDamage (0x00437030) pushes modelIndex immediately
+    // after timeOffset, yielding script arguments 9 and 10 respectively.
+    Scr_AddInt(modelIndex, SCRIPTINSTANCE_SERVER);
+#endif
     HitLocationString = G_GetHitLocationString(hitLoc);
     Scr_AddConstString(HitLocationString, SCRIPTINSTANCE_SERVER);
     GScr_AddVector(vDir);
@@ -17244,7 +22340,11 @@ void __cdecl Scr_PlayerDamage(
     Scr_AddInt(damage, SCRIPTINSTANCE_SERVER);
     GScr_AddEntity(attacker);
     GScr_AddEntity(inflictor);
+#ifdef KISAK_SP
+    callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerdamage, 0xBu);
+#else
     callback = Scr_ExecEntThread(self, g_scr_data.gametype.playerdamage, 0xAu);
+#endif
     Scr_FreeThread(callback, SCRIPTINSTANCE_SERVER);
 }
 
@@ -17293,6 +22393,9 @@ void __cdecl Scr_ActorDamage(
                 float *vPoint,
                 float *vDir,
                 hitLocation_t hitLoc,
+#ifdef KISAK_SP
+                int modelIndex,
+#endif
                 int timeOffset)
 {
     unsigned __int16 HitLocationString; // ax
@@ -17300,6 +22403,9 @@ void __cdecl Scr_ActorDamage(
     unsigned __int16 callback; // [esp+0h] [ebp-4h]
 
     Scr_AddInt(timeOffset, SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+    Scr_AddInt(modelIndex, SCRIPTINSTANCE_SERVER);
+#endif
     HitLocationString = G_GetHitLocationString(hitLoc);
     Scr_AddConstString(HitLocationString, SCRIPTINSTANCE_SERVER);
     GScr_AddVector(vDir);
@@ -17314,7 +22420,11 @@ void __cdecl Scr_ActorDamage(
     Scr_AddInt(damage, SCRIPTINSTANCE_SERVER);
     GScr_AddEntity(attacker);
     GScr_AddEntity(inflictor);
+#ifdef KISAK_SP
+    callback = Scr_ExecEntThread(self, g_scr_data.gametype.actordamage, 0xBu);
+#else
     callback = Scr_ExecEntThread(self, g_scr_data.gametype.actordamage, 0xAu);
+#endif
     Scr_FreeThread(callback, SCRIPTINSTANCE_SERVER);
 }
 
@@ -17369,6 +22479,18 @@ void __cdecl Scr_VehicleRadiusDamage(
     char *value; // eax
     unsigned __int16 callback; // [esp+8h] [ebp-4h]
 
+#ifdef KISAK_SP
+    // Consumer half of the CodeCallback_VehicleRadiusDamage guard above -- SP's callbacksetup
+    // script does not define that label, so g_scr_data.gametype.vehicleradiusdamage is never
+    // populated under KISAK_SP.
+    //
+    // The return is placed HERE, before the first Scr_Add*, deliberately. Returning at the
+    // Scr_ExecEntThread call below instead would still push all 13 arguments onto the script VM
+    // stack and then abandon them, corrupting VM state for every later script call -- a subtler
+    // and much harder-to-diagnose failure than the one being fixed. Guarding the producer without
+    // its consumer (or vice versa) is the specific mistake this project has already made once.
+    return;
+#endif
     if ( iWeapon == -1 )
         iWeapon = 0;
     Scr_AddInt(timeOffset, SCRIPTINSTANCE_SERVER);

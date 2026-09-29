@@ -462,7 +462,7 @@ void __cdecl CL_ConfigstringModified(int localClientNum)
     oldGs = (gameState_t *)oldGs_large_local.GetBuf();
     v2 = Cmd_Argv(1);
     index = atoi(v2);
-    if ((unsigned int)index >= 0xCBC)
+    if ((unsigned int)index >= MAX_CONFIGSTRINGS)
         Com_Error(ERR_DROP, "configstring > MAX_CONFIGSTRINGS");
     s = Cmd_Argv(2);
     LocalClientGlobals = CL_GetLocalClientGlobals(localClientNum);
@@ -1114,7 +1114,14 @@ void __cdecl CL_InitCGame(int localClientNum)
     {
         Com_InitDObj();
         if ( useFastFile->current.enabled )
-            Com_LoadLevelFastFiles(mapname);
+        {
+#ifdef KISAK_SP
+            if (!DB_IsZoneLoaded(mapname))
+#endif
+                Com_LoadLevelFastFiles(mapname);
+            // Remote clients have no local SV_SpawnServer to finish this load.
+            DB_SyncXAssets();
+        }
         else
             CL_SetExpectedHunkUsage(LocalClientGlobals->mapname);
     }

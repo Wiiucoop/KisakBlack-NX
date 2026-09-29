@@ -78,7 +78,13 @@ enum //$284BF4CF6978AE12DFEEB2363B7EFFE8 : __int32
     CS_DESTRUCTIBLES_LAST      = 0xCAB,
     CS_ANIMTREES               = 0xCAC,
     CS_ANIMTREES_LAST          = 0xCBB,
+#ifdef KISAK_SP
+    CS_SP_LOOKAT_TEXT          = 0xCBC,
+    CS_SP_LOOKAT_TEXT_LAST     = CS_SP_LOOKAT_TEXT + 2 * 32 - 1,
+    MAX_CONFIGSTRINGS          = CS_SP_LOOKAT_TEXT_LAST + 1,
+#else
     MAX_CONFIGSTRINGS          = 0xCBC,
+#endif
 };
 
 void __cdecl SV_SetConfigstring(int index, char *val);

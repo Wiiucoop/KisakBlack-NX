@@ -45,9 +45,39 @@ enum actor_think_result_t : __int32
 
 enum AISpecies : __int32
 {                                       // XREF: actor_s/r
+#ifdef KISAK_SP
+    // RETAIL SP ORDERING, established 2026-08-28 by three independent facts:
+    //  1. g_animScriptTable (retail 0x01a48c30) is written with four list bases in this order by
+    //     the animscript SET pass -- 0x01c79b64 human, 0x01c7a024 dog, 0x01c7a4e4 zombie,
+    //     0x01c7a9a4 zombie_dog (stride 0x4C0). Each base is proven by the species-specific script
+    //     names its own setter fills it with (dog_* into 0x01c7a024, zombie_dog_* into 0x01c7a9a4).
+    //  2. Actor_AnimTryRun (0x0051ac94) indexes that table as a plain [species] array of pointers.
+    //  3. This tree already carried the answer: ActorScr_SetSpecies's own Scr_Error text reads
+    //     "unknown type '%s', should be human, dog, zombie, zombie_dog" -- the same four names in
+    //     the same order. That string is MP-derived source, not something read out of the SP binary.
+    //
+    // NOTE the value shift: AI_SPECIES_DOG is 0 on MP and 1 on SP. Anything that relied on
+    // AI_SPECIES_DOG being the zero value must be checked, not assumed -- one such site was found
+    // and corrected (ActorCmd_ClearOverrideRunToPos, see actor_script_cmd.cpp).
+    AI_SPECIES_HUMAN      = 0x0,
+    AI_SPECIES_DOG        = 0x1,
+    AI_SPECIES_ZOMBIE     = 0x2,
+    AI_SPECIES_ZOMBIE_DOG = 0x3,
+    MAX_AI_SPECIES        = 0x4,
+    // AI_SPECIES_ALL is UNREFERENCED in this tree, and MP's value (0x1) cannot distinguish the two
+    // readings -- with one species, "count of all species" and "bitmask of all species" are both 1.
+    // Kept equal to MAX_AI_SPECIES so the MP relationship is preserved verbatim. If a future caller
+    // wants the mask (ActorCmd_SetTalkToSpecies builds one with `1 << i`), that is 0xF, not 0x4 --
+    // resolve it against retail before using this constant either way.
+    AI_SPECIES_ALL        = 0x4,
+#else
     AI_SPECIES_DOG = 0x0,
     MAX_AI_SPECIES = 0x1,
     AI_SPECIES_ALL = 0x1,
+#endif
+    // The zero species, for loops that iterate every species. Identical to AI_SPECIES_DOG on MP
+    // (so codegen is unchanged there) and to AI_SPECIES_HUMAN on SP.
+    AI_SPECIES_FIRST = 0x0,
 };
 inline AISpecies &operator++(AISpecies &t)
 {
@@ -333,6 +363,15 @@ struct actor_s // sizeof=0x2780
     int iPotentialCoverNodeCount;
     pathnode_t *pPotentialReacquireNode[10];
     int iPotentialReacquireNodeCount;
+    // Retail SP actor_s +0x1AD8..+0x1AE4.  The actor script methods at
+    // 0x007CE220/0x007CE2C0 write this contiguous range and retail's cover
+    // engagement scorer at 0x007BFD40 reads all four values.  Keep the fields
+    // together at the matching semantic point used by the source counterpart;
+    // reconstruction offsets are not assumed to equal retail offsets.
+    float engageMinDist;
+    float engageMinFalloffDist;
+    float engageMaxDist;
+    float engageMaxFalloffDist;
     ActorCoverArrivalInfo arrivalInfo;
     float fovDot;
     float fMaxSightDistSqrd;
@@ -411,12 +450,16 @@ struct ai_funcs_t // sizeof=0x1C
 };
 
 constexpr float actorMins[3] = { -15.0, -15.0, 0.0 };
+#ifdef KISAK_SP
+constexpr float actorMaxs[3] = { 15.0, 15.0, 72.0 }; // retail SP actorMaxs @ 00a50ca8 = {15, 15, 72}
+#else
 constexpr float actorMaxs[3] = { 15.0, 15.0, 48.0 };
+#endif
 
 constexpr float meleeAttackOffsets[4][2] = { { 1.0, 0.0 }, { 0.0, 1.0 }, { -1.0, 0.0 }, { 0.0, -1.0 } };
 //constexpr float ACTOR_EYE_OFFSET = 64.0f; // in actor_mp.h
 
 
-extern const unsigned __int16 *g_AISpeciesNames[1];
+extern const unsigned __int16 *g_AISpeciesNames[MAX_AI_SPECIES];
 
-extern const ai_funcs_t *AIFuncTable[1];
+extern const ai_funcs_t *AIFuncTable[MAX_AI_SPECIES];

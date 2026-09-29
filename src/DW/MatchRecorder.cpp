@@ -956,7 +956,7 @@ void __cdecl MatchRecordSpawn(gclient_s *client)
                 if ( !numLives )
                 {
                     MatchRecordCopyExternalIP(playerState, client->ps.clientNum);
-                    LODWORD(v1) = SV_GetClientDInt64Stat(client->ps.clientNum, &g_ConnectionID);
+                    v1 = SV_GetClientDInt64Stat(client->ps.clientNum, &g_ConnectionID);
                     MatchRecorderDDLSetInt64(&playerState, "connectionid", v1);
                     upload = (SV_GetClientDIntStat(client->ps.clientNum, &g_UploadBandwitdh) >> 3) / 0x412;
                     MatchRecorderDDLSetInt(&playerState, "upload", upload);

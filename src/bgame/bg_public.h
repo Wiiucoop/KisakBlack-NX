@@ -26,10 +26,19 @@ enum gentityFlags_t : uint32_t // LWSS: not a real enum name, used to force usag
     FL_NO_BOTS              = 0x20,
     FL_NO_HUMANS            = 0x40,
     FL_TOGGLE               = 0x80,
+#ifdef KISAK_SP
+    // Retail SP keeps the dynamic-path state as a compact three-bit group.
+    // BlackOps.exe uses 0x100 for the dynamic-blocker predicate, 0x200 for
+    // automatic path blocking, and 0x400 for the active obstacle state.
+    FL_DYNAMICPATH          = 0x100,
+    FL_AUTO_BLOCKPATHS      = 0x200,
+    FL_OBSTACLE             = 0x400,
+#else
     FL_SOFTACTIVATE         = 0x100,
     FL_LOW_PRIORITY_USEABLE = 0x200,
     FL_NO_HEADCHECK         = 0x400,
     FL_DYNAMICPATH          = 0x800,
+#endif
     FL_SUPPORTS_LINKTO      = 0x1000,
     FL_NO_AUTO_ANIM_UPDATE  = 0x2000,
     FL_GRENADE_TOUCH_DAMAGE = 0x4000,
@@ -44,11 +53,15 @@ enum gentityFlags_t : uint32_t // LWSS: not a real enum name, used to force usag
     FL_MISSILE_ATTRACTOR    = 0x800000,
     FL_TARGET               = 0x1000000,
     FL_WEAPON_BEING_GRABBED = 0x2000000,
+#ifndef KISAK_SP
     FL_OBSTACLE             = 0x4000000,
+#endif
     FL_DODGE_LEFT           = 0x8000000,
     FL_DODGE_RIGHT          = 0x10000000,
     FL_BADPLACE_VOLUME      = 0x20000000,
+#ifndef KISAK_SP
     FL_AUTO_BLOCKPATHS      = 0x40000000,
+#endif
 };
 
 //enum $5313C8230143BA0EE39E1AA1829F5562 : __int32

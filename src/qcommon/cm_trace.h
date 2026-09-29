@@ -1,4 +1,5 @@
 #pragma once
+#include <cstring>
 #include <DynEntity/DynEntity_gamestate.h>
 //#include <physics/phys_colgeom.h>
 

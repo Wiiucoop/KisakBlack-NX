@@ -1,4 +1,5 @@
 #include "g_client_script_cmd_mp.h"
+#include <game/g_sp_crosshair.h>
 #include "g_main_mp.h"
 #include <clientscript/cscr_vm.h>
 #include <game/g_weapon.h>
@@ -48,6 +49,612 @@ static void __cdecl METHOD_NULLSUB(scr_entref_t entref)
 {
 
 }
+
+#ifdef KISAK_SP
+#include <qcommon/common.h>
+
+// ===========================================================================
+// TODO(SP-STUB) -- deliberate no-op stubs for retail-SP PLAYER script methods.
+//
+// Source: retail SP's player method table at 0x00A52A80, 168 entries, reached
+// through the 3rd link of SP's Scr_GetMethod chain (SP dispatcher
+// FUN_004B3AE0). Paired with this file's methods[] on two facts: both tables
+// begin with "giveweapon", and 107 names are shared -- no other repo method
+// table shares more than 1. (Relative order is only partly preserved, 68 of
+// 107 in a longest-common-subsequence; the two trees have each inserted
+// their own platform-specific rows into the middle.) The 29 registered below
+// are the SP-only names the `frontend` boot actually compiles.
+//
+// Placeholders, NOT implementations -- see the TODO(SP-STUB) header above
+// BuiltinFunctionDef functions[] in g_scr_main_mp.cpp for the full rationale
+// and the VM stack-safety argument. type == 0 matches retail SP on every row.
+// ===========================================================================
+
+// Channel 24 == "parserscript" (con_channels.cpp:11, builtinChannels[24]), the
+// same channel the sibling stubs in game_mp/g_scr_main_mp.cpp report on.
+static void PlayerSPStub_ReportOnce(const char *name, const char *spHandler, const char *retDesc, bool *pReported)
+{
+    if ( *pReported )
+        return;
+    *pReported = true;
+    Com_PrintWarning(
+        24,
+        "WARNING: TODO(SP-STUB) script builtin '%s' (retail SP handler %s) was called "
+        "but is an unimplemented stub: it does no work at all and evaluates to %s. "
+        "This warning prints once per builtin name.\n",
+        name,
+        spHandler,
+        retDesc);
+}
+
+#define PlayerSPStub_DEFINE(symbol, gscName, spHandler)                        \
+    static void __cdecl symbol(scr_entref_t)                                   \
+    {                                                                          \
+        static bool s_reported = false;                                        \
+        PlayerSPStub_ReportOnce(gscName, spHandler, "undefined", &s_reported);  \
+    }
+
+// Returns a fixed integer instead of undefined. STILL A STUB -- it does no
+// work; the value is only a return SHAPE fix. The VM makes `if (x)` on
+// undefined a fatal script error (Scr_CastBool, cscr_variable.cpp:4522-4529),
+// and every name using this macro is read as a predicate or a number somewhere
+// in the retail SP script corpus. Per-name reasoning is on each row below; the
+// VM stack contract is written out above the SP_STUB_* macros in
+// game_mp/g_scr_main_mp.cpp.
+#define PlayerSPStub_DEFINE_INT(symbol, gscName, spHandler, value)             \
+    static void __cdecl symbol(scr_entref_t)                                   \
+    {                                                                          \
+        static bool s_reported = false;                                        \
+        PlayerSPStub_ReportOnce(gscName, spHandler,                            \
+                                "the fixed integer " #value, &s_reported);     \
+        Scr_AddInt((value), SCRIPTINSTANCE_SERVER);                            \
+    }
+
+// Returns the zero vector instead of undefined. STILL A STUB -- nothing is
+// sampled. Reading `x[0]` off undefined is fatal (Scr_EvalArray,
+// cscr_variable.cpp:6048-6062); every name using this macro is indexed as a
+// 3-vector by the corpus. (getnormalizedcameramovement used to be one of
+// them; it now has a real body further down.)
+#define PlayerSPStub_DEFINE_ZEROVEC(symbol, gscName, spHandler)                \
+    static void __cdecl symbol(scr_entref_t)                                   \
+    {                                                                          \
+        static bool s_reported = false;                                        \
+        float zero[3] = { 0.0f, 0.0f, 0.0f };                                  \
+        PlayerSPStub_ReportOnce(gscName, spHandler,                            \
+                                "the zero vector (0,0,0)", &s_reported);       \
+        Scr_AddVector(zero, SCRIPTINSTANCE_SERVER);                            \
+    }
+
+// --- TODO(SP-STUB) player method stubs, registered at the end of methods[] ---
+static gentity_s *PlayerCmd_ViewModelSelf_SP(scr_entref_t entref);
+static void PlayerCmd_SetStanceAllowed_SP(scr_entref_t entref, unsigned int mask)
+{
+    gentity_s *self = PlayerCmd_ViewModelSelf_SP(entref);
+    if (!self)
+        return;
+    playerState_s *ps = &self->client->ps;
+    if (Scr_GetInt(0, SCRIPTINSTANCE_SERVER))
+        ps->pm_flags &= ~mask;
+    else
+        ps->pm_flags |= mask;
+}
+// Port-local mask mapping; retail 0x00501AE0/0x006121A0 use bits23/24.
+static void PlayerCmd_AllowCrouch_SP(scr_entref_t entref)
+{
+    PlayerCmd_SetStanceAllowed_SP(entref, SP_PMF_NO_CROUCH);
+}
+static void PlayerCmd_AllowProne_SP(scr_entref_t entref)
+{
+    PlayerCmd_SetStanceAllowed_SP(entref, SP_PMF_NO_PRONE);
+}
+// ---------------------------------------------------------------------------
+// self StartCameraTween( <time> ) -- SP only. REAL BODY (this row used to be
+// a no-op TODO(SP-STUB)).
+//
+// EVIDENCE: retail SP handler 0x007da570, decompiled/disassembled 2026-08-22.
+// NOT a server-command -- no call to SV_GameSendServerCommand anywhere in the
+// function. It rides the normal entity-event/temp-entity broadcast pipeline:
+// G_TempEntity(client->ps.origin, EV_START_CAMERA_TWEEN raw 0xB4), then
+// otherEntityNum=-1, eventParm=(short)(tweenTime*1000.0f). The retail raw
+// event byte (0xB4) was independently cross-derived two ways from the
+// client-side jumptable at CG_EntityEvent (0x0064a8a0) and both agreed; this
+// tree's own EV_START_CAMERA_TWEEN (bg_misc.h) is a different raw value
+// (0xB6, an artifact of this reconstruction's enum ordering) but the SYMBOLIC
+// constant is what both the server push here and the client consumer
+// (cg_event.cpp:1643 `case EV_START_CAMERA_TWEEN:`) already agree on, so the
+// wire stays internally self-consistent within this tree. The consuming
+// client-side chain (CG_StartCameraTween/CG_UpdateCameraTween(FOV),
+// cg_camera.cpp) is already fully ported -- this builtin was the only
+// missing half.
+// Retail also clears the triggering client's bit in a per-client
+// broadcast-ack mask on the temp entity (the standard "already applied
+// locally, don't also deliver the broadcast event" idiom) -- not reproduced
+// here: SP has exactly one client, so the temp-entity event and any local
+// prediction can only ever target the same single player, making that
+// exclusion a no-op in this configuration.
+void __cdecl PlayerCmd_StartCameraTween_SP(scr_entref_t entref)
+{
+    gentity_s *pSelf; // [esp+0h] [ebp-4h]
+
+    if ( entref.classnum )
+    {
+        Scr_ObjectError("not an entity", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+    if ( entref.entnum >= 0x400u
+        && !Assert_MyHandler(
+                    "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\g_client_script_cmd_mp.cpp",
+                    1307,
+                    0,
+                    "%s",
+                    "entref.entnum < MAX_GENTITIES") )
+    {
+        __debugbreak();
+    }
+    pSelf = &g_entities[entref.entnum];
+    if ( !pSelf->client )
+    {
+        Scr_ObjectError(va("entity %i is not a player", entref.entnum), SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    // Ghidra-validated 2026-08-22 against fresh disassembly of 0x007da570:
+    // (1) retail's origin source is r.currentOrigin (offset 0x11C, decoded
+    // directly off the player's gentity_s*), not client->ps.origin -- the two
+    // are usually in sync for a live player but are different storage, and
+    // r.currentOrigin is what retail actually reads here.
+    // (2) otherEntityNum: retail writes all-ones (0xFFFFFFFF) then clears
+    // exactly the calling client's ack bit
+    // (*(uint*)(te+0xE0+(clientNum>>5)*4) &= ~(1<<(clientNum&0x1F))), leaving
+    // 0xFFFFFFFE for client 0 -- not a bare -1. Reproduced generally below
+    // rather than hardcoding -2, though SP always resolves to client 0.
+    float tweenTime = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+    gentity_s *te = G_TempEntity(pSelf->r.currentOrigin, EV_START_CAMERA_TWEEN);
+    int clientNum = pSelf->client->ps.clientNum;
+    te->s.otherEntityNum = (short)(~(1u << (clientNum & 0x1f)));
+    te->s.eventParm = (short)(tweenTime * 1000.0f);
+}
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_allowmelee, "allowmelee", "0x00489fb0")
+    // TODO(SP-STUB) 6 GSC ref(s) in the frontend closure, e.g. animscripts/banzai:1816 player AllowMelee( false );
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_enablehealthshield, "enablehealthshield", "0x007d8340")
+    // TODO(SP-STUB) 6 GSC ref(s) in the frontend closure, e.g. animscripts/banzai:2017 player EnableHealthShield( false );
+// ---------------------------------------------------------------------------
+// self ShowViewModel() / HideViewModel() -- SP only. REAL BODIES (these rows
+// used to be no-op TODO(SP-STUB)s).
+//
+// EVIDENCE: retail SP handlers 0x007d6f90 and 0x007d6ff0, independently
+// decompiled and checked in disassembly 2026-08-28. Both validate that self
+// is a player and send a reliable, argument-free command to that entity:
+// show uses byte 0x7b and hide uses byte 0x7d. Hide additionally interrupts
+// the same seven weapon transition states by enqueueing predictable event 2
+// with the old state as its parameter, then calls retail thunk 0x0052a0e0.
+// The thunk and target body match this tree's PM_ResetWeaponState exactly.
+static gentity_s *PlayerCmd_ViewModelSelf_SP(scr_entref_t entref)
+{
+    if ( entref.classnum )
+    {
+        Scr_ObjectError("not an entity", SCRIPTINSTANCE_SERVER);
+        return 0;
+    }
+    if ( entref.entnum >= 0x400u
+        && !Assert_MyHandler(
+                    "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\g_client_script_cmd_mp.cpp",
+                    0,
+                    0,
+                    "%s",
+                    "entref.entnum < MAX_GENTITIES") )
+    {
+        __debugbreak();
+    }
+
+    gentity_s *pSelf = &g_entities[entref.entnum];
+    if ( !pSelf->client )
+    {
+        Scr_ObjectError(va("entity %i is not a player", entref.entnum), SCRIPTINSTANCE_SERVER);
+        return 0;
+    }
+    return pSelf;
+}
+
+static void __cdecl PlayerCmd_ShowViewModel_SP(scr_entref_t entref)
+{
+    if ( !PlayerCmd_ViewModelSelf_SP(entref) )
+        return;
+
+    SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, va("%c", 0x7b));
+    Com_Printf(24, "SP showviewmodel: client %u command 0x7b\n", entref.entnum);
+}
+
+static void __cdecl PlayerCmd_HideViewModel_SP(scr_entref_t entref)
+{
+    gentity_s *pSelf = PlayerCmd_ViewModelSelf_SP(entref);
+    if ( !pSelf )
+        return;
+
+    playerState_s *ps = &pSelf->client->ps;
+    switch ( ps->weaponstate )
+    {
+        case WEAPON_RELOADING_INTERUPT:
+        case WEAPON_RELOAD_START:
+        case WEAPON_RELOAD_START_INTERUPT:
+        case WEAPON_RELOAD_END:
+        case WEAPON_RELOAD_QUICK:
+        case WEAPON_RELOAD_QUICK_EMPTY:
+        case WEAPON_MELEE_INIT:
+            BG_AddPredictableEventToPlayerstate(EV_STOP_WEAPON_SOUND, ps->weaponstate, ps);
+            break;
+        default:
+            break;
+    }
+
+    PM_ResetWeaponState(ps);
+    SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, va("%c", 0x7d));
+    Com_Printf(24, "SP hideviewmodel: client %u command 0x7d\n", entref.entnum);
+}
+// ---------------------------------------------------------------------------
+// self OpenMainMenu( <menuName> ) -- SP only. REAL BODY (this row used to be a
+// no-op TODO(SP-STUB)).  maps/frontend.gsc:609 is
+// `get_players()[0] OpenMainMenu( "main" );` and it is the only thing that ever
+// asks the client to raise the SP front end, so the stub meant the menu could
+// never open.
+//
+// EVIDENCE: retail SP handler 0x007d7160, decompiled AND disassembled
+// 2026-08-27.  Transcribed instruction-for-instruction; nothing below is
+// inferred from the MP sibling.  The full retail body is 41 instructions:
+//
+//   007d7166  SHR ECX,0x10          ; entref.classnum
+//   007d716c  JNZ -> Scr_ObjectError("not an entity", 0)   [0xa05754], ESI = 0
+//   007d7173  IMUL ESI,ESI,0x34c    ; g_entities stride 0x34C, base 0x1a796f8
+//   007d717f  CMP [ESI+0x13c],ECX   ; gentity_s::client, 0 -> va("entity %i is
+//                                   ; not a player") [0xa0d2e0] + Scr_ObjectError
+//   007d71b2  MOV EDX,[ESI+0x13c]
+//   007d71b8  CMP [EDX+0x1a2c],0x2  ; the gate -- see below
+//   007d71c6  CALL Scr_GetString(0, 0)              (0x00567cb0)
+//   007d71cc  CALL GScr_GetScriptMenuIndex(str)     (0x00575b70)
+//   007d71d9  CALL va("%c %i", 0x62, iMenuIndex)    (0x0057cdd0, fmt @ 0xa26cec)
+//   007d71e7  CALL SV_GameSendServerCommand(entnum, 1, str)  (0x00543cf0)
+//   007d71f0  CALL Scr_AddInt(1, 0)                 (0x0045dbb0)
+//   007d71f9  ...else Scr_AddInt(0, 0); ADD ESP,0x2c on the taken path.
+//
+// Four things the retail body settles that are worth stating explicitly,
+// because three of them are NOT what a reader would guess from the MP sibling:
+//
+//  * COMMAND BYTE is 0x62 (PUSH 0x62 at 0x007d71d2), not MP's 116/'t'.  This is
+//    the byte cg_servercmds_mp.cpp's `case 0x62` already consumes.
+//  * ARGUMENT COUNT is exactly 2 ("%c %i").  Stack-cleanup arithmetic proves the
+//    whole argument partition rather than trusting the decompiler's lists: the
+//    single `ADD ESP,0x2c` at 0x007d71f5 balances exactly 11 pushes -- 2 for
+//    Scr_GetString, 1 for GScr_GetScriptMenuIndex, 3 for va, 3 for
+//    SV_GameSendServerCommand, 2 for Scr_AddInt.  There is no third wire field.
+//  * INDEX DERIVATION is GScr_GetScriptMenuIndex (0x00575b70), which already
+//    exists in this tree at g_scr_main_mp.cpp:6081 / .h:325 -- not invented for
+//    this row.  It is the same helper PlayerCmd_OpenMenu uses, and it walks the
+//    same CS_SCRIPT_MENUS+2548 configstring range the client half reads back.
+//  * clientNum SOURCE is entref.entnum re-read off the stack
+//    (`MOVZX EAX, word ptr [ESP+0x20]` at 0x007d71df; entry+4 after 7 intervening
+//    pushes), NOT pSelf->client->ps.clientNum.  Reproduced as written.
+//
+// THE GATE, `*(int *)(client + 0x1a2c) == 2`, is read as
+// sess.connected == CON_CONNECTED on two facts and NOT on the offset (this
+// tree's gclient_s puts it at 0x26C0, so the SP layout plainly diverges and the
+// offset carries no information):
+//   1. CON_CONNECTED == 0x2 (g_client_mp.h:19), and 2 is the literal compared.
+//   2. The sibling handler `closemainmenu` (0x007d7510) gates on the SAME
+//      client+0x1a2c == 2 in the same position, and its reconstruction
+//      counterpart PlayerCmd_CloseMenu likewise gates on
+//      sess.connected == CON_CONNECTED.  One field, two independent handlers,
+//      same predicate on both sides.
+//
+// DELIBERATE DIVERGENCE FROM THE MP SIBLING, both directions verified:
+//  * NO Assert_MyHandler anywhere.  Retail SP's body has no assert call at all,
+//    and neither does 0x007da570 (startcameratween) -- checked specifically so
+//    the absence is a property of the retail build, not of one function.  The
+//    asserts in PlayerCmd_OpenMenu and in PlayerCmd_StartCameraTween_SP above
+//    carry `projects_pc` line numbers that retail does not supply here, and
+//    inventing one would be fabricating a value.  Omitting is also the safer
+//    half: Assert_MyHandler is always-on and __debugbreak()s in Release.
+//  * `va` rather than MP's `_snprintf(svcmd, 0x40, ...)` + svcmd[63] = 0.
+//    Retail calls 0x0057cdd0 (va) directly and keeps no local buffer.
+void __cdecl PlayerCmd_OpenMainMenu_SP(scr_entref_t entref)
+{
+    const char *v1; // eax
+    char *String; // eax
+    gentity_s *pSelf; // [esp+0h] [ebp-4h]
+    int iMenuIndex; // [esp+4h] [ebp-8h]
+
+    if ( entref.classnum )
+    {
+        Scr_ObjectError("not an entity", SCRIPTINSTANCE_SERVER);
+        pSelf = 0;
+    }
+    else
+    {
+        pSelf = &g_entities[entref.entnum];
+        if ( !pSelf->client )
+        {
+            v1 = va("entity %i is not a player", entref.entnum);
+            Scr_ObjectError(v1, SCRIPTINSTANCE_SERVER);
+        }
+    }
+    if ( pSelf->client->sess.connected == CON_CONNECTED )
+    {
+        String = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+        iMenuIndex = GScr_GetScriptMenuIndex(String);
+        v1 = va("%c %i", 0x62, iMenuIndex);
+        SV_GameSendServerCommand(entref.entnum, SV_CMD_RELIABLE, v1);
+        Scr_AddInt(1, SCRIPTINSTANCE_SERVER);
+    }
+    else
+    {
+        Scr_AddInt(0, SCRIPTINSTANCE_SERVER);
+    }
+}
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_allowlean, "allowlean", "0x00599ae0")
+    // TODO(SP-STUB) 4 GSC ref(s) in the frontend closure, e.g. animscripts/banzai:1812 player AllowLean( false );
+static void PlayerCmd_AllowStand_SP(scr_entref_t entref)
+{
+    // Retail 0x00521050 uses bit22; translated to the port's separate flags.
+    PlayerCmd_SetStanceAllowed_SP(entref, SP_PMF_NO_STAND);
+}
+// ---------------------------------------------------------------------------
+// self GetNormalizedCameraMovement() -- SP only. REAL BODY (this row used to
+// be a TODO(SP-STUB) that returned the zero vector).
+//
+// EVIDENCE: retail SP handler 0x005aac30, disassembled 2026-08-27. The whole
+// function is 42 instructions:
+//
+//   entref.classnum != 0            -> Scr_ObjectError("not an entity")
+//   g_entities[entnum].client == 0  -> Scr_ObjectError(va("entity %i is not a player"))
+//   esi = ent->client                                        ; gentity+0x13C
+//   movsx edx, byte [esi+0x1a4e] ; cvtsi2ss ; mulss [0x9c8844]
+//   movsx eax, byte [esi+0x1a4f] ; cvtsi2ss ; mulss [0x9c8844]
+//   xorps xmm0, xmm0                                         ; third component
+//   Scr_AddVector(&vec, SCRIPTINSTANCE_SERVER)               ; 0x00432940
+//
+// It is a METHOD (takes scr_entref_t), returns a 3-vector via Scr_AddVector,
+// and the scale constant at 0x009c8844 is the float 0xBC010204 == -1/127.0f
+// (NEGATIVE -- the sibling getnormalizedmovement at 0x0044aa80 uses the same
+// magnitude with the opposite sign, +1/127.0f, from 0x00a173d0).
+//
+// IDENTIFYING THE TWO SOURCE BYTES. They are the two signed chars at
+// gclient+0x1A4E/0x1A4F. Retail SP's per-client usercmd_s sits at gclient
+// +0x1A30: its button bitset is at +0x1A34, proven by the bit-test helper at
+// 0x0040b3f0 (`eax = 0x80000000 >> (idx & 31); eax &= this[idx >> 5]`) being
+// called with `ecx = client+0x1a34` and button indices 0x0B/0x24/0x25.
+//
+// The decisive cross-check is the helicopter driver-input gather at retail
+// 0x0042dfd0, which reads FOUR of these bytes into four adjacent stack slots
+// and whose line-for-line counterpart already exists in this tree at
+// g_helicopter1.cpp:525-580. Matching them up:
+//
+//   retail [ebp+0x1a4b] -> slot+0x10   ==  tree  move[0] = usercmd->forwardmove
+//   retail [ebp+0x1a4c] -> slot+0x11   ==  tree  move[1] = usercmd->rightmove
+//   retail [ebp+0x1a4e] -> slot+0x12   ==  tree  move[2] = usercmd->pitchmove
+//   retail [ebp+0x1a4f] -> slot+0x13   ==  tree  move[3] = usercmd->yawmove
+//
+// with the same three-way vehHelicopterYawAltitudeControls switch, the same
+// bitset probes at 0x24/0x25 substituting +/-127, and the same
+// vehHelicopterInvertUpDown negation of the pitch slot. (retail
+// `test dword [ebp+0xc], 0xc00` likewise matches the tree's
+// `(client->ps.pm_flags & 0xC00) == 0`, confirming ps is at gclient+0.)
+//
+// So this builtin reads the LOOK stick (pitchmove/yawmove), and the sibling
+// getnormalizedmovement -- which reads +0x1A4B/+0x1A4C, a different pair --
+// reads the MOVE stick (forwardmove/rightmove). That is what makes the two
+// builtins distinct, and it is why the "camera" in the name is accurate.
+// Retail SP's usercmd_s packs these five chars at +0x1B..+0x1F where this
+// tree's MP usercmd_s has them at +0x1E..+0x22; only the SP struct offsets
+// differ, the field ORDER (forwardmove, rightmove, upmove, pitchmove,
+// yawmove) is identical, and this port is written against the named fields.
+//
+// The tree's per-client usercmd is client->sess.cmd, refreshed every frame by
+// SV_GetUsercmd (g_active_mp.cpp:1697) and handed to ClientThink_real.
+//
+// WHY THIS MATTERS: frontend_anim.gsc's player_camera_movment_tracker polls
+// this builtin to fire the `player_camera_moving` notify that
+// do_player_idle_drift has an endon for. While it returned (0,0,0) the notify
+// never fired and center_camera_for_idle's 60deg->1deg view-clamp ramp ran to
+// completion, which is what pinned the view. Both input devices feed these
+// fields: CL_GamepadMove (cl_input_mp.cpp:778-779) and CL_MouseMove
+// (cl_input_mp.cpp:1032-1033).
+//
+// NOT REPRODUCED: retail applies no clamping, so a full-deflection char of
+// -128 yields 1.0079, marginally outside [-1,1]. Transcribed as-is.
+void __cdecl PlayerCmd_GetNormalizedCameraMovement_SP(scr_entref_t entref)
+{
+    gentity_s *pSelf; // [esp+0h] [ebp-4h]
+    const char *v1;
+    float movement[3];
+
+    if ( entref.classnum )
+    {
+        Scr_ObjectError("not an entity", SCRIPTINSTANCE_SERVER);
+        pSelf = 0;
+    }
+    else
+    {
+        pSelf = &g_entities[entref.entnum];
+        if ( !pSelf->client )
+        {
+            v1 = va("entity %i is not a player", entref.entnum);
+            Scr_ObjectError(v1, SCRIPTINSTANCE_SERVER);
+        }
+    }
+    movement[0] = (float)pSelf->client->sess.cmd.pitchmove * (-1.0f / 127.0f);
+    movement[1] = (float)pSelf->client->sess.cmd.yawmove * (-1.0f / 127.0f);
+    movement[2] = 0.0f;
+    Scr_AddVector(movement, SCRIPTINSTANCE_SERVER);
+}
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_closemainmenu, "closemainmenu", "0x007d7510")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. maps/frontend:624 get_players()[0] CloseMainMenu ();
+static void PlayerCmd_RevivePlayer_SP(scr_entref_t entref)
+{
+    // Reviewed retail 0x007DB090; local name, not recovered retail symbol.
+    gentity_s *self = PlayerCmd_ViewModelSelf_SP(entref);
+    if (!self)
+        return;
+    gclient_s *client = self->client;
+    pmove_t *pm = &g_pmove[client->ps.clientNum];
+    pm->ps = &client->ps;
+    client->ps.damageTimer = 0;
+    client->ps.damageDuration = 0;
+    client->damage_fromWorld = 0;
+    client->revive = 0;
+    scriptAnimEventTypes_t event = ANIM_ET_LASTSTAND_TO_STAND;
+    if (pm->cmd.button_bits.testBit(9u))
+        event = ANIM_ET_LASTSTAND_TO_CROUCH;
+    else if (pm->cmd.button_bits.testBit(8u))
+        event = ANIM_ET_LASTSTAND_TO_PRONE;
+    BG_AnimScriptEvent(pm, event, 0, 1);
+    client->lastStand = 0;
+    client->lastStandTime = 0;
+    client->ps.lastStandPrevWeapon = 0;
+    clientState_s *state = G_GetClientState(self->s.number);
+    state->lastStandStartTime = 0;
+    state->beingRevived = 0;
+    self->health = client->sess.maxHealth;
+    self->maxHealth = client->sess.maxHealth;
+    client->damage_blood = 0;
+    client->ps.stats[0] = self->health;
+}
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_setscripthintstring, "setscripthintstring", "0x007da330")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. maps/_contextual_melee:171 player SetScriptHintString("");
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_allowpickupweapons, "allowpickupweapons", "0x007da430")
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. maps/_hind_player:1427 player AllowPickupWeapons( false );
+PlayerSPStub_DEFINE_INT(PlayerCmd_SPStub_getcurrentweaponclipammo, "getcurrentweaponclipammo", "0x005d8ff0", 0)
+    // RETURNS 0: JUDGEMENT: 0 rounds in the clip. Both sites are numeric comparisons
+    //            (`>= weaponClipSize(weap)`, `> 0`) that fault on undefined.
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. animscripts/combat_utility:2321 if ( self getCurrentWeaponClipAmmo() >= weaponClipSize( weap ) )
+PlayerSPStub_DEFINE_ZEROVEC(PlayerCmd_SPStub_getnormalizedmovement, "getnormalizedmovement", "0x0044aa80")
+    // RETURNS (0,0,0): JUDGEMENT, corpus-supported: maps/flamer_util.gsc:2689 initialises
+    //                  `movement = (0,0,0)` and only then conditionally overwrites it with this
+    //                  builtin, so (0,0,0) is the corpus's own 'no stick input' value. Consumers
+    //                  index [0]/[1] and call Length().
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. maps/flamer_util:2693 movement = self GetNormalizedMovement();
+// Retail SP islookingat (0x007D7950) is implemented in g_sp_crosshair.cpp.
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_setautopickup, "setautopickup", "0x007d7d50")
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. maps/_meatshield:191 self SetAutoPickup(false);
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_attachtodec20terminal, "attachtodec20terminal", "0x007d7690")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/frontend:685 get_players()[0] AttachToDec20Terminal();
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_detachdec20terminal, "detachdec20terminal", "0x007d7700")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/frontend:699 get_players()[0] DetachDec20Terminal();
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_getplayerviewheight, "getplayerviewheight", "0x007d6e70")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_utility:8779 height = self GetPlayerViewHeight();
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_getweaponrenderoptions, "getweaponrenderoptions", "0x007d8110")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_utility:13245 self.weapons_info[i]._renderOptions = self GetWeaponRenderOptions( self.weapons_list...
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_initdec20terminal, "initdec20terminal", "0x007d7630")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/frontend:625 get_players()[0] initdec20terminal();
+PlayerSPStub_DEFINE_INT(PlayerCmd_SPStub_reloadbuttonpressed, "reloadbuttonpressed", "0x00487ad0", 0)
+    // RETURNS 0: JUDGEMENT: 0 = 'not pressed'. NOTE the hazard: maps/_hind_player.gsc:794 is
+    //            `while (!player ReloadButtonPressed())`, so 0 parks that thread rather than
+    //            faulting -- a parked thread is the lesser failure, and 1 ('always pressed')
+    //            would be an outright fabrication.
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_hind_player:794 while(!player ReloadButtonPressed())
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_resetadswidthandlerp, "resetadswidthandlerp", "0x007d68d0")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_meatshield:884 self.player resetAdsWidthAndLerp();
+PlayerSPStub_DEFINE(PlayerCmd_SPStub_setadswidthandlerp, "setadswidthandlerp", "0x007d6830")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_meatshield:891 self.player setAdsWidthAndLerp( 400, 10 );
+static void PlayerCmd_StartRevive_SP(scr_entref_t entref)
+{
+    // 0x007D9CF0 operates on the downed player, not the script argument.
+    gentity_s *self = PlayerCmd_ViewModelSelf_SP(entref);
+    if (!self)
+        return;
+    self->client->revive = 1;
+    self->client->ps.pm_type = 7;
+    G_GetClientState(self->s.number)->beingRevived = 1;
+}
+static void PlayerCmd_StopRevive_SP(scr_entref_t entref)
+{
+    // 0x007D9D80 returns the interrupted revive to ordinary last stand.
+    gentity_s *self = PlayerCmd_ViewModelSelf_SP(entref);
+    if (!self)
+        return;
+    self->client->revive = 0;
+    self->client->ps.pm_type = 6;
+    G_GetClientState(self->s.number)->beingRevived = 0;
+}
+
+// Retail SP player-method entry 0x00A530F8 pairs "uploadscore" with handler
+// 0x007D9590. System-link games skip the upload. Otherwise retail validates a
+// player and 2..10 integer arguments, then forwards them as reliable command
+// 0x37; the client owns the platform leaderboard operation.
+static void __cdecl PlayerCmd_UploadScore_SP(scr_entref_t entref)
+{
+    if ( Dvar_GetBool("systemlink") )
+        return;
+
+    if ( entref.classnum )
+    {
+        Scr_ObjectError("not an entity", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    gentity_s *player = &g_entities[entref.entnum];
+    if ( !player->client )
+    {
+        Scr_ObjectError(
+            va("entity %i is not a player", entref.entnum),
+            SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    const int argc = Scr_GetNumParam(SCRIPTINSTANCE_SERVER);
+    if ( argc < 2 || argc > 10 )
+    {
+        Scr_Error("Incorrect number of parameters\n", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    const int leaderboard = Scr_GetInt(0, SCRIPTINSTANCE_SERVER);
+    char details[100] = {};
+    char number[12];
+    for ( int i = 1; i < argc; ++i )
+    {
+        _itoa(Scr_GetInt(i, SCRIPTINSTANCE_SERVER), number, 10);
+        I_strncat(details, sizeof(details), " ");
+        I_strncat(details, sizeof(details), number);
+    }
+
+    SV_GameSendServerCommand(
+        entref.entnum,
+        SV_CMD_RELIABLE,
+        va("%c %i%s", 0x37, leaderboard, details));
+}
+
+// Retail SP player-method row 0x00A53254 pairs "playerknockback" with
+// handler 0x007D7300. The handler reads parameter 0 as an int: true clears
+// its no-knockback bit and false sets it. Retail uses raw gentity+0x170 bit
+// 0x20, but this MP-derived layout names 0x20 FL_NO_BOTS; the local damage
+// path gates ApplyKnockBack with FL_NO_KNOCKBACK (0x8), so translate the
+// semantic flag instead of copying the SP numeric bit into the wrong layout.
+static void __cdecl PlayerCmd_PlayerKnockback_SP(scr_entref_t entref)
+{
+    if ( entref.classnum )
+    {
+        Scr_ObjectError("not an entity", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    if ( entref.entnum >= 1024u )
+    {
+        Scr_ObjectError("entity index is outside the entity range", SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    gentity_s *player = &g_entities[entref.entnum];
+    if ( !player->client )
+    {
+        Scr_ObjectError(va("entity %i is not a player", entref.entnum), SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    if ( Scr_GetInt(0, SCRIPTINSTANCE_SERVER) == 1 )
+        player->flags &= ~FL_NO_KNOCKBACK;
+    else
+        player->flags |= FL_NO_KNOCKBACK;
+}
+#endif // KISAK_SP
 
 // BE FUCKING MINDFUL OF WHITESPACE IN THE STRING (UNLIKE ME)
 const BuiltinMethodDef methods[] =
@@ -244,6 +851,40 @@ const BuiltinMethodDef methods[] =
   // LWSS END
   { "issplitscreen", &PlayerCmd_IsSplitscreen, 0 },
   { "isplayeronsamemachine", &PlayerCmd_IsPlayerOnSameMachine, 0 }
+#ifdef KISAK_SP
+  ,
+  { "allowcrouch", &PlayerCmd_AllowCrouch_SP, 0 },                          // SP 0x00501AE0
+  { "allowprone", &PlayerCmd_AllowProne_SP, 0 },                            // SP 0x006121A0
+  { "startcameratween", &PlayerCmd_StartCameraTween_SP, 0 },                 // IMPLEMENTED from SP handler 0x007da570
+  { "allowmelee", &PlayerCmd_SPStub_allowmelee, 0 },                         // TODO(SP-STUB) SP 0x00A52A80 idx 111, 0x00489fb0
+  { "enablehealthshield", &PlayerCmd_SPStub_enablehealthshield, 0 },         // TODO(SP-STUB) SP 0x00A52A80 idx 94, 0x007d8340
+  { "showviewmodel", &PlayerCmd_ShowViewModel_SP, 0 },                       // IMPLEMENTED from SP handler 0x007d6f90
+  { "hideviewmodel", &PlayerCmd_HideViewModel_SP, 0 },                       // IMPLEMENTED from SP handler 0x007d6ff0
+  { "openmainmenu", &PlayerCmd_OpenMainMenu_SP, 0 },                         // IMPLEMENTED from SP handler 0x007d7160
+  { "allowlean", &PlayerCmd_SPStub_allowlean, 0 },                           // TODO(SP-STUB) SP 0x00A52A80 idx 60, 0x00599ae0
+  { "allowstand", &PlayerCmd_AllowStand_SP, 0 },                            // SP 0x00521050
+  { "getnormalizedcameramovement", &PlayerCmd_GetNormalizedCameraMovement_SP, 0 }, // SP 0x00A52A80 idx 36, 0x005aac30 -- REAL BODY
+  { "closemainmenu", &PlayerCmd_SPStub_closemainmenu, 0 },                   // TODO(SP-STUB) SP 0x00A52A80 idx 67, 0x007d7510
+  { "reviveplayer", &PlayerCmd_RevivePlayer_SP, 0 },                        // SP 0x007DB090
+  { "setscripthintstring", &PlayerCmd_SPStub_setscripthintstring, 0 },       // TODO(SP-STUB) SP 0x00A52A80 idx 162, 0x007da330
+  { "allowpickupweapons", &PlayerCmd_SPStub_allowpickupweapons, 0 },         // TODO(SP-STUB) SP 0x00A52A80 idx 163, 0x007da430
+  { "getcurrentweaponclipammo", &PlayerCmd_SPStub_getcurrentweaponclipammo, 0 }, // TODO(SP-STUB) SP 0x00A52A80 idx 8, 0x005d8ff0
+  { "getnormalizedmovement", &PlayerCmd_SPStub_getnormalizedmovement, 0 },   // TODO(SP-STUB) SP 0x00A52A80 idx 35, 0x0044aa80
+  { "islookingat", &G_SPIsLookingAt, 0 },                                   // Retail SP 0x007D7950
+  { "setautopickup", &PlayerCmd_SPStub_setautopickup, 0 },                   // TODO(SP-STUB) SP 0x00A52A80 idx 87, 0x007d7d50
+  { "attachtodec20terminal", &PlayerCmd_SPStub_attachtodec20terminal, 0 },   // TODO(SP-STUB) SP 0x00A52A80 idx 70, 0x007d7690
+  { "detachdec20terminal", &PlayerCmd_SPStub_detachdec20terminal, 0 },       // TODO(SP-STUB) SP 0x00A52A80 idx 71, 0x007d7700
+  { "getplayerviewheight", &PlayerCmd_SPStub_getplayerviewheight, 0 },       // TODO(SP-STUB) SP 0x00A52A80 idx 34, 0x007d6e70
+  { "getweaponrenderoptions", &PlayerCmd_SPStub_getweaponrenderoptions, 0 }, // TODO(SP-STUB) SP 0x00A52A80 idx 90, 0x007d8110
+  { "initdec20terminal", &PlayerCmd_SPStub_initdec20terminal, 0 },           // TODO(SP-STUB) SP 0x00A52A80 idx 69, 0x007d7630
+  { "reloadbuttonpressed", &PlayerCmd_SPStub_reloadbuttonpressed, 0 },       // TODO(SP-STUB) SP 0x00A52A80 idx 51, 0x00487ad0
+  { "resetadswidthandlerp", &PlayerCmd_SPStub_resetadswidthandlerp, 0 },     // TODO(SP-STUB) SP 0x00A52A80 idx 152, 0x007d68d0
+  { "setadswidthandlerp", &PlayerCmd_SPStub_setadswidthandlerp, 0 },         // TODO(SP-STUB) SP 0x00A52A80 idx 151, 0x007d6830
+  { "startrevive", &PlayerCmd_StartRevive_SP, 0 },                          // SP 0x007D9CF0
+  { "stoprevive", &PlayerCmd_StopRevive_SP, 0 },                            // SP 0x007D9D80
+  { "uploadscore", &PlayerCmd_UploadScore_SP, 0 },                           // IMPLEMENTED from SP name-pointer table entry 0x00a530f8, handler 0x007d9590
+  { "playerknockback", &PlayerCmd_PlayerKnockback_SP, 0 },                   // IMPLEMENTED from SP name-pointer table entry 0x00a53254, handler 0x007d7300
+#endif // KISAK_SP
 };
 
 
@@ -3768,12 +4409,35 @@ void __cdecl PlayerCmd_BotPressUseButton(scr_entref_t entref)
     }
 }
 
+#ifdef KISAK_SP
+// Normal-Zombies branch of retail 0x004049F0. A solo player is eligible;
+// eligibility does not require the MP final-stand perk. Campaign/vs differs.
+// Retail counts nondowned players twice without resetting the accumulator
+// (0x00404A7D -> 0x00404AD9), so its final >1 test means at least one here.
+// SP raw active state 4 maps to this tree's MP CS_ACTIVE (5).
+static bool G_CanEnterZombieLastStand_SP()
+{
+    if (!zombiemode->current.enabled || zombietron->current.enabled)
+        return false;
+    for (int i = 0; i < sv_maxclients->current.integer; ++i)
+    {
+        const client_t *client = &svs.clients[i];
+        if (client->header.state >= CS_ACTIVE && client->gentity
+            && client->gentity->client && !client->gentity->client->lastStand)
+            return true;
+    }
+    return false;
+}
+#endif
+
 void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
 {
     const char *v1; // eax
     char *String; // eax
     unsigned __int16 floatValue; // ax
+#ifndef KISAK_SP
     char *v4; // eax
+#endif
     unsigned __int8 v5; // al
     const WeaponDef *WeaponDef; // eax
     int v7; // esi
@@ -3794,6 +4458,10 @@ void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
     gentity_s *tempBulletHitEntity; // [esp+9Ch] [ebp-38h]
     int iWeapon; // [esp+A0h] [ebp-34h]
     int psTimeOffset; // [esp+A4h] [ebp-30h]
+#ifdef KISAK_SP
+    int modelIndex;
+    const bool zombieDamage = zombiemode->current.enabled && !zombietron->current.enabled;
+#endif
     int dflags; // [esp+A8h] [ebp-2Ch]
     int iSurfType; // [esp+ACh] [ebp-28h]
     pmove_t *pm; // [esp+B0h] [ebp-24h]
@@ -3839,6 +4507,11 @@ void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
     if ( damage > 0 )
     {
         pm = &g_pmove[pSelf->client->ps.clientNum];
+#ifdef KISAK_SP
+        // SP does not gate damage on an MP scratch pointer (0x007DA77D).
+        // Bind the animation consumers to this entity's persistent state.
+        pm->ps = &pSelf->client->ps;
+#endif
         if ( pm->ps )
         {
             if ( Scr_GetType(0, SCRIPTINSTANCE_SERVER) && Scr_GetPointerType(0, SCRIPTINSTANCE_SERVER) == 19 )
@@ -3848,8 +4521,13 @@ void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
             dflags = Scr_GetInt(3u, SCRIPTINSTANCE_SERVER);
             mod = (meansOfDeath_t)G_MeansOfDeathFromScriptParam(4u);
             if ( pSelf->client->lastStand
+#ifdef KISAK_SP
+                && mod != MOD_CRUSH
+                && pSelf->client->lastStandTime > level.time )
+#else
                 && mod != MOD_MELEE
                 && G_GetClientState(pSelf->s.number)->lastStandStartTime > level.time )
+#endif
             {
                 pSelf->health = 1;
                 return;
@@ -3868,11 +4546,20 @@ void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
             }
             floatValue = (unsigned __int16)Scr_GetConstString(8u, SCRIPTINSTANCE_SERVER);
             hitLoc = (hitLocation_t)G_GetHitLocationIndexFromString(floatValue);
+#ifdef KISAK_SP
+            // Retail 0x007da875/0x007da882 reads two integers, matching
+            // _callbackglobal.gsc: modelIndex then psOffsetTime. SP has no
+            // surface-name argument; both bullet events use flesh (7).
+            modelIndex = Scr_GetInt(9u, SCRIPTINSTANCE_SERVER);
+            psTimeOffset = Scr_GetInt(10u, SCRIPTINSTANCE_SERVER);
+            iSurfType = 7;
+#else
             psTimeOffset = Scr_GetInt(9u, SCRIPTINSTANCE_SERVER);
             v4 = Scr_GetString(0xAu, SCRIPTINSTANCE_SERVER);
             iSurfType = Com_SurfaceTypeFromName(v4);
             if ( iSurfType == -1 )
                 iSurfType = 7;
+#endif
             if ( pSelf->client->ps.pm_type == 9 )
             {
                 Com_Printf(15, "Trying to do damage to a client that is already dead");
@@ -4011,13 +4698,53 @@ void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
             if ( (float)pSelf->client->ps.damageTimer > max_damage_time )
                 pSelf->client->ps.damageTimer = (int)max_damage_time;
             pSelf->client->ps.damageDuration = pSelf->client->ps.damageTimer;
-            pSelf->health -= damage;
+#ifdef KISAK_SP
+            if (zombieDamage && pSelf->client->lastStand)
+            {
+                // 0x007DAE8B lets the Zombies script manage downed health.
+                Scr_PlayerLastStand(pSelf, inflictor, attacker, damage, mod, iWeapon,
+                    localdir, hitLoc, psTimeOffset);
+            }
+            else
+#endif
+            {
+                pSelf->health -= damage;
+#ifdef KISAK_SP
+                if (zombieDamage && pSelf->health <= 0 && G_CanEnterZombieLastStand_SP())
+                {
+                    // 0x0055DB60 sets lastStand before the stance animation,
+                    // then calls the script before the damage notification.
+                    pSelf->client->lastStand = 1;
+                    G_GetClientState(pSelf->s.number)->lastStandStartTime = level.time + 500;
+                    scriptAnimEventTypes_t event = ANIM_ET_STAND_TO_LASTSTAND;
+                    if (pSelf->client->ps.pm_flags & 2)
+                        event = ANIM_ET_CROUCH_TO_LASTSTAND;
+                    else if (pSelf->client->ps.pm_flags & 1)
+                        event = ANIM_ET_PRONE_TO_LASTSTAND;
+                    BG_AnimScriptEvent(pm, event, 0, 1);
+                    if ((pSelf->client->ps.eFlags & 0x300) != 0)
+                    {
+                        turret = &g_entities[pSelf->client->ps.viewlocked_entNum];
+                        if (turret->s.eType == 11)
+                            G_ClientStopUsingTurret(turret);
+                    }
+                    Scr_PlayerLastStand(pSelf, inflictor, attacker, damage, mod, iWeapon,
+                        localdir, hitLoc, psTimeOffset);
+                }
+#endif
+            }
 
             {
                 PROF_SCOPED("damage notify");
+#ifdef KISAK_SP
+                // Retail 0x007daec6 emits the full nine-field damage notify.
+                G_DamageNotify(scr_const.damage, pSelf, attacker, dir, (float *)point,
+                    damage, mod, dflags, modelIndex, floatValue, String);
+#else
                 Scr_AddEntity(attacker, SCRIPTINSTANCE_SERVER);
                 Scr_AddInt(damage, SCRIPTINSTANCE_SERVER);
                 Scr_Notify(pSelf, scr_const.damage, 2u);
+#endif
             }
             
             if (!entityHandlers[pSelf->handler].die)
@@ -4031,7 +4758,11 @@ void __cdecl PlayerCmd_finishPlayerDamage(scr_entref_t entref)
                     pain(pSelf, attacker, damage, point, mod, localdir, hitLoc, iWeapon);
                 goto LABEL_130;
             }
-            if ( !pSelf->client->lastStand && (pSelf->client->ps.perks[1] & 0x20) != 0 && !pSelf->client->ps.waterlevel )
+            if (
+#ifdef KISAK_SP
+                !zombieDamage &&
+#endif
+                !pSelf->client->lastStand && (pSelf->client->ps.perks[1] & 0x20) != 0 && !pSelf->client->ps.waterlevel )
             {
                 PROF_SCOPED("enter last stand");
                 if ( (pSelf->client->ps.pm_flags & 2) != 0 )
@@ -7326,7 +8057,11 @@ void __cdecl PlayerCmd_SetPerk(scr_entref_t entref)
     }
     perkName = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
     perkIndex = BG_GetPerkIndexForName(perkName);
+#ifdef KISAK_SP
+    if ( perkIndex == BG_SP_PERK_COUNT )
+#else
     if ( perkIndex == 52 )
+#endif
     {
         v2 = va("Unknown perk: %s\n", perkName);
         Scr_Error(v2, 0);
@@ -7337,13 +8072,18 @@ void __cdecl PlayerCmd_SetPerk(scr_entref_t entref)
 
 void __cdecl BG_SetPerk(unsigned int *perks, unsigned int perkIndex)
 {
+#ifndef KISAK_SP
     unsigned int v2; // edx
+#endif
 
     if ( !perks
         && !Assert_MyHandler("c:\\projects_pc\\cod\\codsrc\\src\\bgame\\../bgame/bg_perks.h", 145, 0, "%s", "perks") )
     {
         __debugbreak();
     }
+#ifdef KISAK_SP
+    *perks |= BG_GetSPPerkMask(perkIndex);
+#else
     if ( perkIndex >= 0x34
         && !Assert_MyHandler(
                     "c:\\projects_pc\\cod\\codsrc\\src\\bgame\\../bgame/bg_perks.h",
@@ -7358,6 +8098,7 @@ void __cdecl BG_SetPerk(unsigned int *perks, unsigned int perkIndex)
     v2 = perks[1] | ((unsigned __int64)(1LL << perkIndex) >> 32);
     *perks |= 1LL << perkIndex;
     perks[1] = v2;
+#endif
 }
 
 void __cdecl PlayerCmd_HasPerk(scr_entref_t entref)
@@ -7395,12 +8136,20 @@ void __cdecl PlayerCmd_HasPerk(scr_entref_t entref)
     }
     perkName = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
     perkIndex = BG_GetPerkIndexForName(perkName);
+#ifdef KISAK_SP
+    if ( perkIndex == BG_SP_PERK_COUNT )
+#else
     if ( perkIndex == 52 )
+#endif
     {
         v2 = va("Unknown perk: %s\n", perkName);
         Scr_Error(v2, 0);
     }
+#ifdef KISAK_SP
+    HasPerk = BG_HasSPPerk(pSelf->client->ps.perks, perkIndex);
+#else
     HasPerk = BG_HasPerk(pSelf->client->ps.perks, perkIndex);
+#endif
     Scr_AddBool(HasPerk, SCRIPTINSTANCE_SERVER);
 }
 
@@ -7436,9 +8185,17 @@ void __cdecl PlayerCmd_GetPerks(scr_entref_t entref)
         }
     }
     Scr_MakeArray(SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+    // Retail SP does not expose getperks; keep the reconstruction's extra
+    // method internally consistent with the retail SP representation.
+    for ( perkIndex = 0; perkIndex < BG_SP_PERK_COUNT; ++perkIndex )
+    {
+        if ( BG_HasSPPerk(pSelf->client->ps.perks, perkIndex) )
+#else
     for ( perkIndex = 0; perkIndex < 0x34; ++perkIndex )
     {
         if ( BG_HasPerk(pSelf->client->ps.perks, perkIndex) )
+#endif
         {
             PerkNameForIndex = (char *)BG_GetPerkNameForIndex(perkIndex);
             Scr_AddString(PerkNameForIndex, SCRIPTINSTANCE_SERVER);
@@ -7481,7 +8238,11 @@ void __cdecl PlayerCmd_UnsetPerk(scr_entref_t entref)
     }
     perkName = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
     perkIndex = BG_GetPerkIndexForName(perkName);
+#ifdef KISAK_SP
+    if ( perkIndex == BG_SP_PERK_COUNT )
+#else
     if ( perkIndex == 52 )
+#endif
     {
         v2 = va("Unknown perk: %s\n", perkName);
         Scr_Error(v2, 0);
@@ -7492,13 +8253,18 @@ void __cdecl PlayerCmd_UnsetPerk(scr_entref_t entref)
 
 void __cdecl BG_UnsetPerk(unsigned int *perks, unsigned int perkIndex)
 {
+#ifndef KISAK_SP
     unsigned int v2; // edx
+#endif
 
     if ( !perks
         && !Assert_MyHandler("c:\\projects_pc\\cod\\codsrc\\src\\bgame\\../bgame/bg_perks.h", 160, 0, "%s", "perks") )
     {
         __debugbreak();
     }
+#ifdef KISAK_SP
+    *perks &= ~BG_GetSPPerkMask(perkIndex);
+#else
     if ( perkIndex >= 0x34
         && !Assert_MyHandler(
                     "c:\\projects_pc\\cod\\codsrc\\src\\bgame\\../bgame/bg_perks.h",
@@ -7513,6 +8279,7 @@ void __cdecl BG_UnsetPerk(unsigned int *perks, unsigned int perkIndex)
     v2 = perks[1] & ~((unsigned __int64)(1LL << perkIndex) >> 32);
     *perks &= ~(unsigned int)(1LL << perkIndex);
     perks[1] = v2;
+#endif
 }
 
 void __cdecl PlayerCmd_ClearPerks(scr_entref_t entref)
@@ -7772,8 +8539,10 @@ void __cdecl PlayerCmd_ClientSysSetState(scr_entref_t entref)
                         str[j] = 33;
                 }
             }
-            Info_SetValueForKey(szConfigString, "s", str);
-            v4 = va("%c %i %s", 57, i, szConfigString);
+            // See GScr_ClientSysSetState (g_scr_main_mp.cpp) for the retail
+            // evidence -- same bug, same fix: send the raw sanitized value,
+            // not an Info_SetValueForKey-wrapped string.
+            v4 = va("%c %i %s", 57, i, str);
             SV_GameSendServerCommand(pSelf->client->ps.clientNum, SV_CMD_RELIABLE, v4);
         }
         else

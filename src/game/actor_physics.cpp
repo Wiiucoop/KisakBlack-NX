@@ -83,7 +83,11 @@ void __cdecl ai_physics_trace(
             end,
             mins,
             maxs,
+#ifdef KISAK_SP
+            0x283C013); // Retail SP 0x00469e90 gathers proximity prims with 0x0283C013.
+#else
             0x2838013);
+#endif
         context.prims = pPhys->proximity_data.prims;
         context.nprims = pPhys->proximity_data.nprims;
         G_TraceCapsule(trace, start, mins, maxs, end, passEntityNum, contentmask, &context);

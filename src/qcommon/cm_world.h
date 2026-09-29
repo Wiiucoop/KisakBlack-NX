@@ -175,5 +175,10 @@ int __cdecl CM_PointSightTraceToEntities_r(
 
 
 static const float PREDICTION_TRACE_MIN[3] = { -15.0, -15.0, 0.0 };
+#ifdef KISAK_SP
+// retail SP 0x00a52020: { 15, 15, 72 } (SP actors are 72 tall, see SP_actor @ 004f5a70)
+static const float PREDICTION_TRACE_MAX[3] = { 15.0, 15.0, 72.0 };
+#else
 static const float PREDICTION_TRACE_MAX[3] = { 15.0, 15.0, 48.0 };
+#endif
 

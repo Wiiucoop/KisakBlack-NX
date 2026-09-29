@@ -382,6 +382,12 @@ void __cdecl    GScr_LoadConsts()
     scr_const.angle_deltas = GScr_AllocString("angle deltas");
     scr_const.bulletwhizby = GScr_AllocString("bulletwhizby");
     scr_const.dog = GScr_AllocString("dog");
+#ifdef KISAK_SP
+    scr_const.human = GScr_AllocString("human");
+    scr_const.zombie = GScr_AllocString("zombie");
+    scr_const.zombie_dog = GScr_AllocString("zombie_dog");
+    scr_const.corner_approach = GScr_AllocString("corner_approach"); // retail GScr_LoadConsts @ 005EB921
+#endif
     scr_const.enemy = GScr_AllocString("enemy");
     scr_const.enemy_visible = GScr_AllocString("enemy_visible");
     scr_const.face_angle = GScr_AllocString("face angle");

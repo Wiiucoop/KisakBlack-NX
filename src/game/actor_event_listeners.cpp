@@ -1,6 +1,7 @@
 #include "actor_event_listeners.h"
 #include <game_mp/g_main_mp.h>
 #include <clientscript/cscr_vm.h>
+#include <clientscript/cscr_stringlist.h>
 #include <game_mp/g_spawn_mp.h>
 #include <game_mp/g_misc_mp.h>
 #include <clientscript/scr_const.h>
@@ -41,7 +42,47 @@ unsigned __int16 *g_AIEV_scrConst_table[28] =
 
 int g_listenerCount;
 AIEventListener g_AIEVlisteners[32];
-unsigned int array[63];
+
+int __cdecl Actor_FindEventFromString(unsigned __int16 eventString)
+{
+    for ( int event = 0; event < 28; ++event )
+    {
+        if ( g_AIEV_scrConst_table[event] && *g_AIEV_scrConst_table[event] == eventString )
+            return event;
+    }
+
+    Scr_Error(
+        va("Unable to find AI event for [%s]", SL_ConvertToString(eventString, SCRIPTINSTANCE_SERVER)),
+        SCRIPTINSTANCE_SERVER);
+    return 0;
+}
+
+void __cdecl Actor_EventListener_Add(int entIndex, unsigned __int16 eventString)
+{
+    const int event = Actor_FindEventFromString(eventString);
+    if ( !event )
+        return;
+
+    for ( int listenerIndex = 0; listenerIndex < g_listenerCount; ++listenerIndex )
+    {
+        if ( g_AIEVlisteners[listenerIndex].entIndex == entIndex )
+        {
+            Com_BitSetAssert(&g_AIEVlisteners[listenerIndex].events, event, 0xFFFFFFF);
+            return;
+        }
+    }
+
+    if ( g_listenerCount >= 32 )
+    {
+        Scr_Error(va("Max listeners exceeded; entity id: %d\n", entIndex), SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    AIEventListener &listener = g_AIEVlisteners[g_listenerCount++];
+    listener.entIndex = entIndex;
+    listener.events = 0;
+    Com_BitSetAssert(&listener.events, event, 0xFFFFFFF);
+}
 
 void __cdecl RemoveSwapWithLast(unsigned int listenerIndex)
 {
@@ -61,12 +102,11 @@ void __cdecl RemoveSwapWithLast(unsigned int listenerIndex)
     removeIndex = listenerIndex;
     if ( (int)listenerIndex < --g_listenerCount )
     {
-        g_AIEVlisteners[listenerIndex].entIndex = g_AIEVlisteners[g_listenerCount].entIndex;
-        array[2 * listenerIndex] = array[2 * g_listenerCount];
+        g_AIEVlisteners[listenerIndex] = g_AIEVlisteners[g_listenerCount];
         removeIndex = g_listenerCount;
     }
     g_AIEVlisteners[removeIndex].entIndex = 1023;
-    array[2 * removeIndex] = 0;
+    g_AIEVlisteners[removeIndex].events = 0;
 }
 
 void __cdecl Actor_EventListener_RemoveEntity(int entIndex)
@@ -95,7 +135,7 @@ int __cdecl Actor_EventListener_Next(int index, ai_event_t event, int teamFlags)
 
     for ( i = index + 1; i < g_listenerCount; ++i )
     {
-        if (Com_BitCheckAssert(&array[2 * i], event, 0xFFFFFFF))
+        if (Com_BitCheckAssert(&g_AIEVlisteners[i].events, event, 0xFFFFFFF))
         {
             sentient = g_entities[g_AIEVlisteners[i].entIndex].sentient;
             if ( !sentient || (teamFlags & (1 << sentient->eTeam)) != 0 )

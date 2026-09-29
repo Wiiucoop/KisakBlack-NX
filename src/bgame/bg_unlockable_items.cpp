@@ -355,6 +355,9 @@ itemInfo_t *__cdecl BG_UnlockablesGetItemInfo(int itemIndex)
 
 char __cdecl BG_UnlockablesAllItemsUnlocked()
 {
+    // Private-match loadouts are independent of progression and UI menu state.
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) )
+        return 1;
     if ( Com_GameMode_IsPublicOnlineGame() || Com_GameMode_IsGameMode(GAMEMODE_BASIC_TRAINING) )
         return Dvar_GetInt(allItemsUnlocked) > 0;
     if ( Com_GameMode_IsGameMode(GAMEMODE_LOCAL_SPLITSCREEN) || Com_GameMode_IsGameMode(GAMEMODE_SYSTEMLINK) )
@@ -488,6 +491,8 @@ bool __cdecl BG_UnlockablesIsClanTagFeaturePurchased(int controllerIndex, unsign
 
 char __cdecl BG_UnlockablesAllItemsFree()
 {
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) )
+        return 1;
     if ( Com_GameMode_IsPublicOnlineGame() || Com_GameMode_IsGameMode(GAMEMODE_BASIC_TRAINING) )
         return Dvar_GetInt(allItemsPurchased) > 0;
     if ( Com_GameMode_IsGameMode(GAMEMODE_LOCAL_SPLITSCREEN) || Com_GameMode_IsGameMode(GAMEMODE_SYSTEMLINK) )
@@ -1376,6 +1381,8 @@ const char *__cdecl BG_UnlockablesGetItemImage(int itemIndex)
 
 int __cdecl BG_UnlockablesGetItemUnlockLevel(int itemIndex)
 {
+    if ( BG_UnlockablesAllItemsUnlocked() )
+        return 0;
     itemInfo_t *itemInfo; // [esp+0h] [ebp-4h]
 
     itemInfo = BG_UnlockablesGetItemInfo(itemIndex);
@@ -1387,6 +1394,8 @@ int __cdecl BG_UnlockablesGetItemUnlockLevel(int itemIndex)
 
 int __cdecl BG_UnlockablesGetItemUnlockPLevel(int itemIndex)
 {
+    if ( BG_UnlockablesAllItemsUnlocked() )
+        return 0;
     itemInfo_t *itemInfo; // [esp+0h] [ebp-4h]
 
     itemInfo = BG_UnlockablesGetItemInfo(itemIndex);
@@ -3077,6 +3086,8 @@ bool __cdecl BG_UnlockablesIsItemClassified(int itemIndex)
 {
     itemInfo_t *itemInfo; // [esp+0h] [ebp-4h]
 
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) )
+        return 0;
     itemInfo = BG_UnlockablesGetItemInfo(itemIndex);
     return itemInfo && itemInfo->unclassifyAt > s_unlockableItems.numPurchasedItemsInSlot;
 }
@@ -3088,6 +3099,8 @@ bool __cdecl BG_UnlockablesIsItemClassifiedGeneric(int controllerIndex, int item
     itemInfo_t *itemInfo; // [esp+8h] [ebp-8h]
     itemInfo_t *currItemInfo; // [esp+Ch] [ebp-4h]
 
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) )
+        return 0;
     if ( !BG_UnlockablesIsItemValidNotNull(itemIndex) )
         return 0;
     itemInfo = BG_UnlockablesGetItemInfo(itemIndex);
@@ -3256,6 +3269,8 @@ bool __cdecl SV_CacValidate_IsItemPurchased(unsigned __int8 *cacBuffer, int item
     itemInfo = BG_UnlockablesGetItemInfo(itemIndex);
     if ( !itemInfo )
         return 0;
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) )
+        return 1;
     if ( rank < 0 )
     {
         if ( itemInfo->cost <= 0 )
@@ -3935,7 +3950,34 @@ void __cdecl BG_UnlockableItemsInit()
                                             0,
                                             0,
                                             "Associate the body type with the primary weapon (perk1 if false)");
+#ifndef KISAK_SP
+    // SP retail divergence (2026-08-06), found by an actual SP boot failure:
+    //   Com_ERROR: Couldn't load file or file is invalid 'mp/attachmenttable.csv'
+    // raised from BG_LoadWeaponAttachmentTable (bg_weapons_attachment.cpp:466).
+    //
+    // The decisive fact is about the shipped game DATA, not the binary: mp/attachmenttable.csv
+    // does not exist ANYWHERE in the retail install. Verified by decompressing every candidate
+    // fastfile (they are plain zlib after a 12-byte header) and by scanning every .iwd archive --
+    // zero hits in common.ff, common_mp.ff, patch.ff, code_pre_gfx.ff, code_post_gfx.ff,
+    // frontend.ff, and all iwd files. That scan was itself sanity-checked against two strings
+    // known to be present (ui/menus.txt in frontend.ff, ddl/stats.ddl in patch.ff), both of which
+    // it found -- so the zero result is a genuine absence, not a broken search. No code path
+    // requiring this asset can succeed, in SP or MP.
+    //
+    // Semantically this is the MP Create-a-Class attachment/unlockables system, which the SP
+    // campaign has no equivalent of -- the same argument (and the same MP-progression family)
+    // already used to guard out BG_EmblemsInit for SP. This subtree only became reachable at SP
+    // boot at all once the patch.ff/ddl-override fixes let LiveStats_Init -> BG_UnlockableItemsInit
+    // run to completion for the first time.
+    //
+    // TODO(SP): Ghidra was unavailable when this was written, so it is NOT confirmed whether retail
+    // SP skips this call outright or calls it against a data source not present in this install.
+    // A prior audit did find the mp/attachmenttable.csv string present in the SP binary with live
+    // xrefs, which argues SP references it *somewhere* -- but a referenced string is not proof of a
+    // boot-time call, and the data genuinely is not shipped. If SP campaign weapons later turn out
+    // to need attachment data, the data source has to be located before this guard is removed.
     BG_LoadWeaponAttachmentTable();
+#endif
     memcpy(itemsInSlot, s_unlockableItems.itemsInSlot, sizeof(itemsInSlot));
     numItemsInSlot = s_unlockableItems.numItemsInSlot;
     numPurchasedItemsInSlot = s_unlockableItems.numPurchasedItemsInSlot;
@@ -4449,6 +4491,21 @@ void __cdecl BG_UnlockablesEquipClassCurrentAttachmentCmd()
     }
 }
 
+static itemInfo_t *BG_UnlockablesGetSelectedWeaponForOptions()
+{
+    const unsigned int itemIndex = (unsigned int)sharedUiInfo.itemIndex;
+    if ( itemIndex >= _countof(s_unlockableItems.itemTable) )
+        return nullptr;
+
+    itemInfo_t *itemInfo = &s_unlockableItems.itemTable[itemIndex];
+    // Unlocking purchases must not make placeholders or non-weapons equippable.
+    if ( !itemInfo->isValid || itemInfo->isNullItem
+        || (itemInfo->loadoutSlot != LOADOUTSLOT_PRIMARY_WEAPON
+            && itemInfo->loadoutSlot != LOADOUTSLOT_SECONDARY_WEAPON) )
+        return nullptr;
+    return itemInfo;
+}
+
 void __cdecl BG_UnlockablesEquipClassCurrentOptionCmd()
 {
     const char *v0; // eax
@@ -4462,17 +4519,9 @@ void __cdecl BG_UnlockablesEquipClassCurrentOptionCmd()
     {
         customClassName = Cmd_Argv(1);
         optionName = Cmd_Argv(2);
-        itemInfo = BG_UnlockablesGetItemInfo(sharedUiInfo.itemIndex);
-        if ( !itemInfo
-            && !Assert_MyHandler(
-                        "C:\\projects_pc\\cod\\codsrc\\src\\bgame\\bg_unlockable_items.cpp",
-                        3345,
-                        0,
-                        "%s",
-                        "itemInfo") )
-        {
-            __debugbreak();
-        }
+        itemInfo = BG_UnlockablesGetSelectedWeaponForOptions();
+        if ( !itemInfo )
+            return;
         optionNum = BG_GetWeaponOptionNumFromIndexAndGroup(
                                     sharedUiInfo.sortedItemPivot,
                                     (eWeaponOptionGroup)ui_currentWeaponOptionGroup->current.integer);
@@ -4510,17 +4559,9 @@ void __cdecl BG_UnlockablesToggleWeaponOptionCmd()
     {
         customClassName = Cmd_Argv(1);
         optionName = Cmd_Argv(2);
-        itemInfo = BG_UnlockablesGetItemInfo(sharedUiInfo.itemIndex);
-        if ( !itemInfo
-            && !Assert_MyHandler(
-                        "C:\\projects_pc\\cod\\codsrc\\src\\bgame\\bg_unlockable_items.cpp",
-                        3379,
-                        0,
-                        "%s",
-                        "itemInfo") )
-        {
-            __debugbreak();
-        }
+        itemInfo = BG_UnlockablesGetSelectedWeaponForOptions();
+        if ( !itemInfo )
+            return;
         optionNum = BG_GetWeaponOptionNumFromIndexAndGroup(
                                     0,
                                     (eWeaponOptionGroup)ui_currentWeaponOptionGroup->current.integer);
@@ -4745,6 +4786,132 @@ void __cdecl BG_UnlockablesEquipDefaultClassCmd()
         Com_PrintError(15, "equipdefaultclass usage: equipdefaultclass <customclassname> <defaultClass>\n");
     }
 }
+
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+#ifndef KISAK_SP
+static bool BG_ServerDefaultSlot(char *buffer, const char *className, const char *slotName, int item)
+{
+    ddlState_t state;
+    const ddlState_t *cac = LiveStats_GetCacDDLState();
+    const bool found = className ? DDL_MoveTo(cac, &state, 2, className, slotName) != 0 :
+        DDL_MoveToName(cac, &state, slotName) != 0;
+    if (!found || item < 0 || !LiveStats_ServerDefaultInt(buffer, &state, static_cast<unsigned int>(item)))
+    {
+        Com_PrintError(16, "Offline server defaults: cannot equip CacLoadouts.%s.%s=%d (schema v%d).\n",
+            className ? className : "<global>", slotName, item, cac->ddl ? cac->ddl->version : -1);
+        return false;
+    }
+    return true;
+}
+
+static bool BG_ServerDefaultEquip(char *buffer, const char *className, const char *slotName, int item)
+{
+    ddlState_t state;
+    const ddlState_t *cac = LiveStats_GetCacDDLState();
+    const bool found = className ? DDL_MoveTo(cac, &state, 2, className, slotName) != 0 :
+        DDL_MoveToName(cac, &state, slotName) != 0;
+    if (!found || !state.member || state.member->type < 0 || state.member->type > 2 ||
+        state.member->arraySize <= 0 || state.member->size <= 0 ||
+        state.member->size % state.member->arraySize ||
+        state.member->size / state.member->arraySize > 32 ||
+        (state.member->arraySize > 1 && (state.arrayIndex < 0 || state.arrayIndex >= state.member->arraySize)) ||
+        state.absoluteOffset < 0 || state.absoluteOffset > state.ddl->size - state.member->size / state.member->arraySize ||
+        state.absoluteOffset > STATS_BUFFER_SIZE * 8 - 320 - state.member->size / state.member->arraySize)
+        return false;
+    // Match EquipClassToSlot's change-only special-property behavior in this
+    // explicit destination; no local controller, UI dvars, or command dispatch.
+    if (DDL_GetInt(&state, buffer) != static_cast<unsigned int>(item))
+    {
+        const bool weapon = !I_stricmp(slotName, "primary") || !I_stricmp(slotName, "secondary");
+        if (weapon || !I_strnicmp(slotName, "specialty", 9))
+        {
+            const int body = BG_UnlockablesGetAssociatedBody(item);
+            if (body != -1 && !BG_ServerDefaultSlot(buffer, className, "body", body))
+                return false;
+        }
+        if (weapon)
+        {
+            for (int point = ATTACHMENT_POINT_TOP; point < ATTACHMENT_POINT_COUNT; ++point)
+            {
+                char name[64];
+                Com_sprintf(name, sizeof(name), "%sattachment%s", slotName, BG_GetAttachmentPointName(static_cast<eAttachmentPoint>(point)));
+                if (!BG_ServerDefaultSlot(buffer, className, name, 0))
+                    return false;
+            }
+            const char *suffixes[] = { "camo", "reticle", "reticlecolor", "lens", "tag", "emblem" };
+            for (int i = 0; i < 6; ++i)
+            {
+                char name[64];
+                Com_sprintf(name, sizeof(name), "%s%s", slotName, suffixes[i]);
+                if (!BG_ServerDefaultSlot(buffer, className, name, 0))
+                    return false;
+            }
+        }
+    }
+    return BG_ServerDefaultSlot(buffer, className, slotName, item);
+}
+#endif
+
+bool BG_UnlockablesBuildServerDefaults(char *buffer, unsigned char *purchasedItems)
+{
+#ifdef KISAK_SP
+    return false;
+#else
+    if (!buffer || !purchasedItems || !LiveStats_GetCacDDLState()->ddl)
+        return false;
+    // The ten class assignments in the shipped mp/stats_init.cfg. The values
+    // themselves come from the same loadout tables used by the client command.
+    for (int classIndex = 0; classIndex < 10; ++classIndex)
+    {
+        const char *className = BG_UnlockablesGetCustomClassName(static_cast<customClass_t>(classIndex));
+        const int defaultClass = CLASS_CUSTOM_SMG + classIndex % 5;
+        if (!className)
+            return false;
+        for (int slot = LOADOUTSLOT_FIRST; slot < LOADOUTSLOT_GLOBAL_ITEMS_START; ++slot)
+        {
+            int item = s_unlockableItems.defaultClassLoadouts[defaultClass][slot];
+            if (item == -1)
+                item = BG_UnlockablesGetDefaultItem(static_cast<loadoutSlot_t>(slot));
+            const char *slotName = BG_UnlockablesGetLoadoutName(static_cast<loadoutSlot_t>(slot));
+            if (!slotName || !BG_ServerDefaultEquip(buffer, className, slotName, item))
+                return false;
+        }
+    }
+    for (int slot = LOADOUTSLOT_GLOBAL_ITEMS_START; slot < LOADOUTSLOT_COUNT; ++slot)
+    {
+        int item = s_unlockableItems.defaultGlobalItems[slot - LOADOUTSLOT_GLOBAL_ITEMS_START];
+        if (item == -1)
+            item = BG_UnlockablesGetDefaultItem(static_cast<loadoutSlot_t>(slot));
+        const char *slotName = BG_UnlockablesGetLoadoutName(static_cast<loadoutSlot_t>(slot));
+        if (!slotName || !BG_ServerDefaultEquip(buffer, NULL, slotName, item))
+            return false;
+    }
+    // Fresh paid purchases remain clear; free items are inherently purchased.
+    // Do not use AllItemsFree/UI cheats or the controller-bound pro replacement.
+    memset(purchasedItems, 0, 32);
+    for (int item = 0; item < 256; ++item)
+    {
+        ddlState_t itemArray, itemState, purchased;
+        // Shipped MP v100 itemstat_s has an explicit scalar purchased member.
+        // Use index traversal instead of the legacy helper's incomplete varargs.
+        if (!DDL_MoveToName(LiveStats_GetRootDDLState(), &itemArray, "itemStats") ||
+            !LiveStats_ServerDefaultElement(&itemArray, &itemState, item) ||
+            !DDL_MoveToName(&itemState, &purchased, "purchased") ||
+            !LiveStats_ServerDefaultInt(buffer, &purchased, 0))
+        {
+            Com_PrintError(16, "Offline server defaults: cannot clear itemStats[%d].purchased.\n", item);
+            return false;
+        }
+        if (BG_UnlockablesIsItemValidNotNull(item))
+        {
+            if (!BG_UnlockablesGetItemInfo(item)->cost || DDL_GetInt(&purchased, buffer))
+                purchasedItems[item >> 3] |= static_cast<unsigned char>(1u << (item & 7));
+        }
+    }
+    return true;
+#endif
+}
+#endif
 
 void __cdecl BG_UnlockablesEquipDefaultClass(
                 int controllerIndex,

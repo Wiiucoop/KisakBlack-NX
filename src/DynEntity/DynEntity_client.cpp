@@ -703,6 +703,25 @@ void __cdecl DynEntCl_DestroyEntityModel(unsigned __int16 id)
     }
 }
 
+#ifdef KISAK_SP
+// Manual local adapter for retail 0x0061c7d0; see the Pentagon diagnosis.
+// Unlike retail's contiguous-count walk, honor holes left by individual frees.
+// Destroy through the existing owner so physics, fading, burning, collision,
+// rendering and occupancy bookkeeping are all released together.
+void DynEntCl_CleanupSpawnedModels_SP()
+{
+    for (int extraId = ARRAY_COUNT(usedExtraDynEnts) - 1; extraId >= 0; --extraId)
+    {
+        if (usedExtraDynEnts[extraId])
+            DynEntCl_DestroyEntityModel((unsigned __int16)(cm.originalDynEntCount + extraId));
+    }
+    // Individual frees only lower the high-water mark by one. Once every
+    // occupied extra slot is gone, discard any trailing holes as well.
+    cm.dynEntCount[0] = cm.originalDynEntCount;
+    iassert(numExtraDynEnts == 0);
+}
+#endif
+
 void __cdecl DynEnt_FixupLightConstraints(int localClientNum, int entnum, int primaryLightIndex)
 {
     const DynEntityPose *dynEntPose; // [esp+40h] [ebp-4Ch]

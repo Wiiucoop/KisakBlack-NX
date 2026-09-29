@@ -1024,3 +1024,88 @@ void __cdecl CG_DrawVisibleNames(int localClientNum)
     }
 }
 
+
+#ifdef KISAK_SP
+#include <server_mp/sv_init_mp.h>
+#include <stringed/stringed_hooks.h>
+#include <gfx_d3d/r_init.h>
+#include <qcommon/common.h>
+#include <climits>
+
+namespace
+{
+const dvar_s *friendlyNameFontObjective;
+const dvar_s *friendlyNameFontSize;
+const dvar_s *friendlyNameFontColor;
+const dvar_s *friendlyNameFontGlowColor;
+
+bool HasLookAtText(const char *text)
+{
+    return text && *text && I_stricmp(text, "none");
+}
+
+// Retail 0x00432280: normalized font metrics, virtual placement, pixel rounding.
+void DrawLookAtLine(const ScreenPlacement *place, const char *text, Font_s *font,
+    float y, float depth, float scale, const float *color, const float *glow)
+{
+    float x = 25.0f;
+    float sx = R_NormalizedTextScale(font, scale), sy = sx;
+    ScrPlace_ApplyRect(place, &x, &y, &sx, &sy, 2, 2);
+    CL_DrawTextPhysicalWithEffects(const_cast<char *>(text), INT_MAX, font,
+        floorf(x + 0.5f), floorf(y + 0.5f), depth, sx, sy, color, 3, glow,
+        nullptr, nullptr, 0, 0, 0, 0);
+}
+}
+
+void CG_RegisterLookAtDvars_SP()
+{
+    friendlyNameFontObjective = _Dvar_RegisterBool("friendlyNameFontObjective", true, 0, "");
+    friendlyNameFontSize = _Dvar_RegisterFloat("friendlyNameFontSize", 0.3f, 0.01f, 100.0f, 0, "");
+    _Dvar_RegisterFloat("friendlyNameSplitScreenFontSize", 0.4f, 0.01f, 100.0f, 0, "");
+    friendlyNameFontColor = _Dvar_RegisterVec4("friendlyNameFontColor", 0.9f, 1.0f, 0.9f, 0.7f, 0.0f, 1.0f, 0, "");
+    friendlyNameFontGlowColor = _Dvar_RegisterVec4("friendlyNameFontGlowColor", 0.0f, 0.3f, 0.0f, 1.0f, 0.0f, 1.0f, 0, "");
+}
+
+// Recovered behavior of retail 0x004BF560, using relocated SP configstrings.
+// This descriptive identifier is not a claim about the original source name.
+void CG_DrawLookAtText_SP(int localClientNum)
+{
+    if (cg_paused->current.integer || CG_Flashbanged(localClientNum)
+        || !I_stricmp(Dvar_GetString("ui_gametype"), "vs") || Com_IsMenuLevel(nullptr)
+        || !cg_drawFriendlyNames->current.enabled) return;
+    cg_s *cg = CG_GetLocalClientGlobals(localClientNum);
+    if (unsigned(cg->clientNum) >= 32) return;
+    const int slot = CS_SP_LOOKAT_TEXT + cg->clientNum * 2;
+    const char *primary = CL_GetConfigString(slot);
+    if (!HasLookAtText(primary) || Dvar_GetBool("hud_missionFailed")) return;
+    const char *text = SEH_LocalizeTextMessage(primary, "Friend Name", LOCMSG_SAFE);
+    if (!text) return;
+    float color[4];
+    if (CG_GetTeamIndicator() == 3) Dvar_GetUnpackedColor(cg_TeamColor_MyTeamAlt, color);
+    else memcpy(color, friendlyNameFontColor->current.vector, sizeof(color));
+    const float *glow = friendlyNameFontGlowColor->current.vector;
+    const float scale = friendlyNameFontSize->current.value;
+    const ScreenPlacement *place = &scrPlaceView[localClientNum];
+    Font_s *font = UI_GetFontHandle(place, friendlyNameFontObjective->current.enabled ? 1 : 0, scale);
+    float depth = 1.0f;
+    if (R_StereoActivated() && cg->nextSnap)
+    {
+        float end[3], contact[3];
+        Vec3Mad(cg->refdef.vieworg, 15000.0f, cg->refdef.viewaxis[0], end);
+        trace_t trace = {};
+        CG_LocationalTrace(&trace, cg->refdef.vieworg, end, cg->nextSnap->ps.clientNum,
+            0x0280F001, false, nullptr);
+        Vec3Lerp(cg->refdef.vieworg, end, trace.fraction, contact);
+        depth = Vec3Distance(cg->refdef.vieworg, contact);
+        if (depth >= 10000.0f) depth = 10000.0f;
+    }
+    DrawLookAtLine(place, text, font, -2.0f, depth, scale, color, glow);
+    const char *secondary = CL_GetConfigString(slot + 1);
+    if (HasLookAtText(secondary))
+    {
+        const float secondaryColor[4] = { 1.0f, 1.0f, 1.0f, 0.7f };
+        DrawLookAtLine(place, UI_SafeTranslateString(secondary), font, 18.0f,
+            depth, scale, secondaryColor, glow);
+    }
+}
+#endif

@@ -39,6 +39,235 @@ static void __cdecl METHOD_NULLSUB(scr_entref_t entref)
 }
 
 
+#ifdef KISAK_SP
+#include <qcommon/common.h>
+#include <game_mp/g_scr_main_mp.h>
+
+// ===========================================================================
+// TODO(SP-STUB) -- deliberate no-op stubs for retail-SP ACTOR script methods.
+//
+// Source: retail SP's actor method table at 0x00A52058, 115 entries, reached
+// through the 1st link of SP's Scr_GetMethod chain (SP dispatcher
+// FUN_0051AB90; SP Scr_GetMethod is FUN_0068A640). That table is this file's
+// methods_2[] plus 40 extra names; the 75 names the two tables share appear in
+// IDENTICAL relative order in both, which is what establishes the pairing.
+// The 22 registered below are the subset of those 40 that the SP `frontend`
+// boot actually compiles.
+//
+// These are placeholders, NOT implementations. Each does nothing but print one
+// warning naming itself. They exist so the SP script set LINKS: an unresolved
+// method name falls through EmitMethod's script_method: path
+// (cscr_compiler.cpp:3187) and becomes a script-function reference, which
+// LinkThread (cscr_compiler.cpp:271) then kills the boot over. Grep
+// TODO(SP-STUB) to enumerate every stub in the tree.
+//
+// The full rationale -- in particular WHY AN EMPTY BODY IS STACK-SAFE, with
+// the cscr_vm.cpp line references -- is written out once above
+// BuiltinFunctionDef functions[] in game_mp/g_scr_main_mp.cpp. Not repeated
+// here.
+//
+// type == 0 on every row. Unlike the earlier pass, that is now a VERIFIED
+// claim rather than merely the permissive choice: all 710 rows across all
+// seven SP method tables were read, only 9 carry type 1 (the mover table's
+// devadd{pitch,yaw,roll} and 6 others), and every one of the 58 names
+// registered by this pass carries 0 in retail SP.
+// ===========================================================================
+
+// Channel 24 == "parserscript" (con_channels.cpp:11, builtinChannels[24]), the
+// same channel the sibling stubs in game_mp/g_scr_main_mp.cpp report on.
+static void ActorSPStub_ReportOnce(const char *name, const char *spHandler, const char *retDesc, bool *pReported)
+{
+    if ( *pReported )
+        return;
+    *pReported = true;
+    Com_PrintWarning(
+        24,
+        "WARNING: TODO(SP-STUB) script builtin '%s' (retail SP handler %s) was called "
+        "but is an unimplemented stub: it does no work at all and evaluates to %s. "
+        "This warning prints once per builtin name.\n",
+        name,
+        spHandler,
+        retDesc);
+}
+
+#define ActorSPStub_DEFINE(symbol, gscName, spHandler)                        \
+    static void __cdecl symbol(scr_entref_t)                                  \
+    {                                                                         \
+        static bool s_reported = false;                                       \
+        ActorSPStub_ReportOnce(gscName, spHandler, "undefined", &s_reported); \
+    }
+
+// Returns a fixed integer instead of undefined. STILL A STUB -- it does no
+// work; the value is only a return SHAPE fix. It exists because the VM makes
+// `if (x)` on undefined a fatal script error (Scr_CastBool,
+// cscr_variable.cpp:4522-4529), and every name using this macro is read as a
+// predicate somewhere in the retail SP script corpus. The per-name reason for
+// the specific value is on that name's own row below. See the full write-up
+// above the SP_STUB_* macros in game_mp/g_scr_main_mp.cpp for the VM stack
+// contract that makes this safe.
+#define ActorSPStub_DEFINE_INT(symbol, gscName, spHandler, value)             \
+    static void __cdecl symbol(scr_entref_t)                                  \
+    {                                                                         \
+        static bool s_reported = false;                                       \
+        ActorSPStub_ReportOnce(gscName, spHandler,                            \
+                               "the fixed integer " #value, &s_reported);     \
+        Scr_AddInt((value), SCRIPTINSTANCE_SERVER);                           \
+    }
+
+// --- TODO(SP-STUB) actor method stubs, registered at the end of methods_2[] ---
+ActorSPStub_DEFINE(ActorCmd_SPStub_setproneanimnodes, "setproneanimnodes", "0x007ca720")
+    // TODO(SP-STUB) 8 GSC ref(s) in the frontend closure, e.g. animscripts/cover_prone:57 self setProneAnimNodes( -45, 45, %prone_legs_down, %exposed_modern, %prone_le...
+ActorSPStub_DEFINE_INT(ActorCmd_SPStub_canshoot, "canshoot", "0x007caba0", 0)
+    // RETURNS 0: JUDGEMENT: capability query; 0 = 'cannot shoot at that point'.
+    // TODO(SP-STUB) 7 GSC ref(s) in the frontend closure, e.g. animscripts/combat:1044 if ( IsDefined( self.enemy ) && (!self cansee( self.enemy ) || !self canShoot( s...
+ActorSPStub_DEFINE_INT(ActorCmd_SPStub_useturret, "useturret", "0x007cc3d0", 0)
+    // RETURNS 0: JUDGEMENT: 0 = 'failed to mount the turret'.
+    // TODO(SP-STUB) 7 GSC ref(s) in the frontend closure, e.g. animscripts/cover_wall:828 if ( self useTurret( turret ) )
+ActorSPStub_DEFINE(ActorCmd_SPStub_shoot, "shoot", "0x007c9b50")
+    // TODO(SP-STUB) 5 GSC ref(s) in the frontend closure, e.g. animscripts/shared:1486 self shoot( 1, pos );
+ActorSPStub_DEFINE(ActorCmd_SPStub_stopuseturret, "stopuseturret", "0x007cc4c0")
+    // TODO(SP-STUB) 5 GSC ref(s) in the frontend closure, e.g. maps/_mgturret:1688 self StopUSeturret();
+ActorSPStub_DEFINE_INT(ActorCmd_SPStub_usecovernode, "usecovernode", "0x007c9ec0", 0)
+    // RETURNS 0: JUDGEMENT: 0 = 'failed to take the cover node'.
+    // TODO(SP-STUB) 4 GSC ref(s) in the frontend closure, e.g. animscripts/combat_utility:2034 if ( self UseCoverNode( node ) )
+ActorSPStub_DEFINE(ActorCmd_SPStub_checkgrenadethrow, "checkgrenadethrow", "0x007cba70")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. animscripts/combat_utility:1575 throwvel = self checkGrenadeThrow(armOffset, "min energy", self.randomGr...
+ActorSPStub_DEFINE(ActorCmd_SPStub_checkgrenadethrowpos, "checkgrenadethrowpos", "0x007cbb70")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. animscripts/combat_utility:1562 throwvel = self checkGrenadeThrowPos(armOffset, "min energy", destination);
+ActorSPStub_DEFINE_INT(ActorCmd_SPStub_issuppressed, "issuppressed", "0x007cb9d0", 0)
+    // RETURNS 0: JUDGEMENT: 0 = 'not suppressed'; nothing in this tree tracks
+    //            suppression.
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. animscripts/squadmanager:798 else if (self issuppressed())
+ActorSPStub_DEFINE(ActorCmd_SPStub_updateplayersightaccuracy, "updateplayersightaccuracy", "0x007c9d70")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. animscripts/combat_utility:391 self updatePlayerSightAccuracy();
+ActorSPStub_DEFINE(ActorCmd_SPStub_updateprone, "updateprone", "0x007ca820")
+    // TODO(SP-STUB) 3 GSC ref(s) in the frontend closure, e.g. animscripts/combat_utility:872 self UpdateProne(%prone_legs_up, %prone_legs_down, 1, 0.1, 1);
+ActorSPStub_DEFINE(ActorCmd_SPStub_dropweapon, "dropweapon", "0x007cae50")
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. animscripts/shared:227 droppedWeapon = self DropWeapon( dropWeaponName, position, speed );
+ActorSPStub_DEFINE(ActorCmd_SPStub_findbestcovernode, "findbestcovernode", "0x007c9e20")
+    // NOTE: LEFT UNDEFINED DELIBERATELY AND CORRECTLY: the corpus guards it with IsDefined
+    //       (animscripts/combat_utility.gsc:2028/2089), and undefined is what retail returns when
+    //       no cover node is found. Same for getturret (maps/_vehicle_aianim.gsc:2286 wraps it in
+    //       isdefined()) and dropweapon (result never read).
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. animscripts/combat_utility:2028 node = self FindBestCoverNode();
+ActorSPStub_DEFINE_INT(ActorCmd_SPStub_canuseturret, "canuseturret", "0x007cc500", 0)
+    // RETURNS 0: JUDGEMENT: capability query; 0 = 'cannot use that turret'.
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_mgturret:911 if( ai[i] IsInGoal( node.origin ) && ai[i] CanUSeturret( turret ) )
+ActorSPStub_DEFINE_INT(ActorCmd_SPStub_checkcoverexitposwithpath, "checkcoverexitposwithpath", "0x007c9ae0", 0)
+    // RETURNS 0: JUDGEMENT: 0 = 'no valid exit position found'; no path check is performed.
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. animscripts/cover_arrival:2071 if ( !isExposedApproach && checkWithPath && !( self checkCoverExitPosWith...
+ActorSPStub_DEFINE(ActorCmd_SPStub_enterprone, "enterprone", "0x007ca610")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. animscripts/utility:2253 self EnterProne(timer);
+ActorSPStub_DEFINE(ActorCmd_SPStub_exitprone, "exitprone", "0x007ca6c0")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. animscripts/utility:2274 self ExitProne(timer);
+ActorSPStub_DEFINE(ActorCmd_SPStub_getturret, "getturret", "0x007ccc80")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_vehicle_aianim:2286 if( !isdefined( guy getturret() ) )
+ActorSPStub_DEFINE(ActorCmd_SPStub_startactorreact, "startactorreact", "0x007ce8f0")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_callbacksetup:314 self startactorreact();
+ActorSPStub_DEFINE(ActorCmd_SPStub_stopshoot, "stopshoot", "0x007c9cb0")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. animscripts/utility:1377 self StopShoot();
+ActorSPStub_DEFINE(ActorCmd_SPStub_throwgrenade, "throwgrenade", "0x007cbc90")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. animscripts/combat_utility:1761 self throwGrenade();
+
+// --- Added 2026-08-28, when GScr_LoadHumanAnimScripts began compiling the 23 human
+// animscripts. Both names are actor methods that no earlier pass registered, and an
+// UNREGISTERED builtin is a COMPILE error, not a runtime warning: the boot died with
+//     Server script compile error: unknown function (animscripts/grenade_return_throw.gsc:109)
+//       self pickUpGrenade();
+// A static diff of the newly-compiled script closure against every name this tree
+// registers says these two are the ONLY additions the human set needs; the other 113
+// entries of the SP actor method table it touches are already present above.
+ActorSPStub_DEFINE(ActorCmd_SPStub_pickupgrenade, "pickupgrenade", "0x007cc380")
+    // TODO(SP-STUB) 2 GSC ref(s), both animscripts/grenade_return_throw (:109, :121) --
+    // the AI picking a live grenade back up to throw it away. Retail 0x007cc380 is short:
+    // Actor_Get(entref), then `if (actor-><short +0x215c>) FUN_00647e00();`. Left a stub
+    // rather than guessed: +0x215c is not mapped to a field of this tree's actor_s, and
+    // FUN_00647e00 is unidentified. Nothing on the frontend path throws grenades.
+// Retail 0x007C98F0 is the actor-only wrapper around the same worker used by
+// AnimScripted. The binary actor-method table pairs the literal
+// "startscriptedanim" with this address, and the body independently proves the
+// ABI: Actor_Get, reject more than eight parameters, then worker flags (0, 0).
+static void __cdecl ActorCmd_StartScriptedAnim_SP(scr_entref_t entref)
+{
+    actor_s *actor = Actor_Get(entref);
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) > 8 )
+        Scr_Error("too many parameters", SCRIPTINSTANCE_SERVER);
+    Com_Printf(15, "SP startscriptedanim method: ent %d actor %p\n", actor->ent->s.number, actor);
+    GScr_StartScriptedAnim_SP(entref, false, false);
+}
+
+// Retail SP 0x007CD130.  Besides the actor-method table's name/handler pairing,
+// the body independently identifies all three existing actor_s string fields:
+// current becomes last, parameter 0 becomes current, and parameter 1 records
+// the transition reason.  Actor_DumpInfo consumes the same triplet.
+static void __cdecl ActorCmd_TrackScriptState_SP(scr_entref_t entref)
+{
+    actor_s *actor = Actor_Get(entref);
+    if ( Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 2 )
+        Scr_Error("trackScriptState newStateName, reasonForTransition", SCRIPTINSTANCE_SERVER);
+
+    Scr_SetString(&actor->lastScriptState, actor->scriptState, SCRIPTINSTANCE_SERVER);
+    Scr_SetString(
+        &actor->scriptState,
+        (unsigned __int16)Scr_GetConstString(0, SCRIPTINSTANCE_SERVER),
+        SCRIPTINSTANCE_SERVER);
+    Scr_SetString(
+        &actor->stateChangeReason,
+        (unsigned __int16)Scr_GetConstString(1, SCRIPTINSTANCE_SERVER),
+        SCRIPTINSTANCE_SERVER);
+
+    if ( actor->scriptState == actor->lastScriptState )
+    {
+        Scr_Error(
+            va(
+                "trackScriptState should only be called on script state transitions.  "
+                "Called for state %s from state %s.",
+                SL_ConvertToString(actor->scriptState, SCRIPTINSTANCE_SERVER),
+                SL_ConvertToString(actor->lastScriptState, SCRIPTINSTANCE_SERVER)),
+            SCRIPTINSTANCE_SERVER);
+    }
+}
+
+// Retail SP 0x007CE220.  The actor-method table's name/handler pair is fact 1;
+// the body writes the first two members of the contiguous +0x1AD8 engagement
+// block, and retail's independent scorer at 0x007BFD40 reads that same block.
+static void __cdecl ActorCmd_SetEngagementMinDist_SP(scr_entref_t entref)
+{
+    actor_s *actor = Actor_Get(entref);
+    actor->engageMinDist = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+    actor->engageMinFalloffDist = Scr_GetFloat(1, SCRIPTINSTANCE_SERVER);
+
+    if ( actor->engageMinFalloffDist > actor->engageMinDist )
+    {
+        Scr_Error(
+            va(
+                "Min dist falloff must be <= min dist. [%f < %f]",
+                actor->engageMinDist,
+                actor->engageMinFalloffDist),
+            SCRIPTINSTANCE_SERVER);
+    }
+}
+
+// Retail SP 0x007CE2C0, the +0x1AE0/+0x1AE4 twin of the method above.
+static void __cdecl ActorCmd_SetEngagementMaxDist_SP(scr_entref_t entref)
+{
+    actor_s *actor = Actor_Get(entref);
+    actor->engageMaxDist = Scr_GetFloat(0, SCRIPTINSTANCE_SERVER);
+    actor->engageMaxFalloffDist = Scr_GetFloat(1, SCRIPTINSTANCE_SERVER);
+
+    if ( actor->engageMaxFalloffDist < actor->engageMaxDist )
+    {
+        Scr_Error(
+            va(
+                "Max dist falloff must be >= max dist. [%f > %f]",
+                actor->engageMaxDist,
+                actor->engageMaxFalloffDist),
+            SCRIPTINSTANCE_SERVER);
+    }
+}
+#endif // KISAK_SP
+
+
 const BuiltinMethodDef methods_2[] =
 {
   { "startcoverarrival", &ActorCmd_StartCoverArrival, 0 },
@@ -122,6 +351,35 @@ const BuiltinMethodDef methods_2[] =
   { "setanimstate", &ActorCmd_SetAnimState, 0 },
   { "setaimanimweights", &ActorCmd_SetAimAnimWeights, 0 },
   { "finishactordamage", &ActorCmd_finishActorDamage, 0 }
+#ifdef KISAK_SP
+  ,
+  { "setproneanimnodes", &ActorCmd_SPStub_setproneanimnodes, 0 },            // TODO(SP-STUB) SP 0x00A52058 idx 26, 0x007ca720
+  { "trackscriptstate", &ActorCmd_TrackScriptState_SP, 0 },                  // IMPLEMENTED from SP 0x00A52058 idx 72, 0x007CD130
+  { "canshoot", &ActorCmd_SPStub_canshoot, 0 },                              // TODO(SP-STUB) SP 0x00A52058 idx 33, 0x007caba0
+  { "useturret", &ActorCmd_SPStub_useturret, 0 },                            // TODO(SP-STUB) SP 0x00A52058 idx 53, 0x007cc3d0
+  { "shoot", &ActorCmd_SPStub_shoot, 0 },                                    // TODO(SP-STUB) SP 0x00A52058 idx 4, 0x007c9b50
+  { "stopuseturret", &ActorCmd_SPStub_stopuseturret, 0 },                    // TODO(SP-STUB) SP 0x00A52058 idx 54, 0x007cc4c0
+  { "usecovernode", &ActorCmd_SPStub_usecovernode, 0 },                      // TODO(SP-STUB) SP 0x00A52058 idx 12, 0x007c9ec0
+  { "checkgrenadethrow", &ActorCmd_SPStub_checkgrenadethrow, 0 },            // TODO(SP-STUB) SP 0x00A52058 idx 47, 0x007cba70
+  { "checkgrenadethrowpos", &ActorCmd_SPStub_checkgrenadethrowpos, 0 },      // TODO(SP-STUB) SP 0x00A52058 idx 82, 0x007cbb70
+  { "issuppressed", &ActorCmd_SPStub_issuppressed, 0 },                      // TODO(SP-STUB) SP 0x00A52058 idx 45, 0x007cb9d0
+  { "updateplayersightaccuracy", &ActorCmd_SPStub_updateplayersightaccuracy, 0 }, // TODO(SP-STUB) SP 0x00A52058 idx 8, 0x007c9d70
+  { "updateprone", &ActorCmd_SPStub_updateprone, 0 },                        // TODO(SP-STUB) SP 0x00A52058 idx 27, 0x007ca820
+  { "dropweapon", &ActorCmd_SPStub_dropweapon, 0 },                          // TODO(SP-STUB) SP 0x00A52058 idx 35, 0x007cae50
+  { "findbestcovernode", &ActorCmd_SPStub_findbestcovernode, 0 },            // TODO(SP-STUB) SP 0x00A52058 idx 10, 0x007c9e20
+  { "canuseturret", &ActorCmd_SPStub_canuseturret, 0 },                      // TODO(SP-STUB) SP 0x00A52058 idx 55, 0x007cc500
+  { "checkcoverexitposwithpath", &ActorCmd_SPStub_checkcoverexitposwithpath, 0 }, // TODO(SP-STUB) SP 0x00A52058 idx 3, 0x007c9ae0
+  { "enterprone", &ActorCmd_SPStub_enterprone, 0 },                          // TODO(SP-STUB) SP 0x00A52058 idx 24, 0x007ca610
+  { "exitprone", &ActorCmd_SPStub_exitprone, 0 },                            // TODO(SP-STUB) SP 0x00A52058 idx 25, 0x007ca6c0
+  { "getturret", &ActorCmd_SPStub_getturret, 0 },                            // TODO(SP-STUB) SP 0x00A52058 idx 62, 0x007ccc80
+  { "startactorreact", &ActorCmd_SPStub_startactorreact, 0 },                // TODO(SP-STUB) SP 0x00A52058 idx 114, 0x007ce8f0
+  { "stopshoot", &ActorCmd_SPStub_stopshoot, 0 },                            // TODO(SP-STUB) SP 0x00A52058 idx 6, 0x007c9cb0
+  { "throwgrenade", &ActorCmd_SPStub_throwgrenade, 0 },                      // TODO(SP-STUB) SP 0x00A52058 idx 51, 0x007cbc90
+  { "pickupgrenade", &ActorCmd_SPStub_pickupgrenade, 0 },                    // TODO(SP-STUB) SP 0x00A52058 idx 52, 0x007cc380
+  { "startscriptedanim", &ActorCmd_StartScriptedAnim_SP, 0 },                // IMPLEMENTED from SP 0x007C98F0 -> shared worker 0x00624F30
+  { "setengagementmindist", &ActorCmd_SetEngagementMinDist_SP, 0 },         // SP 0x00A52058 idx 105, 0x007ce220
+  { "setengagementmaxdist", &ActorCmd_SetEngagementMaxDist_SP, 0 },         // SP 0x00A52058 idx 106, 0x007ce2c0
+#endif // KISAK_SP
 };
 
 
@@ -1568,7 +1826,7 @@ void __cdecl Actor_GetEntType(int entnum)
     }
     else
     {
-        if ( (FL_OBSTACLE /* nx-port: decompiled as &objBuf[1758][2] */ & level.gentities[entnum].flags) != 0 )
+        if ( (FL_OBSTACLE & level.gentities[entnum].flags) != 0 )
             obstacle = scr_const.obstacle;
         else
             obstacle = scr_const.world;
@@ -1732,7 +1990,8 @@ void __cdecl ScrCmd_GetNegotiationEndNode(scr_entref_t entref)
         {
             __debugbreak();
         }
-        if ( *((int *)&self->Physics.proximity_data.prims[199].tree + 7 * self->Path.wNegotiationStartNode) < 0
+        const int endNodeIndex = self->Path.pts[self->Path.wNegotiationStartNode - 1].iNodeNum;
+        if ( endNodeIndex < 0
             && !Assert_MyHandler(
                         "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_script_cmd.cpp",
                         3120,
@@ -1742,8 +2001,7 @@ void __cdecl ScrCmd_GetNegotiationEndNode(scr_entref_t entref)
         {
             __debugbreak();
         }
-        v1 = Path_ConvertIndexToNode(*((unsigned int *)&self->Physics.proximity_data.prims[199].tree
-                                                                 + 7 * self->Path.wNegotiationStartNode));
+        v1 = Path_ConvertIndexToNode(endNodeIndex);
         Scr_AddPathnode(v1);
     }
 }
@@ -2042,12 +2300,31 @@ void __cdecl ActorCmd_ClearOverrideRunToPos(scr_entref_t entref)
     actor_s *v1; // eax
 
     v1 = Actor_Get(entref);
+#ifdef KISAK_SP
+    // CORRECTED 2026-08-28. The #else branch below is this function as the decompiler emitted it,
+    // and it is a MIS-TYPED FLOAT STORE, not a species write. The three stores it makes land at
+    // actor_s +3836 / +3840 / +3844; animscriptOverrideRunToPos[0] is at +3836, so +3840 and
+    // +3844 are pos[1] and pos[2]. The decompiler re-based the pointer (`v1 + 3836`) and then
+    // named those two slots after whatever happens to sit at +0x04 and +0x08 of actor_s --
+    // `sentient` and `species`. ActorCmd_SetOverrideRunToPos directly above writes the same three
+    // components correctly, which is the shape this clear-function mirrors.
+    //
+    // It was harmless only because NULL and AI_SPECIES_DOG were both 0. Widening AISpecies makes
+    // AI_SPECIES_DOG == 1 on SP, which would store 1 into a float (1.4e-45) and, worse, would read
+    // as a real species assignment to anyone maintaining this. Fixed for SP only: the MP path must
+    // stay byte-identical, and there the emitted stores are already correct by coincidence.
+    v1->arrivalInfo.animscriptOverrideRunTo = 0;
+    v1->arrivalInfo.animscriptOverrideRunToPos[0] = 0.0f;
+    v1->arrivalInfo.animscriptOverrideRunToPos[1] = 0.0f;
+    v1->arrivalInfo.animscriptOverrideRunToPos[2] = 0.0f;
+#else
     v1->arrivalInfo.animscriptOverrideRunTo = 0;
     v1->arrivalInfo.animscriptOverrideRunToPos[0] = 0.0f;
     v1 = (actor_s *)((char *)v1 + 3836);
     //v1->sentient = *(sentient_s **)&FLOAT_0_0;
     v1->sentient = NULL;
     v1->species = AI_SPECIES_DOG;
+#endif
 }
 
 void __cdecl ActorCmd_NearNode(scr_entref_t entref)
@@ -2338,7 +2615,7 @@ void __cdecl ActorCmd_SetTalkToSpecies(scr_entref_t entref)
             self->talkToSpecies = -1;
             return;
         }
-        for ( i = 0; i < 1; ++i )
+        for ( i = 0; i < MAX_AI_SPECIES; ++i )
         {
             if ( species == *g_AISpeciesNames[i] )
             {
@@ -2393,6 +2670,115 @@ void __cdecl ActorCmd_SetAimAnimWeights(scr_entref_t entref)
 
 void __cdecl ActorCmd_finishActorDamage(scr_entref_t entref)
 {
+#ifdef KISAK_SP
+    typedef void(__cdecl *actor_die_sp_t)(
+        gentity_s *,
+        gentity_s *,
+        gentity_s *,
+        int,
+        int,
+        int,
+        const float *,
+        hitLocation_t);
+
+    actor_s *self = Actor_Get(entref);
+    gentity_s *inflictor = &g_entities[ENTITYNUM_WORLD];
+    gentity_s *attacker = &g_entities[ENTITYNUM_WORLD];
+    float vPoint[3];
+    float vDir[3] = { 0.0f, 0.0f, 0.0f };
+    float *point = 0;
+    float *dir = 0;
+    const int damage = Scr_GetInt(2u, SCRIPTINSTANCE_SERVER);
+    if ( damage <= 0 )
+        return;
+
+    if ( Scr_GetType(0, SCRIPTINSTANCE_SERVER) && Scr_GetPointerType(0, SCRIPTINSTANCE_SERVER) == 19 )
+        inflictor = Scr_GetEntity(0);
+    if ( Scr_GetType(1u, SCRIPTINSTANCE_SERVER) && Scr_GetPointerType(1u, SCRIPTINSTANCE_SERVER) == 19 )
+        attacker = Scr_GetEntity(1u);
+
+    const int dflags = Scr_GetInt(3u, SCRIPTINSTANCE_SERVER);
+    const meansOfDeath_t mod = (meansOfDeath_t)G_MeansOfDeathFromScriptParam(4u);
+    char *weaponName = Scr_GetString(5u, SCRIPTINSTANCE_SERVER);
+    const int iWeapon = G_GetWeaponIndexForName(weaponName);
+    if ( Scr_GetType(6u, SCRIPTINSTANCE_SERVER) )
+    {
+        Scr_GetVector(6u, vPoint, SCRIPTINSTANCE_SERVER);
+        point = vPoint;
+    }
+    if ( Scr_GetType(7u, SCRIPTINSTANCE_SERVER) )
+    {
+        Scr_GetVector(7u, vDir, SCRIPTINSTANCE_SERVER);
+        dir = vDir;
+    }
+
+    const unsigned __int16 hitLocString = (unsigned __int16)Scr_GetConstString(8u, SCRIPTINSTANCE_SERVER);
+    const hitLocation_t hitLoc = (hitLocation_t)G_GetHitLocationIndexFromString(hitLocString);
+    const int modelIndex = Scr_GetInt(9u, SCRIPTINSTANCE_SERVER);
+    const int psTimeOffset = Scr_GetInt(10u, SCRIPTINSTANCE_SERVER);
+
+    // Retail 0x007CE570 reports damage received after native death through a
+    // separate notification and performs no further health/state mutation.
+    if ( !self->Physics.bIsAlive )
+    {
+        G_DamageNotify(
+            scr_const.damage_afterdeath,
+            self->ent,
+            attacker,
+            dir,
+            point,
+            damage,
+            mod,
+            dflags,
+            modelIndex,
+            hitLocString,
+            weaponName);
+        return;
+    }
+
+    self->ent->health -= damage;
+    G_DamageNotify(
+        scr_const.damage,
+        self->ent,
+        attacker,
+        dir,
+        point,
+        damage,
+        mod,
+        dflags,
+        modelIndex,
+        hitLocString,
+        weaponName);
+
+    if ( self->ent->health > 0 )
+    {
+        void(__cdecl *pain)(gentity_s *, gentity_s *, int, const float *, const int, const float *, const hitLocation_t, const int) =
+            entityHandlers[self->ent->handler].pain;
+        if ( pain )
+            pain(self->ent, attacker, damage, point, mod, vDir, hitLoc, iWeapon);
+        return;
+    }
+
+    if ( self->ent->health < -999 )
+        self->ent->health = -999;
+    ScrNotify_FaceEvent(self->ent, scr_const.death);
+    if ( iWeapon )
+        Scr_AddString((char *)BG_WeaponName(iWeapon), SCRIPTINSTANCE_SERVER);
+    else
+        Scr_AddUndefined(SCRIPTINSTANCE_SERVER);
+    Scr_AddConstString(*modNames[mod], SCRIPTINSTANCE_SERVER);
+    Scr_AddEntity(attacker, SCRIPTINSTANCE_SERVER);
+    Scr_Notify(self->ent, scr_const.death, 3u);
+
+    // The script callback owns timeOffset.  The native retail die handler is
+    // a distinct eight-word cdecl dispatch and contains no script callback.
+    Scr_ActorKilled(self->ent, inflictor, attacker, damage, mod, iWeapon, vDir, hitLoc, psTimeOffset);
+    if ( self->ent->sentient )
+        self->ent->sentient->lastAttacker.setEnt(attacker);
+    actor_die_sp_t die = reinterpret_cast<actor_die_sp_t>(entityHandlers[self->ent->handler].die);
+    if ( die )
+        die(self->ent, inflictor, attacker, damage, mod, iWeapon, vDir, hitLoc);
+#else
     char *String; // eax
     unsigned __int16 floatValue; // ax
     unsigned __int8 v3; // al
@@ -2495,4 +2881,5 @@ void __cdecl ActorCmd_finishActorDamage(scr_entref_t entref)
             }
         }
     }
+#endif
 }

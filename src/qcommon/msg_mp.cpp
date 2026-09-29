@@ -8,12 +8,24 @@
 #include "threads.h"
 #include <bgame/bg_local.h>
 #include "msg.h"
+#include "msg_origin_quantization.h"
 #include "sv_msg_write.h"
 #include <bgame/bg_misc.h>
 #include <demo/demo_profile.h>
 #include <client_mp/cl_parse_mp.h>
 #include <win32/win_shared.h>
 #include <client/client.h>
+#include <cstddef>
+#include <client_mp/client_mp.h>
+
+// The hardcoded netfield offsets and snapshot stride both require the retail
+// 0xD0-byte clientState_s layout in SP as well as MP.
+static_assert(sizeof(clientState_s) == 208,
+              "clientState_s must retain the retail 0xD0-byte layout");
+#ifdef KISAK_SP
+static_assert(offsetof(clientState_s, beingRevived) == 116);
+static_assert(offsetof(clientState_s, xuid) == 120);
+#endif
 
 const int msg_hData[256] =
 {
@@ -276,7 +288,34 @@ const int msg_hData[256] =
 };
 
 
-const NetField entityStateFields[69] =
+// ES_AI_SPECIES_NET_BITS -- transmitted width of entityState_s::lerp.u.actor.species.
+//
+// This is a WIDTH change only: the row keeps its offset (88), its size (4) and its
+// position in the table, so no other row moves and the demo field list is untouched --
+// the hazard that makes inserting or reordering rows in these tables dangerous does not
+// apply here.
+//
+// MP transmits AI species in 1 bit because MP has exactly one species (dog, enumerator 0),
+// so the field only ever carries 0. SP has four -- human, dog, zombie, zombie_dog -- and
+// MSG_WriteValue masks the delta with ((1 << bits) - 1), so at 1 bit species 2 and 3 would
+// arrive on the client with bit 1 stripped: a zombie (2) would read as a human (0) and a
+// zombie_dog (3) as a dog (1). Two bits is the exact width for MAX_AI_SPECIES == 4.
+//
+// MAINTENANCE COUPLING, stated here because it cannot be asserted: MAX_AI_SPECIES lives in
+// Game/Server/game/actor.h, which this Engine translation unit does not include. If a
+// fifth species is ever added, this width must grow with it.
+#ifdef KISAK_SP
+#define ES_AI_SPECIES_NET_BITS 2
+static_assert(ES_AI_SPECIES_NET_BITS >= 2,
+              "AI species netfield must carry AISpecies 0..3 (MAX_AI_SPECIES == 4 on SP).");
+#else
+#define ES_AI_SPECIES_NET_BITS 1
+static_assert(ES_AI_SPECIES_NET_BITS == 1,
+              "MP's entityState wire format is frozen: species is 1 bit, which is only "
+              "sound while MP has a single AI species.");
+#endif
+
+const NetField entityStateFields[69 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 0u, "MSG_FIELD_ETYPE", "0" },
   { "time2", 120, 4, -97, 0u, "MSG_FIELD_TIME", "0" },
@@ -347,6 +386,9 @@ const NetField entityStateFields[69] =
   { "partBits[2]", 164, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[3]", 168, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[4]", 172, 4, 32, 1u, "32", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
 
@@ -363,8 +405,8 @@ const NetField archivedEntityFields[8] =
   { "clientMask[0]", 4, 4, 32, 0u, NULL, NULL }
 };
 
-const int numPlayerEntityStateFields = 74;
-const NetField playerEntityStateFields[74] =
+const int numPlayerEntityStateFields = 74 + SP_ENTITY_ANIM_FIELDS;
+const NetField playerEntityStateFields[74 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 1u, "MSG_FIELD_ETYPE", "NEVER_CHANGES" },
   {
@@ -544,10 +586,13 @@ const NetField playerEntityStateFields[74] =
     "NEVER_CHANGES"
   },
   { "un3", 152, 4, 32, 1u, "32", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
-const int numCorpseEntityStateFields = 68;
-const NetField corpseEntityStateFields[68] =
+const int numCorpseEntityStateFields = 68 + SP_ENTITY_ANIM_FIELDS;
+const NetField corpseEntityStateFields[68 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 1u, "MSG_FIELD_ETYPE", "NEVER_CHANGES" },
   { "lerp.pos.trBase[0]", 24, 4, -66, 0u, "MSG_FIELD_ES_ORIGINX", "0" },
@@ -689,11 +734,14 @@ const NetField corpseEntityStateFields[68] =
   { "lerp.u.anonymous.data[5]", 104, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "lerp.u.anonymous.data[6]", 108, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "lerp.u.anonymous.data[7]", 112, 4, 32, 1u, "32", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
 
-const int numItemEntityStateFields = 69;
-const NetField itemEntityStateFields[69] =
+const int numItemEntityStateFields = 69 + SP_ENTITY_ANIM_FIELDS;
+const NetField itemEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 0u, "MSG_FIELD_ETYPE", "0" },
   { "lerp.pos.trType", 12, 1, 8, 0u, "MSG_TRAJECTORY_BITS", "0" },
@@ -772,11 +820,14 @@ const NetField itemEntityStateFields[69] =
   { "lerp.u.anonymous.data[6]", 108, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "lerp.u.anonymous.data[7]", 112, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "enemyModel", 200, 2, 10, 1u, "SUBMODEL_BITS", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
 
-const int numMissileEntityStateFields = 69;
-const NetField missileEntityStateFields[69] =
+const int numMissileEntityStateFields = 69 + SP_ENTITY_ANIM_FIELDS;
+const NetField missileEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 0u, "MSG_FIELD_ETYPE", "0" },
   { "lerp.pos.trTime", 16, 4, -68, 0u, "MSG_FIELD_POS_TRTIME", "0" },
@@ -855,9 +906,12 @@ const NetField missileEntityStateFields[69] =
   { "partBits[3]", 168, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[4]", 172, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "enemyModel", 200, 2, 10, 1u, "SUBMODEL_BITS", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
-const NetField scriptMoverStateFields[72] =
+const NetField scriptMoverStateFields[72 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 0u, "MSG_FIELD_ETYPE", "0" },
   { "loopSoundFade", 208, 2, -16, 0u, "FADETIME_BITS", "0" },
@@ -939,11 +993,14 @@ const NetField scriptMoverStateFields[72] =
   { "iHeadIcon", 214, 1, 4, 1u, "HEAD_ICON_BITS", "NEVER_CHANGES" },
   { "partBits[3]", 168, 4, 32, 0u, "32", "0" },
   { "partBits[4]", 172, 4, 32, 0u, "32", "0" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
 
-const int numSoundBlendEntityStateFields = 68;
-const NetField soundBlendEntityStateFields[68] =
+const int numSoundBlendEntityStateFields = 68 + SP_ENTITY_ANIM_FIELDS;
+const NetField soundBlendEntityStateFields[68 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 1u, "MSG_FIELD_ETYPE", "NEVER_CHANGES" },
   { "lerp.pos.trTime", 16, 4, -68, 0u, "MSG_FIELD_POS_TRTIME", "0" },
@@ -1013,9 +1070,12 @@ const NetField soundBlendEntityStateFields[68] =
   { "enemyModel", 200, 2, 10, 1u, "SUBMODEL_BITS", "NEVER_CHANGES" },
   { "iHeadIcon", 214, 1, 4, 1u, "HEAD_ICON_BITS", "NEVER_CHANGES" },
   { "faction", 215, 1, 7, 1u, "2 + CLIENT_BITS", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
-const NetField fxStateFields[68] =
+const NetField fxStateFields[68 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 0u, "MSG_FIELD_ETYPE", "0" },
   { "time2", 120, 4, -97, 0u, "MSG_FIELD_TIME", "0" },
@@ -1093,12 +1153,15 @@ const NetField fxStateFields[68] =
   { "partBits[3]", 168, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[4]", 172, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "enemyModel", 200, 2, 10, 1u, "SUBMODEL_BITS", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
 
 
-const int numLoopFxEntityStateFields = 69;
-const NetField loopFxEntityStateFields[69] =
+const int numLoopFxEntityStateFields = 69 + SP_ENTITY_ANIM_FIELDS;
+const NetField loopFxEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 1u, "MSG_FIELD_ETYPE", "NEVER_CHANGES" },
   { "lerp.pos.trTime", 16, 4, -68, 0u, "MSG_FIELD_POS_TRTIME", "0" },
@@ -1169,11 +1232,14 @@ const NetField loopFxEntityStateFields[69] =
   { "enemyModel", 200, 2, 10, 1u, "SUBMODEL_BITS", "NEVER_CHANGES" },
   { "iHeadIcon", 214, 1, 4, 1u, "HEAD_ICON_BITS", "NEVER_CHANGES" },
   { "faction", 215, 1, 7, 1u, "2 + CLIENT_BITS", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
 
-const int numTurretEntityStateFields = 69;
-const NetField turretEntityStateFields[69] =
+const int numTurretEntityStateFields = 69 + SP_ENTITY_ANIM_FIELDS;
+const NetField turretEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 0u, "MSG_FIELD_ETYPE", "0" },
   {
@@ -1268,9 +1334,12 @@ const NetField turretEntityStateFields[69] =
   { "enemyModel", 200, 2, 10, 1u, "SUBMODEL_BITS", "NEVER_CHANGES" },
   { "iHeadIcon", 214, 1, 4, 1u, "HEAD_ICON_BITS", "NEVER_CHANGES" },
   { "faction", 215, 1, 7, 1u, "2 + CLIENT_BITS", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
-const NetField helicopterEntityStateFields[71] =
+const NetField helicopterEntityStateFields[71 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 1u, "MSG_FIELD_ETYPE", "NEVER_CHANGES" },
   {
@@ -1447,9 +1516,12 @@ const NetField helicopterEntityStateFields[71] =
   { "partBits[2]", 164, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[3]", 168, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[4]", 172, 4, 32, 1u, "32", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
-const NetField planeStateFields[66] =
+const NetField planeStateFields[66 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 1u, "MSG_FIELD_ETYPE", "NEVER_CHANGES" },
   { "lerp.pos.trBase[0]", 24, 4, 0, 2u, "MSG_FIELD_FLOAT", "ALWAYS_CHANGES" },
@@ -1573,12 +1645,15 @@ const NetField planeStateFields[66] =
   { "partBits[3]", 168, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[4]", 172, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "enemyModel", 200, 2, 10, 1u, "SUBMODEL_BITS", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
 
 
-const int numVehicleEntityStateFields = 71;
-const NetField vehicleEntityStateFields[71] =
+const int numVehicleEntityStateFields = 71 + SP_ENTITY_ANIM_FIELDS;
+const NetField vehicleEntityStateFields[71 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 1u, "MSG_FIELD_ETYPE", "NEVER_CHANGES" },
   { "lerp.pos.trTime", 16, 4, -68, 0u, "MSG_FIELD_POS_TRTIME", "0" },
@@ -1723,11 +1798,14 @@ const NetField vehicleEntityStateFields[71] =
   { "partBits[2]", 164, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[3]", 168, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[4]", 172, 4, 32, 1u, "32", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
 
-const int numActorStateFields = 69;
-const NetField actorStateFields[69] =
+const int numActorStateFields = 69 + SP_ENTITY_ANIM_FIELDS;
+const NetField actorStateFields[69 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 0u, "MSG_FIELD_ETYPE", "0" },
   {
@@ -1823,7 +1901,7 @@ const NetField actorStateFields[69] =
   { "loopSoundId", 124, 4, 32, 0u, "SOUNDALIAS_BITS", "0" },
   { "loopSoundFade", 208, 2, -16, 0u, "FADETIME_BITS", "0" },
   { "otherEntityNum", 196, 2, 10, 0u, "GENTITYNUM_BITS", "0" },
-  { "lerp.u.actor.species", 88, 4, 1, 0u, "AI_SPECIES_BITS", "0" },
+  { "lerp.u.actor.species", 88, 4, ES_AI_SPECIES_NET_BITS, 0u, "AI_SPECIES_BITS", "0" },
   { "lerp.u.actor.team", 92, 4, 2, 0u, "2", "0" },
   { "lerp.useCount", 116, 4, 6, 0u, "USE_COUNT_BITS", "0" },
   { "lerp.u.anonymous.data[5]", 104, 4, 32, 0u, "32", "0" },
@@ -1838,11 +1916,14 @@ const NetField actorStateFields[69] =
   { "partBits[3]", 168, 4, 32, 0u, "32", "0" },
   { "partBits[4]", 172, 4, 32, 0u, "32", "0" },
   { "un3", 152, 4, 10, 1u, "SUBMODEL_BITS", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
 
-const int numEventEntityStateFields = 69;
-const NetField eventEntityStateFields[69] =
+const int numEventEntityStateFields = 69 + SP_ENTITY_ANIM_FIELDS;
+const NetField eventEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS] =
 {
   { "eType", 190, 2, -58, 0u, "MSG_FIELD_ETYPE", "0" },
   { "lerp.pos.trBase[0]", 24, 4, -66, 0u, "MSG_FIELD_ES_ORIGINX", "0" },
@@ -1921,17 +2002,30 @@ const NetField eventEntityStateFields[69] =
   { "partBits[2]", 164, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[3]", 168, 4, 32, 1u, "32", "NEVER_CHANGES" },
   { "partBits[4]", 172, 4, 32, 1u, "32", "NEVER_CHANGES" }
+#ifdef KISAK_SP
+  ,{ "animTreeIndex", offsetof(entityState_s, animTreeIndex), 1, 7, 0u, "7", "0" }
+#endif
 };
 
-const int numClientStateFields = 50;
-const NetField clientStateFields[50] =
+const int numClientStateFields = NUM_CLIENT_STATE_FIELDS;
+const NetField clientStateFields[NUM_CLIENT_STATE_FIELDS] =
 {
   { "score.status_icon", 164, 4, 3, 0u, "STATUS_ICON_BITS", "0" },
   { "score.place", 168, 4, 6, 0u, "CLIENT_BITS + 1", "0" },
+#ifdef KISAK_SP
+  // Retail SP's clientState table (0x00A5BF00..) sends score.kills as 32 bits and score.score
+  // through a wide SP-only encoding (-79); zombie points and kills overflow MP's 16/10 bits.
+  { "score.score", 172, 4, 32, 0u, "32", "0" },
+#else
   { "score.score", 172, 4, -16, 0u, "SCORE_BITS", "0" },
+#endif
   { "score.deaths", 184, 4, 10, 0u, "ASSIST_BITS", "0" },
   { "score.scoreboardColumns[1]", 192, 4, 10, 0u, "ASSIST_BITS", "0" },
+#ifdef KISAK_SP
+  { "score.kills", 176, 4, 32, 0u, "32", "0" },
+#else
   { "score.kills", 176, 4, 10, 0u, "ASSIST_BITS", "0" },
+#endif
   { "score.scoreboardColumns[0]", 188, 4, 10, 0u, "ASSIST_BITS", "0" },
   { "modelindex", 12, 4, 9, 0u, "MODEL_BITS", "0" },
   { "attachModelIndex[0]", 16, 4, 9, 0u, "MODEL_BITS", "0" },
@@ -1958,7 +2052,12 @@ const NetField clientStateFields[50] =
   { "clanAbbrev[0]", 136, 4, 32, 0u, "32", "0" },
   { "name[8]", 72, 4, 32, 0u, "32", "0" },
   { "name[12]", 76, 4, 32, 0u, "32", "0" },
+#ifdef KISAK_SP
+  // Carries score.headshots under KISAK_SP (g_client_fields.cpp); retail SP sends it as 16 bits.
+  { "score.scoreboardColumns[2]", 196, 4, 16, 0u, "16", "0" },
+#else
   { "score.scoreboardColumns[2]", 196, 4, 10, 0u, "ASSIST_BITS", "0" },
+#endif
   { "score.scoreboardColumns[3]", 200, 4, 10, 0u, "ASSIST_BITS", "0" },
   { "xuid32[0]", 120, 4, 32, 0u, "32", "0" },
   { "prestige", 104, 4, 8, 0u, "PRESTIGE_BITS", "0" },
@@ -1983,9 +2082,61 @@ const NetField clientStateFields[50] =
   { "attachModelIndex[5]", 36, 4, 9, 0u, "MODEL_BITS", "0" },
   { "lastDamageTime", 108, 4, -97, 0u, "MSG_FIELD_TIME", "0" },
   { "lastStandStartTime", 112, 4, -97, 0u, "MSG_FIELD_TIME", "0" },
-  { "score.ping", 160, 4, 10, 0u, "PING_BITS", "0" }
+  { "score.ping", 160, 4, 10, 0u, "PING_BITS", "0" },
+#ifdef KISAK_SP
+  // Retail descriptor 0x00A5C124: beingRevived, offset0x44, size4, bits1.
+  // Our retained client-state layout places the dedicated field at +116.
+  { "beingRevived", offsetof(clientState_s, beingRevived), 4, 1, 0u, "1", "0" },
+#endif
 };
 
+
+// PS_PM_FLAGS_NET_BITS -- transmitted width of playerState_s::pm_flags.
+//
+// MP: 25, unchanged, frozen wire format.
+//
+// SP: 32, which is what retail actually has. Read out of the live playerState
+// netfield table in BlackOps.exe: the sole "pm_flags" string is at 0x009cac80,
+// its sole pointer is the row at 0x00a5c6d8, and that row reads
+//     { name = 0x009cac80, offset = 12, size = 4, bits = 0x20, changeHint = 0 }
+// (retail NetField is 20 bytes -- five dwords -- this tree's has two extra
+// debug-string members). The row is pinned to this table, not a lookalike: the
+// row immediately before it is { offset 184, size 4, bits 16 } == this file's
+// "torsoTimer" row, which is likewise immediately before pm_flags here, and
+// netFieldOrderInfo_t::playerState[179] confirms the entry count.
+//
+// WHY IT MATTERS. GScr_PlayerLinkToAbsolute_SP (g_scr_main_mp.cpp) sets
+// pm_flags bit 26 (0x4000000) server-side, and CG_UpdateCameraMode /
+// CG_CalcViewValues read it client-side to decide whether the tag camera also
+// takes the parent's ORIENTATION. At 25 bits it can never arrive. The field is
+// delta-encoded as from^to and MSG_WriteValue (sv_msg_write.cpp:909-913) does
+//     value = MSG_GetField(fromF,size) ^ MSG_GetField(toF,size);
+//     if (bits != 32) value &= (1 << bits) - 1;
+// so a change confined to bit 26 masks to zero. MSG_ValuesAreEqual does see the
+// raw inequality and does spend a change bit, but the payload written is 0, and
+// MSG_ReadDeltaPlayerstate XORs that 0 into the client's old value -- so the bit
+// is set on the server and stays permanently 0 on the client.
+//
+// 32 (not 27) is both retail's value and the only width that takes
+// MSG_WriteValue's no-mask path, so no pm_flags bit can be silently dropped.
+#ifdef KISAK_SP
+#define PS_PM_FLAGS_NET_BITS 32
+// 0x4000000 is bit 26, so the width must be at least 27; retail's 32 satisfies
+// it with room for every remaining flag.
+static_assert(PS_PM_FLAGS_NET_BITS >= 27,
+              "pm_flags netfield is too narrow to carry bit 26 (0x4000000), the "
+              "playerlinktoabsolute 'linked absolute' flag. See "
+              "GScr_PlayerLinkToAbsolute_SP and CG_UpdateCameraMode.");
+static_assert(PS_PM_FLAGS_NET_BITS <= 32,
+              "pm_flags is a 4-byte field; MSG_WriteValue cannot write more "
+              "than 32 bits.");
+#else
+#define PS_PM_FLAGS_NET_BITS 25
+static_assert(PS_PM_FLAGS_NET_BITS == 25,
+              "MP's playerState wire format is frozen. pm_flags must stay 25 "
+              "bits in the MP build -- widening it desynchronises every "
+              "MSG_ReadDeltaPlayerstate against retail clients.");
+#endif
 
 const int numPlayerStateFields = 179;
 const NetField playerStateFields[179] =
@@ -2074,7 +2225,9 @@ const NetField playerStateFields[179] =
   },
   { "aimSpreadScale", 1308, 4, -106, 0u, "MSG_FIELD_AIM_SPREAD_SCALE", "0" },
   { "torsoTimer", 184, 4, 16, 0u, "16", "0" },
-  { "pm_flags", 12, 4, 25, 0u, "PMF_BIT_COUNT", "0" },
+  // MP: 25 (unchanged). SP: 32, matching retail's row at 0x00a5c6d8 -- see the
+  // PS_PM_FLAGS_NET_BITS note above the table.
+  { "pm_flags", 12, 4, PS_PM_FLAGS_NET_BITS, 0u, "PMF_BIT_COUNT", "0" },
   { "weapAnim", 1300, 4, 11, 0u, "ANIM_BITS", "0" },
   { "weapAnimLeft", 1304, 4, 11, 0u, "ANIM_BITS", "0" },
   { "weaponstate", 344, 4, 7, 0u, "WEAPON_STATE_BITS", "0" },
@@ -4480,9 +4633,9 @@ double __cdecl MSG_ReadOriginFloat(int bits, msg_t *msg, float oldValue)
             }
             index = 1;
         }
-        roundedCenter = (int)((*MSG_GetMapCenter())[index] + 9.313225746154785e-10);
+        roundedCenter = MSG_QuantizeOrigin((*MSG_GetMapCenter())[index]);
         return (float)(roundedCenter
-                                 + (((int)(oldValue + 9.313225746154785e-10) + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u))
+                                 + ((MSG_QuantizeOrigin(oldValue) + 0x8000 - roundedCenter) ^ MSG_ReadBits(msg, 0x10u))
                                  - 0x8000);
     }
     else
@@ -4497,9 +4650,9 @@ double __cdecl MSG_ReadOriginZFloat(msg_t *msg, float oldValue)
 
     if ( MSG_ReadBit(msg) )
     {
-        roundedCenter = (int)((*MSG_GetMapCenter())[2] + 9.313225746154785e-10);
+        roundedCenter = MSG_QuantizeOrigin((*MSG_GetMapCenter())[2]);
         return (float)(roundedCenter
-                                 + (((int)(oldValue + 9.313225746154785e-10) + 0x10000 - roundedCenter) ^ MSG_ReadBits(msg, 0x11u))
+                                 + ((MSG_QuantizeOrigin(oldValue) + 0x10000 - roundedCenter) ^ MSG_ReadBits(msg, 0x11u))
                                  - 0x10000);
     }
     else

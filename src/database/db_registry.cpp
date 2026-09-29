@@ -343,7 +343,32 @@ void *DB_XAssetPool[43] =
   &cm,
   &cm,
   &comWorld,
-  NULL,
+  // ASSET_TYPE_GAMEWORLD_SP (14). Retail BlackOps.exe aliases DB_XAssetPool[14] and
+  // DB_XAssetPool[15] onto the SAME object: the pool table base is 0x00b741b8 (read out
+  // of DB_AllocXAssetHeader (Ghidra 0x007a2770 -- now named in the live database, and its plate
+  // independently records the same 0x00B741B8 pool-table base), which indexes
+  // [EAX*4 + 0xb741b8]), and both
+  // 0x00b741f0 and 0x00b741f4 hold 0x01a55ff0. That object is the live path-data world --
+  // gameWorldCurrent at 0x00b77734 is initialized to it, and Path_SavePaths /
+  // Path_BuildNodeVis / Scr_GetNodeArray read it -- i.e. our gameWorldMp. Same idiom as
+  // COL_MAP_SP/COL_MAP_MP two lines above, which retail also aliases (both 0x02429180 == &cm).
+  //
+  // This slot was NULL. DB_AllocXAssetHeaderHandler[14] is XASSET_SINGLETON (retail
+  // 0x00b74090 == 0x0056bfc0, which decompiles to `return param_1;`), an identity function
+  // with no free list and no capacity -- NULL in means NULL out, and DB_AllocXAssetHeader
+  // reports that single failure mode as "Exceeded limit of 1 'game_map_sp' assets.", which
+  // is a misdiagnosis: the pool was not full, it did not exist. Every SP zone that carries a
+  // game_map_sp asset (frontend.ff included) died on its first one.
+  //
+  // Do NOT point this at a separate gameWorldSp: g_bsp.h declares one but nothing defines it,
+  // and retail deliberately shares one object so SP path data lands in the storage that
+  // pathnode.cpp actually reads. Unconditional (no KISAK_SP guard) because retail's SP binary
+  // has it unconditionally and it is inert in MP: no MP fastfile carries a game_map_sp asset,
+  // DB_FreeXAssetHeaderHandler[14] is FREE_NULLSUB, and DB_InitPoolHeaderHandler[14] is
+  // DB_InitSingleton whose whole body is an assert(size == 1) that POOLSIZE_GAME_MAP_SP
+  // satisfies. GameWorldSp and GameWorldMp are both {const char*, PathData}, sizeof 0x2C == 44,
+  // which is exactly what DB_GetXAssetTypeSize(14) returns, so the clone memcpy is exact-fit.
+  &gameWorldMp,
   &gameWorldMp,
   &g_MapEntsPool,
   &s_world,
@@ -464,7 +489,17 @@ const char *g_defaultAssetName[43] =
   "ui/default.menu",
   "default_menu",
   "CGAME_UNKNOWN",
+  // SP retail divergence, ASSET_TYPE_WEAPON slot (index 24), hand-verified: confirmed by a
+  // direct memory read of the live g_defaultAssetName table in the SP binary (array base
+  // 0x00b74268, entry 24 at 0x00b742c8 == 0x00a48e9c -> "defaultweapon"). Do NOT extend this
+  // #ifdef to neighboring slots -- index 37 (ASSET_TYPE_STRINGTABLE, "mp/defaultStringTable.csv")
+  // was independently re-checked at 0x00b742fc == 0x00a183c8 and is byte-identical in SP; it
+  // must stay unconditional.
+#ifdef KISAK_SP
+  "defaultweapon",
+#else
   "defaultweapon_mp",
+#endif
   "",
   "",
   "",
@@ -2587,7 +2622,39 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntry *newEntry, int allo
         {
             __debugbreak();
         }
+        // SP retail divergence (2026-08-06) -- CONFIRMED BY THE ACTUAL RUNTIME ERROR, not inferred.
+        // This gate makes overriding fatal for any asset type whose g_defaultAssetName entry is
+        // empty. ASSET_TYPE_DDL (0x28 = 40) has "" in that table, so once patch.ff finally began
+        // loading (see the allocFlags correction in DB_LoadGraphicsAssetsForPC) the SP boot died
+        // with, verbatim:
+        //   Com_ERROR: Attempting to override asset 'ddl/stats_archive.ddl'
+        //              from zone 'code_post_gfx' with zone 'patch'
+        //
+        // That override is legitimate and expected: ddl/stats_archive.ddl genuinely ships in BOTH
+        // code_post_gfx.ff and patch.ff (verified by decompressing the retail zone files -- they
+        // are plain zlib after a 12-byte header). Overriding an earlier zone's asset is the entire
+        // purpose of a patch zone, and retail SP demonstrably loads patch.ff without crashing, so
+        // the reconstruction must diverge from retail somewhere on this path. Exempting DDL here
+        // hands the decision to DB_OverrideAsset just below, which resolves it by zone priority --
+        // patch outranks code_post_gfx, so the patch copy correctly wins.
+        //
+        // Note patch_mp.ff contains no DDL assets at all, which is why MP never trips this gate
+        // and why the reconstruction could carry this divergence undetected until SP loaded a
+        // patch zone for the first time.
+        //
+        // TODO(SP): Ghidra was unavailable when this was written, so WHERE retail diverges is not
+        // pinned down. Two candidates, either of which would be more faithful than this exemption:
+        // (a) g_defaultAssetName[40] is non-empty in the SP binary -- there is direct precedent,
+        //     since index 24 already differs between SP and MP in this same table -- readable with
+        //     a single memory read at the documented table base + 40*4; or (b) retail SP's own
+        //     DB_LinkXAssetEntry exempts DDL exactly as done here. Settle this and replace the
+        //     exemption with whichever is real.
+#ifdef KISAK_SP
+        if ( !*g_defaultAssetName[type] && type != ASSET_TYPE_RAWFILE && type != ASSET_TYPE_MAP_ENTS
+            && type != ASSET_TYPE_DDL )
+#else
         if ( !*g_defaultAssetName[type] && type != ASSET_TYPE_RAWFILE && type != ASSET_TYPE_MAP_ENTS )
+#endif
         {
             Sys_LeaveCriticalSection(CRITSECT_DBHASH);
             Com_Error(
@@ -2920,7 +2987,7 @@ void __cdecl DB_GetXAsset(XAssetType type, XAssetHeader header)
 void __cdecl DB_BuildOSPath(const char *zoneName, const char *ext, unsigned int size, char *filename)
 {
     unsigned int CurrentLanguage; // eax
-    char *v5; // eax
+    const char *v5; // eax
     const char *Language; // [esp+0h] [ebp-Ch]
     const char *languageName; // [esp+8h] [ebp-4h]
 
@@ -2936,7 +3003,9 @@ void __cdecl DB_BuildOSPath(const char *zoneName, const char *ext, unsigned int 
     languageName = Language;
     if ( DB_IsUsingGermanPaths() )
         languageName = SEH_GetLanguageName(3u);
-    v5 = Sys_DefaultInstallPath();
+    v5 = Dvar_GetString("fs_b");
+    if (!v5[0])
+        v5 = Sys_DefaultInstallPath();
     Com_sprintf(filename, size, "%s\\zone\\%s\\%s%s", v5, languageName, zoneName, ext);
 }
 
@@ -2966,9 +3035,11 @@ char __cdecl DB_IsUsingGermanPaths()
 
 void __cdecl DB_BuildOSPath_Unlocalized(const char *zoneName, const char *ext, unsigned int size, char *filename)
 {
-    char *v4; // eax
+    const char *v4; // eax
 
-    v4 = Sys_DefaultInstallPath();
+    v4 = Dvar_GetString("fs_b");
+    if (!v4[0])
+        v4 = Sys_DefaultInstallPath();
     Com_sprintf(filename, size, "%s\\zone\\Common\\%s%s", v4, zoneName, ext);
 }
 
@@ -3213,18 +3284,53 @@ void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, unsigned int zoneCount, int syn
         DB_FreeUnusedResources();
         for ( j = 0; j < zoneCount; ++j )
         {
+#ifdef KISAK_SP
+            // Retail SP DB_LoadXAssets (0x00631B10) unloads zone-memory tiers in this exact
+            // order.  The order is observable allocator policy, not cosmetic: a localized
+            // companion is loaded before its owning zone, while PMem_FreeIndex is strictly
+            // LIFO.  In particular frontend (0x02000000) must be freed before en_frontend
+            // (0x01000000).  The inherited MP order did the reverse and raised
+            // "free does not match allocation" on the first map transition out of frontend.
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x20000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x40000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x4000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x8000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x10000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x800);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x1000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x2000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x100);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x200);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x400);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x40);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x80);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x20);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x8);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x10);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x4);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x2);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x200000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x800000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x400000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x2000000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x1000000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x4000000);
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x10000000);
+#else
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x40000);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x80000);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x10000);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x20000);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x4000);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x8000);
+            // The viewer base follows its localized companion during allocation;
+            // free the base first, as in retail MP DB_LoadXAssets.
+            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 2048);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 4096);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x2000);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 256);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 512);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 1024);
-            DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 2048);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 64);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 128);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 16);
@@ -3239,6 +3345,7 @@ void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, unsigned int zoneCount, int syn
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x4000000);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x2000000);
             DB_UnloadXAssetsMemoryForZone(zoneInfo[j].freeFlags, 0x10000000);
+#endif
         }
         Sys_LeaveCriticalSection(CRITSECT_DBHASH);
         DB_UnarchiveAssets();
@@ -3259,6 +3366,99 @@ void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, unsigned int zoneCount, int syn
         __debugbreak();
     }
     count = 0;
+#ifdef KISAK_SP
+    // Retail SP DB_LoadXAssets zone-expansion owner, live-decompiled 2026-08-21 in one pass
+    // at Ghidra 0x00631b10 (the whole function; the sub-ranges the boot-chain doc cites,
+    // 0x00632334-0x006323cf and 0x006323d6-0x00632539, both fall inside it and are
+    // re-verified here, not just transcribed). See
+    // docs/SP_MAIN_MENU_BOOTCHAIN.md Sec.7.4/7.7. Replaces the MP-derived switch kept intact
+    // under #else below, which recognizes only localized-*partner* values
+    // (1,4,16,64,256,1024,0x1000,0x4000,0x10000,0x40000,0x400000,0x1000000,0x4000000) and
+    // silently drops any zoneInfo entry whose allocFlags isn't one of them -- the root cause
+    // of the "frontend" zone (0x02000000) being dropped and the resulting "Couldn't find the
+    // bsp for this map" ERR_DROP documented in Sec.7.4.
+    //
+    // Retail's real policy, keyed on the *source* allocFlags (not the partner value):
+    //   0x00000001 -> 0x00000002   0x00000008 -> 0x00000010   0x00000040 -> 0x00000080
+    //   0x00000100 -> 0x00000200   0x00000800 -> 0x00001000   0x00004000 -> 0x00008000
+    //   0x00020000 -> 0x00040000   0x00800000 -> 0x00400000   0x02000000 -> 0x01000000
+    // For a recognized key, retail appends the localized companion, THEN the original record
+    // (retail LAB_00632517). For every other allocFlags value -- including ones that happen
+    // to equal a partner value above, e.g. "patch"=8 or "mod"=0x20 -- retail still appends
+    // the original record unchanged; there is no drop case in retail at all.
+    //
+    // Retail also runs a separate pre-expansion (0x00632334-0x006323cf) for the 0x100/0x800
+    // alloc-flag tiers: if the zone's name matches one of a fixed 12-entry table (live-read
+    // from 0x00b74474 this pass -- all Zombies map names, not menu/boot-chain names), it
+    // appends a distinct "<name>_patch" record (allocFlags 0x400 for the 0x100 tier, 0x2000
+    // for the 0x800 tier, freeFlags 0) BEFORE the normal per-entry handling below. This table
+    // has no overlap with the SP main-menu boot path (patch_ui=0x4000000, frontend=0x2000000)
+    // -- ported here for owner completeness per Sec.7.7 step 3, not needed for the boot crash.
+    static const char *const s_dbPatchZoneNames[12] =
+    {
+        "common_zombie", "zombie_moon", "zombie_temple", "zombie_coast",
+        "zombie_cosmodrome", "zombie_pentagon", "zombie_theater",
+        "zombie_cod5_asylum", "zombie_cod5_factory", "zombie_cod5_prototype",
+        "zombie_cod5_sumpf", "zombietron"
+    };
+
+    for ( k = 0; k < zoneCount; ++k )
+    {
+        allocFlags = zoneInfo[k].allocFlags;
+
+        if ( allocFlags == 0x100 || allocFlags == 0x800 )
+        {
+            for ( int p = 0; p < 12; ++p )
+            {
+                if ( I_strcmp(zoneInfo[k].name, s_dbPatchZoneNames[p]) == 0 )
+                {
+                    locZoneInfo[count].allocFlags = (allocFlags == 0x100) ? 0x400 : 0x2000;
+                    locZoneInfo[count].freeFlags = 0;
+                    Com_sprintf(zoneName[count], 0x40u, "%s_patch", zoneInfo[k].name);
+                    locZoneInfo[count].name = zoneName[count];
+                    ++count;
+                    break;
+                }
+            }
+        }
+
+        int companionFlags = 0;
+        bool hasCompanion = true;
+        switch ( allocFlags )
+        {
+            case 0x00000001: companionFlags = 0x00000002; break;
+            case 0x00000008: companionFlags = 0x00000010; break;
+            case 0x00000040: companionFlags = 0x00000080; break;
+            case 0x00000100: companionFlags = 0x00000200; break;
+            case 0x00000800: companionFlags = 0x00001000; break;
+            case 0x00004000: companionFlags = 0x00008000; break;
+            case 0x00020000: companionFlags = 0x00040000; break;
+            case 0x00800000: companionFlags = 0x00400000; break;
+            case 0x02000000: companionFlags = 0x01000000; break;
+            default: hasCompanion = false; break;
+        }
+
+        if ( hasCompanion )
+        {
+            v7 = Win_GetLanguage();
+            SEH_GetLanguageIndexForName(v7, &language);
+            name = zoneInfo[k].name;
+            LanguageNameAbbr = SEH_GetLanguageNameAbbr(language);
+            Com_sprintf(zoneName[count], 0x40u, "%s%s", LanguageNameAbbr, name);
+            locZoneInfo[count].name = zoneName[count];
+            locZoneInfo[count].allocFlags = companionFlags;
+            locZoneInfo[count].freeFlags = 0;
+            ++count;
+        }
+
+        // Retail LAB_00632517: unconditional, exactly-once pass-through of the original
+        // record, whether or not it had a localized companion above.
+        locZoneInfo[count].name = zoneInfo[k].name;
+        locZoneInfo[count].allocFlags = zoneInfo[k].allocFlags;
+        locZoneInfo[count].freeFlags = zoneInfo[k].freeFlags;
+        ++count;
+    }
+#else
     for ( k = 0; k < zoneCount; ++k )
     {
         allocFlags = zoneInfo[k].allocFlags;
@@ -3305,6 +3505,13 @@ void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, unsigned int zoneCount, int syn
             }
             if ( allocFlags > 64 )
             {
+                // Retail MP 0x00436304: the UI viewer's 0x800 zone has a
+                // localized 0x1000 companion. Without this case both are dropped.
+                if ( allocFlags == 0x800 )
+                {
+                    locZoneInfo[count].allocFlags = 0x1000;
+                    goto LABEL_85;
+                }
                 if ( allocFlags == 256 )
                 {
                     locZoneInfo[count].allocFlags = 512;
@@ -3350,6 +3557,7 @@ LABEL_85:
             }
         }
     }
+#endif
     DB_LoadXZone(locZoneInfo, count);
     if ( sync )
     {
@@ -3802,11 +4010,51 @@ int __cdecl DB_TryLoadXFileInternal(const char *zoneName, int zoneFlags)
         __debugbreak();
     }
     zoneFile = (void *)-1;
-    if ((zoneFlags & 0x2AAAAAA) != 0
+    // Localized-vs-Common zone directory selection.
+    //
+    // The mask here is "is this zone record itself a LOCALIZED COMPANION record?".  If it is,
+    // retail skips the zone\Common\ probe entirely and goes straight to zone\<language>\.
+    // Otherwise it probes zone\Common\<name>.ff first and only falls back to zone\<language>\
+    // when that file does not exist.  The branch shape is identical in SP and MP; only the
+    // mask value differs, because SP and MP number their zone alloc flags differently.
+    //
+    // Live-verified in retail SP BlackOps.exe this pass (2026-08-21):
+    //   0x007a3760  TEST dword ptr [ESP+0x120],0x1449292   ; ESP+0x120 == the zoneFlags arg
+    //   0x007a376b  JNZ  0x007a37a0                        ; -> DB_BuildOSPath (localized)
+    //   0x007a376d..0x007a3788                             ; inlined DB_BuildOSPath_Unlocalized,
+    //                                                      ;   fmt 0x00a426e0 "%s\zone\Common\%s%s"
+    //   0x007a3795  CALL GetFileAttributesA
+    //   0x007a379e  JNZ  0x007a37b8                        ; found -> keep the Common path
+    //   0x007a37a0..0x007a37b0  CALL 0x004644a0            ; DB_BuildOSPath(zoneName,".ff",0x100,buf)
+    //
+    // 0x1449292 is not arbitrary: it is exactly the bitwise OR of the nine localized-companion
+    // alloc-flag values that retail SP's DB_LoadXAssets (0x00631b10) can emit, read off its
+    // store sites this pass -- 0x10 (0x0063244b), 0x2 (0x00632453), 0x80 (0x0063245b),
+    // 0x200 (0x0063246e), 0x1000 (0x00632476), 0x40000 (0x00632499), 0x8000 (0x006324a1),
+    // 0x400000 (0x006324a9), 0x1000000 (0x006324bc).  0x2|0x10|0x80|0x200|0x1000|0x8000|
+    // 0x40000|0x400000|0x1000000 == 0x1449292.
+    //
+    // The MP mask 0x2AAAAAA (kept below) contains bit 25 (0x02000000).  Under SP's numbering
+    // 0x02000000 is not a companion flag at all -- it is the BASE menu-level flag that retail SP
+    // Com_LoadLevelFastFiles assigns to "frontend", and whose companion is 0x01000000
+    // (retail SP switch arm 0x006324b1 CMP EAX,0x2000000 -> 0x006324bc MOV [EBX],0x1000000).
+    // With the MP mask, "frontend" is misclassified as localized and looked for at
+    // zone\english\frontend.ff, which does not exist; the file lives at zone\Common\frontend.ff.
+#ifdef KISAK_SP
+    if ((zoneFlags & 0x1449292) != 0
         || (DB_BuildOSPath_Unlocalized(zoneName, ".ff", 0x100u, filename), GetFileAttributesA(filename) == -1) )
     {
         DB_BuildOSPath(zoneName, ".ff", 0x100u, filename);
     }
+#else
+    // Preserve the existing MP tiers, but correct the viewer pair: 0x800
+    // is the base in zone/Common, and 0x1000 is its localized companion.
+    if ((zoneFlags & ((0x2AAAAAA & ~0x800) | 0x1000)) != 0
+        || (DB_BuildOSPath_Unlocalized(zoneName, ".ff", 0x100u, filename), GetFileAttributesA(filename) == -1) )
+    {
+        DB_BuildOSPath(zoneName, ".ff", 0x100u, filename);
+    }
+#endif
     zoneFile = CreateFileA(filename, 0x80000000, 1u, 0, 3u, 0x60000000u, 0);
     if ( zoneFile == (void *)-1 )
         DB_ModXFileHandle(zoneName, &zoneFile, &zoneDir);
@@ -5108,6 +5356,45 @@ void __cdecl DB_LoadFastFilesForPC()
 
     int zone = 0;
 
+#ifdef KISAK_SP
+    // SP retail divergence (2026-08-06). Previously this function was completely unguarded, so a
+    // KISAK_SP build loaded MP's zones -- the boot log showed exactly that: "Loading fastfile
+    // 'ui_mp'" followed by "Loading fastfile 'common_mp'", after which every SP menu path failed
+    // ("Waited 14122 msec for missing asset ui/menus.txt"). Those menu paths are correct; the SP
+    // menus simply were not in memory, because the MP zones had been loaded instead.
+    //
+    // Ground truth from the retail install's zone folders (checked directly on disk):
+    //   zone/Common/  -> ui_mp.ff and ui_viewer_mp.ff exist, but there is NO ui.ff and NO
+    //                    ui_viewer.ff anywhere in the install
+    // So SP has no UI zone of its own to load here, which corroborates the prior finding that
+    // Com_LoadUiFastFile is dead code in SP and that no ui_viewer zone-load exists in the SP
+    // binary.
+    //
+    // *** CORRECTION (2026-08-06, same day as the original edit). ***
+    // A first version of this branch loaded "common" @ allocFlags 64 here. That was WRONG on
+    // three counts and is deliberately recorded rather than quietly deleted:
+    //   1. It contradicted this project's own FULL-confidence, Ghidra-derived evidence, which was
+    //      already written down in docs/SP_MP_STARTUP_AUDIT.md (finding #6) BEFORE that edit was
+    //      made: SP's boot-time Com_InitUIAndCommonXAssets/DB_LoadFastFilesForPC call passes a
+    //      NULL-name zone entry, and the downstream queue-builder filters NULL names out before
+    //      any load machinery runs. In retail SP this call is structurally DEAD. It must not load
+    //      anything at all.
+    //   2. Its stated rationale ("SP's menus ship inside common.ff") was simply false. common.ff
+    //      contains zero menu assets. The real mapping is code_post_gfx.ff (ui/code.txt, HUD,
+    //      options), frontend.ff (ui/menus.txt and the main-menu set), patch.ff
+    //      (ui/patch_menus.txt).
+    //   3. It actively created a worse bug. Com_IsMenuLevel (common.cpp) matches only "menu_*",
+    //      "ui" and "ui_mp" -- NOT "frontend" -- so `map frontend` reaches Com_LoadCommonFastFile,
+    //      whose DB_IsZoneLoaded("common_mp") guard was previously satisfied because MP's common
+    //      zone was already resident. Loading "common" here instead left common_mp NOT resident,
+    //      so the guard passed and a second ~107MB common zone would load on top of the first.
+    // The correct SP behavior for the common zone is a KISAK_SP guard inside
+    // Com_LoadCommonFastFile (common.cpp) -- bare "common" at the existing allocFlags 256 tier --
+    // not a load from here. See that function.
+    //
+    // Hence SP loads NOTHING in this function: no ui_mp pre-load, no common, no ui_viewer_mp.
+    (void)zone;
+#else
     if (!IsDedicatedServer())
     {
         //zoneInfo[zone].name = "patch_ui_mp";
@@ -5143,6 +5430,7 @@ void __cdecl DB_LoadFastFilesForPC()
     }
 
     DB_LoadXAssets(zoneInfo, zone, 0);
+#endif
 }
 
 void __cdecl DB_LoadGraphicsAssetsForPC()
@@ -5150,6 +5438,79 @@ void __cdecl DB_LoadGraphicsAssetsForPC()
     XZoneInfo zoneInfo[6]; // [esp+0h] [ebp-50h] BYREF
     unsigned int zoneCount; // [esp+4Ch] [ebp-4h]
 
+#ifdef KISAK_SP
+    // SP retail divergence (Ghidra 0x00571db0, confirmed via decompile AND live string
+    // cross-references -- "code_post_gfx" (no _mp) exists in the SP binary at 0x009afaec
+    // referenced from exactly this function; "code_post_gfx_mp"/"dev_mp" do NOT exist anywhere
+    // in the SP binary at all; "patch_mp" exists as an orphaned string with ZERO xrefs, i.e.
+    // dead data, not actually loaded by anything. Found chasing a real SP boot failure on
+    // 2026-08-05 (fatal "Couldn't load file 'expressions/functions.txt'" after the engine had
+    // already loaded a bunch of _mp-suffixed post-gfx zones that don't exist in an SP-only
+    // asset set) -- same root-cause shape as the earlier Con_Restricted_InitLists /
+    // Com_InitCodeXAssets fixes: an MP-hardcoded zone name silently swallowed by a missing-zone
+    // warning while the actually-needed SP zone never gets requested.
+    //
+    // Two confirmed differences from MP:
+    //   1. First zone name drops the "_mp" suffix ("code_post_gfx"), same allocFlags/freeFlags.
+    //   2. SP collapses MP's TWO second-stage zones (dev_mp allocFlags=4, patch_mp allocFlags=16)
+    //      into a SINGLE zone named "patch" with allocFlags=8 -- SP has no "dev" zone at all.
+    //      The mod-zone name and its existence check (DB_ModFileExists(), Ghidra 0x005eebf0)
+    //      are confirmed IDENTICAL to MP ("mod"), but its allocFlags is 0x20 (32) in SP vs MP's
+    //      64 -- read directly from the SP binary's zoneInfo struct literal, not guessed.
+    //
+    // The old TODO(SP) here claimed these calls were "NOT transcribed" -- that claim was wrong,
+    // and is withdrawn (re-verified against the live database 2026-08-25). SP's FUN_00571db0 does
+    // show, between the first DB_LoadXAssets and the "patch" zone setup:
+    //     R_BeginRemoteScreenUpdate(); Sys_SyncDatabase(); R_EndRemoteScreenUpdate(0);
+    //     FUN_004f11d0("DB_SyncXAssets"); DB_PostLoadXZone();
+    // but those five statements are not extra code sitting near DB_SyncXAssets -- they ARE
+    // DB_SyncXAssets, inlined. SP has a real standalone DB_SyncXAssets at Ghidra 0x004b41a0 whose
+    // entire body is those same five statements in the same order, and 0x00571db0 is not among its
+    // eleven callers, i.e. the compiler expanded it at this one site. Three of the four FUN_*
+    // placeholders the old note cited now have names: 0x006d7e60 = R_BeginRemoteScreenUpdate,
+    // 0x006d7ec0 = R_EndRemoteScreenUpdate, 0x0040dc40 = Sys_SyncDatabase. And the old note's
+    // "explicit DB_PostLoadXZone() call not present in this MP source at all" was simply false --
+    // DB_SyncXAssets() calls DB_PostLoadXZone() at line 3022 of this same file. So the bare
+    // DB_SyncXAssets() call below is a confirmed transcription of SP's inline expansion, not the
+    // "reasonable approximation" the old note settled for.
+    //
+    // TODO(SP): one genuine divergence survives, and it belongs to DB_SyncXAssets itself (line
+    // 3005), not to this function: SP's fourth statement is FUN_004f11d0("DB_SyncXAssets") --
+    // 0x004f11d0 is still unnamed in Ghidra -- where this source has a zero-argument
+    // SocketRouter_EmergencyFrame(). SP retail looks to have added a caller-tag string parameter
+    // to that socket pump (Sys_SyncDatabase at 0x0040dc40 passes its OWN name to the same
+    // 0x004f11d0), so the fix, if taken, is a signature change in live_win_common.h/.cpp plus its
+    // call sites -- not a change here. Static SP binary evidence only; nothing runtime-verified.
+    zoneInfo[0].name = "code_post_gfx";
+    zoneInfo[0].allocFlags = 1;
+    zoneInfo[0].freeFlags = 0x80000000;
+    zoneCount = 1;
+    DB_LoadXAssets(zoneInfo, zoneCount, 0);
+    DB_SyncXAssets();
+    // Literal retail values, confirmed directly against SP's own FUN_00571db0 (0x00571db0,
+    // re-decompiled 2026-08-21): local_48="patch", allocFlags=8, freeFlags=0; when
+    // FUN_005eebf0()/DB_ModFileExists() is true, a second entry local_3c="mod",
+    // allocFlags=0x20, freeFlags=0. These were previously substituted with the MP-derived
+    // partner values (patch=4, mod=16) as a 2026-08-06 compatibility workaround, because this
+    // file's old MP-derived DB_LoadXAssets zone-expansion switch matched only localized
+    // *partner* values (8 and 0x20 are exactly those partners, so the real retail values were
+    // silently dropped -- no warning, no load). That owner has now been replaced under
+    // KISAK_SP (see the DB_LoadXAssets SP block above and
+    // docs/SP_MAIN_MENU_BOOTCHAIN.md Sec.7.4/7.7): 8 maps to its real companion 0x10 in the
+    // nine-row SP table, and 0x20 is not in that table, so it now loads once through the
+    // unconditional pass-through instead of being dropped. The substitution is no longer
+    // needed and is removed here.
+    zoneInfo[0].name = "patch";
+    zoneInfo[0].allocFlags = 8;
+    zoneInfo[0].freeFlags = 0;
+    zoneCount = 1;
+    if ( DB_ModFileExists() )
+    {
+        zoneInfo[zoneCount].name = "mod";
+        zoneInfo[zoneCount].allocFlags = 0x20;
+        zoneInfo[zoneCount++].freeFlags = 0;
+    }
+#else
     zoneInfo[0].name = "code_post_gfx_mp";
     zoneInfo[0].allocFlags = 1;
     zoneInfo[0].freeFlags = 0x80000000;
@@ -5169,6 +5530,7 @@ void __cdecl DB_LoadGraphicsAssetsForPC()
         zoneInfo[zoneCount].allocFlags = 64;
         zoneInfo[zoneCount++].freeFlags = 0;
     }
+#endif
     if ( zoneCount > 6
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\database\\db_registry.cpp",

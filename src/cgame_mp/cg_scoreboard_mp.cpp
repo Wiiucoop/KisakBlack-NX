@@ -19,6 +19,10 @@
 #include <bgame/bg_misc.h>
 #include <ui_mp/ui_main_mp.h>
 #include <client/client.h>
+#ifdef KISAK_SP
+#include <qcommon/common.h>
+#include <ui/ui_main.h>
+#endif
 
 const char *sbColumnNames[18] =
 {
@@ -64,6 +68,142 @@ const dvar_t *cg_scoreboardFont;
 const dvar_t *cg_scoreboardHeaderFontScale;
 const dvar_t *cg_scoreboardPingText;
 const dvar_t *cg_scoreboardPingGraph;
+
+#ifdef KISAK_SP
+// Retail SP CG_RegisterScoreboardDvars (0x005C74D0) registers these after cg_scoreboardPingGraph.
+const dvar_t *cg_ScoresColor_Player;
+const dvar_t *cg_ScoresColor_Transparency;
+const dvar_t *cg_ScoresColor_Zombie;
+const dvar_t *cg_ScoresColor_TransparencyZombie;
+
+// Retail SP column types, as switched on by CG_DrawClientScore (0x00891A00).
+enum spListColumnTypes_t : __int32
+{
+    SPLCT_NAME         = 0,
+    SPLCT_SCORE        = 2,
+    SPLCT_PING         = 3,
+    SPLCT_STATUS_ICON  = 4,
+    SPLCT_TALKING_ICON = 5,
+    SPLCT_KILLS        = 6,
+    SPLCT_RANK_ICON    = 7,
+    SPLCT_ASSISTS      = 8,
+    SPLCT_DOWNS        = 9,
+    SPLCT_REVIVES      = 10,
+    SPLCT_HEADSHOTS    = 11,
+};
+
+#define SPCOL(type, width, name, align) { (listColumnTypes_t)(type), (width), (name), (align), SB_TYPE_INVALID }
+
+// Retail .rdata 0x00A602D0: campaign/co-op, cg_scoreboardPingText off.
+static const listColumnInfo_t columnInfoSP[9] =
+{
+    SPCOL(SPLCT_RANK_ICON, 0.09f, "", 0),
+    SPCOL(SPLCT_STATUS_ICON, 0.05f, "", 0),
+    SPCOL(SPLCT_NAME, 0.25f, "", 0),
+    SPCOL(SPLCT_TALKING_ICON, 0.05f, "", 0),
+    SPCOL(SPLCT_KILLS, 0.11f, "CGAME_SB_KILLS", 2),
+    SPCOL(SPLCT_ASSISTS, 0.11f, "CGAME_SB_ASSISTS", 2),
+    SPCOL(SPLCT_DOWNS, 0.11f, "CGAME_SB_DOWNS", 2),
+    SPCOL(SPLCT_REVIVES, 0.11f, "CGAME_SB_REVIVES", 2),
+    SPCOL(SPLCT_HEADSHOTS, 0.11f, "CGAME_SB_HEADSHOTS", 2),
+};
+
+// Retail .rdata 0x00A60360: arcademode, cg_scoreboardPingText off.
+static const listColumnInfo_t columnInfoArcade[10] =
+{
+    SPCOL(SPLCT_RANK_ICON, 0.09f, "", 0),
+    SPCOL(SPLCT_STATUS_ICON, 0.05f, "", 0),
+    SPCOL(SPLCT_NAME, 0.27f, "", 0),
+    SPCOL(SPLCT_TALKING_ICON, 0.05f, "", 0),
+    SPCOL(SPLCT_SCORE, 0.09f, "CGAME_SB_SCORE", 2),
+    SPCOL(SPLCT_KILLS, 0.09f, "CGAME_SB_KILLS", 2),
+    SPCOL(SPLCT_ASSISTS, 0.09f, "CGAME_SB_ASSISTS", 2),
+    SPCOL(SPLCT_DOWNS, 0.09f, "CGAME_SB_DOWNS", 2),
+    SPCOL(SPLCT_REVIVES, 0.09f, "CGAME_SB_REVIVES", 2),
+    SPCOL(SPLCT_HEADSHOTS, 0.09f, "CGAME_SB_HEADSHOTS", 2),
+};
+
+// Retail .rdata 0x00A60400: zombiemode, neither onlinegame nor systemlink.
+static const listColumnInfo_t columnInfoZombie[4] =
+{
+    SPCOL(SPLCT_NAME, 0.625f, "", 0),
+    SPCOL(SPLCT_SCORE, 0.125f, "CGAME_SB_POINTS", 1),
+    SPCOL(SPLCT_KILLS, 0.125f, "CGAME_SB_KILLS", 1),
+    SPCOL(SPLCT_HEADSHOTS, 0.125f, "CGAME_SB_HEADSHOTS", 1),
+};
+
+// Retail .rdata 0x00A60440: zombietron.
+static const listColumnInfo_t columnInfoZombietron[4] =
+{
+    SPCOL(SPLCT_NAME, 0.6f, "", 0),
+    SPCOL(SPLCT_TALKING_ICON, 0.05f, "", 0),
+    SPCOL(SPLCT_SCORE, 0.175f, "CGAME_SB_POINTS", 1),
+    SPCOL(SPLCT_KILLS, 0.175f, "CGAME_SB_KILLS", 1),
+};
+
+// Retail .rdata 0x00A60480: campaign/co-op, cg_scoreboardPingText on.
+static const listColumnInfo_t columnInfoSPPing[10] =
+{
+    SPCOL(SPLCT_RANK_ICON, 0.08f, "", 0),
+    SPCOL(SPLCT_STATUS_ICON, 0.04f, "", 0),
+    SPCOL(SPLCT_NAME, 0.25f, "", 0),
+    SPCOL(SPLCT_TALKING_ICON, 0.04f, "", 0),
+    SPCOL(SPLCT_KILLS, 0.09f, "CGAME_SB_KILLS", 2),
+    SPCOL(SPLCT_ASSISTS, 0.09f, "CGAME_SB_ASSISTS", 2),
+    SPCOL(SPLCT_DOWNS, 0.09f, "CGAME_SB_DOWNS", 2),
+    SPCOL(SPLCT_REVIVES, 0.09f, "CGAME_SB_REVIVES", 2),
+    SPCOL(SPLCT_HEADSHOTS, 0.09f, "CGAME_SB_HEADSHOTS", 2),
+    SPCOL(SPLCT_PING, 0.09f, "CGAME_SB_PING", 2),
+};
+
+// Retail .rdata 0x00A60520: arcademode, cg_scoreboardPingText on.
+static const listColumnInfo_t columnInfoArcadePing[11] =
+{
+    SPCOL(SPLCT_RANK_ICON, 0.03f, "", 0),
+    SPCOL(SPLCT_STATUS_ICON, 0.03f, "", 0),
+    SPCOL(SPLCT_NAME, 0.31f, "", 0),
+    SPCOL(SPLCT_TALKING_ICON, 0.04f, "", 0),
+    SPCOL(SPLCT_SCORE, 0.06f, "CGAME_SB_SCORE", 2),
+    SPCOL(SPLCT_KILLS, 0.06f, "CGAME_SB_KILLS", 2),
+    SPCOL(SPLCT_ASSISTS, 0.085f, "CGAME_SB_ASSISTS", 2),
+    SPCOL(SPLCT_DOWNS, 0.09f, "CGAME_SB_DOWNS", 2),
+    SPCOL(SPLCT_REVIVES, 0.09f, "CGAME_SB_REVIVES", 2),
+    SPCOL(SPLCT_HEADSHOTS, 0.13f, "CGAME_SB_HEADSHOTS", 2),
+    SPCOL(SPLCT_PING, 0.06f, "CGAME_SB_PING", 2),
+};
+
+// Retail .rdata 0x00A605D0: zombiemode with onlinegame or systemlink.
+static const listColumnInfo_t columnInfoZombieOnline[8] =
+{
+    SPCOL(SPLCT_NAME, 0.35f, "", 0),
+    SPCOL(SPLCT_TALKING_ICON, 0.05f, "", 0),
+    SPCOL(SPLCT_SCORE, 0.1f, "CGAME_SB_POINTS", 1),
+    SPCOL(SPLCT_KILLS, 0.1f, "CGAME_SB_KILLS", 1),
+    SPCOL(SPLCT_DOWNS, 0.1f, "CGAME_SB_DOWNS", 1),
+    SPCOL(SPLCT_REVIVES, 0.1f, "CGAME_SB_REVIVES", 1),
+    SPCOL(SPLCT_HEADSHOTS, 0.1f, "CGAME_SB_HEADSHOTS", 1),
+    SPCOL(SPLCT_PING, 0.1f, "CGAME_SB_PING", 2),
+};
+
+#undef SPCOL
+
+// Retail SP 0x00890C80. Campaign uses cg_ScoresColor_Player; arcademode and zombiemode use the
+// per-client "<base>_<clientNum>" dvar.
+static void CG_GetScoreboardClientColor_SP(const char *baseName, int clientNum, float *color)
+{
+    char dvarName[32];
+
+    if ( !arcademode->current.enabled && !zombiemode->current.enabled )
+    {
+        Dvar_GetUnpackedColor(cg_ScoresColor_Player, color);
+        return;
+    }
+    if ( clientNum < 0 || clientNum > 3 )
+        clientNum = 3;
+    Com_sprintf(dvarName, sizeof(dvarName), "%s_%i", baseName, clientNum);
+    Dvar_GetUnpackedColorByName(dvarName, color);
+}
+#endif
 
 
 matchScoreBoardData_t matchScoreBoardData[1];
@@ -770,6 +910,11 @@ int __cdecl CG_DrawScoreboard(int localClientNum)
     if ( cg_paused->current.integer )
         return 0;
     cgameGlob = CG_GetLocalClientGlobals(localClientNum);
+#ifdef KISAK_SP
+    // Retail SP 0x0042F270: outside intermission the scoreboard only exists for online and zombie games.
+    if ( cgameGlob->nextSnap->ps.pm_type != 5 && !onlinegame->current.enabled && !zombiemode->current.enabled )
+        return 0;
+#endif
     if ( CG_IsScoreboardDisplayed(localClientNum) )
     {
         fade = 1.0f;
@@ -795,6 +940,13 @@ int __cdecl CG_DrawScoreboard(int localClientNum)
     }
     else
     {
+#ifdef KISAK_SP
+        if ( cgameGlob->time - cgameGlob->scoreFadeTime < 0 )
+        {
+            cgameGlob->scoreFadeTime = 0;
+            return 0;
+        }
+#endif
         fadeColor = CG_FadeColor(cgameGlob->time, cgameGlob->scoreFadeTime, 100, 100);
         if ( !fadeColor || Demo_IsPaused() )
             return 0;
@@ -827,11 +979,20 @@ void __cdecl CG_DrawScoreboard_Backdrop(int localClientNum, float alpha)
 
 double __cdecl CG_BackdropWidth()
 {
+#ifdef KISAK_SP
+    // Retail SP (inlined into 0x00890B30 / 0x00892440): zombietron narrows the board to 90%.
+    if ( zombietron->current.enabled )
+        return cg_scoreboardWidth->current.value * 0.9f;
+    if ( CG_IsShowingZombieMap() )
+        return cg_scoreboardSplitscreenWidth->current.value;
+    return cg_scoreboardWidth->current.value;
+#else
     if ( !CG_IsShowingZombieMap() )
         return cg_scoreboardWidth->current.value * 1.0;
     if ( Flame_GetLocalClientSourceRange() )
         return cg_scoreboardSplitscreenWidth->current.value * 1.0;
     return cg_scoreboardQuarterscreenWidth->current.value * 1.0;
+#endif
 }
 
 double __cdecl CG_BackdropLeft(int localClientNum)
@@ -849,10 +1010,16 @@ double __cdecl CG_BackdropLeft(int localClientNum)
 
 double __cdecl CG_BackdropTop()
 {
+#ifdef KISAK_SP
+    // Retail SP offsets the board by +10 where MP uses -15.
+    const float top = (480.0f - cg_scoreboardHeight->current.value) * 0.5f + 10.0f;
+    return top > 0.0f ? top : 0.0f;
+#else
     if ( (float)(0.0 - (float)((float)((float)(480.0 - cg_scoreboardHeight->current.value) / 2.0) - 15.0)) < 0.0 )
         return (float)((float)((float)(480.0 - cg_scoreboardHeight->current.value) / 2.0) - 15.0);
     else
         return 0.0f;
+#endif
 }
 
 void __cdecl CG_DrawBackdropServerInfo(int localClientNum, float alpha)
@@ -921,6 +1088,43 @@ void __cdecl CG_DrawBackdropServerInfo(int localClientNum, float alpha)
 
 void __cdecl CG_DrawScoreboard_ScoresList(int localClientNum, float alpha)
 {
+#ifdef KISAK_SP
+    // Retail SP 0x00892440. No scrolling and no scrollbar; only ui_gametype "vs" groups rows by team.
+    cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
+    if ( !cgameGlob->numScores )
+        return;
+    cgameGlob->scoresOffBottom = 0;
+    float color[4] = { 1.0f, 1.0f, 1.0f, alpha };
+    const float listWidth = CG_BackdropWidth() - 6.0 - 4.0 - 8.0;
+    float y = (float)(cg_scoreboardItemHeight->current.integer + 4) + CG_BackdropTop() + 42.0;
+    CG_DrawScoreboard_ListColumnHeaders(
+        localClientNum,
+        color,
+        y,
+        (float)cg_scoreboardBannerHeight->current.integer,
+        listWidth);
+    int drawLine = 1;
+    int team = cgameGlob->bgs.clientinfo[cgameGlob->clientNum].team;
+    if ( I_stricmp(ui_gametype->current.string, "vs") )
+    {
+        CG_DrawTeamOfClientScore(localClientNum, color, y, team, listWidth, &drawLine);
+        cgameGlob->scoresBottom = drawLine - 1;
+        return;
+    }
+    if ( cgameGlob->teamPlayers[1] || cgameGlob->teamPlayers[2] )
+    {
+        if ( team != 1 && team != 2 )
+            team = 2;
+        y = CG_DrawTeamOfClientScore(localClientNum, color, y, team, listWidth, &drawLine) + 4.0;
+        y = CG_DrawTeamOfClientScore(localClientNum, color, y, team == 1 ? 2 : 1, listWidth, &drawLine) + 4.0;
+    }
+    if ( cgameGlob->teamPlayers[0] )
+        y = CG_DrawTeamOfClientScore(localClientNum, color, y, 0, listWidth, &drawLine) + 4.0;
+    // Retail SP's spectator team is 4; this tree keeps the MP team_t, where it is 3.
+    if ( cgameGlob->teamPlayers[TEAM_SPECTATOR] )
+        CG_DrawTeamOfClientScore(localClientNum, color, y, TEAM_SPECTATOR, listWidth, &drawLine);
+    cgameGlob->scoresBottom = drawLine - 1;
+#else
     double v2; // st7
     float scrollbarTop; // [esp+14h] [ebp-2Ch]
     int team; // [esp+18h] [ebp-28h]
@@ -997,6 +1201,7 @@ void __cdecl CG_DrawScoreboard_ScoresList(int localClientNum, float alpha)
         cgameGlob->scoresBottom = drawLine - 1;
         CG_DrawScrollbar(localClientNum, scrollbarTop);
     }
+#endif
 }
 
 double __cdecl CG_DrawScoreboard_ListColumnHeaders(
@@ -1044,9 +1249,54 @@ double __cdecl CG_DrawScoreboard_ListColumnHeaders(
 
 void __cdecl CG_GetScoreboardInfo(int localClientNum, const listColumnInfo_t **colInfo, int *numFields)
 {
+#ifdef KISAK_SP
+    // Retail SP 0x00890D20: fixed .rdata layouts picked by game mode, not the MP match scoreboard.
+    if ( arcademode->current.enabled )
+    {
+        if ( cg_scoreboardPingText->current.enabled )
+        {
+            *colInfo = columnInfoArcadePing;
+            *numFields = ARRAY_COUNT(columnInfoArcadePing);
+        }
+        else
+        {
+            *colInfo = columnInfoArcade;
+            *numFields = ARRAY_COUNT(columnInfoArcade);
+        }
+    }
+    else if ( !zombiemode->current.enabled )
+    {
+        if ( cg_scoreboardPingText->current.enabled )
+        {
+            *colInfo = columnInfoSPPing;
+            *numFields = ARRAY_COUNT(columnInfoSPPing);
+        }
+        else
+        {
+            *colInfo = columnInfoSP;
+            *numFields = ARRAY_COUNT(columnInfoSP);
+        }
+    }
+    else if ( zombietron->current.enabled )
+    {
+        *colInfo = columnInfoZombietron;
+        *numFields = ARRAY_COUNT(columnInfoZombietron);
+    }
+    else if ( onlinegame->current.enabled || Dvar_GetBool("systemlink") )
+    {
+        *colInfo = columnInfoZombieOnline;
+        *numFields = ARRAY_COUNT(columnInfoZombieOnline);
+    }
+    else
+    {
+        *colInfo = columnInfoZombie;
+        *numFields = ARRAY_COUNT(columnInfoZombie);
+    }
+#else
     Demo_IsPlaying();
     *colInfo = matchScoreBoardData[localClientNum].inGameScoreboardColumnInfo;
     *numFields = matchScoreBoardData[localClientNum].numInGameScoreboardColumns;
+#endif
 }
 
 int __cdecl CG_ScoreboardTotalLines(int localClientNum)
@@ -1086,6 +1336,66 @@ double __cdecl CG_DrawTeamOfClientScore(
                 float listWidth,
                 int *drawLine)
 {
+#ifdef KISAK_SP
+    // Retail SP 0x008921F0.
+    struct sbOrder_t
+    {
+        int clientNum;
+        int score;
+    };
+    sbOrder_t order[32];
+    int orderCount = 0;
+    float rowColor[4];
+
+    cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
+    y = CG_DrawScoreboard_ListBanner(
+            localClientNum,
+            color,
+            y,
+            listWidth,
+            (float)cg_scoreboardBannerHeight->current.integer,
+            team,
+            drawLine);
+    for ( int i = 0; i < com_maxclients->current.integer && i < 32; ++i )
+    {
+        if ( cgameGlob->bgs.clientinfo[i].infoValid )
+        {
+            order[orderCount].clientNum = i;
+            order[orderCount].score = cgameGlob->bgs.clientinfo[i].score.score;
+            ++orderCount;
+        }
+    }
+    // Zombies keeps rows in client order so each player stays on their own coloured bar;
+    // everything else (and zombietron) sorts by score, highest first.
+    if ( !zombiemode->current.enabled || zombietron->current.enabled )
+    {
+        qsort(order, orderCount, sizeof(order[0]), [](const void *a, const void *b) -> int
+        {
+            const sbOrder_t *oa = (const sbOrder_t *)a;
+            const sbOrder_t *ob = (const sbOrder_t *)b;
+            if ( oa->score != ob->score )
+                return oa->score > ob->score ? -1 : 1;
+            return oa->clientNum - ob->clientNum;
+        });
+    }
+    const bool teamBased = !I_stricmp(ui_gametype->current.string, "vs");
+    for ( int i = 0; i < orderCount; ++i )
+    {
+        const int clientNum = order[i].clientNum;
+        clientInfo_t *ci = &cgameGlob->bgs.clientinfo[clientNum];
+        if ( teamBased && ci->team != team )
+            continue;
+        if ( !CG_CheckDrawScoreboardLine(localClientNum, drawLine, y, (float)cg_scoreboardItemHeight->current.integer) )
+            continue;
+        if ( zombiemode->current.enabled )
+            Dvar_GetUnpackedColor(cg_ScoresColor_Zombie, rowColor);
+        else
+            CG_GetScoreboardClientColor_SP("cg_ScoresColor_Player", clientNum, rowColor);
+        rowColor[3] = color[3];
+        y = CG_DrawClientScore(localClientNum, clientNum, rowColor, y, &ci->score, listWidth) + 2.0;
+    }
+    return y;
+#else
     unsigned int clientNum; // [esp+14h] [ebp-24h]
     cg_s *cgameGlob; // [esp+18h] [ebp-20h]
     float teamColor[4]; // [esp+20h] [ebp-18h] BYREF
@@ -1133,6 +1443,7 @@ double __cdecl CG_DrawTeamOfClientScore(
         }
     }
     return ya;
+#endif
 }
 
 int __cdecl CG_CheckDrawScoreboardLine(int localClientNum, int *drawLine, float y, float lineHeight)
@@ -1144,7 +1455,12 @@ int __cdecl CG_CheckDrawScoreboardLine(int localClientNum, int *drawLine, float 
     cgameGlob = CG_GetLocalClientGlobals(localClientNum);
     if ( cgameGlob->scoresOffBottom )
         return 0;
+#ifdef KISAK_SP
+    // Retail SP 0x008912B0 has no scoresTop: the SP board does not scroll.
+    if ( true )
+#else
     if ( *drawLine >= cgameGlob->scoresTop )
+#endif
     {
         value = cg_scoreboardHeight->current.value;
         v5 = y + lineHeight;
@@ -1175,6 +1491,47 @@ double __cdecl CG_DrawScoreboard_ListBanner(
                 int team,
                 int *piDrawLine)
 {
+#ifdef KISAK_SP
+    // Retail SP 0x00891350. Zombies has no banner, only its height; the team score, player
+    // count and "alive" text of the MP banner are all absent from SP.
+    if ( zombiemode->current.enabled )
+        return y + h + 2.0;
+    if ( !CG_CheckDrawScoreboardLine(localClientNum, piDrawLine, y, h) )
+        return y;
+    ScreenPlacement *scrPlace = &scrPlaceView[localClientNum];
+    Font_s *bannerFont = UI_GetFontHandle(scrPlace, cg_scoreboardFont->current.integer, 0.35f);
+    const char *shaderName;
+    const char *displayString;
+    if ( team == 0 )
+    {
+        shaderName = Dvar_GetString("g_TeamIcon_Free");
+        displayString = "";
+    }
+    else if ( team == 1 || team == 2 )
+    {
+        shaderName = Dvar_GetString(team == 1 ? "g_TeamIcon_Axis" : "g_TeamIcon_Allies");
+        displayString = va(
+            "%s",
+            SEH_LocalizeTextMessage(
+                Dvar_GetString(team == 1 ? "g_TeamName_Axis" : "g_TeamName_Allies"),
+                "scoreboard team name",
+                LOCMSG_SAFE));
+    }
+    else
+    {
+        shaderName = Dvar_GetString("g_TeamIcon_Spectator");
+        displayString = va("%s", SEH_LocalizeTextMessage("CGAME_SPECTATORS", "scoreboard team name", LOCMSG_SAFE));
+    }
+    float x = CG_BackdropLeft(localClientNum) + 9.0;
+    Material *material = Material_RegisterHandle(shaderName, 7);
+    if ( !Material_IsDefault(material) )
+    {
+        UI_DrawHandlePic(scrPlace, x, y, h, h, 1, 0, color, material);
+        x = x + h + 8.0;
+    }
+    UI_DrawText(scrPlace, (char *)displayString, 0x7FFFFFFF, bannerFont, x, y + h, 1, 0, 0.35f, color, 3);
+    return y + h + 2.0;
+#else
     float v8; // xmm0_4
     const char *v9; // eax
     const char *v10; // eax
@@ -1297,6 +1654,7 @@ double __cdecl CG_DrawScoreboard_ListBanner(
         }
     }
     return y + h + 4.0;
+#endif
 }
 
 int __cdecl CG_GetLivePlayersOnTeam(int localClientNum, int team)
@@ -1331,6 +1689,140 @@ double __cdecl CG_DrawClientScore(
                 const score_s *score,
                 float listWidth)
 {
+#ifdef KISAK_SP
+    // Retail SP 0x00891A00. Its seventh argument (a 1.75x alpha boost) is 0 at the only call site.
+    cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
+    iassert(clientNum < 32);
+    clientInfo_t *ci = &cgameGlob->bgs.clientinfo[clientNum];
+    if ( !ci->infoValid )
+        return y;
+
+    const ScreenPlacement *scrPlace = &scrPlaceView[localClientNum];
+    const listColumnInfo_t *info;
+    int fieldCount;
+    CG_GetScoreboardInfo(localClientNum, &info, &fieldCount);
+    const float h = (float)cg_scoreboardItemHeight->current.integer;
+    const float scale = 0.35f;
+    float x = CG_BackdropLeft(localClientNum) + 9.0;
+    Material *material = Material_RegisterHandle("white", 7);
+    float iconColor[4] = { 1.0f, 1.0f, 1.0f, color[3] };
+    float barColor[4] = { color[0], color[1], color[2], 0.0f };
+
+    if ( !zombiemode->current.enabled )
+    {
+        float backing[4] = { 0.15f, 0.15f, 0.15f, 0.4f };
+        UI_DrawHandlePic(scrPlace, x, y, listWidth, h, 1, 0, backing, material);
+    }
+    if ( arcademode->current.enabled || zombiemode->current.enabled )
+        barColor[3] = cg_ScoresColor_Transparency->current.value * color[3];
+    else
+        barColor[3] = color[3] * 0.5f;
+    if ( zombietron->current.enabled )
+    {
+        static const float zombietronColors[4][3] =
+        {
+            { 0.35f, 1.0f, 0.35f },
+            { 0.37f, 0.37f, 1.0f },
+            { 1.0f, 0.1f, 0.1f },
+            { 0.7f, 0.7f, 0.2f },
+        };
+        const float *tronColor = zombietronColors[clientNum < 3 ? clientNum : 3];
+        barColor[0] = tronColor[0];
+        barColor[1] = tronColor[1];
+        barColor[2] = tronColor[2];
+    }
+    if ( zombiemode->current.enabled )
+        material = Material_RegisterHandle(va("scorebar_zom_long_%i", clientNum < 3 ? clientNum + 1 : 4), 7);
+    UI_DrawHandlePic(scrPlace, x, y, listWidth, h, 1, 0, barColor, material);
+
+    Font_s *listFont = UI_GetFontHandle(scrPlace, cg_scoreboardFont->current.integer, scale);
+    float textColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    if ( !zombietron->current.enabled )
+    {
+        if ( zombiemode->current.enabled )
+            CG_GetScoreboardClientColor_SP("cg_ScoresColor_Gamertag", clientNum, textColor);
+        else if ( clientNum == (unsigned int)cgameGlob->clientNum )
+            Dvar_GetUnpackedColor(cg_scoreboardMyColor, textColor);
+    }
+    textColor[3] = color[3];
+
+    for ( int i = 0; i < fieldCount; ++i )
+    {
+        const float w = info[i].fWidth * listWidth;
+        const char *string = NULL;
+        switch ( (int)info[i].type )
+        {
+        case SPLCT_NAME:
+            string = BG_DisplayName(ci, 3);
+            break;
+        case SPLCT_SCORE:
+            string = va("%i", score->score);
+            break;
+        case SPLCT_PING:
+            string = va("%i", score->ping);
+            break;
+        case SPLCT_KILLS:
+            string = va("%i", score->kills);
+            break;
+        case SPLCT_ASSISTS:
+            string = va("%i", score->assists);
+            break;
+        // This tree keeps the MP score_s, which has no downs/revives/headshots members; under
+        // KISAK_SP the server carries them in scoreboardColumns[0..2] (see g_client_fields.cpp).
+        case SPLCT_DOWNS:
+            string = va("%i", score->scoreboardColumns[0]);
+            break;
+        case SPLCT_REVIVES:
+            if ( !zombietron->current.enabled )
+                string = va("%i", score->scoreboardColumns[1]);
+            break;
+        case SPLCT_HEADSHOTS:
+            if ( !zombietron->current.enabled )
+                string = va("%i", score->scoreboardColumns[2]);
+            break;
+        case SPLCT_STATUS_ICON:
+            if ( ci->hStatusIcon )
+                UI_DrawHandlePic(scrPlace, x + CalcXAdj(info[i].iAlignment, w, h), y, h, h, 1, 0, iconColor, ci->hStatusIcon);
+            break;
+        case SPLCT_TALKING_ICON:
+        {
+            Material *voice = NULL;
+            if ( CL_IsPlayerMuted(localClientNum, clientNum) )
+                voice = Material_RegisterHandle("voice_off", 7);
+            else if ( CL_IsPlayerTalking(localClientNum, clientNum) )
+                voice = Material_RegisterHandle("voice_on", 7);
+            if ( voice )
+                UI_DrawHandlePic(scrPlace, x, y, h, h, 1, 0, iconColor, voice);
+            break;
+        }
+        case SPLCT_RANK_ICON:
+            if ( ci->hRankIcon )
+            {
+                DrawListString(
+                    localClientNum,
+                    (char *)CL_GetRankData(ci->rank, MP_RANKTABLE_DISPLAYLEVEL),
+                    x,
+                    (float)R_TextHeight(listFont) * 0.0875f + y,
+                    h,
+                    info[i].iAlignment,
+                    listFont,
+                    scale,
+                    3,
+                    colorWhite);
+                UI_DrawHandlePic(scrPlace, x + h, y, h, h, 1, 0, iconColor, ci->hRankIcon);
+            }
+            break;
+        default:
+            break;
+        }
+        if ( string )
+            DrawListString(localClientNum, (char *)string, x, y, w, info[i].iAlignment, listFont, scale, 3, textColor);
+        x += w;
+    }
+    if ( cg_scoreboardPingGraph->current.enabled )
+        CG_DrawClientPing(localClientNum, score->ping, x, y, listWidth * cg_scoreboardPingWidth->current.value, h);
+    return y + h;
+#else
     int v7; // eax
     int iAlignment; // [esp+Ch] [ebp-80h]
     Font_s *v9; // [esp+10h] [ebp-7Ch]
@@ -1492,6 +1984,7 @@ double __cdecl CG_DrawClientScore(
     if ( cg_scoreboardPingGraph->current.enabled )
         CG_DrawClientPing(localClientNum, score->ping, x, y, listWidth * cg_scoreboardPingWidth->current.value, 12.0);
     return y + 12.0;
+#endif
 }
 
 double __cdecl CalcXAdj(int align, float maxw, float w)
@@ -1532,11 +2025,20 @@ void __cdecl DrawListString(
 
     if ( string )
     {
+#ifdef KISAK_SP
+        // Retail SP 0x008915E0: coarser shrink step and a higher shadow cutoff, to suit its 0.35 rows.
+        while ( (float)UI_TextWidth(string, 0x7FFFFFFF, font, scale) > width )
+            scale = scale - 0.025;
+        iassert(scale > 0);
+        if ( scale < 0.2 )
+            style = 0;
+#else
         while ( (float)UI_TextWidth(string, 0x7FFFFFFF, font, scale) > width )
             scale = scale - 0.02;
         iassert(scale > 0);
         if ( scale < 0.16 )
             style = 0;
+#endif
         v10 = UI_TextWidth(string, 0x7FFFFFFF, font, scale);
         xAdj = CalcXAdj(alignment, width, (float)v10);
         if ( alignment == 2 )
@@ -1549,7 +2051,11 @@ void __cdecl DrawListString(
             0x7FFFFFFF,
             font,
             x + xAdj,
+#ifdef KISAK_SP
+            (float)(value * (float)((float)((float)v11 * scale) + (float)cg_scoreboardItemHeight->current.integer)) + y,
+#else
             (float)(value * (float)((float)((float)v11 * scale) + 12.0)) + y,
+#endif
             1,
             0,
             scale,
@@ -1783,7 +2289,12 @@ void __cdecl CenterViewOnClient(int localClientNum)
 
 bool __cdecl CG_IsScoreboardDisplayed(int localClientNum)
 {
+#ifdef KISAK_SP
+    // Retail SP 0x00415580; CG_DrawScoreboard also reads this flag at 0x0042f2b3.
+    return CG_GetLocalClientGlobals(localClientNum)->showScores != 0;
+#else
     return UI_GetActiveMenu(localClientNum) == UIMENU_SCOREBOARD;
+#endif
 }
 
 bool __cdecl CG_IsIntermission(int localClientNum)
@@ -1912,7 +2423,11 @@ void __cdecl CG_RegisterScoreboardDvars()
                                                                             "Width of the scoreboard for a quarter of the screen splitscreen");
     cg_scoreboardHeight = _Dvar_RegisterFloat(
                                                     "cg_scoreboardHeight",
+#ifdef KISAK_SP
+                                                    330.0, // retail SP 0x005C74D0
+#else
                                                     435.0,
+#endif
                                                     0.0,
                                                     3.4028235e38,
                                                     0,
@@ -1934,7 +2449,11 @@ void __cdecl CG_RegisterScoreboardDvars()
                                                                  "Scale of rank font");
     cg_scoreboardTextOffset = _Dvar_RegisterFloat(
                                                             "cg_scoreboardTextOffset",
+#ifdef KISAK_SP
+                                                            0.62, // retail SP 0x005C74D0
+#else
                                                             0.60000002,
+#endif
                                                             0.0,
                                                             3.4028235e38,
                                                             0,
@@ -1955,6 +2474,33 @@ void __cdecl CG_RegisterScoreboardDvars()
                                                                      "Scoreboard header font scale");
     cg_scoreboardPingText = _Dvar_RegisterBool("cg_scoreboardPingText", 1, 0, "Whether to show numeric ping value");
     cg_scoreboardPingGraph = _Dvar_RegisterBool("cg_scoreboardPingGraph", 0, 0, "Whether to show graphical ping");
+#ifdef KISAK_SP
+    // Retail SP 0x005C74D0 also registers the row/text colours the SP board draws with.
+    cg_ScoresColor_Player = _Dvar_RegisterColor("cg_ScoresColor_Player", 0.76, 0.78, 0.1, 1.0, 0, "Player row color");
+    _Dvar_RegisterColor("cg_ScoresColor_Player_0", 0.49, 0.49, 0.1, 1.0, 0, "Player 0 row color");
+    _Dvar_RegisterColor("cg_ScoresColor_Player_1", 0.44, 0.2, 0.22, 1.0, 0, "Player 1 row color");
+    _Dvar_RegisterColor("cg_ScoresColor_Player_2", 0.16, 0.72, 0.28, 1.0, 0, "Player 2 row color");
+    _Dvar_RegisterColor("cg_ScoresColor_Player_3", 0.16, 0.25, 0.18, 1.0, 0, "Player 3 row color");
+    cg_ScoresColor_Transparency = _Dvar_RegisterFloat(
+                                                                    "cg_ScoresColor_Transparency",
+                                                                    0.8,
+                                                                    0.0,
+                                                                    1.0,
+                                                                    0,
+                                                                    "Row transparency");
+    cg_ScoresColor_Zombie = _Dvar_RegisterColor("cg_ScoresColor_Zombie", 0.21, 0.0, 0.0, 1.0, 0, "Zombie row color");
+    cg_ScoresColor_TransparencyZombie = _Dvar_RegisterFloat(
+                                                                            "cg_ScoresColor_TransparencyZombie",
+                                                                            0.8,
+                                                                            0.0,
+                                                                            1.0,
+                                                                            0,
+                                                                            "Zombie row transparency");
+    _Dvar_RegisterColor("cg_ScoresColor_Gamertag_0", 0.0, 0.0, 0.0, 1.0, 0, "Player 0 name color");
+    _Dvar_RegisterColor("cg_ScoresColor_Gamertag_1", 0.0, 0.0, 0.0, 1.0, 0, "Player 1 name color");
+    _Dvar_RegisterColor("cg_ScoresColor_Gamertag_2", 0.0, 0.0, 0.0, 1.0, 0, "Player 2 name color");
+    _Dvar_RegisterColor("cg_ScoresColor_Gamertag_3", 0.0, 0.0, 0.0, 1.0, 0, "Player 3 name color");
+#endif
 }
 
 void __cdecl CG_RegisterScoreboardGraphics()

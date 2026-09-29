@@ -2120,7 +2120,14 @@ WeaponFullDef *__cdecl BG_LoadWeaponVariantDefInternal(const char *folder, char 
         weapFullDef->weapDef.flameTableThirdPersonPtr = BG_GetFlameTable(
             folder,
             (char *)weapFullDef->weapDef.flameTableThirdPerson);
+    // SP retail divergence, hand-verified (Ghidra 0x004be790, BG_LoadWeaponVariantDefInternal,
+    // already named/plated from an earlier campaign): the sentinel literal drops "_mp" -- no
+    // other change to this comparison or the block it gates.
+#ifdef KISAK_SP
+    if (I_stricmp(name, "defaultweapon"))
+#else
     if (I_stricmp(name, "defaultweapon_mp"))
+#endif
     {
         if (!weapFullDef->weapDef.viewLastShotEjectEffect)
             weapFullDef->weapDef.viewLastShotEjectEffect = weapFullDef->weapDef.viewShellEjectEffect;

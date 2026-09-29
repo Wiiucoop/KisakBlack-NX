@@ -21,6 +21,21 @@
 #include <live/live_storage_pub.h>
 #include <universal/q_parse.h>
 #include <game_mp/g_main_mp.h>
+#ifdef KISAK_SP
+// For SV_Map_f's UI_SetActiveMenuSp(Com_LocalClients_GetPrimary(), UISP_PREGAME) tail. Same pair
+// sv_init_mp.cpp already carries for its two UISP_BRIEFING calls. Guarded so the MP translation
+// unit is untouched (sv_init_mp.cpp takes com_clients.h unconditionally, but nothing in the MP
+// build of THIS file needs either header).
+#include <qcommon/com_clients.h>
+#include <ui_mp/ui_main_mp.h>
+#include <qcommon/common.h>   // Com_IsMenuLevel
+#include <clientscript/cscr_stringlist.h>
+#include <clientscript/scr_const.h>
+#include <math.h>
+#include <game_mp/player_use_mp.h>
+
+int Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEntIndex);
+#endif
 
 int sv_migrate;
 
@@ -167,6 +182,199 @@ cmd_function_s SV_GameCompleteStatus_f_VAR;
 cmd_function_s SV_GameCompleteStatus_f_VAR_SERVER;
 cmd_function_s SV_Map_f_VAR;
 cmd_function_s SV_Map_f_VAR_SERVER;
+#ifdef KISAK_SP
+cmd_function_s SV_SPMap_f_VAR;
+cmd_function_s SV_SPMap_f_VAR_SERVER;
+cmd_function_s SV_SPDevMap_f_VAR;
+cmd_function_s SV_SPDevMap_f_VAR_SERVER;
+static cmd_function_s SV_ZombieBoxStatus_f_VAR;
+static cmd_function_s SV_ZombieBoxStatus_f_VAR_SERVER;
+static cmd_function_s SV_ZombiePlayerStatus_f_VAR;
+static cmd_function_s SV_ZombiePlayerStatus_f_VAR_SERVER;
+static cmd_function_s SV_ZombieUseStatus_f_VAR;
+static cmd_function_s SV_ZombieUseStatus_f_VAR_SERVER;
+
+// Read-only port diagnostic for damage/downing acceptance tests.
+static void SV_ZombiePlayerStatus_f()
+{
+    if (!com_sv_running->current.enabled)
+    {
+        Com_Printf(0, "ZM_PLAYER: no running server\n");
+        return;
+    }
+    for (int i = 0; i < level.maxclients; ++i)
+    {
+        const gentity_s *player = &g_entities[i];
+        if (!player->r.inuse || !player->client)
+            continue;
+        const gclient_s *client = player->client;
+        Com_Printf(0, "ZM_PLAYER: time=%d ent=%d health=%d statHealth=%d lastStand=%d takedamage=%d flags=0x%x clientFlags=0x%x pmType=%d otherFlags=0x%x connected=%d\n",
+            level.time, i, player->health, client->ps.stats[0], client->lastStand,
+            player->takedamage, player->flags, client->flags, client->ps.pm_type,
+            client->ps.otherFlags, client->sess.connected);
+    }
+}
+
+// Port diagnostic, not a recovered retail command. Runs on the server command
+// queue and only reads entities; no script calls or visibility changes.
+static void SV_ZombieBoxStatus_f()
+{
+    if (!com_sv_running->current.enabled)
+    {
+        Com_Printf(0, "ZM_BOX: no running server\n");
+        return;
+    }
+
+    int boxCount = 0;
+    for (int i = 0; i < level.num_entities; ++i)
+    {
+        const gentity_s *box = &g_entities[i];
+        if (!box->r.inuse || !box->targetname
+            || strcmp(SL_ConvertToString(box->targetname, SCRIPTINSTANCE_SERVER), "treasure_chest_use"))
+            continue;
+
+        ++boxCount;
+        Com_Printf(0, "ZM_BOX: location=%s trigger=%d origin=(%.1f %.1f %.1f) contents=0x%x\n",
+            box->script_noteworthy ? SL_ConvertToString(box->script_noteworthy, SCRIPTINSTANCE_SERVER) : "<unnamed>",
+            i, box->r.currentOrigin[0], box->r.currentOrigin[1], box->r.currentOrigin[2], box->r.contents);
+
+        // Shipped content links trigger -> lid -> weapon origin -> box base.
+        const char *parts[] = {"lid", "weapon_origin", "base"};
+        const gentity_s *part = box;
+        for (int link = 0; link < 3; ++link)
+        {
+            const gentity_s *next = NULL;
+            if (part->target)
+            {
+                for (int j = 0; j < level.num_entities; ++j)
+                {
+                    if (g_entities[j].r.inuse && g_entities[j].targetname == part->target)
+                    {
+                        next = &g_entities[j];
+                        break;
+                    }
+                }
+            }
+            if (!next)
+            {
+                Com_Printf(0, "ZM_BOX: %s target missing\n", parts[link]);
+                break;
+            }
+            Com_Printf(0, "ZM_BOX: %s ent=%d model=%u hidden=%d clientMask=0x%x origin=(%.1f %.1f %.1f)\n",
+                parts[link], next->s.number, next->model, (next->s.lerp.eFlags & 0x20) != 0,
+                next->r.clientMask[0], next->r.currentOrigin[0], next->r.currentOrigin[1], next->r.currentOrigin[2]);
+            part = next;
+        }
+    }
+    Com_Printf(0, "ZM_BOX: %d box locations; hidden=0 and clientMask=0 permit visibility.\n", boxCount);
+}
+
+// Port diagnostic, not a recovered retail command. Dumps every trigger_use/
+// trigger_use_touch/trigger_radius/trigger_radius_use entity near the first
+// connected player, printing the exact fields Player_GetUseList and
+// Player_UpdateCursorHints (Game/Server/game_mp/player_use_mp.cpp) gate on,
+// so a "can't interact with this door/trigger" report can be checked without
+// needing the compiled map's GSC source.
+static void SV_ZombieUseStatus_f()
+{
+    if (!com_sv_running->current.enabled)
+    {
+        Com_Printf(0, "ZM_USE: no running server\n");
+        return;
+    }
+
+    const gentity_s *player = NULL;
+    for (int i = 0; i < level.maxclients; ++i)
+    {
+        if (g_entities[i].r.inuse && g_entities[i].client)
+        {
+            player = &g_entities[i];
+            break;
+        }
+    }
+    if (!player)
+    {
+        Com_Printf(0, "ZM_USE: no connected player\n");
+        return;
+    }
+
+    const float *po = player->client->ps.origin;
+    int found = 0;
+    for (int i = 0; i < level.num_entities; ++i)
+    {
+        const gentity_s *ent = &g_entities[i];
+        if (!ent->r.inuse)
+            continue;
+        if (ent->classname != scr_const.trigger_use
+            && ent->classname != scr_const.trigger_use_touch
+            && ent->classname != scr_const.trigger_radius
+            && ent->classname != scr_const.trigger_radius_use)
+            continue;
+
+        float dx = ent->r.currentOrigin[0] - po[0];
+        float dy = ent->r.currentOrigin[1] - po[1];
+        float dz = ent->r.currentOrigin[2] - po[2];
+        float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (dist > 1024.0f)
+            continue;
+
+        ++found;
+        Com_Printf(0,
+            "ZM_USE: ent=%d classname=%s dist=%.1f team=%u contents=0x%x item=%d hintstring=%d requireLookAt=%d "
+            "handler=%d clientMask=0x%x itemAmmoCount1=%d playerClientNum=%d targetname=%s origin=(%.1f %.1f %.1f) mins=(%.1f %.1f %.1f) maxs=(%.1f %.1f %.1f)\n",
+            i,
+            SL_ConvertToString(ent->classname, SCRIPTINSTANCE_SERVER),
+            dist,
+            ent->team,
+            ent->r.contents,
+            ent->s.un3.item,
+            ent->s.un1.scale,
+            ent->trigger.requireLookAt,
+            ent->handler,
+            ent->r.clientMask[0],
+            ent->item[1].ammoCount,
+            player->client->ps.clientNum,
+            ent->targetname ? SL_ConvertToString(ent->targetname, SCRIPTINSTANCE_SERVER) : "<none>",
+            ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
+            ent->r.mins[0], ent->r.mins[1], ent->r.mins[2],
+            ent->r.maxs[0], ent->r.maxs[1], ent->r.maxs[2]);
+        if (dist <= 256.0f)
+        {
+            // Same player box Player_GetUseList feeds the touch branch.
+            float pmins[3] = { po[0] - 15.0f, po[1] - 15.0f, po[2] };
+            float pmaxs[3] = { po[0] + 15.0f, po[1] + 15.0f, po[2] + 70.0f };
+            Com_Printf(0,
+                "ZM_USE:   near ent=%d linked=%d svFlags=0x%x eType=%d flags=0x%x absmin=(%.1f %.1f %.1f) absmax=(%.1f %.1f %.1f) angles=(%.1f %.1f %.1f) contact=%d\n",
+                i, ent->r.linked, ent->r.svFlags, ent->s.eType, ent->flags,
+                ent->r.absmin[0], ent->r.absmin[1], ent->r.absmin[2],
+                ent->r.absmax[0], ent->r.absmax[1], ent->r.absmax[2],
+                ent->r.currentAngles[0], ent->r.currentAngles[1], ent->r.currentAngles[2],
+                SV_EntityContact(pmins, pmaxs, ent));
+        }
+    }
+    {
+        static useList_t useList[1024];
+        gentity_s *mutablePlayer = &g_entities[player - g_entities];
+        int count = Player_GetUseList(mutablePlayer, useList, player->client->ps.cursorHintEntIndex);
+        Com_Printf(0, "ZM_USE: Player_GetUseList returned %d usable entries (first wins the hint)\n", count);
+        for (int i = 0; i < count && i < 8; ++i)
+        {
+            const gentity_s *u = useList[i].ent;
+            Com_Printf(0, "ZM_USE:   [%d] ent=%d classname=%s eType=%d item=%d score=%.1f\n",
+                i, u->s.number, SL_ConvertToString(u->classname, SCRIPTINSTANCE_SERVER),
+                u->s.eType, u->s.un3.item, useList[i].score);
+        }
+        Com_Printf(0, "ZM_USE: player health=%d active=%d pm_type=%d pm_flags=0x%x weaponstate=%d eFlags=0x%x weapFlags=0x%x clientFlags=0x%x\n",
+            player->health, player->active, player->client->ps.pm_type, player->client->ps.pm_flags,
+            player->client->ps.weaponstate, player->client->ps.eFlags, player->client->ps.weapFlags,
+            player->client->flags);
+    }
+    Com_Printf(0, "ZM_USE: %d use-trigger entities within 1024 units of player origin (%.1f %.1f %.1f)\n",
+        found, po[0], po[1], po[2]);
+    Com_Printf(0, "ZM_USE: LIVE ps.cursorHint=%d ps.cursorHintString=%d ps.cursorHintEntIndex=%d (1023=none)\n",
+        player->client->ps.cursorHint, player->client->ps.cursorHintString, player->client->ps.cursorHintEntIndex);
+}
+#endif
 cmd_function_s SV_KillServer_f_VAR;
 cmd_function_s SV_KillServer_f_VAR_SERVER;
 cmd_function_s SV_ScriptUsage_f_VAR;
@@ -230,6 +438,20 @@ void __cdecl SV_AddOperatorCommands()
         Cmd_AddCommandInternal("devmap", Cbuf_AddServerText_f, &SV_Map_f_VAR);
         Cmd_AddServerCommandInternal("devmap", SV_Map_f, &SV_Map_f_VAR_SERVER);
         Cmd_SetAutoComplete("devmap", "maps/mp", "d3dbsp");
+#ifdef KISAK_SP
+        // Retail SP registrar 0x0057DBE0 exposes all four names to the same
+        // shared handler. ChangeLevel's final launcher uses these SP aliases.
+        Cmd_AddCommandInternal("spmap", Cbuf_AddServerText_f, &SV_SPMap_f_VAR);
+        Cmd_AddServerCommandInternal("spmap", SV_Map_f, &SV_SPMap_f_VAR_SERVER);
+        Cmd_AddCommandInternal("spdevmap", Cbuf_AddServerText_f, &SV_SPDevMap_f_VAR);
+        Cmd_AddServerCommandInternal("spdevmap", SV_Map_f, &SV_SPDevMap_f_VAR_SERVER);
+        Cmd_AddCommandInternal("zm_box_status", Cbuf_AddServerText_f, &SV_ZombieBoxStatus_f_VAR);
+        Cmd_AddServerCommandInternal("zm_box_status", SV_ZombieBoxStatus_f, &SV_ZombieBoxStatus_f_VAR_SERVER);
+        Cmd_AddCommandInternal("zm_player_status", Cbuf_AddServerText_f, &SV_ZombiePlayerStatus_f_VAR);
+        Cmd_AddServerCommandInternal("zm_player_status", SV_ZombiePlayerStatus_f, &SV_ZombiePlayerStatus_f_VAR_SERVER);
+        Cmd_AddCommandInternal("zm_use_status", Cbuf_AddServerText_f, &SV_ZombieUseStatus_f_VAR);
+        Cmd_AddServerCommandInternal("zm_use_status", SV_ZombieUseStatus_f, &SV_ZombieUseStatus_f_VAR_SERVER);
+#endif
         Demo_RegisterCommands();
         Cmd_AddCommandInternal("killserver", Cbuf_AddServerText_f, &SV_KillServer_f_VAR);
         Cmd_AddServerCommandInternal("killserver", SV_KillServer_f, &SV_KillServer_f_VAR_SERVER);
@@ -302,6 +524,13 @@ void __cdecl SV_Map_f()
 
     I_strncpyz(mapname, basename, 64);
     I_strlwr(mapname);
+#if defined(KISAK_SP) && defined(KISAK_DEDICATED)
+    if (!Com_IsZombieMap(mapname))
+    {
+        Com_PrintError(15, "The SP dedicated server only supports Zombies maps.\n");
+        return;
+    }
+#endif
 
 // LWSS: IDA got this totally wrong. The goto logic is wrong and causes SV_SpawnServer() to be called in an infinite loop
 //    if ( !useFastFile->current.enabled )
@@ -350,8 +579,29 @@ void __cdecl SV_Map_f()
     if (Demo_IsRecording())
         Demo_End(0);
 
+#ifdef KISAK_SP
+    // The retail SP executable never enters the ordinary Zombies maps itself: its frontend hands
+    // them to the separate multiplayer/Zombies application. OpenBLOPS intentionally keeps the SP
+    // runtime in-process, so select that application's mode before SV_SpawnServer starts loading
+    // screens, gametype data, and common assets. The shipped common_zombie.ff owns
+    // animscripts/traverse/zombie_shared.gsc; leaving zombiemode false makes the level zone load
+    // successfully and then fail while compiling that include.
+    //
+    // This inference is deliberately based on the map name, not a command-line `set`: zombiemode
+    // is a read-only dvar and the console rejects +set zombiemode 1. All normal Zombies maps use
+    // the zombie_ prefix; zombietron is the one shipped exception and already has its own test in
+    // Com_LoadLevelFastFiles. Resetting the three mode dvars here also makes an in-process return
+    // from Zombies to campaign/frontend deterministic, something retail gets for free by changing
+    // executables.
+    Com_SetSpMapMode(mapname);
+#endif
+
     cmd = SV_Cmd_Argv(0);
     isDevmap = I_stricmp(cmd, "devmap") == 0;
+#ifdef KISAK_SP
+    isDevmap = isDevmap || I_stricmp(cmd, "spdevmap") == 0;
+    Com_Printf(15, "SP map command: %s %s\n", cmd, mapname);
+#endif
 
     cheat = (com_developer->current.integer == 2);
 
@@ -365,6 +615,40 @@ void __cdecl SV_Map_f()
 
     FS_ConvertPath(mapname);
     SV_SpawnServer(0, mapname, mapIsPreloaded, sv_migrate);
+#ifdef KISAK_SP
+    // Retail SP SV_Map_f (0x0087c500) does not end at SV_SpawnServer. Its tail, re-read off the
+    // shipped BlackOps.exe with capstone this pass:
+    //     0087c7a5  call 0x50f030            ; SV_SpawnServer(mapname, .., 0)
+    //     0087c7aa  call 0x4a8240
+    //     0087c7af  push 0 / call 0x684eb0   ; Com_IsMenuLevel(NULL)
+    //     0087c7b6  add esp,0x18 / test al,al
+    //     0087c7bc  jne 0x87c7cb             ; menu level -> skip the next call
+    //     0087c7be  push 0x9dd354 / call 0x40d820 / add esp,4
+    //     0087c7cb  push 4                   ; UISP_PREGAME
+    //     0087c7cd  call 0x5bee40            ; Com_LocalClients_GetPrimary
+    //     0087c7d2  push eax
+    //     0087c7d3  call 0x5852c0            ; UI_SetActiveMenu(primary, UISP_PREGAME)
+    //     0087c7db  call 0x5118c0
+    // This call is the missing OTHER half of the frontend main-menu path: case 4 of
+    // UI_SetActiveMenuSp carries the prelude that (re)loads ui/menus.txt -- the only zone asset
+    // holding the "main" menu -- at the one moment frontend.ff is actually mounted. Without a
+    // caller, that prelude never runs and the UI context never gets "main".
+    //
+    // *** DELIBERATE DIVERGENCE FROM RETAIL, not a transcription. ***
+    // In retail the UI_SetActiveMenu call at 0x87c7cb is UNCONDITIONAL: the `jne` above it only
+    // skips the 0x40d820 call, and both branches converge on it. It is transcribed here behind
+    // Com_IsMenuLevel(0) anyway, because retail additionally gates case 4's menu-CHANGING body
+    // (Key_SetCatcher(16) + Menus_CloseAll + Menus_OpenByName("pregame")) behind
+    //     if (!FUN_004efe20() && !onlinegame->current.enabled && !systemlink->current.enabled)
+    // and FUN_004efe20 is still an unresolved predicate, so that gate is NOT transcribed in this
+    // tree -- case 4's body runs unconditionally here. An unguarded call would therefore slam
+    // "pregame" over every map load, campaign levels included. Gating on Com_IsMenuLevel(0)
+    // confines the whole thing to the frontend map, which is the only place the prelude does
+    // anything useful regardless. Retire this divergence, and restore retail's unconditional
+    // call, if and when 0x004efe20 is identified and case 4's real gate is transcribed.
+    if ( Com_IsMenuLevel(0) )
+        UI_SetActiveMenuSp(Com_LocalClients_GetPrimary(), UISP_PREGAME);
+#endif
 }
 
 char __cdecl SV_CheckMapExists(const char *map)
@@ -1078,7 +1362,11 @@ void __cdecl SV_SetPerk_f()
     {
         perkName = SV_Cmd_Argv(2);
         perkIndex = BG_GetPerkIndexForName(perkName);
+#ifdef KISAK_SP
+        if ( perkIndex < BG_SP_PERK_COUNT )
+#else
         if ( perkIndex < 0x34 )
+#endif
         {
             i = 0;
             for ( clIdx = svs.clients; (signed int)i < com_maxclients->current.integer && clIdx != PlayerByName; ++clIdx )

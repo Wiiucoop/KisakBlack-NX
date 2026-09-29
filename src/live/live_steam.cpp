@@ -159,15 +159,29 @@ bool __cdecl LiveSteam_LaunchOtherApp(const char *cmd)
     int result; // [esp+4h] [ebp-8h]
     DWORD dwThreadID; // [esp+8h] [ebp-4h] BYREF
 
+#ifdef KISAK_SP
+    // Retail SP 0x00466080 recognizes the shipped executable names.  Keep the
+    // reconstruction's development aliases accepted as well so existing MP behavior
+    // remains isolated from this SP-only correction.
+    if ( !I_stricmp(cmd, "BlackOps.exe") || !I_stricmp(cmd, "CoDSP_rd.exe") )
+#else
     if ( !I_stricmp(cmd, "CoDSP_rd.exe") )
+#endif
     {
         url = "steam://run/42700";
         goto LABEL_8;
     }
+#ifdef KISAK_SP
+    if ( !I_stricmp(cmd, "BlackOpsMP.exe") || !I_stricmp(cmd, "CoDMP_rd.exe") )
+#else
     if ( !I_stricmp(cmd, "CoDMP_rd.exe") )
+#endif
     {
         url = "steam://run/42710";
 LABEL_8:
+#ifdef KISAK_SP
+        Com_Printf_NoFilter((char *)"SP Steam handoff: %s -> %s\n", cmd, url);
+#endif
         g_ShellExecuteInProgress = 1;
         CreateThread(0, 0, (LPTHREAD_START_ROUTINE)ShellExecuteThredProc, (LPVOID)url, 0, &dwThreadID);
         while ( g_ShellExecuteInProgress )
@@ -178,10 +192,15 @@ LABEL_8:
         return result > 32;
     }
     Com_Printf_NoFilter((char *)"Steam_LaunchOtherApp: Don't know how to launch '%s'\n", cmd);
+#ifdef KISAK_SP
+    // Retail SP returns false for an unknown executable; it does not assert.
+    return 0;
+#else
     v1 = va("Unknown exe '%s' to launch through Steam.\n", cmd);
     if ( !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\live\\live_steam.cpp", 195, 0, v1) )
         __debugbreak();
     return 0;
+#endif
 }
 
 void __cdecl LiveSteam_ShowStore()

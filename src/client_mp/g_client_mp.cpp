@@ -1,3 +1,5 @@
+#include <server_mp/sv_offline_stats.h>
+#include <game/g_sp_crosshair.h>
 #include "g_client_mp.h"
 #include <bgame/bg_misc.h>
 #include <clientscript/scr_const.h>
@@ -382,6 +384,10 @@ LABEL_11:
 
 const char *__cdecl ClientConnect(unsigned int clientNum, unsigned int scriptPersId)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    if (!SV_OfflineStatsConnect(clientNum))
+        return "Offline stats profile initialization failed (see server console)";
+#endif
     gclient_s *client; // [esp+0h] [ebp-420h]
     XAnimTree_s *pXAnimTree; // [esp+4h] [ebp-41Ch]
     sentient_s *sentient; // [esp+8h] [ebp-418h]
@@ -419,7 +425,12 @@ const char *__cdecl ClientConnect(unsigned int clientNum, unsigned int scriptPer
     ci->nextValid = 1;
     client->sess.connected = CON_CONNECTING;
     client->sess.scriptPersId = scriptPersId;
+#ifdef KISAK_SP
+    // Zombies connecting callbacks query self.team before ClientBegin/spawn.
+    client->sess.cs.team = zombiemode->current.enabled ? TEAM_ALLIES : TEAM_FREE;
+#else
     client->sess.cs.team = TEAM_FREE;//  RETURN_ZERO32();
+#endif
     client->sess.sessionState = SESS_STATE_SPECTATOR;
     client->spectatorClient = -1;
     client->sess.forceSpectatorClient = -1;
@@ -463,6 +474,9 @@ const char *__cdecl ClientConnect(unsigned int clientNum, unsigned int scriptPer
 void __cdecl ClientClearFields(gclient_s *client)
 {
     client->useHoldEntity.setEnt(0);
+#ifdef KISAK_SP
+    G_SPClearClientLookAt(client);
+#endif
 }
 
 void __cdecl ClientBegin(unsigned int clientNum)
@@ -566,7 +580,14 @@ void __cdecl ClientSpawn(gentity_s *ent, const float *spawn_origin, const float 
     AssignToSmallerType<int>(&ent->s.lerp.useCount, ent->useCount + 1);
     ent->s.groundEntityNum = 1023;
     Scr_SetString(&ent->classname, scr_const.player, SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+    // Retail SP ClientSpawn (BlackOps.exe 0x00480170, store at 0x00480219)
+    // uses the extra 0x4000 bit. Its semantic name has not been established
+    // conclusively, so preserve the observed value without guessing.
+    ent->clipmask = 0x281c011;
+#else
     ent->clipmask = 0x2818011;
+#endif
     ent->r.svFlags |= 1u;
     ent->takedamage = 0;
     G_SetClientContents(ent);
@@ -588,7 +609,59 @@ void __cdecl ClientSpawn(gentity_s *ent, const float *spawn_origin, const float 
     client->lastServerTime = savedServerTime;
     client->spectatorClient = -1;
     client->ps.stats[4] = savedSpawnCount + 1;
+#ifdef KISAK_SP
+    // ---------------------------------------------------------------------
+    // SP: seed the whole health chain from g_player_maxhealth.
+    //
+    // WHY THIS IS THE PORT AND NOT A TWEAK. MP and SP split responsibility for
+    // the player's starting health in OPPOSITE directions:
+    //   * MP: the engine only publishes ps.stats[2] (= sess.maxHealth) and the
+    //     gametype script supplies the health --
+    //     maps/mp/gametypes/_globallogic spawnPlayer() does
+    //     `self.maxhealth = <tweakable>; self.health = self.maxhealth;`.
+    //   * SP: those two lines are COMMENTED OUT in the shipped SP corpus and
+    //     replaced by `self.maxhealth = self.health;`
+    //     (maps/_callbackglobal.gsc:1106-1108, extracted from retail
+    //     common.ff). SP script NEVER assigns self.health anywhere -- the whole
+    //     corpus only ever reads it (maps/_load.gsc:920 prints it). The engine
+    //     is the sole producer.
+    // So reusing MP's ClientSpawn verbatim leaves the SP player at 0 hp forever.
+    //
+    // RETAIL, verbatim. SP ClientSpawn == BlackOps.exe 0x00480170, reached from
+    // PlayerCmd_spawn (0x007d9780) exactly as this tree's g_client_script_cmd_mp
+    // :5607 reaches ClientSpawn. It replaces MP's lone `stats[2] = maxHealth`
+    // with five stores, in this order:
+    //     iVar2 = g_player_maxhealth->current.integer;   // [0x01bf13ec]+0x18
+    //     client[0x1AC0] = iVar2;   // sess.maxHealth
+    //     client[0x01CC] = iVar2;   // ps.stats[2]
+    //     client[0x01C4] = iVar2;   // ps.stats[0]
+    //     ent[0x184]     = iVar2;   // ent->health
+    //     ent[0x188]     = client[0x1AC0];  // ent->maxHealth
+    // Offsets pinned, not guessed: ent+0x184/0x188 are health/maxHealth because
+    // the setmaxhealth builtin at 0x007f5020 writes exactly that adjacent pair
+    // plus client+0x1AC0, and client+0x1AC0 is sess.maxHealth because
+    // ScrCmd_Get/SetNormalHealth (0x007f4da5 / 0x007f4eca) divide by it. The
+    // stats base is 0x1C4 because this same function does
+    // `client[0x1D4] = savedSpawnCount + 1` == ps.stats[4] three lines above,
+    // and SP ClientEndFrame (0x0047f640) does `client[0x1C4] = ent->health`
+    // == ps.stats[0].
+    //
+    // WHY IT IS THE TAG-CAMERA BLOCKER. SP ClientEndFrame 0x0047f640 computes
+    //     *(uint *)(client + 4) = ((0 < *(int *)(client + 0x1c4)) - 1 & 9) + 1;
+    // i.e. ps.pm_type = ps.stats[0] > 0 ? PM_NORMAL_LINKED(1) : PM_DEAD_LINKED(10)
+    // whenever ent->tagInfo is set -- byte-for-byte the rule this tree already
+    // reconstructs at g_active_mp.cpp:2527. With stats[0] == 0 it latches 10
+    // every frame, and CG_UpdateCameraMode (0x00623b60) tests pm_type == 1 ONLY,
+    // so CAM_LINKED never engages. The reconstruction of the RULE was correct;
+    // the missing input was the health.
+    client->sess.maxHealth = g_player_maxhealth->current.integer;
     client->ps.stats[2] = client->sess.maxHealth;
+    client->ps.stats[0] = client->sess.maxHealth;
+    ent->health = client->sess.maxHealth;
+    ent->maxHealth = client->sess.maxHealth;
+#else
+    client->ps.stats[2] = client->sess.maxHealth;
+#endif
     client->ps.eFlags = iFlags;
     client->sess.cs.clientIndex = index;
     client->sess.cs.attachedVehEntNum = 1023;
@@ -682,6 +755,46 @@ LABEL_50:
     client->lastSpawnTime = level.time;
     client->sess.cmd.serverTime = level.time;
     client->ps.commandTime = level.time - 100;
+#ifdef KISAK_SP
+    // ---------------------------------------------------------------------
+    // SP: force an unassigned team to TEAM_ALLIES and mirror it into the
+    // sentient. Retail SP ClientSpawn (BlackOps.exe 0x00480170), verbatim, in
+    // this position -- between `ps.commandTime = level.time - 100` and the
+    // ClientEndFrame / ClientThink_real pair that closes the function:
+    //     004804c4  MOV EAX,[EBX + 0x1aec]   ; sess.cs.team
+    //     004804cf  TEST EAX,EAX
+    //     004804d1  JNZ  004804d8
+    //     004804d3  MOV EAX,0x2              ; TEAM_ALLIES
+    //     004804d8  MOV [EBX + 0x1aec],EAX
+    //     004804de  MOV EDX,[ESI + 0x144]    ; ent->sentient
+    //     004804e5  MOV [EDX + 0x4],EAX      ; sentient->eTeam = team
+    //     004804e8  CALL 0047f640            ; ClientEndFrame
+    //     004804ef  CALL 0069d450            ; ClientThink_real
+    // Offsets pinned, not guessed: client+0x1AEC is sess.cs.team because
+    // clientState_s opens with { clientIndex, team } and retail writes the
+    // client index to client+0x1AE8 in both ClientSpawn and ClientConnect
+    // (0x005d3760); gentity+0x144 is ent->sentient and sentient+0x4 is eTeam
+    // per Ghidra's own sentient_s layout, cross-checked against the retail
+    // `.team` script-field row at 0x00A55C78 whose field offset literal is 4.
+    //
+    // WHY IT IS NEEDED. Retail ClientConnect sets sentient->eTeam = 3 and
+    // sess.cs.team = getAssignedTeam(clientNum) -- and getAssignedTeam
+    // (0x004D26C0, self-named by its own "getAssignedTeam Error: unknown xuid
+    // (%llx) for client (%i).\n" error string) returns 0 whenever the live/DW
+    // check at its head fails, i.e. always offline. So without this block the
+    // player's team is TEAM_FREE(0) for the entire game: ClientUserinfoChanged
+    // (g_client_mp.cpp:330) faithfully mirrors sess.cs.team into eTeam, but the
+    // value it mirrors is 0. That poisons `1 << sentient->eTeam` throughout the
+    // actor targeting layer (actor_events.cpp:125, actor_event_listeners.cpp
+    // :101, actor_senses.cpp:430) and makes Sentient_EnemyTeam(0) return
+    // TEAM_FREE, so AI never resolves the player as an enemy team; it also
+    // fails the trigger-team gate in Player_UpdateCursorHints
+    // (player_use_mp.cpp:447, `self->team != ent->client->sess.cs.team`).
+    if ( client->sess.cs.team == TEAM_FREE )
+        client->sess.cs.team = TEAM_ALLIES;
+    if ( ent->sentient )
+        ent->sentient->eTeam = client->sess.cs.team;
+#endif
     ClientEndFrame(ent);
     ClientThink_real(ent, &client->sess.cmd);
     level.clientIsSpawning = 0;

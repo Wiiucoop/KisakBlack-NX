@@ -780,6 +780,13 @@ void __cdecl Bullet_NofifyActor(
 
 team_t __cdecl Sentient_EnemyTeam(team_t eTeam)
 {
+#ifdef KISAK_SP
+    // Retail SP accepts six sentient team values, including neutral/dead teams.
+    static const team_t enemyTeam[6] = { TEAM_FREE, TEAM_ALLIES, TEAM_AXIS,
+        TEAM_FREE, TEAM_FREE, TEAM_FREE };
+    iassert(unsigned(eTeam) < 6);
+    return unsigned(eTeam) < 6 ? enemyTeam[eTeam] : TEAM_FREE;
+#else
     team_t EnemyTeam[4]; // [esp+0h] [ebp-10h]
 
     EnemyTeam[0] = TEAM_FREE;
@@ -797,6 +804,7 @@ team_t __cdecl Sentient_EnemyTeam(team_t eTeam)
         __debugbreak();
     }
     return EnemyTeam[eTeam];
+#endif
 }
 
 void __cdecl Bullet_ImpactEffect(

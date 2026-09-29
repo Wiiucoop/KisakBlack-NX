@@ -483,6 +483,9 @@ void __cdecl XAnimUpdateTimeAndNotetrackLeaf(
                 float dtime,
                 char notifyFlags);
 void __cdecl XAnimProcessClientNotify(XAnimInfo *info, float dtime);
+#ifdef KISAK_SP
+void __cdecl XAnimApplyClientCommandCatchup_SP(DObj *obj, unsigned int animIndex, int elapsedMs);
+#endif
 signed int __cdecl XAnimGetNextNotifyIndex(const XAnimParts *parts, float time);
 double __cdecl XAnimGetNotifyFracLeaf(const XAnimState *state, const XAnimState *nextState, float time, float dtime);
 void __cdecl XAnimUpdateTimeAndNotetrackSyncSubTree(

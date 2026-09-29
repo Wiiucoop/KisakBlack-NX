@@ -27,6 +27,24 @@
 #include <bgame/bg_misc.h>
 #include <sound/snd_utils.h>
 #include <stringed/stringed_hooks.h>
+#ifdef KISAK_SP
+#include <cgame_mp/cg_actors_mp.h>
+
+// Retail SP keeps this state in five gentity_s fields at +0x284..+0x294.
+// The reconstruction deliberately retains the MP gentity_s layout, so keep
+// the SP-only sound-wait state out of the shared structure.
+struct SPSoundNotifyState
+{
+    unsigned __int16 notifyString;
+    unsigned __int16 pad;
+    unsigned int alias;
+    int startTime;
+    int lengthMs;
+    int useCount;
+};
+
+static SPSoundNotifyState s_spSoundNotifyState[1024];
+#endif
 
 const char *origErrorMsg = "localized string";
 
@@ -516,6 +534,19 @@ void __cdecl G_DObjUpdate(gentity_s *ent)
             numModelsa = DestructibleUpdate(ent, dobjModels, numModels);
             dobj = Com_ServerDObjCreate(dobjModels, numModelsa, tree, ent->s.number);
             DObjSetHidePartBits(dobj, ent->s.partBits);
+#ifdef KISAK_SP
+            if ( ent->s.eType == ET_ACTOR )
+            {
+                // Retail SP snapshots six actor attachment model/tag pairs in
+                // a block separate from entityState_s.  Preserve MP's layout
+                // and publish that block only in the integrated SP build.
+                CG_PublishActorAttachments_SP(
+                    ent->s.number,
+                    ent->attachModelNames,
+                    ent->attachTagNames,
+                    ent->attachIgnoreCollision);
+            }
+#endif
             if ( ent->scr_vehicle )
                 G_UpdateVehicleTags(ent);
             G_UpdateTags(ent, 1);
@@ -1468,6 +1499,8 @@ void __cdecl G_TraceBulletPathForVehTurret(gentity_s *ent, DObjTrace_s *trace, i
     veh = ent->scr_vehicle;
     dualBarrel = (veh->gunnerTurrets[gunnerIndex].flags & 2) != 0;
     flash = 0;
+#ifndef KISAK_SP
+    // Retail SP's self-collision trace reads the current barrel; it does not fire.
     if ( dualBarrel )
     {
         if ( veh->gunnerTurrets[gunnerIndex].fireBarrel )
@@ -1475,6 +1508,7 @@ void __cdecl G_TraceBulletPathForVehTurret(gentity_s *ent, DObjTrace_s *trace, i
         else
             veh->gunnerTurrets[gunnerIndex].fireBarrel = 1;
     }
+#endif
     if ( veh->gunnerTurrets[gunnerIndex].fireBarrel )
         flash = veh->boneIndex.gunnerTags[gunnerIndex].flash2;
     else
@@ -2017,6 +2051,49 @@ gentity_s *__cdecl G_PlaySoundAlias(gentity_s *ent, unsigned int alias, unsigned
     gentity_s *tmp; // [esp+0h] [ebp-4h]
 
     tmp = 0;
+#ifdef KISAK_SP
+    // Retail SP 0x00534A90 selects event 5 when a script notify string is
+    // supplied, does not set SVF_BROADCAST, and records the wait state even
+    // though the client reports the final sound length asynchronously.
+    if ( alias )
+    {
+        tmp = G_TempEntity(ent->r.currentOrigin, notifyString ? EV_SOUND_ALIAS_NOTIFY : EV_SOUND_ALIAS);
+        tmp->s.loopSoundId = alias;
+        AssignToSmallerType<short>(&tmp->s.otherEntityNum, ent->s.number);
+        tmp->s.un3.item = bone;
+    }
+    if ( notifyString )
+    {
+        SPSoundNotifyState &state = s_spSoundNotifyState[ent->s.number];
+        unsigned __int16 heldNotifyString = 0;
+
+        // Retail SP FUN_00813020 takes a temporary string reference before
+        // notifying the previous waiter. Scr_Notify re-enters the VM and may
+        // release the builtin arguments, so the incoming string must stay
+        // referenced until it has been installed in the entity's wait state.
+        Scr_SetString(&heldNotifyString, notifyString, SCRIPTINSTANCE_SERVER);
+        if ( state.notifyString && state.useCount != ent->useCount )
+        {
+            Scr_SetString(&state.notifyString, 0, SCRIPTINSTANCE_SERVER);
+            memset(&state, 0, sizeof(state));
+        }
+        else if ( state.notifyString )
+            Scr_Notify(ent, state.notifyString, 0);
+        Scr_SetString(&state.notifyString, heldNotifyString, SCRIPTINSTANCE_SERVER);
+        Scr_SetString(&heldNotifyString, 0, SCRIPTINSTANCE_SERVER);
+        state.alias = alias;
+        state.startTime = level.time;
+        state.lengthMs = -1;
+        state.useCount = ent->useCount;
+        Com_Printf(
+            15,
+            "SP sound notify start: ent %d alias %u notify %s start %d\n",
+            ent->s.number,
+            alias,
+            SL_ConvertToString(notifyString, SCRIPTINSTANCE_SERVER),
+            level.time);
+    }
+#else
     if ( notifyString
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\g_utils_mp.cpp",
@@ -2035,8 +2112,88 @@ gentity_s *__cdecl G_PlaySoundAlias(gentity_s *ent, unsigned int alias, unsigned
         AssignToSmallerType<short>(&tmp->s.otherEntityNum, ent->s.number);
         tmp->s.un3.item = bone;
     }
+#endif
     return tmp;
 }
+
+#ifdef KISAK_SP
+void __cdecl G_SPResetSoundNotifyState()
+{
+    memset(s_spSoundNotifyState, 0, sizeof(s_spSoundNotifyState));
+}
+
+void __cdecl G_SPShutdownSoundNotifyState()
+{
+    for ( int i = 0; i < 1024; ++i )
+    {
+        if ( s_spSoundNotifyState[i].notifyString )
+            Scr_SetString(&s_spSoundNotifyState[i].notifyString, 0, SCRIPTINSTANCE_SERVER);
+    }
+    memset(s_spSoundNotifyState, 0, sizeof(s_spSoundNotifyState));
+}
+
+void __cdecl G_SPSetSoundLength(int entNum, int lengthMs)
+{
+    if ( static_cast<unsigned int>(entNum) >= 1024u )
+        return;
+
+    gentity_s *ent = &g_entities[entNum];
+    SPSoundNotifyState &state = s_spSoundNotifyState[entNum];
+    if ( !ent->r.inuse || !state.notifyString || state.useCount != ent->useCount )
+        return;
+
+    if ( lengthMs > state.lengthMs )
+    {
+        state.lengthMs = lengthMs;
+        state.startTime = level.time;
+        Com_Printf(15, "SP sound notify length: ent %d length %d start %d\n", entNum, lengthMs, level.time);
+    }
+}
+
+void __cdecl G_SPUpdateSoundNotify(gentity_s *ent)
+{
+    if ( !ent || static_cast<unsigned int>(ent->s.number) >= 1024u )
+        return;
+
+    SPSoundNotifyState &state = s_spSoundNotifyState[ent->s.number];
+    if ( !state.notifyString )
+        return;
+    if ( state.useCount != ent->useCount )
+    {
+        Scr_SetString(&state.notifyString, 0, SCRIPTINSTANCE_SERVER);
+        memset(&state, 0, sizeof(state));
+        return;
+    }
+
+    const int duration = state.lengthMs < 0 ? 5000 : state.lengthMs;
+    if ( level.time - state.startTime < duration )
+        return;
+
+    const unsigned __int16 notifyString = state.notifyString;
+    Com_Printf(
+        15,
+        "SP sound notify complete: ent %d alias %u notify %s length %d elapsed %d\n",
+        ent->s.number,
+        state.alias,
+        SL_ConvertToString(notifyString, SCRIPTINSTANCE_SERVER),
+        duration,
+        level.time - state.startTime);
+    Scr_Notify(ent, notifyString, 0);
+    Scr_SetString(&state.notifyString, 0, SCRIPTINSTANCE_SERVER);
+    state.alias = 0;
+    state.startTime = 0;
+    state.lengthMs = 0;
+    state.useCount = 0;
+}
+
+bool __cdecl G_SPIsWaitingOnSound(const gentity_s *ent)
+{
+    if ( !ent || static_cast<unsigned int>(ent->s.number) >= 1024u )
+        return false;
+    const SPSoundNotifyState &state = s_spSoundNotifyState[ent->s.number];
+    return state.notifyString != 0 && state.useCount == ent->useCount;
+}
+#endif
 
 void __cdecl G_AnimScriptSound(int client, snd_alias_list_t *aliasList)
 {

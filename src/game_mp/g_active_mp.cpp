@@ -1,4 +1,5 @@
 #include "g_active_mp.h"
+#include <game/g_sp_crosshair.h>
 #include <bgame/bg_misc.h>
 #include <universal/com_math_anglevectors.h>
 #include <game/actor_script_cmd.h>
@@ -36,8 +37,28 @@
 #include <demo/demo_recording.h>
 #include <game/turret.h>
 #include <client/cl_debugdata.h>
+#ifdef KISAK_SP
+#include <qcommon/common.h>
+#endif
 
 pmove_t g_pmove[32]; // i think this is 32
+
+#ifdef KISAK_SP
+// Retail SP stores this as a dword global at 0x01C08AE8. The paired server builtins at
+// 0x00804D40/0x00804D50 set it to one/zero, and ClientEvents reads it in the
+// EV_GRENADE_SUICIDE arm before choosing between instant death and dropping the live grenade.
+static int s_grenadeSuicideDisabled;
+
+void G_SetGrenadeSuicideDisabled_SP(bool disabled)
+{
+    s_grenadeSuicideDisabled = disabled;
+}
+
+bool G_IsGrenadeSuicideDisabled_SP()
+{
+    return s_grenadeSuicideDisabled != 0;
+}
+#endif
 
 float zBoost = 100.0;
 float xySpeed = 100.0;
@@ -590,6 +611,51 @@ LABEL_6:
         case 90:
             if ( ent->client && (ent->flags & 3) == 0 )
             {
+#ifdef KISAK_SP
+                if ( G_IsGrenadeSuicideDisabled_SP() )
+                {
+                    // Retail SP ClientEvents 0x00552237..0x005522F2. Zombies calls
+                    // DisableGrenadeSuicide during _zombiemode::main so cooking a grenade drops
+                    // the live grenade at the player's feet instead of taking the MP instant-death
+                    // path. The two trailing G_FireGrenade arguments are recovered from the shared
+                    // pushes around BG_GetPlayerWeaponModel: rotate=0, time=grenadeTimeLeft.
+                    grenadeWeaponIndex = ent->client->ps.offHandIndex;
+                    launchspot[0] = ent->r.currentOrigin[0];
+                    launchspot[1] = ent->r.currentOrigin[1];
+                    launchspot[2] = ent->r.currentOrigin[2] + 40.0f;
+                    launchvel[0] = 0.0f;
+                    launchvel[1] = 0.0f;
+                    launchvel[2] = 0.0f;
+                    PlayerWeaponModel = BG_GetPlayerWeaponModel(&ent->client->ps, grenadeWeaponIndex);
+                    G_FireGrenade(
+                        ent,
+                        launchspot,
+                        launchvel,
+                        grenadeWeaponIndex,
+                        PlayerWeaponModel,
+                        0,
+                        ent->client->ps.grenadeTimeLeft);
+
+                    if ( !zombiemode->current.enabled || (ent->client->ps.eFlags & 0x3000) == 0 )
+                    {
+                        G_Damage(
+                            ent,
+                            ent,
+                            ent,
+                            0,
+                            0,
+                            100000,
+                            0,
+                            0xD,
+                            eventParm,
+                            HITLOC_NONE,
+                            0,
+                            0,
+                            0);
+                    }
+                    return;
+                }
+#endif
                 ent->health = 0;
                 ent->client->ps.stats[0] = 0;
                 if ( ent->client->ps.throwBackGrenadeOwner == 1023 )
@@ -1358,6 +1424,64 @@ LABEL_53:
                     for ( i2 = 0; i2 < 2; ++i2 )
                         v7->array[i2] &= mask_bits.array[i2];
                 }
+#ifdef KISAK_SP
+                // ---------------------------------------------------------
+                // SP: the pm_type pre-chain lives HERE, not in ClientEndFrame,
+                // and its death branch is keyed on HEALTH, not sessionState.
+                //
+                // Ghidra-validated 2026-08-27. Retail SP ClientThink_real
+                // (BlackOps.exe 0x0069d450) runs this exact ladder immediately
+                // after the button/inactivity block and immediately before the
+                // pmove_t is memset and pm->tracemask is chosen:
+                //     if      (client[0x1C0C] & 1) ps.pm_type = 2;   // noclip
+                //     else if (client[0x1C0C] & 2) ps.pm_type = 3;   // ufo
+                //     else if (client[0x1D14])     ps.pm_type = 7;
+                //     else if (client[0x1D1C])     ps.pm_type = 6;
+                //     else if (client[0x71] < 1)   ps.pm_type = (tagInfo!=0)+9;
+                //     else                         ps.pm_type = (tagInfo!=0);
+                // client+0x1C0C is client->flags (SP ClientEndFrame 0x0047f640
+                // tests the same dword for the &4 pm_flags|0x800 rule and the
+                // &3 link gate); client+0x1C4 == client[0x71] is ps.stats[0]
+                // (same function stores ent->health into it). Retail SP has NO
+                // sessionState test anywhere in this ladder.
+                //
+                // WHY THE MP FORM IS BROKEN IN SP. MP keys the death branch on
+                // sess.sessionState == SESS_STATE_DEAD. The ONLY writer of that
+                // value in this tree is ClientScr_SetSessionState
+                // (g_client_fields.cpp:489), driven by the `sessionstate`
+                // script field -- and the extracted SP GSC corpus assigns
+                // self.sessionstate at five sites, all "playing" / "spectator"
+                // / "intermission", never "dead". MP's _globallogic owns that
+                // assignment and has no SP counterpart. So in SP the branch is
+                // unreachable: player_die (g_combat_mp.cpp:306) sets
+                // pm_type = 9|10 and stats[0] = 0, and the very next
+                // ClientEndFrame fell through to `pm_type = tagInfo &&
+                // !(eFlags&0x4000)` -- 0 (PM_NORMAL) for an unlinked corpse.
+                // A dead SP player kept full movement and kept tracemask
+                // 0x2818011 instead of 0x810011 (MASK_DEADSOLID), because the
+                // `pm->ps->pm_type < 9` test a few lines below saw 0.
+                // Latent until b87659b gave the SP player real health.
+                //
+                // Reviewed startrevive (0x007D9CF0) sets revive and pm_type7;
+                // stoprevive (0x007D9D80) clears revive and restores pm_type6.
+                // Preserve that distinction when rebuilding movement state.
+                //
+                // The pm_type == 8 case MP guards here is likewise dropped to
+                // match retail: 8 is only ever set by that same MP last-stand
+                // revive builtin, which SP script never calls.
+                if ( (client->flags & 1) != 0 )
+                    client->ps.pm_type = 2;
+                else if ( (client->flags & 2) != 0 )
+                    client->ps.pm_type = 3;
+                else if ( client->revive )
+                    client->ps.pm_type = 7;
+                else if ( client->lastStand )
+                    client->ps.pm_type = 6;
+                else if ( client->ps.stats[0] < 1 )
+                    client->ps.pm_type = (ent->tagInfo != 0) + 9;
+                else
+                    client->ps.pm_type = (ent->tagInfo != 0);
+#endif
                 oldEventSequence = client->ps.predictableEventSequence;
                 memset((unsigned __int8 *)pm, 0, 0x258u);
                 pm->localClientNum = -1;
@@ -2369,7 +2493,9 @@ void __cdecl ClientEndFrame(gentity_s *ent)
     const char *v4; // eax
     char *v5; // eax
     int v6; // [esp+20h] [ebp-C0h]
+#ifndef KISAK_SP
     bool v7; // [esp+24h] [ebp-BCh]
+#endif
     bitarray<51> *v8; // [esp+28h] [ebp-B8h]
     int k; // [esp+2Ch] [ebp-B4h]
     float *playerAngles; // [esp+30h] [ebp-B0h]
@@ -2457,6 +2583,7 @@ void __cdecl ClientEndFrame(gentity_s *ent)
             client->dropWeaponTime = 0;
             if ( client->compassPingTime <= level.time )
                 client->ps.eFlags &= ~0x400000u;
+#ifndef KISAK_SP
             if ( (client->flags & 1) != 0 )
             {
                 client->ps.pm_type = 2;
@@ -2486,6 +2613,19 @@ void __cdecl ClientEndFrame(gentity_s *ent)
                 v7 = ent->tagInfo && (client->ps.eFlags & 0x4000) == 0;
                 client->ps.pm_type = v7;
             }
+#else
+            // SP: the whole ladder above moved to ClientThink_real, keyed on
+            // ps.stats[0] instead of sess.sessionState -- see the block there.
+            // Retail SP ClientEndFrame (0x0047f640) computes NO pm_type of its
+            // own; it only performs the tagInfo override / decrement below.
+            //
+            // Dropping the SESS_STATE_DEAD arm costs this build nothing: that
+            // arm was already unreachable in SP (nothing sets SESS_STATE_DEAD),
+            // so its svFlags/takedamage side effects never fired, and retail SP
+            // likewise leaves the unconditional `svFlags = (svFlags & ~SVF_NOCLIENT)
+            // | SVF_BOT` / `takedamage = 1` stores above in force for a dead
+            // player. Behaviour here is unchanged; only the pm_type producer moved.
+#endif
             client->currentAimSpreadScale = client->ps.aimSpreadScale / 255.0;
             if ( (ent->client->flags & 3) == 0 )
             {
@@ -2501,8 +2641,26 @@ void __cdecl ClientEndFrame(gentity_s *ent)
                 else
                 {
                     ent->client->prevLinkAnglesSet = 0;
+#ifdef KISAK_SP
+                    // Retail SP 0x0047f640, in this exact else-branch:
+                    //     if (pm_type == 1 || pm_type == 10) --pm_type;
+                    // i.e. PM_NORMAL_LINKED -> PM_NORMAL, PM_DEAD_LINKED ->
+                    // PM_DEAD on the frame the tag link is dropped. This tree
+                    // already had the identical two lines in G_RunClient
+                    // (g_active_mp.cpp:1758), but they were dead: G_RunFrame
+                    // calls G_RunFrameForEntity -> G_RunClient at
+                    // g_main_mp.cpp:3255 and ClientEndFrame at :3314, same
+                    // frame, and ClientEndFrame unconditionally recomputed
+                    // pm_type afterwards. G_RunClient's copy is left alone (it
+                    // is on the MP path too); this is the retail-placed one.
+                    if ( ent->client->ps.pm_type == 1 || ent->client->ps.pm_type == 10 )
+                        --ent->client->ps.pm_type;
+#endif
                 }
             }
+#ifdef KISAK_SP
+            G_SPUpdateLookAt(ent);
+#endif
             Player_UpdateCursorHints(ent);
             P_DamageFeedback(ent);
             if ( level.time - client->lastCmdTime <= 1000 )

@@ -93,6 +93,9 @@ void __cdecl DynEntCl_Shutdown(int localClientNum);
 void __cdecl DynEntCl_InitEntities(int localClientNum);
 DynEntityColl *__cdecl DynEnt_GetEntityColl(DynEntityCollType collType, unsigned __int16 dynEntId);
 void __cdecl DynEntCl_DestroyEntityModel(unsigned __int16 id);
+#ifdef KISAK_SP
+void DynEntCl_CleanupSpawnedModels_SP();
+#endif
 void __cdecl DynEnt_FixupLightConstraints(int localClientNum, int entnum, int primaryLightIndex);
 void __cdecl DynEntCl_ProcessEntities(int localClientNum, int time);
 void __cdecl DynEnt_UpdateLightConstraint(

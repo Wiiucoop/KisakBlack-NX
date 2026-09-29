@@ -676,32 +676,33 @@ char *__cdecl UI_FeederItemText_Servers(int localClientNum, int contextIndex, in
 
 char *__cdecl UI_FeederItemText_ServerStatus(int index, unsigned int column)
 {
-    if ( index < 0 || index >= (int)sharedUiInfo.serverStatusInfoScoreBoard.lines[2][5] || column > 1 )
+    if ( index < 0 || index >= sharedUiInfo.serverStatusInfo.numLines
+        || index >= _countof(sharedUiInfo.serverStatusInfo.lines) || column > 1 )
         return (char *)"";
-    if ( sharedUiInfo.serverStatusInfo.lines[index + 4][column + 6]
-        && *sharedUiInfo.serverStatusInfo.lines[index + 4][column + 6] == 64 )
-    {
-        return UI_SafeTranslateString(sharedUiInfo.serverStatusInfo.lines[index + 4][column + 6] + 1);
-    }
-    return (char *)sharedUiInfo.serverStatusInfo.lines[index + 4][column + 6];
+    const char *text = sharedUiInfo.serverStatusInfo.lines[index][column];
+    if ( !text )
+        return (char *)"";
+    return *text == '@' ? UI_SafeTranslateString(text + 1) : (char *)text;
 }
 
 char *__cdecl UI_FeederItemText_ServerStatusScoreboard(int index, unsigned int column)
 {
-    if ( index < 0 || index >= sharedUiInfo.pendingServerStatus.server[0].valid || column > 6 )
+    if ( index < 0 || index >= sharedUiInfo.serverStatusInfoScoreBoard.numLines
+        || index >= _countof(sharedUiInfo.serverStatusInfoScoreBoard.lines) || column > 6 )
         return (char *)"";
-    if ( *sharedUiInfo.serverStatusInfoScoreBoard.lines[index + 4][column + 6] == 64 )
-        return UI_SafeTranslateString(sharedUiInfo.serverStatusInfoScoreBoard.lines[index + 4][column + 6] + 1);
-    return (char *)sharedUiInfo.serverStatusInfoScoreBoard.lines[index + 4][column + 6];
+    const char *text = sharedUiInfo.serverStatusInfoScoreBoard.lines[index][column];
+    if ( !text )
+        return (char *)"";
+    return *text == '@' ? UI_SafeTranslateString(text + 1) : (char *)text;
 }
 
 const char *__cdecl UI_FeederItemText_Mods(int index)
 {
-    if ( index < 0 || index >= (int)sharedUiInfo.modList[63].modDescr )
+    if ( index < 0 || index >= sharedUiInfo.modCount || index >= _countof(sharedUiInfo.modList) )
         return "";
     if ( sharedUiInfo.modList[index].modName && *sharedUiInfo.modList[index].modName )
         return sharedUiInfo.modList[index].modName;
-    return (const char *)sharedUiInfo.serverHardwareIconList[2 * index + 9];
+    return sharedUiInfo.modList[index].modDescr ? sharedUiInfo.modList[index].modDescr : "";
 }
 
 const char *__cdecl UI_FeederItemText_CommmonPlayerListHandler(
@@ -2494,7 +2495,8 @@ void __cdecl UI_FeederSelection(int localClientNum, int contextIndex, float feed
             uiInfo->playerIndex = index;
             break;
         case 9:
-            sharedUiInfo.modCount = index;
+            if ( index >= 0 && index < sharedUiInfo.modCount && index < _countof(sharedUiInfo.modList) )
+                sharedUiInfo.modIndex = index;
             break;
         case 19:
             uiInfo->playerIndex = index;

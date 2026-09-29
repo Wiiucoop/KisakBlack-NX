@@ -43,11 +43,61 @@
 #include <stringed/stringed_hooks.h>
 #include <cgame/cg_drawtools.h>
 #include <bgame/bg_misc.h>
+#include <bgame/bg_weapons.h>
 #include <EffectsCore/fx_load_obj.h>
 #include <gfx_d3d/r_model.h>
 #include "cg_ui_animate_mp.h"
+#include <ui_mp/ui_main_mp.h>
 
 GfxFog cg_serverVolFog;
+
+#ifdef KISAK_SP
+// Retail stores this as cg_s::hideViewModel at SP offset 0xa9d44. The MP
+// reconstruction has no corresponding field, so keep the SP-only state out of
+// cg_s instead of changing the multiplayer layout.
+static bool s_hideViewModel_SP[MAX_LOCAL_CLIENTS];
+
+// This reconstruction activates the frontend local player while the one-shot startup Bink is
+// still playing. Retail's boot lifecycle does not let frontend.gsc's Start3DCinematic("frontend")
+// replace number_lady_intro after ~700 ms. Preserve the premature command here and apply it after
+// that exact startup reel ends. This is deliberately not the cinematicGlob "next" slot: retail's
+// per-frame CG consumer promotes that slot immediately, so it cannot express a deferred command.
+static bool s_deferred3DCinematicPending_SP[MAX_LOCAL_CLIENTS];
+static char s_deferred3DCinematicName_SP[MAX_LOCAL_CLIENTS][256];
+static unsigned int s_deferred3DCinematicFlags_SP[MAX_LOCAL_CLIENTS];
+
+bool CG_IsViewModelHidden_SP(int localClientNum)
+{
+    return localClientNum >= 0 && localClientNum < MAX_LOCAL_CLIENTS
+        ? s_hideViewModel_SP[localClientNum]
+        : false;
+}
+
+void CG_ResetViewModelHidden_SP(int localClientNum)
+{
+    if ( localClientNum >= 0 && localClientNum < MAX_LOCAL_CLIENTS )
+        s_hideViewModel_SP[localClientNum] = false;
+}
+
+void CG_StartDeferred3DCinematic_SP(int localClientNum)
+{
+    if ( localClientNum < 0 || localClientNum >= MAX_LOCAL_CLIENTS ||
+         !s_deferred3DCinematicPending_SP[localClientNum] || R_Cinematic_IsStarted() )
+    {
+        return;
+    }
+
+    const unsigned int flags = s_deferred3DCinematicFlags_SP[localClientNum];
+    char name[256];
+    I_strncpyz(name, s_deferred3DCinematicName_SP[localClientNum], sizeof(name));
+    s_deferred3DCinematicPending_SP[localClientNum] = false;
+    s_deferred3DCinematicName_SP[localClientNum][0] = 0;
+
+    Com_Printf(14, "SP cinematic deferred start: name='%s' flags=0x%x\n", name, flags);
+    R_Cinematic_StartPlayback_Internal(name, flags, 0);
+    Dvar_SetBool((dvar_s *)cg_cinematicFullscreen, false);
+}
+#endif
 
 struct //__declspec(align(4)) $59835072FC2CD3936CE4A4C9F556010B // sizeof=0x48
 {                                       // XREF: .data:cg_waitingScriptMenu/r
@@ -416,7 +466,10 @@ void __cdecl CG_ParseClientSystemStateChange(int localClientNum, int sysIndex, c
     if (cg_scr_data.clientsysstatechange && gScrVarPub[1].timeArrayId)
     {
         cgs = CG_GetLocalClientGlobals(localClientNum);
-        state = Info_ValueForKey(pState, "s");
+        // Both ClientSysSetState senders transmit a raw state token, with spaces
+        // escaped as !. Parsing an info-string key here loses musicCmd states
+        // such as SPAWN_OPS before the client script can select the team music.
+        state = pState;
         str[0] = 0;
         if ( state )
         {
@@ -519,6 +572,9 @@ void __cdecl CG_MapRestart(int localClientNum, int savepersist)
 
     cgameGlob = CG_GetLocalClientGlobals(localClientNum);
     cgs = CG_GetLocalClientStaticGlobals(localClientNum);
+#ifdef KISAK_SP
+    CG_ResetViewModelHidden_SP(localClientNum);
+#endif
     CG_ClearGenericFilter(cgameGlob);
     destroy_client_gjkcc_info(localClientNum);
     if ( cg_showmiss->current.integer )
@@ -563,6 +619,9 @@ void __cdecl CG_MapRestart(int localClientNum, int savepersist)
     CG_SetThirdPerson(0);
     CL_SetStance(localClientNum, CL_STANCE_STAND);
     CL_SetADS(localClientNum, 0);
+#ifdef KISAK_SP
+    cgameGlob->cameraData.extraCamEntNum = 1023;
+#endif
     if ( !savepersist )
     {
         CG_CloseScriptMenu(localClientNum, 0);
@@ -838,6 +897,26 @@ void __cdecl CG_DeployServerCommand(int localClientNum)
             v46 = atoi(v45);
             CG_ScrCamera(localClientNum, v46);
             break;
+#ifdef KISAK_SP
+        case 0x2e: // stop3dcinematic -- SP only. Server: GScr_Stop3DCinematic_SP
+                   // (g_scr_main_mp.cpp), wire "%c" 0x2e ('.'). Retail SP client
+                   // handler 0x0078daf0 case '.', decompiled 2026-08-22: stops the
+                   // single fullscreen-Bink pipeline and flips cg_cinematicFullscreen
+                   // back to its default (true).
+            if ( localClientNum == 0 )
+            {
+                s_deferred3DCinematicPending_SP[localClientNum] = false;
+                s_deferred3DCinematicName_SP[localClientNum][0] = 0;
+                R_Cinematic_StopPlayback();
+                Dvar_SetBool((dvar_s *)cg_cinematicFullscreen, true);
+            }
+            break;
+#endif
+#ifdef KISAK_SP
+        case 0x3e: // Retail SP 0x0078daf0 -> 0x0061c7d0: cleanupspawneddynents.
+            DynEntCl_CleanupSpawnedModels_SP();
+            break;
+#endif
         case 0x30:
             CG_WaterDropsServerCommand(localClientNum);
             break;
@@ -852,6 +931,66 @@ void __cdecl CG_DeployServerCommand(int localClientNum)
             v44 = atoi(v43);
             CG_ParseClientSystemStateChange(localClientNum, v44, v55);
             break;
+#ifdef KISAK_SP
+        case 0x3b: // pause3dcinematic -- SP only. Server: GScr_Pause3DCinematic_SP
+                   // (g_scr_main_mp.cpp), wire "%c %i" 0x3b (';') <pauseBool>. Retail
+                   // SP client handler 0x0078daf0 case ';', decompiled 2026-08-22:
+                   // atoi(arg)==0 resumes, nonzero pauses. Retail passes the SAME
+                   // literal true to BOTH branches (confirmed by raw disassembly:
+                   // "PUSH 1" happens once, before the atoi()==0 branch, and neither
+                   // branch pushes anything else before its call) -- resume is always
+                   // fromScript=true here, since it's the only way a script-issued
+                   // pause can ever be cleared (R_Cinematic_Resume(false) can never
+                   // clear CINEMATIC_SCRIPT_PAUSED). See R_Cinematic_Pause/Resume in
+                   // r_cinematic.cpp for the exact targetPaused semantics.
+            if ( localClientNum == 0 )
+            {
+                if ( atoi(Cmd_Argv(1)) == 0 )
+                    R_Cinematic_Resume(true);
+                else
+                    R_Cinematic_Pause(true);
+            }
+            break;
+        case 0x3c: // start3dcinematic -- SP only. Server: GScr_Start3DCinematic_SP
+                   // (g_scr_main_mp.cpp), wire "%c %s %i" 0x3c ('<') <name> <flags>.
+                   // Retail SP client handler 0x0078daf0 case '<', decompiled
+                   // 2026-08-22: starts the single fullscreen-Bink pipeline with the
+                   // flags the server already computed, volume hardcoded to 0 (this
+                   // GSC path exposes no volume control -- confirmed no Scr_GetFloat
+                   // call anywhere in start3dcinematic's retail body), and flips
+                   // cg_cinematicFullscreen off while it plays.
+            if ( localClientNum == 0 )
+            {
+                const char *name = Cmd_Argv(1);
+                const unsigned int flags = atoi(Cmd_Argv(2));
+                char currentName[256];
+                unsigned int currentTime = 0;
+                const bool startupIntroActive =
+                    R_Cinematic_GetFilenameAndTimeInMsec(currentName, sizeof(currentName), &currentTime) &&
+                    !I_stricmp(currentName, "number_lady_intro") &&
+                    R_Cinematic_IsStarted();
+
+                if ( startupIntroActive )
+                {
+                    I_strncpyz(s_deferred3DCinematicName_SP[localClientNum], name, 256);
+                    s_deferred3DCinematicFlags_SP[localClientNum] = flags;
+                    s_deferred3DCinematicPending_SP[localClientNum] = true;
+                    Com_Printf(
+                        14,
+                        "SP cinematic defer: current='%s' time=%u ms pending='%s' flags=0x%x\n",
+                        currentName,
+                        currentTime,
+                        name,
+                        flags);
+                }
+                else
+                {
+                    R_Cinematic_StartPlayback_Internal(name, flags, 0);
+                    Dvar_SetBool((dvar_s *)cg_cinematicFullscreen, false);
+                }
+            }
+            break;
+#endif
         case 0x42:
             CG_MapRestart(localClientNum, 0);
             break;
@@ -936,6 +1075,60 @@ void __cdecl CG_DeployServerCommand(int localClientNum)
             v2 = atoi(v1);
             CG_SelectWeaponIndex(localClientNum, &cgameGlob->nextSnap->ps, v2);
             break;
+#ifdef KISAK_SP
+        case 0x62: // openmainmenu -- SP only. Server: PlayerCmd_OpenMainMenu_SP
+                   // (g_client_script_cmd_mp.cpp), wire "%c %i" 0x62 <menuIndex>.
+                   // Retail SP client handler 0x0078d0a0, decompiled 2026-08-22:
+                   // resolves the menu name from the script-menu configstring
+                   // range and either fast-paths to the main menu or opens the
+                   // named menu generally. Retail's raw configstring base is
+                   // 0x9c7 (2503); this tree uses the reconstruction's
+                   // CS_SCRIPT_MENUS=2548 instead (Ghidra plate on
+                   // GScr_GetScriptMenuIndex, 0x00575b70: "SP configstring-layout
+                   // divergence, not used as evidence per project policy") --
+                   // matches GScr_GetScriptMenuIndex (g_scr_main_mp.cpp) and the
+                   // existing CG_OpenScriptMenu/CG_PrecacheScriptMenu machinery
+                   // in this same file, so server and client stay self-consistent.
+        {
+            unsigned int menuIndex = (unsigned int)atoi(Cmd_Argv(1));
+            if (menuIndex > 0x1f)
+            {
+                Com_Printf(14, "Server tried to open a bad script menu index: %i\n", menuIndex);
+                break;
+            }
+            const char *menuName = CL_GetConfigString(menuIndex + 2548);
+            if (!menuName[0])
+            {
+                Com_Printf(14, "Server tried to open a non-loaded script menu index: %i\n", menuIndex);
+                break;
+            }
+            // MEASURED END-TO-END 2026-08-27, once the server half
+            // (PlayerCmd_OpenMainMenu_SP, g_client_script_cmd_mp.cpp) was
+            // implemented and this consumer finally had a producer.  Temporary
+            // instrumentation in this exact spot printed:
+            //     0x62: idx=0 name='main' menuCount=111
+            //     0x62: UI_SetActiveMenuSp(UISP_MAIN) returned 1, menuCount 111
+            // i.e. the configstring lookup resolves, 111 menus are loaded, the
+            // Menu_Count>0 re-entrancy guard passes, and Menus_OpenByName("main")
+            // runs.  The instrumentation has been removed again.
+            //
+            // THIS SETTLES THE "is SP's main menu a script menu?" QUESTION: it is
+            // NOT.  `ui/scriptmenus/main.menu` is genuinely absent from every
+            // shipped zone and "Error: Could not load menufile
+            // ui/scriptmenus/main.menu" is logged on every boot -- but that is a
+            // red herring for this path, because the `main` fast-path below never
+            // touches the script-menu system.  It hands the name to the ORDINARY
+            // UI menu list, where "main" does exist.  Only the else-branch (any
+            // other precached name) goes through UI_OpenMenu/the scriptmenus
+            // assets.  That asymmetry is exactly why retail's handler special-cases
+            // the name at all.
+            if (!I_stricmp(menuName, "main"))
+                UI_SetActiveMenuSp(localClientNum, UISP_MAIN);
+            else
+                UI_OpenMenu(localClientNum, menuName);
+            break;
+        }
+#endif
         case 0x63:
             v3 = Cmd_Argv(1);
             CG_TranslateHudElemMessage(localClientNum, v3, "announcement message", hudElemString);
@@ -1033,6 +1226,17 @@ void __cdecl CG_DeployServerCommand(int localClientNum)
                 CG_SetClientDvarFromServer(cgameGlob, text, v19);
             }
             break;
+#ifdef KISAK_SP
+        case 0x7b: // showviewmodel -- retail SP CG_DeployServerCommand 0x0078daf0
+            s_hideViewModel_SP[localClientNum] = false;
+            Com_Printf(14, "SP showviewmodel client apply: localClientNum=%i\n", localClientNum);
+            break;
+        case 0x7d: // hideviewmodel -- retail SP CG_DeployServerCommand 0x0078daf0
+            s_hideViewModel_SP[localClientNum] = true;
+            PM_ResetWeaponState(&cgameGlob->predictedPlayerState);
+            Com_Printf(14, "SP hideviewmodel client apply: localClientNum=%i\n", localClientNum);
+            break;
+#endif
         default:
             v47 = Cmd_Argv(0);
             Com_Printf(14, "Unknown client game command: %s\n", v47);

@@ -3392,7 +3392,51 @@ void __cdecl BG_FindAnimTrees()
     bgs->animData->animScriptData.mainAnim = bgs->animData->generic_human.main.index;
     bgs->animData->animScriptData.torsoAnim = bgs->animData->generic_human.torso.index;
     bgs->animData->animScriptData.legsAnim = bgs->animData->generic_human.legs.index;
+#ifdef KISAK_SP
+    // SP KEEPS A SECOND, SEPARATE ANIMTREE FOR AI ACTORS. Line 3390 above must stay on
+    // "multiplayer": retail SP's BG_FindAnimTrees (0x0058d2d0) reads its animtree name from
+    // the global at 0x00b6c0f8, which points at "multiplayer", and generic_human.tree feeds
+    // animScriptData.animations[1024]. animtrees/multiplayer.atr is 927 nodes; the shipped
+    // animtrees/generic_human.atr is 7314. Pointing line 3390 at "generic_human" therefore
+    // trips "iNumAnims < MAX_MODEL_ANIMATIONS" at load -- measured, not predicted.
+    //
+    // The AI actor set is the animtree literally NAMED "generic_human", which every SP
+    // animscript declares with #using_animtree and resolves its %anim indices against.
+    // Retail holds it standalone: server global 0x01c79b60 (loaded by 0x005687f0 with
+    // Com_Error if absent), client animData+0x8D39C. That client offset IS this slot --
+    // bgsAnim_s::generic_dog.tree, which nothing in this tree reads or writes today.
+    //
+    // Integrated clients copy the server pointer. A remote client compiles the
+    // SERVER script domain itself and must resolve its own tree before teardown.
+    // Retail client loader 0042ae30, instructions0042ae4f-80, likewise chooses
+    // G_GetActorAnims for sv_running or Scr_FindAnimTree(0,"generic_human")
+    // for a remote loading client.
+    //
+    // Placement is load-bearing: this is the last statement of BG_LoadAnim, after
+    // Scr_PrecacheAnimTrees and before BG_PostLoadAnim calls Scr_EndLoadAnimTrees, which
+    // destroys the animtree array. Any later lookup asserts and returns garbage.
+    //
+    // bEnforceExists = 1 is safe in both modes: animtrees/generic_human.atr ships in
+    // code_post_gfx.ff, and 41 of the zombie animscripts in common_zombie.ff also declare
+    // #using_animtree("generic_human") (the dog and zombie_dog scripts opt out with their
+    // own trees via useAnimTree, which routes through G_SetAnimTree, not this pointer).
+    if ( bgs == &level_bgs || !com_sv_running->current.enabled )
+        bgs->animData->generic_dog.tree = BG_FindAnimTree("generic_human", 1);
+    else
+        bgs->animData->generic_dog.tree = level_bgs.animData->generic_dog.tree;
+#endif
 }
+
+#ifdef KISAK_SP
+// The AI-actor animtree loaded above. Retail reaches the same pointer through
+// G_GetActorAnims (0x00508530, `return DAT_01c79b60;`) on the server. Side-local by way of
+// the ambient bgs, so one accessor serves both the server and the client.
+XAnim_s *__cdecl BG_GetActorAnims()
+{
+    iassert(bgs);
+    return bgs->animData->generic_dog.tree.anims;
+}
+#endif
 
 scr_animtree_t __cdecl BG_FindAnimTree(const char *filename, int bEnforceExists)
 {

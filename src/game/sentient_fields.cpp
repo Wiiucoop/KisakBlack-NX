@@ -5,27 +5,56 @@
 #include "sentient.h"
 #include <game_mp/g_spawn_mp.h>
 
+// The script field table below binds sentient_s members by raw offset; keep the layout honest.
+#ifndef KISAK_NX // nx-port: x86 offsets; the table below uses offsetof
+static_assert(offsetof(sentient_s, eTeam) == 4, "sentient field offset");
+static_assert(offsetof(sentient_s, scriptOwner) == 8, "sentient field offset");
+static_assert(offsetof(sentient_s, iThreatBias) == 12, "sentient field offset");
+static_assert(offsetof(sentient_s, iThreatBiasGroupIndex) == 16, "sentient field offset");
+static_assert(offsetof(sentient_s, bIgnoreMe) == 20, "sentient field offset");
+static_assert(offsetof(sentient_s, bIgnoreAll) == 21, "sentient field offset");
+static_assert(offsetof(sentient_s, bIgnoreForFriendlyFire) == 22, "sentient field offset");
+static_assert(offsetof(sentient_s, maxVisibleDist) == 36, "sentient field offset");
+static_assert(offsetof(sentient_s, lastAttacker) == 48, "sentient field offset");
+static_assert(offsetof(sentient_s, syncedMeleeEnt) == 52, "sentient field offset");
+static_assert(offsetof(sentient_s, targetEnt) == 56, "sentient field offset");
+static_assert(offsetof(sentient_s, scriptTargetEnt) == 60, "sentient field offset");
+static_assert(offsetof(sentient_s, scriptTargetTag) == 64, "sentient field offset");
+static_assert(offsetof(sentient_s, attackerAccuracy) == 88, "sentient field offset");
+static_assert(offsetof(sentient_s, ignoreRandomBulletDamage) == 92, "sentient field offset");
+static_assert(offsetof(sentient_s, turretInvulnerability) == 93, "sentient field offset");
+static_assert(offsetof(sentient_s, pClaimedNode) == 96, "sentient field offset");
+static_assert(offsetof(sentient_s, pPrevClaimedNode) == 100, "sentient field offset");
+static_assert(offsetof(sentient_s, bInMeleeCharge) == 140, "sentient field offset");
+#endif
+
 const sentient_fields_s fields_2[20] =
 {
-  { "aiteam", 4, { 4 }, F_INT, SentientScr_SetTeam, SentientScr_GetTeam },
-  { "script_owner", 8, { 4 }, F_ENTHANDLE, &SentientScr_ReadOnly, NULL },
-  { "threatbias", 12, { 4 }, F_INT, NULL, NULL },
-  { "threatbiasgroup", 16, { 4 }, F_INT, &SentientScr_ReadOnly, NULL },
-  { "attacker", 48, { 4 }, F_ENTHANDLE, &SentientScr_ReadOnly, NULL },
-  { "node", 96, { 4 }, F_PATHNODE, &SentientScr_ReadOnly, NULL },
-  { "prevnode", 100, { 4 }, F_PATHNODE, &SentientScr_ReadOnly, NULL },
-  { "enemy", 56, { 4 }, F_ENTHANDLE, &SentientScr_ReadOnly, NULL },
-  { "scriptenemy", 60, { 4 }, F_ENTHANDLE, &SentientScr_ReadOnly, NULL },
-  { "scriptenemytag", 64, { 2 }, F_STRING, &SentientScr_ReadOnly, NULL },
-  { "syncedmeleetarget", 52, { 4 }, F_ENTHANDLE, NULL, NULL },
-  { "ignoreme", 20, { 1 }, F_BYTE, NULL, NULL },
-  { "ignoreall", 21, { 1 }, F_BYTE, NULL, NULL },
-  { "ignoreforfriendlyfire", 22, { 1 }, F_BYTE, NULL, NULL },
-  { "maxvisibledist", 36, { 4 }, F_FLOAT, NULL, NULL },
-  { "attackeraccuracy", 88, { 4 }, F_FLOAT, NULL, NULL },
-  { "ignorerandombulletdamage", 92, { 1 }, F_BYTE, NULL, NULL },
-  { "turretinvulnerability", 93, { 1 }, F_BYTE, NULL, NULL },
-  { "inmeleecharge", 140, { 1 }, F_BYTE, NULL, NULL },
+#ifdef KISAK_SP
+  // Retail SP's sentient field table at BlackOps.exe 0x00A55C78 names this
+  // field "team" and routes it through SentientScr_SetTeam/GetTeam.
+  { "team", (int)offsetof(sentient_s, eTeam), { 4 }, F_INT, SentientScr_SetTeam, SentientScr_GetTeam },
+#else
+  { "aiteam", (int)offsetof(sentient_s, eTeam), { 4 }, F_INT, SentientScr_SetTeam, SentientScr_GetTeam },
+#endif
+  { "script_owner", (int)offsetof(sentient_s, scriptOwner), { 4 }, F_ENTHANDLE, &SentientScr_ReadOnly, NULL },
+  { "threatbias", (int)offsetof(sentient_s, iThreatBias), { 4 }, F_INT, NULL, NULL },
+  { "threatbiasgroup", (int)offsetof(sentient_s, iThreatBiasGroupIndex), { 4 }, F_INT, &SentientScr_ReadOnly, NULL },
+  { "attacker", (int)offsetof(sentient_s, lastAttacker), { 4 }, F_ENTHANDLE, &SentientScr_ReadOnly, NULL },
+  { "node", (int)offsetof(sentient_s, pClaimedNode), { 4 }, F_PATHNODE, &SentientScr_ReadOnly, NULL },
+  { "prevnode", (int)offsetof(sentient_s, pPrevClaimedNode), { 4 }, F_PATHNODE, &SentientScr_ReadOnly, NULL },
+  { "enemy", (int)offsetof(sentient_s, targetEnt), { 4 }, F_ENTHANDLE, &SentientScr_ReadOnly, NULL },
+  { "scriptenemy", (int)offsetof(sentient_s, scriptTargetEnt), { 4 }, F_ENTHANDLE, &SentientScr_ReadOnly, NULL },
+  { "scriptenemytag", (int)offsetof(sentient_s, scriptTargetTag), { 2 }, F_STRING, &SentientScr_ReadOnly, NULL },
+  { "syncedmeleetarget", (int)offsetof(sentient_s, syncedMeleeEnt), { 4 }, F_ENTHANDLE, NULL, NULL },
+  { "ignoreme", (int)offsetof(sentient_s, bIgnoreMe), { 1 }, F_BYTE, NULL, NULL },
+  { "ignoreall", (int)offsetof(sentient_s, bIgnoreAll), { 1 }, F_BYTE, NULL, NULL },
+  { "ignoreforfriendlyfire", (int)offsetof(sentient_s, bIgnoreForFriendlyFire), { 1 }, F_BYTE, NULL, NULL },
+  { "maxvisibledist", (int)offsetof(sentient_s, maxVisibleDist), { 4 }, F_FLOAT, NULL, NULL },
+  { "attackeraccuracy", (int)offsetof(sentient_s, attackerAccuracy), { 4 }, F_FLOAT, NULL, NULL },
+  { "ignorerandombulletdamage", (int)offsetof(sentient_s, ignoreRandomBulletDamage), { 1 }, F_BYTE, NULL, NULL },
+  { "turretinvulnerability", (int)offsetof(sentient_s, turretInvulnerability), { 1 }, F_BYTE, NULL, NULL },
+  { "inmeleecharge", (int)offsetof(sentient_s, bInMeleeCharge), { 1 }, F_BYTE, NULL, NULL },
   { NULL, 0, { 0 }, F_INT, NULL, NULL }
 };
 
@@ -49,6 +78,27 @@ void __cdecl SentientScr_SetTeam(sentient_s *pSelf, const sentient_fields_s *pFi
     if ( !pSelf && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game\\sentient_fields.cpp", 79, 0, "%s", "pSelf") )
         __debugbreak();
     pszTeam = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+    // Retail SP 0x00819180 accepts exactly axis/allies/neutral and writes the
+    // numeric sentient team through Sentient_SetTeam (0x0043F3A0).
+    if ( !I_stricmp(pszTeam, "axis") )
+    {
+        Sentient_SetTeam(pSelf, TEAM_AXIS);
+        return;
+    }
+    if ( !I_stricmp(pszTeam, "allies") )
+    {
+        Sentient_SetTeam(pSelf, TEAM_ALLIES);
+        return;
+    }
+    if ( !I_stricmp(pszTeam, "neutral") )
+    {
+        Sentient_SetTeam(pSelf, TEAM_SPECTATOR);
+        return;
+    }
+    v1 = va("unknown team '%s', should be axis, allies, or neutral\n", pszTeam);
+    Scr_Error(v1, 0);
+#else
     if ( I_stricmp(pszTeam, "axis") )
     {
         if ( I_stricmp(pszTeam, "allies") )
@@ -79,6 +129,7 @@ void __cdecl SentientScr_SetTeam(sentient_s *pSelf, const sentient_fields_s *pFi
     {
         Sentient_SetTeam(pSelf, TEAM_AXIS);
     }
+#endif
 }
 
 void __cdecl SentientScr_GetTeam(sentient_s *pSelf, const sentient_fields_s *pField)
@@ -88,6 +139,27 @@ void __cdecl SentientScr_GetTeam(sentient_s *pSelf, const sentient_fields_s *pFi
     {
         __debugbreak();
     }
+#ifdef KISAK_SP
+    // Retail SP 0x00819210 has no TEAM_NUM_TEAMS assertion. Its jump table
+    // maps 1/2/3/5 and returns without a string for 0, 4, or out-of-range.
+    switch ( static_cast<int>(pSelf->eTeam) )
+    {
+        case 1:
+            Scr_AddString("axis", SCRIPTINSTANCE_SERVER);
+            break;
+        case 2:
+            Scr_AddString("allies", SCRIPTINSTANCE_SERVER);
+            break;
+        case 3:
+            Scr_AddString("neutral", SCRIPTINSTANCE_SERVER);
+            break;
+        case 5:
+            Scr_AddString("dead", SCRIPTINSTANCE_SERVER);
+            break;
+        default:
+            break;
+    }
+#else
     if ( pSelf->eTeam >= (unsigned int)TEAM_NUM_TEAMS
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\sentient_fields.cpp",
@@ -121,6 +193,7 @@ void __cdecl SentientScr_GetTeam(sentient_s *pSelf, const sentient_fields_s *pFi
                 __debugbreak();
             break;
     }
+#endif
 }
 
 void __cdecl GScr_AddFieldsForSentient()

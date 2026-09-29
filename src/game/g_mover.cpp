@@ -21,6 +21,10 @@
 #include <ragdoll/ragdoll_update.h>
 #include <physics/physics_system.h>
 #include <bgame/bg_slidemove.h>
+#ifdef KISAK_SP
+#include <game_mp/g_scr_main_mp.h>
+#include <bgame/bg_perks.h>
+#endif
 
 const char *hintStrings[8] =
 {
@@ -794,8 +798,12 @@ void __cdecl G_MoverTeam_New(gentity_s *ent)
                 mover_info = create_mover_info(ent);
             BG_EvaluateTrajectory(&ent->s.lerp.pos, level.time, origin);
             BG_EvaluateTrajectory(&ent->s.lerp.apos, level.time, angles);
-            //mover_info_t::init(mover_info, origin, angles, ent->r.currentOrigin, ent->r.currentAngles, 1);
+#ifdef KISAK_SP
+            // Retail SP G_MoverTeam_New (0x004A8B40) passes the entity's prior origin and angles.
+            mover_info->init(origin, angles, ent->r.currentOrigin, ent->r.currentAngles, true);
+#else
             mover_info->init(origin, angles, ent->r.currentAngles, ent->r.currentAngles, true);
+#endif
             G_MoverTeam(ent, mover_info);
         }
     }
@@ -884,6 +892,13 @@ void __cdecl G_RunMover(gentity_s *ent)
     float *v1; // [esp+4h] [ebp-4h]
     int savedregs; // [esp+8h] [ebp+0h] BYREF
 
+#ifdef KISAK_SP
+    // Retail SP has an early scripted-animation branch here. It owns mover
+    // root motion, think execution, and the authored-base trDelta handoff as
+    // one unit.
+    if ( GScr_RunScriptedMover_SP(ent) )
+        return;
+#endif
     if ( ent->tagInfo )
     {
         if ( !zombietron->current.enabled || ent->s.lerp.apos.trType == 1 )
@@ -930,7 +945,14 @@ void __cdecl trigger_use_shared(gentity_s *self, SpawnVar *spawnVar)
     if ( SV_SetBrushModel(self) )
     {
         self->r.contents = 0x200000;
+#ifdef KISAK_SP
+        // Retail SP trigger_use_shared (0x007e8f10) has no perk restriction
+        // store at all. This reconstruction's shared cursor-hint path retains
+        // the MP field, so initialize it to the SP table's no-perk sentinel.
+        self->trigger.perk = BG_SP_PERK_COUNT;
+#else
         self->trigger.perk = 52;
+#endif
         self->s.otherEntityNum = 1023;
         SV_LinkEntity(self);
         self->item[1].ammoCount = 1023;

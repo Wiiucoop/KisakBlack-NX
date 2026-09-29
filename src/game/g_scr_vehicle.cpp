@@ -1,4 +1,7 @@
 #include "g_scr_vehicle.h"
+#ifdef KISAK_SP
+#include <new>                             // placement new, to restore a memset vptr
+#endif
 #include <universal/q_shared.h>
 #include <clientscript/cscr_vm.h>
 #include <clientscript/scr_const.h>
@@ -52,8 +55,66 @@ void __cdecl METHODS_NULLSUB(scr_entref_t entref)
 
 }
 
+#ifdef KISAK_SP
+#include <qcommon/common.h>
+
+// ===========================================================================
+// TODO(SP-STUB) -- deliberate no-op stubs for retail-SP VEHICLE script methods.
+//
+// Source: retail SP's vehicle method table at 0x00A551D8, 90 entries, reached
+// through the 5th link of SP's Scr_GetMethod chain (SP dispatcher
+// FUN_00479130). Paired with this file's s_methods_0[] on two facts: both
+// begin with "attachpath", and the 85 shared names appear in IDENTICAL
+// relative order. The 3 registered below are the SP-only names the
+// `frontend` boot actually compiles.
+//
+// Placeholders, NOT implementations -- see the TODO(SP-STUB) header above
+// BuiltinFunctionDef functions[] in game_mp/g_scr_main_mp.cpp for the full
+// rationale and the VM stack-safety argument. type == 0 matches retail SP.
+//
+// NOTE ON "setenginevolume": retail SP points that row at 0x00651A30, the
+// binary's shared do-nothing routine -- i.e. retail SP registers the name and
+// implements it as a no-op too. That single stub is therefore behaviourally
+// faithful rather than a placeholder, but it is left under the same
+// TODO(SP-STUB) marker so the grep stays complete.
+// ===========================================================================
+
+// Channel 24 == "parserscript" (con_channels.cpp:11, builtinChannels[24]), the
+// same channel the sibling stubs in game_mp/g_scr_main_mp.cpp report on.
+static void VehSPStub_ReportOnce(const char *name, const char *spHandler, bool *pReported)
+{
+    if ( *pReported )
+        return;
+    *pReported = true;
+    Com_PrintWarning(
+        24,
+        "WARNING: TODO(SP-STUB) script builtin '%s' (retail SP handler %s) was called "
+        "but is an unimplemented stub: it does nothing and evaluates to undefined. "
+        "This warning prints once per builtin name.\n",
+        name,
+        spHandler);
+}
+
+#define VehSPStub_DEFINE(symbol, gscName, spHandler)           \
+    static void __cdecl symbol(scr_entref_t)                   \
+    {                                                          \
+        static bool s_reported = false;                        \
+        VehSPStub_ReportOnce(gscName, spHandler, &s_reported); \
+    }
+
+// --- TODO(SP-STUB) vehicle method stubs, registered at the end of s_methods_0[] ---
+VehSPStub_DEFINE(CMD_VEH_SPStub_setenginevolume, "setenginevolume", "0x00651a30")
+    // TODO(SP-STUB) 2 GSC ref(s) in the frontend closure, e.g. maps/_vehicle:6760 self setenginevolume( i / timer );
+VehSPStub_DEFINE(CMD_VEH_SPStub_addvehicletocompass, "addvehicletocompass", "0x004b5190")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_vehicle:5027 self AddVehicleToCompass( maps\_vehicletypes::get_compassTypeForVehicleType( self.veh...
+VehSPStub_DEFINE(CMD_VEH_SPStub_removevehiclefromcompass, "removevehiclefromcompass", "0x005970d0")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_vehicle:5035 self RemoveVehicleFromCompass();
+#endif // KISAK_SP
+
 // Looks congruent to retail blops mp latest
-const BuiltinMethodDef s_methods_0[89] =
+// (element count is 89 for KISAK_MP, unchanged; the explicit [89] bound was
+//  dropped only so the KISAK_SP rows below can be appended.)
+const BuiltinMethodDef s_methods_0[] =
 {
   { "attachpath", CMD_VEH_AttachPath, 0 },
   { "vehgetmodel", CMD_VEH_GetModel, 0 },
@@ -144,6 +205,12 @@ const BuiltinMethodDef s_methods_0[89] =
   { "gettreadhealth", CMD_VEH_GetTreadHealth, 0 },
   { "getboost", CMD_VEH_GetBoost, 0 },
   { "isboosting", CMD_VEH_IsBoosting, 0 }
+#ifdef KISAK_SP
+  ,
+  { "setenginevolume", CMD_VEH_SPStub_setenginevolume, 0 },                 // TODO(SP-STUB) SP 0x00A551D8 idx 31, 0x00651a30
+  { "addvehicletocompass", CMD_VEH_SPStub_addvehicletocompass, 0 },         // TODO(SP-STUB) SP 0x00A551D8 idx 39, 0x004b5190
+  { "removevehiclefromcompass", CMD_VEH_SPStub_removevehiclefromcompass, 0 }, // TODO(SP-STUB) SP 0x00A551D8 idx 40, 0x005970d0
+#endif // KISAK_SP
 };
 
 unsigned __int16 *s_wheelTags[6] =
@@ -2950,6 +3017,25 @@ void __cdecl G_SpawnVehicle(gentity_s *ent, char *typeName, int load)
     static colgeom_visitor_inlined_t<200> dummy_0;
 
     //veh->vehicle_cache.proximity_data.__vftable = dummy_0.__vftable;
+#ifdef KISAK_SP
+    // RESTORE THE VTABLE POINTER. The memset above zeroes all of vehicle_cache_t, which includes
+    // the embedded colgeom_visitor_inlined_t<200> -- and that object is POLYMORPHIC, so the
+    // memset destroys its vptr. The `= dummy_0` on the next line cannot put it back: it
+    // selects the implicit copy-assignment operator (the hand-written operator= takes a
+    // POINTER and is not viable here), and C++ copy-assignment never copies a vptr.
+    //
+    // Retail does restore it explicitly, which is what the commented-out __vftable line
+    // directly above was: G_SpawnVehicle 0x0051f194 does MOV ECX,[dummy] / MOV [EBP+0x750],ECX.
+    // Placement-new re-establishes it -- the same idiom this tree already uses for the
+    // identical defect at Engine/Animation/ik/ik_import.cpp:2648.
+    //
+    // The two statements after this one are then redundant but produce identical state,
+    // so they are left alone to keep the diff minimal.
+    // Same defect as Actor_InitMove, same shape, not yet reached in practice -- fixed
+    // here because it is the identical memset-then-copy-assign and would fault the
+    // first time an SP vehicle ran a proximity query.
+    new (&veh->vehicle_cache.proximity_data) colgeom_visitor_inlined_t<200>();
+#endif
     veh->vehicle_cache.proximity_data = dummy_0;
 
     //colgeom_visitor_inlined_t<500>::reset(&veh->vehicle_cache.proximity_data);

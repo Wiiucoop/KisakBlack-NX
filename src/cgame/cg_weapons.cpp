@@ -3719,6 +3719,14 @@ void __cdecl CG_AddViewWeapon(int localClientNum)
     {
         if ( cgameGlob->cubemapShot || !cg_drawGun->current.enabled || CG_GetWeapReticleZoom(cgameGlob, &fZoom) )
             drawgun = 0;
+#ifdef KISAK_SP
+        // Retail CG_AddViewWeapon (0x00677610) reads cg_s::hideViewModel and
+        // passes drawgun=(field == 0) to CG_AddPlayerWeapon. Our MP-derived
+        // cg_s lacks that SP field; cg_servercmds_mp.cpp owns equivalent
+        // SP-only side state populated by retail command bytes 0x7b/0x7d.
+        if ( CG_IsViewModelHidden_SP(localClientNum) )
+            drawgun = 0;
+#endif
         weaponIndex = BG_GetViewmodelWeaponIndex(ps);
         if ( weaponIndex <= 0 )
         {
@@ -7092,7 +7100,9 @@ void __cdecl CG_SetBaseWeaponForStats(const WeaponVariantDef *weapVariantDef)
 void __cdecl CG_SetupWeaponConfigString(int configStringIndex)
 {
     int WeaponIndexForName; // eax
+#ifndef KISAK_SP
     const WeaponVariantDef *weapVarDef; // eax
+#endif
     unsigned int currentIndex; // [esp+0h] [ebp-81Ch]
     int variantCount; // [esp+4h] [ebp-818h]
     const WeaponVariantDef *weapVariantDef; // [esp+8h] [ebp-814h]
@@ -7127,7 +7137,14 @@ void __cdecl CG_SetupWeaponConfigString(int configStringIndex)
         if ( WeaponIndexForName == weaponIndex )
         {
             weapVariantDef = BG_GetWeaponVariantDef(weaponIndex);
+#ifndef KISAK_SP
             CG_SetBaseWeaponForStats(weapVariantDef);
+#else
+            // Retail SP CG_SetupWeaponConfigString (0x00699A10) fetches the
+            // variant here but never calls the MP stats/unlockables bridge.
+            // Calling it before SP initializes any unlockable table asserts
+            // on s_unlockableItems.maxItem during zombie weapon setup.
+#endif
             variantCount = 0;
             token = (const char *)Com_Parse(&weaponConfigString);
             if ( token )
@@ -7143,8 +7160,12 @@ void __cdecl CG_SetupWeaponConfigString(int configStringIndex)
             {
                 for ( currentIndex = weaponIndex; currentIndex < variantCount + weaponIndex; ++currentIndex )
                 {
+#ifdef KISAK_SP
+                    BG_GetWeaponVariantDef(currentIndex);
+#else
                     weapVarDef = BG_GetWeaponVariantDef(currentIndex);
                     CG_SetBaseWeaponForStats(weapVarDef);
+#endif
                 }
                 return;
             }
@@ -7158,6 +7179,20 @@ void __cdecl CG_SetupWeaponDef()
 {
     unsigned int configStringIndex; // [esp+0h] [ebp-4h]
 
+    // SP retail divergence, hand-verified (Ghidra 0x005a95e0, CG_SetupWeaponDef, renamed and
+    // plated this session): the default-weapon literal drops "_mp", AND the BG_LoadWeaponTable
+    // ("_mp", 0) call below is dropped entirely -- confirmed by a full instruction-level
+    // disassembly pass (entry to RET is exactly: CG_GetWeaponIndexForName, the gate call, then
+    // the CG_SetupWeaponConfigString loop -- no third call site anywhere in the body). Same drop
+    // pattern independently confirmed in the sibling G_SetupWeaponDef (0x0065b3f0).
+#ifdef KISAK_SP
+    CG_GetWeaponIndexForName((char*)"defaultweapon");
+    if ( !G_ExitAfterToolComplete() )
+    {
+        for ( configStringIndex = 0; configStringIndex < 0x100; ++configStringIndex )
+            CG_SetupWeaponConfigString(configStringIndex);
+    }
+#else
     CG_GetWeaponIndexForName((char*)"defaultweapon_mp");
     if ( !G_ExitAfterToolComplete() )
     {
@@ -7165,6 +7200,7 @@ void __cdecl CG_SetupWeaponDef()
         for ( configStringIndex = 0; configStringIndex < 0x100; ++configStringIndex )
             CG_SetupWeaponConfigString(configStringIndex);
     }
+#endif
 }
 
 unsigned int __cdecl ValidLatestPrimaryWeapIdx(const cg_s *cgameGlob, unsigned int weaponIndex)

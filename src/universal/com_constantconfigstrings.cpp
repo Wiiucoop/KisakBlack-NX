@@ -143,8 +143,29 @@ void __cdecl CCS_LoadConstantConfigStrings(const char *mapname, const char *game
     {
         __debugbreak();
     }
+    // SP's constant-config-string tables live under "sp/configStrings/", MP's under
+    // "mp/configStrings/". Note the local `dir` is assigned and then NOT used - the literal is
+    // passed directly - so the argument is what has to change, not just `dir`.
+    // Evidence (zone scan of all 139 shipped .ff files):
+    //   mp/configstrings/* -> common_mp.ff (168 entries) and patch_mp.ff (312). Zero in ANY SP zone.
+    //   sp/configstrings/* -> patch.ff (5: configstrings_pc_zombie_{coast,cosmodrome,pentagon,
+    //                        theater}_zom.csv + zombietron), plus zombie_pentagon.ff,
+    //                        zombie_theater.ff, zombietron.ff.
+    //   The retail SP exe keeps the same format string with the %s directory slot
+    //   ("%s/configstrings/configstrings_pc_%s_%s.csv", 0x5d6eac), i.e. the prefix really is a
+    //   parameter rather than baked in.
+    // Non-fatal either way (a missing STRINGTABLE resolves to the default empty table, and both
+    // the client and the server of a listen server compute the same checksum from it, so
+    // CCS_CompareChecksums' EXE_CONFIGSTRINGMISMATCH2 Com_Error cannot trip). For "frontend"
+    // neither prefix has a table, so this changes nothing today; it matters for the zombie maps
+    // whose tables do ship. Audit finding C9 (asset-availability audit).
+#ifdef KISAK_SP
+    dir = "sp";
+    Com_sprintf(filename, 0x100u, "%s/configStrings/configStrings_pc_%s_%s.csv", "sp", mapname, gametype);
+#else
     dir = "mp";
     Com_sprintf(filename, 0x100u, "%s/configStrings/configStrings_pc_%s_%s.csv", "mp", mapname, gametype);
+#endif
     StringTable_GetAsset(filename, (XAssetHeader *)&configStringTable);
     configStringTableChecksum = StringTable_Checksum(configStringTable, 0);
     Com_DPrintf(30, "CCS: CCS_LoadConstantConfigStrings %s: %d\n", filename, configStringTableChecksum);

@@ -1,6 +1,7 @@
 #include "l_precomp.h"
 #include <qcommon/common.h>
 #include "l_memory.h"
+#include <cstring>
 #include <time.h>
 
 struct directive_s // sizeof=0x8
@@ -2453,4 +2454,3 @@ int __cdecl PC_SourceFileAndLine(int handle, char *filename, int *line)
     }
     return 1;
 }
-

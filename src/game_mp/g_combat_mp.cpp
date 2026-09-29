@@ -93,7 +93,26 @@ void __cdecl G_ParseHitLocDmgTable()
         g_HitLocConstNames[i] = v0;
     }
     g_fHitLocDamageMult[18] = 0.0f;
-    pszBuffer = Com_LoadInfoString((char*)"info/mp_lochit_dmgtable", "hitloc damage table", "LOCDMGTABLE", loadBuffer);
+#ifdef KISAK_SP
+    // SP ships the AI-flavoured hit-location damage table, not the MP one.
+    // Evidence:
+    //   - zone data: "info/mp_lochit_dmgtable" appears ONLY in common_mp.ff (a zone SP never
+    //     loads); "info/ai_lochit_dmgtable" is in code_post_gfx.ff, which SP loads at startup
+    //     (DB_LoadGraphicsAssetsForPC, db_registry.cpp - existing KISAK_SP branch). Content dump
+    //     at code_post_gfx.ff+0x47263c confirms the same LOCDMGTABLE ident and the same field
+    //     names ("none","helmet","head","neck","torso",...), i.e. the identical 19-field shape
+    //     g_HitLocNames expects, so no consumer below needs changing.
+    //   - retail BlackOps.exe string table: the only "*lochit_dmgtable" literal present is
+    //     "info/ai_lochit_dmgtable" (0x5d3ff0). "info/mp_lochit_dmgtable" is absent entirely.
+    // Prevents: Com_LoadInfoString -> Com_LoadInfoString_FastFile ->
+    //   Com_Error(ERR_DROP, "Could not load %s file [%s]") at com_loadutils.cpp:50-51 when
+    //   SV_SpawnServer("frontend") -> SV_InitGameProgs -> G_InitGame reaches
+    //   G_ParseHitLocDmgTable (g_main_mp.cpp:858). Audit finding C2 (asset-availability audit).
+    static const char *const s_hitLocDmgTableName = "info/ai_lochit_dmgtable";
+#else
+    static const char *const s_hitLocDmgTableName = "info/mp_lochit_dmgtable";
+#endif
+    pszBuffer = Com_LoadInfoString((char*)s_hitLocDmgTableName, "hitloc damage table", "LOCDMGTABLE", loadBuffer);
     if (!ParseConfigStringToStruct(
         (unsigned __int8 *)g_fHitLocDamageMult,
         pFieldList,
@@ -102,7 +121,7 @@ void __cdecl G_ParseHitLocDmgTable()
         0,
         0,
         BG_StringCopy))
-        Com_Error(ERR_DROP, "Error parsing hitloc damage table %s", "info/mp_lochit_dmgtable");
+        Com_Error(ERR_DROP, "Error parsing hitloc damage table %s", s_hitLocDmgTableName);
 }
 
 void __cdecl LookAtKiller(gentity_s *self, gentity_s *inflictor, gentity_s *attacker)
@@ -445,6 +464,9 @@ void __cdecl G_DamageClient(
                 unsigned int mod,
                 unsigned int weapon,
                 hitLocation_t hitLoc,
+#ifdef KISAK_SP
+                int modelIndex,
+#endif
                 int timeOffset)
 {
     unsigned int NumWeapons; // eax
@@ -508,7 +530,13 @@ void __cdecl G_DamageClient(
                 MatchRecordHit(attacker->client, hitLoc);
         }
 #endif
+#ifdef KISAK_SP
+        // Retail G_Damage (0x005405c0) includes modelIndex and passes zero
+        // timeOffset to the eleven-argument SP player-damage callback.
+        Scr_PlayerDamage(targ, inflictor, attacker, damage, dflags, mod, weapon, point, dir, hitLoc, modelIndex, 0);
+#else
         Scr_PlayerDamage(targ, inflictor, attacker, damage, dflags, mod, weapon, point, dir, hitLoc, timeOffset);
+#endif
     }
 }
 
@@ -552,6 +580,9 @@ void __cdecl G_DamageActor(
                 unsigned int mod,
                 unsigned int weapon,
                 hitLocation_t hitLoc,
+#ifdef KISAK_SP
+                unsigned int modelIndex,
+#endif
                 int timeOffset)
 {
     unsigned int NumWeapons; // eax
@@ -603,7 +634,13 @@ void __cdecl G_DamageActor(
         }
         if ( damage <= 0 )
             damage = 1;
+#ifdef KISAK_SP
+        // Retail SP G_Damage (0x005405C0) forwards the hit attachment and
+        // deliberately supplies zero for the actor callback's time offset.
+        Scr_ActorDamage(targ, inflictor, attacker, damage, dflags, mod, weapon, point, dir, hitLoc, modelIndex, 0);
+#else
         Scr_ActorDamage(targ, inflictor, attacker, damage, dflags, mod, weapon, point, dir, hitLoc, timeOffset);
+#endif
     }
 }
 
@@ -697,6 +734,61 @@ void __cdecl G_DamageNotify(
 {
     unsigned int modelName; // [esp+0h] [ebp-4h]
 
+#ifdef KISAK_SP
+    // Retail SP G_DamageNotify (0x004F98D0) constructs exactly nine script
+    // arguments.  weaponName remains in the source-style native ABI but is
+    // intentionally not exposed to script.
+    (void)weaponName;
+    Scr_AddInt(dFlags, SCRIPTINSTANCE_SERVER);
+    if ( partName )
+        Scr_AddConstString(partName, SCRIPTINSTANCE_SERVER);
+    else
+        Scr_AddString((char *)"", SCRIPTINSTANCE_SERVER);
+    if ( !modelIndex || targ->destructible )
+    {
+        Scr_AddString((char *)"", SCRIPTINSTANCE_SERVER);
+        Scr_AddString((char *)"", SCRIPTINSTANCE_SERVER);
+    }
+    else
+    {
+        const unsigned int attachmentIndex = modelIndex - 1;
+        if ( attachmentIndex >= 19
+            && !Assert_MyHandler(
+                        "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\g_combat_mp.cpp",
+                        756,
+                        0,
+                        "%s",
+                        "modelIndex - 1 < ARRAY_COUNT( targ->attachModelNames )") )
+        {
+            __debugbreak();
+        }
+        if ( !targ->attachTagNames[attachmentIndex]
+            && !Assert_MyHandler(
+                        "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\g_combat_mp.cpp",
+                        756,
+                        0,
+                        "%s",
+                        "targ->attachTagNames[modelIndex - 1]") )
+        {
+            __debugbreak();
+        }
+        modelName = SV_GetConfigstringConst(targ->attachModelNames[attachmentIndex] + 0x5F3);
+        if ( !modelName
+            && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\g_combat_mp.cpp", 759, 1, "%s", "modelName") )
+        {
+            __debugbreak();
+        }
+        Scr_AddConstString(targ->attachTagNames[attachmentIndex], SCRIPTINSTANCE_SERVER);
+        Scr_AddConstString(modelName, SCRIPTINSTANCE_SERVER);
+    }
+    Scr_AddConstString(*modNames[mod], SCRIPTINSTANCE_SERVER);
+    Scr_AddVector(point ? point : (float *)vec3_origin, SCRIPTINSTANCE_SERVER);
+    Scr_AddVector(dir ? dir : (float *)vec3_origin, SCRIPTINSTANCE_SERVER);
+    Scr_AddEntity(attacker, SCRIPTINSTANCE_SERVER);
+    Scr_AddInt(damage, SCRIPTINSTANCE_SERVER);
+    Scr_Notify(targ, notify, 9u);
+    ScrNotify_FaceEvent(targ, notify);
+#else
     Scr_AddInt(dFlags, SCRIPTINSTANCE_SERVER);
     Scr_AddString(weaponName, SCRIPTINSTANCE_SERVER);
     if ( partName )
@@ -741,6 +833,7 @@ void __cdecl G_DamageNotify(
     Scr_AddEntity(attacker, SCRIPTINSTANCE_SERVER);
     Scr_AddInt(damage, SCRIPTINSTANCE_SERVER);
     Scr_Notify(targ, notify, 0xAu);
+#endif
 }
 
 void __cdecl G_Damage(
@@ -764,13 +857,36 @@ void __cdecl G_Damage(
     void (__cdecl *die)(gentity_s *, gentity_s *, gentity_s *, int, int, const int, const float *, const hitLocation_t, int); // [esp+18h] [ebp-8h]
     void (__cdecl *pain)(gentity_s *, gentity_s *, int, const float *, const int, const float *, const hitLocation_t, const int); // [esp+1Ch] [ebp-4h]
 
+#ifdef KISAK_SP
+    // Retail SP G_Damage (0x005405c0) replaces null damage owners with the
+    // world entity before choosing the client/actor/vehicle damage path.
+    // Zombie failsafe dodamage calls omit these arguments and their script
+    // callbacks expect an entity, not undefined.
+    if ( !inflictor )
+        inflictor = &g_entities[ENTITYNUM_WORLD];
+    if ( !attacker )
+        attacker = &g_entities[ENTITYNUM_WORLD];
+#endif
+
     if ( targ->client )
     {
+#ifdef KISAK_SP
+        G_DamageClient(targ, inflictor, attacker, (float*)dir, (float *)point, damage, dFlags, mod, weapon, hitLoc, modelIndex, timeOffset);
+#else
         G_DamageClient(targ, inflictor, attacker, (float*)dir, (float *)point, damage, dFlags, mod, weapon, hitLoc, timeOffset);
+#endif
     }
     else if ( targ->actor )
     {
+#ifdef KISAK_SP
+        if ( dir )
+            Vec3NormalizeTo(dir, localdir);
+        else
+            memset(localdir, 0, sizeof(localdir));
+        G_DamageActor(targ, inflictor, attacker, localdir, (float *)point, damage, dFlags, mod, weapon, hitLoc, modelIndex, timeOffset);
+#else
         G_DamageActor(targ, inflictor, attacker, (float *)dir, (float *)point, damage, dFlags, mod, weapon, hitLoc, timeOffset);
+#endif
     }
     else if ( targ->scr_vehicle )
     {

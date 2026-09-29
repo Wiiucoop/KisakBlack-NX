@@ -27,6 +27,21 @@ enum GVType : __int32
     GVTYPE_NUM    = 0x4,
 };
 
+// Listbox special IDs used by the gametype-variants menus. These are shared with
+// ui_feeders_mp.cpp, but intentionally exclude adjacent generic feeder IDs.
+enum GameVariantFeeder : __int32
+{
+    GV_FEEDER_CONDITION_LHS = 35,
+    GV_FEEDER_CONDITION_OP = 36,
+    GV_FEEDER_CONDITION_RHS = 37,
+    GV_FEEDER_RULES = 39,
+    GV_FEEDER_EVENTS = 40,
+    GV_FEEDER_ACTIONS = 41,
+    GV_FEEDER_PARAMETERS = 42,
+    GV_FEEDER_TARGETS = 43,
+    GV_FEEDER_RULE_SUMMARY = 44,
+};
+
 struct GVParameter // sizeof=0x81
 {                                       // XREF: GVRule/r GVRule/r
     bool hasParameter;
@@ -263,7 +278,7 @@ struct _CustomClassDescription // sizeof=0x10
 
 int __cdecl UI_GameVariants_GetClassParameters();
 void __cdecl UI_GV_StartAddingEvent_f();
-void __cdecl UI_GV_StartEditingFeeder(int localClientNum, int feederId, int feederCount);
+void __cdecl UI_GV_StartEditingFeeder(int localClientNum, GameVariantFeeder feederId, int feederCount);
 void __cdecl UI_GV_StartAddingAction_f();
 void __cdecl UI_GV_StartAddingParam_f();
 void __cdecl UI_GV_StartAddingTarget_f();

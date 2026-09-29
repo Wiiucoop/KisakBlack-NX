@@ -40,6 +40,17 @@
 #include "cg_draw_net_mp.h"
 #include <gfx_d3d/r_scene.h>
 
+#ifdef KISAK_SP
+namespace
+{
+    // MP derives a corpse slot from fixed entity numbers 36..43.  Retail SP
+    // converts the actor entity in place and publishes the corpse slot through
+    // lerp.u.actor.actorNum, so retain the live actor slot long enough to clone
+    // the client-side animation state during that type transition.
+    unsigned char s_actorSlotPlusOneForEntity_SP[1024] = {};
+}
+#endif
+
 void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent, bool shutdown_script_for_local_client)
 {
     unsigned int v3; // [esp+0h] [ebp-20h]
@@ -49,6 +60,14 @@ void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent, bool shutdow
 
     if ( shutdown_script_for_local_client || CG_GetClientNumForLocalClient(localClientNum) != cent->nextState.number )
     {
+#ifdef KISAK_SP
+        // A client compile failure can leave timeArrayId alive before the
+        // entity class is initialized. Scr_IsSystemActive alone is insufficient.
+        // Keep the VM invariant in FindEntityId; suppress only teardown callbacks.
+        if (gScrClassMap[SCRIPTINSTANCE_CLIENT][0].entArrayId &&
+            Scr_IsSystemActive(1, SCRIPTINSTANCE_CLIENT))
+        {
+#endif
         CScr_Notify(localClientNum, cent, cscr_const.entityshutdown, 0);
         if ( CL_LocalClient_IsFirstActive(localClientNum) )
         {
@@ -64,11 +83,27 @@ void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent, bool shutdow
         if ( v5 )
         {
             cent->clientFlags &= ~0x100u;
+#ifdef KISAK_SP
+            if (cg_scr_data.entityshutdownCB)
+            {
+#endif
             CScr_AddEntity(cent, (unsigned __int16)localClientNum);
             Scr_AddInt(localClientNum, SCRIPTINSTANCE_CLIENT);
             t = Scr_ExecThread(SCRIPTINSTANCE_CLIENT, cg_scr_data.entityshutdownCB, 2u);
             Scr_FreeThread(t, SCRIPTINSTANCE_CLIENT);
+#ifdef KISAK_SP
+            }
+#endif
         }
+#ifdef KISAK_SP
+        }
+        else
+        {
+            *((unsigned int *)cent + 201) &= ~0x100u;
+        }
+#endif
+        // CScr_FreeEntity already checks entArrayId. Keep resource release even
+        // when notification/callback execution is unavailable during error unwind.
         CScr_FreeEntity(cent, (unsigned __int16)localClientNum);
     }
     if ( cent->pose.isRagdoll || Com_IsRagdollTrajectory(&cent->currentState.pos) )
@@ -1113,10 +1148,79 @@ void CG_ResetEntity(int localClientNum, centity_s *cent, int newEntity)
         goto LABEL_74;
     case 0x11:
         cent->previousEventSequence = cent->nextState.eventSequence;
+#ifdef KISAK_SP
+        if ( cent->nextState.number >= 0 && cent->nextState.number < 1024
+            && cent->nextState.lerp.u.actor.actorNum < 16u )
+        {
+            s_actorSlotPlusOneForEntity_SP[cent->nextState.number] =
+                static_cast<unsigned char>(cent->nextState.lerp.u.actor.actorNum + 1);
+        }
+#endif
         CG_ResetActorEntity(localClientNum, cgameGlob, cent);
         goto LABEL_74;
     case 0x13:
         cent->previousEventSequence = cent->nextState.eventSequence;
+#ifdef KISAK_SP
+        {
+        corpseIndexa = cent->nextState.lerp.u.actor.actorNum;
+        if ( corpseIndexa >= 8
+            && !Assert_MyHandler(
+                "C:\\projects_pc\\cod\\codsrc\\src\\cgame_mp\\cg_snapshot_mp.cpp",
+                387,
+                0,
+                "corpseIndex doesn't index MAX_ACTOR_CORPSES\n\t%i not in [0, %i)",
+                corpseIndexa,
+                8) )
+        {
+            __debugbreak();
+        }
+
+        cgsa = CG_GetLocalClientStaticGlobals(localClientNum);
+        aiCorpseInfo = &cgsa->actorCorpseInfo[corpseIndexa];
+        pXAnimTreea = aiCorpseInfo->pXAnimTree;
+
+        const DObj *liveActorObj = Com_GetClientDObj(cent->nextState.number, localClientNum);
+        XAnimTree_s *liveActorTree = liveActorObj ? DObjGetTree(liveActorObj) : 0;
+        actorInfo_t *liveActorInfo = 0;
+        if ( cent->nextState.number >= 0 && cent->nextState.number < 1024 )
+        {
+            const unsigned int slotPlusOne = s_actorSlotPlusOneForEntity_SP[cent->nextState.number];
+            if ( slotPlusOne && slotPlusOne <= 16 )
+            {
+                actorInfo_t *candidate = &cgameGlob->bgs.actorinfo[slotPlusOne - 1];
+                if ( !liveActorTree || candidate->pXAnimTree == liveActorTree )
+                    liveActorInfo = candidate;
+            }
+            s_actorSlotPlusOneForEntity_SP[cent->nextState.number] = 0;
+        }
+
+        if ( liveActorTree )
+        {
+            XAnim_s *liveAnims = XAnimGetAnims(liveActorTree);
+            if ( !pXAnimTreea || XAnimGetAnims(pXAnimTreea) != liveAnims )
+            {
+                if ( pXAnimTreea )
+                    XAnimFreeTree(pXAnimTreea, 0, SCRIPTINSTANCE_SERVER);
+                pXAnimTreea = XAnimCreateTree(liveAnims, Hunk_AllocXAnimClient);
+            }
+        }
+
+        if ( liveActorInfo )
+            CG_CopyActorCorpseInfo(aiCorpseInfo, liveActorInfo);
+        else
+            memset(&aiCorpseInfo->animInfo, 0, sizeof(aiCorpseInfo->animInfo));
+
+        aiCorpseInfo->pXAnimTree = pXAnimTreea;
+        aiCorpseInfo->actorNum = corpseIndexa;
+        aiCorpseInfo->entityNum = cent->nextState.number;
+        if ( liveActorTree && pXAnimTreea )
+            XAnimCloneAnimTree(liveActorTree, pXAnimTreea);
+        aiCorpseInfo->dobjDirty = 1;
+        if ( (cent->nextState.lerp.eFlags & 0x10) != 0 )
+            cent->previousEventSequence = 0;
+        goto LABEL_74;
+        }
+#else
         if ((unsigned int)(cent->nextState.number - 36) >= 8
             && !Assert_MyHandler(
                 "C:\\projects_pc\\cod\\codsrc\\src\\cgame_mp\\cg_snapshot_mp.cpp",
@@ -1162,6 +1266,7 @@ void CG_ResetEntity(int localClientNum, centity_s *cent, int newEntity)
         }
         cgsa->actorCorpseInfo[corpseIndexa].dobjDirty = 1;
         goto LABEL_74;
+#endif
     default:
         cent->previousEventSequence = cent->nextState.eventSequence;
     LABEL_74:
@@ -1275,11 +1380,16 @@ void __cdecl CG_TransitionKillcam(int localClientNum)
             }
             if ( cent->nextState.eType == ET_ACTOR_CORPSE )
             {
-                bcassert(cent->nextState.number - ACTOR_CORPSES, MAX_ACTOR_CORPSES);
+#ifdef KISAK_SP
+                const unsigned int actorCorpseIndex = cent->nextState.lerp.u.actor.actorNum;
+#else
+                const unsigned int actorCorpseIndex = cent->nextState.number - ACTOR_CORPSES;
+#endif
+                bcassert(actorCorpseIndex, MAX_ACTOR_CORPSES);
                 BG_Actor_FastForwardAnimState(
                     localClientNum,
                     &cent->nextState,
-                    &cgs->actorCorpseInfo[cent->nextState.number - ACTOR_CORPSES]);
+                    &cgs->actorCorpseInfo[actorCorpseIndex]);
             }
         }
         if ( cg_scr_mp_data.demo_jump )
@@ -1548,6 +1658,45 @@ void __cdecl CG_UpdateClientFlags(int localClientNum, centity_s *cent, int oldEF
     {
         __debugbreak();
     }
+#ifdef KISAK_SP
+    // Retail SP CG_UpdateClientFlags (BlackOps.exe 0x00897930) does not defer to
+    // CG_ClientFlagCallback: it runs client_flag_callback( localClientNum, flag,
+    // set, newEnt ) right here for every changed bit (newEnt is 1 for a new
+    // entity, undefined otherwise), then client_flagasval_callback(
+    // localClientNum, val ) when the low 16 bits differ. MP's deferred path
+    // passes 3 args and never runs the asval callback.
+    unsigned int newFlags = cent->nextState.lerp.eFlags2;
+    unsigned __int16 t;
+
+    if ( cg_scr_data.clientFlagCB )
+    {
+        for ( flagNum = 0; flagNum < 16; ++flagNum )
+        {
+            bool newBit = (newFlags & (1 << flagNum)) != 0;
+            bool oldBit = (oldEFlags2 & (1 << flagNum)) != 0;
+
+            if ( newEnt ? !newBit : newBit == oldBit )
+                continue;
+            if ( newEnt )
+                Scr_AddInt(1, SCRIPTINSTANCE_CLIENT);
+            else
+                Scr_AddUndefined(SCRIPTINSTANCE_CLIENT);
+            Scr_AddInt(newBit, SCRIPTINSTANCE_CLIENT);
+            Scr_AddInt(flagNum, SCRIPTINSTANCE_CLIENT);
+            Scr_AddInt(localClientNum, SCRIPTINSTANCE_CLIENT);
+            t = CScr_ExecEntThread(cent, cg_scr_data.clientFlagCB, 4u);
+            Scr_FreeThread(t, SCRIPTINSTANCE_CLIENT);
+        }
+    }
+    if ( cg_scr_data.clientFlagAsValCB && (unsigned __int16)newFlags != (unsigned __int16)oldEFlags2 )
+    {
+        Scr_AddInt((unsigned __int16)newFlags, SCRIPTINSTANCE_CLIENT);
+        Scr_AddInt(localClientNum, SCRIPTINSTANCE_CLIENT);
+        t = CScr_ExecEntThread(cent, cg_scr_data.clientFlagAsValCB, 2u);
+        Scr_FreeThread(t, SCRIPTINSTANCE_CLIENT);
+    }
+    return;
+#endif
     if ( ((cent->clientFlags >> 22) & 1) == 0 )
         CG_ClientFlagResetAll(cent);
     if ( newEnt )

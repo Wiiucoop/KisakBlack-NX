@@ -57,7 +57,26 @@ void __cdecl BG_LoadPenetrationDepthTable()
     if ( !penetrationDepthTableLoaded )
     {
         buffer = Com_LoadInfoString(
+#ifdef KISAK_SP
+                             // SP ships "info/bullet_penetration_sp"; the _mp table is packaged
+                             // only in common_mp.ff, a zone SP never loads.
+                             // Evidence:
+                             //   - zone data: "info/bullet_penetration_mp" -> common_mp.ff only;
+                             //     "info/bullet_penetration_sp" -> code_post_gfx.ff, which SP
+                             //     loads at startup. Same BULLET_PEN_TABLE ident and the same
+                             //     small/medium/large sections, so the three
+                             //     BG_ParsePenetrationDepthTable consumers below are unchanged.
+                             //   - retail BlackOps.exe strings: "info/bullet_penetration_sp"
+                             //     present at 0x5dd71c; the _mp spelling is absent entirely.
+                             // Prevents: Com_LoadInfoString -> Com_LoadInfoString_FastFile ->
+                             //   Com_Error(ERR_DROP, "Could not load %s file [%s]")
+                             //   (com_loadutils.cpp:50-51) at G_InitGame time - called from
+                             //   g_main_mp.cpp:859, the line immediately after
+                             //   G_ParseHitLocDmgTable. Audit finding C3 (asset-availability audit).
+                             (char*)"info/bullet_penetration_sp",
+#else
                              (char*)"info/bullet_penetration_mp",
+#endif
                              "bullet penetration table",
                              "BULLET_PEN_TABLE",
                              loadBuffer);
@@ -5274,10 +5293,23 @@ WeaponVariantDef *__cdecl BG_LoadWeaponVariantDef_LoadObj(char *name)
 
     if ( !*name )
         return 0;
+    // SP retail divergence, hand-verified (Ghidra 0x00768110, BG_LoadWeaponVariantDef_LoadObj,
+    // renamed and plated this session): BOTH arguments change at both call sites below, not just
+    // the name -- the folder literal is "sp" (confirmed via a direct memory read of the SP
+    // binary's folder string, 0x009cacc0 = "sp\0"), and the fallback name literal drops "_mp"
+    // (0xa48e9c = "defaultweapon\0"). Confirmed by disassembly: the same folder operand
+    // (0x9cacc0) is pushed at both call sites, exact same shape as MP's "mp" reuse.
+#ifdef KISAK_SP
+    weapVariantDef = (WeaponVariantDef*)BG_LoadWeaponVariantDefInternal("sp", name); // KISAKTODO: bad cast
+    if ( weapVariantDef )
+        return weapVariantDef;
+    weapVariantDefa = (WeaponVariantDef*)BG_LoadWeaponVariantDefInternal("sp", (char*)"defaultweapon");
+#else
     weapVariantDef = (WeaponVariantDef*)BG_LoadWeaponVariantDefInternal("mp", name); // KISAKTODO: bad cast
     if ( weapVariantDef )
         return weapVariantDef;
     weapVariantDefa = (WeaponVariantDef*)BG_LoadWeaponVariantDefInternal("mp", (char*)"defaultweapon_mp");
+#endif
     if ( !weapVariantDefa )
         Com_Error(ERR_DROP, "BG_LoadWeaponVariantDef: Could not find default weapon");
     SetConfigString((char **)weapVariantDefa, name);

@@ -350,6 +350,15 @@ void __cdecl CG_PredictPlayerState(int localClientNum)
     ps = &cgameGlob->predictedPlayerState;
     cgameGlob->lastFrame.aimSpreadScale = cgameGlob->predictedPlayerState.aimSpreadScale;
     CG_PredictPlayerState_Internal(localClientNum);
+#ifdef KISAK_SP
+    // Retail SP authors relationship flags in ClientEndFrame (0x00418D00).
+    // The MP prediction-retention optimization must not retain an old target.
+    const int lookAtFlags = 0x8 | 0x10 | 0x200000;
+    ps->weapFlags = (ps->weapFlags & ~lookAtFlags)
+        | (cgameGlob->nextSnap->ps.weapFlags & lookAtFlags);
+    ps->eFlags2 = (ps->eFlags2 & ~0x20000000)
+        | (cgameGlob->nextSnap->ps.eFlags2 & 0x20000000);
+#endif
     Entity = CG_GetEntity(localClientNum, ps->clientNum);
     playerEnt = Entity;
     Vec3Copy(ps->origin, Entity->pose.origin);

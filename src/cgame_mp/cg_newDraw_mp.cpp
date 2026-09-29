@@ -447,6 +447,119 @@ char *__cdecl CG_ScriptMainMenu(int localClientNum)
     return CG_GetLocalClientGlobals(localClientNum)->scriptMainMenu;
 }
 
+#ifdef KISAK_SP
+static void CG_GetZombieScoreColor_SP(
+    const char *baseName,
+    int clientNum,
+    const float *fallback,
+    float *outColor)
+{
+    char dvarName[32];
+    Com_sprintf(dvarName, sizeof(dvarName), "%s_%i", baseName, clientNum);
+
+    const dvar_s *colorDvar = Dvar_FindVar(dvarName);
+    if ( colorDvar )
+    {
+        Dvar_GetUnpackedColor(colorDvar, outColor);
+        return;
+    }
+
+    memcpy(outColor, fallback, sizeof(float) * 4);
+}
+
+static void CG_DrawZombiePlayerScores_SP(int localClientNum, const rectDef_s *rect)
+{
+    cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
+    const int clientNum = cgameGlob->predictedPlayerState.clientNum;
+    if ( clientNum < 0 || clientNum >= 32 )
+        return;
+
+    const clientInfo_t *ci = &cgameGlob->bgs.clientinfo[clientNum];
+    if ( !ci->infoValid )
+        return;
+
+    // Retail SP ownerDraw 288 enters the zombie score-list path at 0x005BFED0 /
+    // 0x00893E50.  Its local row uses scorebar_zom_1..4, a 27-unit height
+    // (cg_scoreboardItemHeight + 9), a 0.35 font scale, and score_s::score.
+    // This restores the single-local-client row used by the SP executable; the
+    // score itself is populated from clientState_s by CG_UpdateClientInfo.
+    const char *scorebarName;
+    switch ( clientNum )
+    {
+        case 0: scorebarName = "scorebar_zom_1"; break;
+        case 1: scorebarName = "scorebar_zom_2"; break;
+        case 2: scorebarName = "scorebar_zom_3"; break;
+        default: scorebarName = "scorebar_zom_4"; break;
+    }
+
+    const ScreenPlacement *scrPlace = &scrPlaceView[localClientNum];
+    const float rowHeight = (float)cg_scoreboardItemHeight->current.integer + 9.0f;
+    const float rowY = rect->y - 12.0f;
+    static const float fallbackZombieColor[4] = { 0.21f, 0.0f, 0.0f, 1.0f };
+    static const float fallbackGamertagColors[4][4] =
+    {
+        { 0.0f, 0.0f, 0.0f, 1.0f },
+        { 0.0f, 0.0f, 0.0f, 1.0f },
+        { 0.0f, 0.0f, 0.0f, 1.0f },
+        { 0.0f, 0.0f, 0.0f, 1.0f }
+    };
+    const int colorIndex = clientNum < 4 ? clientNum : 3;
+    float zombieColor[4];
+    const dvar_s *zombieColorDvar = Dvar_FindVar("cg_ScoresColor_Zombie");
+    if ( zombieColorDvar )
+        Dvar_GetUnpackedColor(zombieColorDvar, zombieColor);
+    else
+        memcpy(zombieColor, fallbackZombieColor, sizeof(zombieColor));
+
+    // The ownerDraw wrapper supplies white, and the compact adapter keeps only
+    // that input alpha.  The local Zombies row then brightens the red channel.
+    const float inputAlpha = 1.0f;
+    zombieColor[0] += 0.05f;
+    const dvar_s *transparencyDvar = Dvar_FindVar("cg_ScoresColor_TransparencyZombie");
+    const float transparency = transparencyDvar
+        ? (float)Dvar_GetFloat("cg_ScoresColor_TransparencyZombie")
+        : 0.8f;
+    zombieColor[3] = transparency * 2.0f * inputAlpha;
+
+    Material *scorebar = Material_RegisterHandle(scorebarName, 7);
+    UI_DrawHandlePic(
+        scrPlace,
+        rect->x,
+        rowY,
+        rect->w,
+        rowHeight,
+        rect->horzAlign,
+        rect->vertAlign,
+        zombieColor,
+        scorebar);
+
+    const float fontScale = 0.35f;
+    Font_s *font = UI_GetFontHandle(scrPlace, cg_scoreboardFont->current.integer, fontScale);
+    char *scoreText = (char *)va("%i", ci->score.score);
+    float gamertagColor[4];
+    CG_GetZombieScoreColor_SP(
+        "cg_ScoresColor_Gamertag",
+        colorIndex,
+        fallbackGamertagColors[colorIndex],
+        gamertagColor);
+    gamertagColor[3] = inputAlpha;
+    const float textY = rowY
+        + ((float)R_TextHeight(font) * fontScale + rowHeight) * cg_scoreboardTextOffset->current.value;
+    UI_DrawText(
+        scrPlace,
+        scoreText,
+        0x7FFFFFFF,
+        font,
+        rect->x + 5.0f,
+        textY,
+        rect->horzAlign,
+        rect->vertAlign,
+        fontScale,
+        gamertagColor,
+        3);
+}
+#endif
+
 void __cdecl CG_OwnerDraw(
                 int localClientNum,
                 rectDef_s parentRect,
@@ -505,6 +618,12 @@ void __cdecl CG_OwnerDraw(
                 if ( !cgameGlob->inKillCam )
                     CG_DrawWarMomentumMultiplierBlitzkrieg(localClientNum, &rect, color, material);
                 break;
+#ifdef KISAK_SP
+            case 288:
+                if ( !cgameGlob->inKillCam )
+                    CG_DrawZombiePlayerScores_SP(localClientNum, &rect);
+                break;
+#endif
             case 290:
             case 291:
             case 292:

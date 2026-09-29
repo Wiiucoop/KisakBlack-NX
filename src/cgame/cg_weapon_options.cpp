@@ -5,6 +5,27 @@
 #include <live/live_pcache.h>
 #include <database/db_registry.h>
 
+// SP's weapon-options table is the bare "weaponoptions.csv"; MP prefixes it "mp/".
+// Evidence:
+//   - retail BlackOps.exe: bare "weaponoptions.csv" present at 0x5ab8a0; "mp/weaponoptions.csv"
+//     is a binary-wide zero.
+//   - zone scan of all 139 shipped .ff files: "mp/weaponoptions.csv" -> code_post_gfx_mp only.
+//     Bare "weaponoptions.csv" -> code_post_gfx.ff, a zone SP loads at startup, as a real
+//     StringTable asset (10 columns x 118 rows at +0x46e928), plus common_zombie_patch.
+// Not fatal before this change (a missing STRINGTABLE falls back to the default empty table,
+// which does ship for SP), but every camo base texture, reticle colour and lens colour was
+// silently dropped, with only the Com_PrintWarning at cg_weapon_options.cpp:334 to show for it.
+// Reached at frontend map load: GC_InitWeaponOptions() <- cg_main_mp.cpp CG_Init.
+// Audit finding C5 (asset-availability audit). 7 call sites in this file.
+// NOTE: the sibling "mp/bodyHeadTable.csv" calls are deliberately NOT changed - that table has
+// no SP counterpart in any zone AND no bare/sp-prefixed literal in the retail SP exe, so there
+// is nothing to substitute; it stays on the (non-fatal) default-table path.
+#ifdef KISAK_SP
+#define WEAPONOPTIONS_TABLE "weaponoptions.csv"
+#else
+#define WEAPONOPTIONS_TABLE "mp/weaponoptions.csv"
+#endif
+
 const dvar_t *weaponCamoLodDist;
 const dvar_t *weaponEmblemLodDist;
 const dvar_t *weaponClanTagLodDist;
@@ -156,29 +177,29 @@ void __thiscall WeaponOptions::InitWeaponOptions()
     for ( i = 0; i < 0xA; ++i )
     {
         WeaponOptions::InitWeaponOptionTextures(
-            "mp/weaponoptions.csv",
+            WEAPONOPTIONS_TABLE,
             "camo",
             1,
             i + 2,
             this->camoTextureOverrides[i],
             0x40u);
         WeaponOptions::InitWeaponOptionTextures(
-            "mp/weaponoptions.csv",
+            WEAPONOPTIONS_TABLE,
             "lens",
             1,
             i + 3,
             this->lensTextureOverrides[i],
             0x10u);
         WeaponOptions::InitWeaponOptionTextures(
-            "mp/weaponoptions.csv",
+            WEAPONOPTIONS_TABLE,
             "reticle",
             1,
             i + 2,
             this->reticleTextureOverrides[i],
             0x40u);
     }
-    WeaponOptions::InitWeaponOptionColors("mp/weaponoptions.csv", "reticle_color", 1, 2, this->reticleColors);
-    WeaponOptions::InitWeaponOptionColors("mp/weaponoptions.csv", "lens", 1, 2, this->lensColors);
+    WeaponOptions::InitWeaponOptionColors(WEAPONOPTIONS_TABLE, "reticle_color", 1, 2, this->reticleColors);
+    WeaponOptions::InitWeaponOptionColors(WEAPONOPTIONS_TABLE, "lens", 1, 2, this->lensColors);
     WeaponOptions::InitWeaponOptionMaterials(
         "mp/bodyHeadTable.csv",
         "pattern",
@@ -188,7 +209,7 @@ void __thiscall WeaponOptions::InitWeaponOptions()
         0x40u);
     WeaponOptions::InitWeaponOptionColors("mp/bodyHeadTable.csv", "pattern_color", 1, 3, this->facepaintColors);
     this->numWeaponOverrides = 0;
-    StringTable_GetAsset("mp/weaponoptions.csv", (XAssetHeader *)&tablePtr);
+    StringTable_GetAsset(WEAPONOPTIONS_TABLE, (XAssetHeader *)&tablePtr);
     goldRow = StringTable_LookupRowNumForValue(tablePtr, 1, "gold");
     if ( goldRow != -1 )
     {
@@ -325,7 +346,7 @@ void __thiscall WeaponOptions::WeaponOverride::Init(const WeaponVariantDef *weap
     const StringTable *tablePtr; // [esp+4h] [ebp-8h] BYREF
     int row; // [esp+8h] [ebp-4h]
 
-    StringTable_GetAsset("mp/weaponoptions.csv", (XAssetHeader *)&tablePtr);
+    StringTable_GetAsset(WEAPONOPTIONS_TABLE, (XAssetHeader *)&tablePtr);
     this->lastFrame = com_frameNumber;
     this->weapon = weapVarDef;
     row = StringTable_LookupRowNumForValue(tablePtr, 1, "weapon", 2, weapVarDef->weapDef->parentWeaponName, -1, 0);

@@ -555,7 +555,11 @@ bool __cdecl Path_FindOverlappingNodes()
         gameWorldCurrent->path.nodes[i].constant.wOverlapNode[0] = -1;
         gameWorldCurrent->path.nodes[i].constant.wOverlapNode[1] = -1;
     }
+#ifdef KISAK_SP
+    actorSize_8 = (float)(72.0 - 0.0) + 1.0; // retail SP 0048e0e0: Z half-extent is 73 (actor height 72)
+#else
     actorSize_8 = (float)(48.0 - 0.0) + 1.0;
+#endif
     iErrorCount = 0;
     for ( ia = 0; ia < gameWorldCurrent->path.nodeCount; ++ia )
     {

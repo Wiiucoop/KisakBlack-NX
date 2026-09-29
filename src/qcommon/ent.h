@@ -361,6 +361,20 @@ struct __declspec(align(4)) entityState_s // sizeof=0xE0
                 unsigned __int8 destructibleid;
         } un1;
         clientLinkInfo_t clientLinkInfo;
+#ifdef KISAK_SP
+        // Reconstruction storage for retail SP entityState+0xD0. Retail's
+        // loopSoundFade is a separate short at +0xCE; our MP layout keeps it
+        // at +0xD0. Use trailing padding, never overlay the sound fade.
+        unsigned __int8 animTreeIndex;
+#else
         // padding byte
+#endif
         // padding byte
 };
+
+static_assert(sizeof(entityState_s) == 0xE0, "entity snapshot stride changed");
+#ifdef KISAK_SP
+static_assert(offsetof(entityState_s, loopSoundFade) == 0xD0, "sound fade offset changed");
+static_assert(offsetof(entityState_s, clientLinkInfo) == 0xDA, "entity netfield offsets changed");
+static_assert(offsetof(entityState_s, animTreeIndex) == 0xDE, "SP animation byte must occupy trailing padding");
+#endif

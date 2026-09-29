@@ -291,6 +291,7 @@ void CScr_GetMaxLocalClients();
 void CScr_LocalClientActive();
 void __cdecl CScr_IsSplitScreenHost();
 void __cdecl CScr_IsSplitScreen();
+void __cdecl CScr_PlayBink();
 void __cdecl CScr_StopBink();
 void __cdecl CScr_GetBinkLength();
 void __cdecl CScr_IsBinkFinished();

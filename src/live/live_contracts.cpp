@@ -1631,10 +1631,16 @@ unsigned int __cdecl LiveContracts_SV_GetIndexForActiveContract(
                 unsigned int clientNum,
                 unsigned int activeContractIndex)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Direct-connect servers have no uploaded online stats profile. Match the
+    // existing invalid-contract sentinel without touching the absent DDL state.
+    return static_cast<unsigned int>(-1);
+#else
     char *buffer; // [esp+0h] [ebp-4h]
 
     buffer = LiveContracts_SV_GetStatBuffer(clientNum);
     return LiveContracts_GetIndexForActiveContract_Internal(buffer, activeContractIndex);
+#endif
 }
 
 char *__cdecl LiveContracts_SV_GetStatBuffer(unsigned int clientNum)
@@ -1668,10 +1674,14 @@ char *__cdecl LiveContracts_SV_GetStatBuffer(unsigned int clientNum)
 
 int __cdecl LiveContracts_SV_GetActiveContractProgress(unsigned int clientNum, unsigned int activeContractIndex)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    return 0;
+#else
     char *buffer; // [esp+0h] [ebp-4h]
 
     buffer = LiveContracts_SV_GetStatBuffer(clientNum);
     return LiveContracts_GetActiveContractProgress_Internal(buffer, activeContractIndex, 0);
+#endif
 }
 
 void __cdecl LiveContracts_SV_IncrementActiveContractProgress(
@@ -1679,6 +1689,9 @@ void __cdecl LiveContracts_SV_IncrementActiveContractProgress(
                 unsigned int activeContractIndex,
                 int increment)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    return;
+#else
     char *buffer; // [esp+0h] [ebp-18h]
     int currentProgress; // [esp+4h] [ebp-14h]
     ddlState_t searchState; // [esp+8h] [ebp-10h] BYREF
@@ -1711,10 +1724,14 @@ void __cdecl LiveContracts_SV_IncrementActiveContractProgress(
         if ( LiveStats_GetActiveContractStatState(activeContractIndex, CONTRACT_STAT_PROGRESS, &searchState) )
             SV_SetClientDIntStat(clientNum, &searchState, increment + currentProgress);
     }
+#endif
 }
 
 void __cdecl LiveContracts_SV_ResetActiveContractProgress(unsigned int clientNum, unsigned int activeContractIndex)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    return;
+#else
     char *buffer; // [esp+0h] [ebp-10h]
     unsigned int contractIndex; // [esp+4h] [ebp-Ch]
     int progressInterval; // [esp+8h] [ebp-8h]
@@ -1755,6 +1772,7 @@ void __cdecl LiveContracts_SV_ResetActiveContractProgress(unsigned int clientNum
             }
         }
     }
+#endif
 }
 
 void __cdecl LiveContracts_SV_IncrementActiveContractTime(
@@ -1762,6 +1780,9 @@ void __cdecl LiveContracts_SV_IncrementActiveContractTime(
                 unsigned int activeContractIndex,
                 int increment)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    return;
+#else
     char *buffer; // [esp+0h] [ebp-18h]
     ddlState_t searchState; // [esp+4h] [ebp-14h] BYREF
     int currentTime; // [esp+14h] [ebp-4h]
@@ -1797,26 +1818,38 @@ void __cdecl LiveContracts_SV_IncrementActiveContractTime(
                 SV_SetClientDIntStat(clientNum, &searchState, increment + currentTime);
         }
     }
+#endif
 }
 
 int __cdecl LiveContracts_SV_GetActiveContractStatus(unsigned int clientNum, unsigned int activeContractIndex)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    return 0;
+#else
     char *buffer; // [esp+0h] [ebp-4h]
 
     buffer = LiveContracts_SV_GetStatBuffer(clientNum);
     return LiveContracts_GetActiveContractStatus_Internal(buffer, activeContractIndex);
+#endif
 }
 
 int __cdecl LiveContracts_SV_GetCombatTimePassed(unsigned int clientNum, unsigned int activeContractIndex)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    return 0;
+#else
     char *buffer; // [esp+0h] [ebp-4h]
 
     buffer = LiveContracts_SV_GetStatBuffer(clientNum);
     return LiveContracts_GetCombatTimePassed_Internal(buffer, activeContractIndex);
+#endif
 }
 
 void __cdecl LiveContracts_SVMergeBuffers(unsigned __int8 *cacbuffer, unsigned __int8 *globalbuffer)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    return;
+#else
     signed int i; // [esp+0h] [ebp-Ch]
     unsigned int cac_contractidx; // [esp+4h] [ebp-8h]
 
@@ -1845,6 +1878,7 @@ void __cdecl LiveContracts_SVMergeBuffers(unsigned __int8 *cacbuffer, unsigned _
             }
         }
     }
+#endif
 }
 
 void __cdecl LiveContracts_CLMergeBuffers(unsigned __int8 *cacbuffer, unsigned __int8 *globalbuffer)
@@ -1877,7 +1911,11 @@ void __cdecl LiveContracts_CLMergeBuffers(unsigned __int8 *cacbuffer, unsigned _
 
 unsigned int __cdecl SV_CACValidate_GetIndexForActiveContract(unsigned __int8 *cacbuffer, unsigned int activeindex)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    return static_cast<unsigned int>(-1);
+#else
     return LiveContracts_GetIndexForActiveContract_Internal((char *)cacbuffer, activeindex);
+#endif
 }
 
 void __cdecl LiveContracts_SetFilterCmd()

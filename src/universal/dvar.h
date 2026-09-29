@@ -309,20 +309,22 @@ const dvar_s *__cdecl _Dvar_RegisterColor(
                 float a,
                 unsigned __int16 flags,
                 const char *description);
+// x/y/z are FLOAT components, not integers -- see the transcription-bug note on the
+// definitions in dvar.cpp. Retail moves them with MOVSS into DvarValue.vector[0..2].
 const dvar_s *__cdecl _Dvar_RegisterLinearRGB(
                 char *dvarName,
-                unsigned int x,
-                unsigned int y,
-                unsigned int z,
+                float x,
+                float y,
+                float z,
                 float min,
                 float max,
                 unsigned __int16 flags,
                 const char *description);
 const dvar_s *__cdecl _Dvar_RegisterColorXYZ(
                 const char *dvarName,
-                unsigned int x,
-                unsigned int y,
-                unsigned int z,
+                float x,
+                float y,
+                float z,
                 float min,
                 float max,
                 unsigned __int16 flags,

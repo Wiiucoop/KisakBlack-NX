@@ -1793,6 +1793,14 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                     }
                     return;
                 case EV_FACE_EVENT:
+#ifdef KISAK_SP
+                    // Local SP integration guard: retail also pushes before
+                    // testing nextValid. Skip inactive entities before touching
+                    // the VM stack so an unconsumed face argument cannot leak.
+                    centa = CG_GetEntity(localClientNum, p_nextState->number);
+                    if (!centa->nextValid)
+                        return;
+#endif
                     if (eventParm >= 12
                         && !Assert_MyHandler(
                             "C:\\projects_pc\\cod\\codsrc\\src\\cgame\\cg_event.cpp",
@@ -1845,8 +1853,10 @@ void __cdecl CG_EntityEvent(int localClientNum, centity_s *cent, int event)
                         Scr_AddConstString(cscr_const.none, SCRIPTINSTANCE_CLIENT);
                         break;
                     }
+#ifndef KISAK_SP
                     centa = CG_GetEntity(localClientNum, p_nextState->number);
                     if (((centa->clientFlags >> 1) & 1) != 0)
+#endif
                         CScr_Notify(localClientNum, centa, cscr_const.face, 1u);
                     return;
                 case EV_SETLOCALWIND:

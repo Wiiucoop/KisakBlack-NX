@@ -1549,9 +1549,12 @@ int __cdecl get_physics_contents_mask(char phys_env_collision_flags)
 {
     int mask; // [esp+0h] [ebp-4h]
 
-    mask = 0x280EC93;
+    // Retail SP BlackOps.exe 0x004504B0 uses these masks. The reconstructed
+    // MP values included the extra 0x802 bits and admitted the wrong content
+    // classes into SP environment queries.
+    mask = 0x280E491;
     if ((phys_env_collision_flags & 0x20) != 0 && (phys_env_collision_flags & 0x10) == 0)
-        return 0x281EE93;
+        return 0x281E691;
     if ((phys_env_collision_flags & 8) != 0 || (phys_env_collision_flags & 0x10) != 0)
         return 0x211;
     return mask;

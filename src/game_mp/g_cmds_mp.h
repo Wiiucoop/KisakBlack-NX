@@ -31,6 +31,9 @@ void __cdecl Cmd_Vote_f(gentity_s *ent);
 void __cdecl Cmd_SetViewpos_f(gentity_s *ent);
 void __cdecl Cmd_EntityCount_f();
 void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt);
+#ifdef KISAK_SP
+void __cdecl Cmd_MenuLevelMessage_f();   // retail FUN_0054bbb0, dispatched from ClientCommand "mlvl"
+#endif
 void __cdecl ClientCommand(int clientNum);
 void __cdecl Cmd_Say_f(gentity_s *ent, int mode, int arg0);
 void Cmd_PrintEntities_f();

@@ -341,7 +341,9 @@ void __cdecl CL_ConnectHackDW()
 
 bool __cdecl CL_CDKeyValidate(netadr_t addr)
 {
-#if defined(WIN32) || defined(KISAK_NX)
+#ifdef OPENBLOPS_NO_STEAM_AUTH
+    return true;
+#elif defined(WIN32) || defined(KISAK_NX)
     return Steam_UpdateClientAuthTicket(addr);
 #else
 #error Steam Auth for Arch
@@ -351,28 +353,49 @@ bool __cdecl CL_CDKeyValidate(netadr_t addr)
 
 void __cdecl CL_Connect_f()
 {
+#if !defined(KISAK_SP) || !defined(OPENBLOPS_NO_STEAM_AUTH)
     int ControllerIndex; // eax
+#endif
     __int16 v1; // ax
     clientUIActive_t *clUI; // [esp+28h] [ebp-Ch]
     clientConnection_t *clc; // [esp+2Ch] [ebp-8h]
-    const char *server; // [esp+30h] [ebp-4h]
+    char server[256];
 
     if ( Cmd_Argc() == 2 )
     {
+#if defined(OPENBLOPS_NO_STEAM_AUTH) && !defined(KISAK_DEDICATED)
+        // A manually issued destination supersedes a pending startup request.
+        Com_CancelStartupConnect();
+#endif
         SND_StopSounds(SND_STOP_ALL);
         CL_AllocatePerLocalClientMemory();
         clUI = CL_GetLocalClientUIGlobals(0);
         CL_GetLocalClientGlobals(0);
         clc = CL_GetLocalClientConnection(0);
         clc->serverMessage[0] = 0;
-        server = Cmd_Argv(1);
-        if ( !strcmp(server, "localhost") )
+        I_strncpyz(server, Cmd_Argv(1), sizeof(server));
+        // A frontend/listen server must stop before a direct remote connection.
+#if defined(KISAK_SP) && defined(OPENBLOPS_NO_STEAM_AUTH)
+        if (com_sv_running->current.enabled)
+        {
+            // Full Com_Shutdown reloads map frontend through Com_AssetLoadUI,
+            // which replaces the remote connection we are about to establish.
+            Com_ShutdownInternal("EXE_SERVERKILLED");
+            CL_InitRenderer();
+        }
+#else
+        if (com_sv_running->current.enabled)
             SV_KillLocalServer();
+        ControllerIndex = Com_LocalClient_GetControllerIndex(0);
+        SV_Frame(ControllerIndex, 0);
+#endif
         cl_serverLoadingMap = 0;
         g_waitingForServer = 0;
         FS_DisablePureCheck(0);
-        ControllerIndex = Com_LocalClient_GetControllerIndex(0);
-        SV_Frame(ControllerIndex, 0);
+        // Shutting down a frontend server frees the earlier client storage.
+        CL_AllocatePerLocalClientMemory();
+        clUI = CL_GetLocalClientUIGlobals(0);
+        clc = CL_GetLocalClientConnection(0);
         CL_Disconnect(0, 1);
         Con_Close(0);
         I_strncpyz(cls.servername, server, 256);
@@ -392,11 +415,15 @@ void __cdecl CL_Connect_f()
                 v1);
             if ( NET_IsLocalAddress(clc->serverAddress) || CL_CDKeyValidate(clc->serverAddress) ) // LWSS ADD CDKey for steam
             {
+#ifdef OPENBLOPS_NO_STEAM_AUTH
+                if (true) // Direct IP connections do not require service sign-in.
+#else
                 if ( Sys_IsLANAddress(clc->serverAddress) 
 #ifdef KISAK_DW
                     || dwGetLogOnStatus(0) == 4 
 #endif
                     )
+#endif
                 {
                     if ( NET_IsLocalAddress(clc->serverAddress) )
                         CL_SetLocalClientConnectionState(0, CA_CHALLENGING);
@@ -1469,7 +1496,7 @@ char __cdecl CL_RequestCACValidate(unsigned __int64 serverId)
     char payload[2]; // [esp+28h] [ebp-9D00h] BYREF
     unsigned int v8; // [esp+2Ah] [ebp-9CFEh]
     int v9; // [esp+2Eh] [ebp-9CFAh]
-    unsigned __int8 to[40178]; // [esp+32h] [ebp-9CF6h] BYREF
+    unsigned __int8 to[STATS_BUFFER_SIZE + 10]; // [esp+32h] [ebp-9CF6h] BYREF
 
     Com_DPrintf(14, "CACValidate: Compressing stats\n");
     v6 = 0;
@@ -1485,7 +1512,7 @@ char __cdecl CL_RequestCACValidate(unsigned __int64 serverId)
         }
         else
         {
-            v5 = MSG_CompressWithZLib(buffer->statsBuffer, 0x9CE8u, to, 0x9CE8u);
+            v5 = MSG_CompressWithZLib(buffer->statsBuffer, STATS_BUFFER_SIZE, to, STATS_BUFFER_SIZE);
             payload[0] = 3;
             payload[1] = 0;
             v8 = v5;

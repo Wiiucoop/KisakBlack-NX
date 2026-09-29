@@ -15,6 +15,11 @@ UILocalVarContext *__cdecl UI_UIContext_GetLocalVarsContext(int contextIndex);
 const char *__cdecl UI_GetMonthAbbrev(unsigned int month);
 const char **__cdecl UI_GetServerFilter(const char **filter, int filtera);
 bool __cdecl UI_KeysBypassMenu(int localClientNum);
+#ifdef KISAK_SP
+// Retail SP 0x0069AA20 -- "is the focused menu a UI3D menu?". Name is INVENTED; see the
+// definition in ui_main.cpp for the evidence and the caveats.
+bool __cdecl UI_MenuIsUI3D(int localClientNum);
+#endif
 char *__cdecl UI_GetMenuBuffer(char *filename);
 char *__cdecl GetMenuBuffer_LoadObj(char *filename);
 char *__cdecl GetMenuBuffer_FastFile(const char *filename);

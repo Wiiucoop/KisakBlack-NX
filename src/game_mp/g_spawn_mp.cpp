@@ -1,4 +1,5 @@
 #include "g_spawn_mp.h"
+#include <game/g_sp_crosshair.h>
 #include <game/g_load_utils.h>
 #include <clientscript/cscr_vm.h>
 #include "g_utils_mp.h"
@@ -17,6 +18,10 @@
 #include <game/g_client_fields.h>
 #include <cgame/cg_hudelem.h>
 #include <bgame/bg_weapons_def.h>
+#ifdef KISAK_SP
+#include <server/sv_game.h>
+#include <server/sv_world.h>
+#endif
 
 struct ent_field_t // sizeof=0x14
 {                                       // XREF: .rdata:fields_1/r
@@ -66,10 +71,40 @@ const SpawnFuncEntry s_bspOnlySpawns[15] =
   { "script_vehicle", SP_script_vehicle }
 };
 
-const SpawnFuncEntry s_bspOrDynamicSpawns[7] =
+#ifdef KISAK_SP
+// Local adapter name, not a recovered retail symbol. Retail 0x0051E5A0 is
+// bound to "info_volume" at 0x00A55890. Its stack entity argument and complete
+// success/failure paths were verified in canonical SP v167 on 2026-09-05.
+// Generic map spawning only records the brush index; this initializer makes
+// IsTouching use that brush so the Zombies zone manager can detect occupants.
+static void __cdecl G_SpawnInfoVolume_SP(gentity_s *self, SpawnVar *)
+{
+    if (!SV_SetBrushModel(self))
+    {
+        Com_PrintError(
+            1,
+            "Killing info_volume at (%f %f %f) because the brush model is invalid.\n",
+            self->s.lerp.pos.trBase[0],
+            self->s.lerp.pos.trBase[1],
+            self->s.lerp.pos.trBase[2]);
+        G_FreeEntity(self);
+        return;
+    }
+
+    self->s.lerp.eFlags |= 1u;
+    self->r.contents = 0;
+    self->r.svFlags = 1;
+    SV_LinkEntity(self);
+}
+#endif
+
+const SpawnFuncEntry s_bspOrDynamicSpawns[] =
 {
   { "info_notnull", SP_info_notnull },
   { "info_notnull_big", SP_info_notnull },
+#ifdef KISAK_SP
+  { "info_volume", G_SpawnInfoVolume_SP },
+#endif
   { "trigger_radius", SP_trigger_radius },
   { "trigger_radius_use", SP_trigger_radius_use },
   { "script_model", SP_script_model },
@@ -502,7 +537,7 @@ void __cdecl G_CallSpawn(SpawnVar *spawnVar)
                     }
                     else if ( strcmp("glass", classname) )
                     {
-                        spawnFunc = G_FindSpawnFunc(classname, s_bspOrDynamicSpawns, 7);
+                        spawnFunc = G_FindSpawnFunc(classname, s_bspOrDynamicSpawns, ARRAY_COUNT(s_bspOrDynamicSpawns));
                         if ( !spawnFunc && level.spawnVar.spawnVarsValid )
                             spawnFunc = G_FindSpawnFunc(classname, s_bspOnlySpawns, 15);
                         if ( (char *)spawnFunc != (char *)G_FreeEntityWrapper )
@@ -581,7 +616,7 @@ int __cdecl G_CallSpawnEntity(gentity_s *ent)
         }
         else
         {
-            spawnFunc = (void (__cdecl *)(gentity_s *))G_FindSpawnFunc(classname, s_bspOrDynamicSpawns, 7);
+            spawnFunc = (void (__cdecl *)(gentity_s *))G_FindSpawnFunc(classname, s_bspOrDynamicSpawns, ARRAY_COUNT(s_bspOrDynamicSpawns));
             if ( spawnFunc )
             {
                 //if ( spawnFunc == G_FreeEntityWrapper
@@ -779,6 +814,15 @@ int __cdecl Scr_SetEntityField(unsigned int entnum, unsigned int offset)
                 Scr_SetClientField(ent->client, offset & 0xFFFF3FFF);
                 return 1;
             }
+#ifdef KISAK_SP
+            // The shared entity-field registry already registers client "name".
+            // Route that same field to the SP actor string without a duplicate.
+            else if (ent->actor && Scr_IsClientNameField(offset & 0x3FFF))
+            {
+                G_SPSetActorName(ent);
+                return 1;
+            }
+#endif
             else
             {
                 return 0;
@@ -842,6 +886,10 @@ void __cdecl Scr_GetEntityField(unsigned int entnum, unsigned int offset)
         case 0xC000u:
             if ( ent->client )
                 Scr_GetClientField(ent->client, offset & 0xFFFF3FFF);
+#ifdef KISAK_SP
+            else if (ent->actor && Scr_IsClientNameField(offset & 0x3FFF))
+                G_SPGetActorName(ent);
+#endif
             break;
         default:
             if ( offset >= 0xF
@@ -982,6 +1030,9 @@ void __cdecl Scr_FreeEntity(gentity_s *ent)
     {
         __debugbreak();
     }
+#ifdef KISAK_SP
+    G_SPFreeEntityLookAt(ent);
+#endif
     Scr_FreeEntityConstStrings(ent);
     Scr_FreeEntityNum(ent->s.number, 0, SCRIPTINSTANCE_SERVER);
 }

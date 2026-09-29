@@ -1579,7 +1579,7 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
     }
     if ( dvar && dvar->name && *dvar->name )
     {
-        if ( Com_LogFileOpen() && !Dvar_ValuesEqual(dvar->type, dvar->current, value) )
+        if ( Com_LogFileOpen() && !Dvar_ValuesEqual(dvar->type, dvar->current, value) && (dvar->flags & 0x20000) == 0 )
         {
             v3 = Dvar_ValueToString(dvar, value);
             Com_sprintf(string, 0x400u, "            dvar set %s %s\n", dvar->name, v3);
@@ -2511,11 +2511,38 @@ const dvar_s *__cdecl _Dvar_RegisterColor(
     return Dvar_RegisterVariant((char*)dvarName, DVAR_TYPE_COLOR, flags, dvarValue, domain, description);
 }
 
+// TRANSCRIPTION BUG FIX, 2026-08-07 (audit5). NOT an SP/MP divergence -- this was wrong in
+// both configurations and is deliberately not #ifdef'd.
+//
+// The parameters were typed `unsigned int` and written into DvarValue.color[], which is
+// `unsigned __int8[4]`. That wrote three BYTES of a sixteen-byte union and left the other
+// thirteen as uninitialised stack.
+//
+// Fact 1 (binary): Ghidra 0x00503590 (_Dvar_RegisterLinearRGB) moves x/y/z with MOVSS --
+//   32-bit floats -- into DvarValue.vector[0..2] at 0x00503593-0x005035bf, then pushes type
+//   0xa and calls Dvar_RegisterVariant (0x00862d70). vector[3] is left untouched, so do NOT
+//   add a memset here; that would also diverge.
+// Fact 2 (observed): the live boot log prints
+//     '3.60134e-43 -1.70146e+38 0' is not a valid value for dvar 'r_lightTweakSunColor'
+//   3.60134e-43 is bit pattern 0x00000101 -- exactly {color[0]=1, color[1]=1, color[2]=0,
+//   pad=0} for the intended (1.0, 1.0, 0.0). The second component is unwritten stack. The
+//   garbage is a direct, arithmetically-confirmed consequence of the byte writes.
+//
+// Blast radius is exactly two call sites, both already passing correct float literals:
+// r_dvars.cpp:859 (r_lightTweakSunColor) and r_dvars.cpp:918 (r_materialXYZ). Verified
+// against the binary (0x006caab1-0x006caae0) that retail really does register
+// r_lightTweakSunColor as x=1.0, y=1.0, z=0.0, min=0.0, max=1.0 -- the call sites were
+// always right, only these two signatures were wrong.
+//
+// Downstream: R_CopyParseParamsFromDvars (r_bsp.cpp:153-155) reads
+// r_lightTweakSunColor->current.vector[0..2] straight into
+// sunParse->sunSettings[0].sunDiffuseColor, so until now every BSP load fed a denormal and
+// -1.7e38 into world sun lighting.
 const dvar_s *__cdecl _Dvar_RegisterLinearRGB(
                 char *dvarName,
-                unsigned int x,
-                unsigned int y,
-                unsigned int z,
+                float x,
+                float y,
+                float z,
                 float min,
                 float max,
                 unsigned __int16 flags,
@@ -2524,9 +2551,9 @@ const dvar_s *__cdecl _Dvar_RegisterLinearRGB(
     DvarValue dvarValue; // [esp-24h] [ebp-4Ch]
     DvarLimits dvarDomain; // [esp-14h] [ebp-3Ch]
 
-    dvarValue.color[0] = x;
-    dvarValue.color[1] = y;
-    dvarValue.color[2] = z;
+    dvarValue.vector[0] = x;
+    dvarValue.vector[1] = y;
+    dvarValue.vector[2] = z;
 
     dvarDomain.value.min = min;
     dvarDomain.value.max = max;
@@ -2536,9 +2563,9 @@ const dvar_s *__cdecl _Dvar_RegisterLinearRGB(
 
 const dvar_s *__cdecl _Dvar_RegisterColorXYZ(
                 const char *dvarName,
-                unsigned int x,
-                unsigned int y,
-                unsigned int z,
+                float x,
+                float y,
+                float z,
                 float min,
                 float max,
                 unsigned __int16 flags,
@@ -2547,9 +2574,9 @@ const dvar_s *__cdecl _Dvar_RegisterColorXYZ(
     DvarValue dvarValue; // [esp-24h] [ebp-4Ch]
     DvarLimits dvarDomain; // [esp-14h] [ebp-3Ch]
 
-    dvarValue.color[0] = x;
-    dvarValue.color[1] = y;
-    dvarValue.color[2] = z;
+    dvarValue.vector[0] = x;
+    dvarValue.vector[1] = y;
+    dvarValue.vector[2] = z;
 
     dvarDomain.value.min = min;
     dvarDomain.value.max = max;
@@ -3254,7 +3281,10 @@ void __cdecl Dvar_SetCheatState()
 void __cdecl Dvar_Init()
 {
     isDvarSystemActive = 1;
-    dvar_cheats = _Dvar_RegisterBool("sv_cheats", 1, 0x18u, "External Dvar");
+    // Retail SP registers sv_cheats with reset value 0.  Keeping the reset at 1
+    // lets an external "/sv_cheats 1" assignment bypass write protection via
+    // Dvar_CanChangeValue's reset-value exception.
+    dvar_cheats = _Dvar_RegisterBool("sv_cheats", 0, 0x18u, "External Dvar");
     dvar_restoreDvarsOnLive = _Dvar_RegisterBool(
                                                             "sv_restoreDvars",
                                                             1,

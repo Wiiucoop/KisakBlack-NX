@@ -179,8 +179,57 @@ const game_hudelem_field_t fields_0[28] =
   { NULL, 0, 0, F_INT, 0, 0, NULL, NULL }
 };
 
+#ifdef KISAK_SP
+#include <qcommon/common.h>
+
+// ===========================================================================
+// TODO(SP-STUB) -- deliberate no-op stub for a retail-SP HUDELEM script method.
+//
+// Source: retail SP's hudelem method table at 0x00A535C8, 23 entries, reached
+// through the 6th link of SP's Scr_GetMethod chain (SP dispatcher
+// FUN_0040FCE0). Paired with this file's methods_0[] on two facts: both begin
+// with "settext", and the 22 shared names appear in IDENTICAL relative order.
+// SP has exactly one name this table lacks ("changefontscaleovertime"); the
+// four this table has that SP lacks are the MP-only
+// set{playername,mapname,gametype}string / setwargamedata rows.
+//
+// Placeholder, NOT an implementation -- see the TODO(SP-STUB) header above
+// BuiltinFunctionDef functions[] in game_mp/g_scr_main_mp.cpp for the full
+// rationale and the VM stack-safety argument. type == 0 matches retail SP.
+// ===========================================================================
+
+// Channel 24 == "parserscript" (con_channels.cpp:11, builtinChannels[24]), the
+// same channel the sibling stubs in game_mp/g_scr_main_mp.cpp report on.
+static void HESPStub_ReportOnce(const char *name, const char *spHandler, bool *pReported)
+{
+    if ( *pReported )
+        return;
+    *pReported = true;
+    Com_PrintWarning(
+        24,
+        "WARNING: TODO(SP-STUB) script builtin '%s' (retail SP handler %s) was called "
+        "but is an unimplemented stub: it does nothing and evaluates to undefined. "
+        "This warning prints once per builtin name.\n",
+        name,
+        spHandler);
+}
+
+#define HESPStub_DEFINE(symbol, gscName, spHandler)           \
+    static void __cdecl symbol(scr_entref_t)                  \
+    {                                                         \
+        static bool s_reported = false;                       \
+        HESPStub_ReportOnce(gscName, spHandler, &s_reported); \
+    }
+
+// --- TODO(SP-STUB) hudelem method stub, registered at the end of methods_0[] ---
+HESPStub_DEFINE(HECmd_SPStub_changefontscaleovertime, "changefontscaleovertime", "0x007ded10")
+    // TODO(SP-STUB) 1 GSC ref(s) in the frontend closure, e.g. maps/_gameskill:2107 self changeFontScaleOverTime( timer );
+#endif // KISAK_SP
+
 // Looks congruent to retail blops mp latest
-const BuiltinMethodDef methods_0[26] =
+// (element count is 26 for KISAK_MP, unchanged; the explicit [26] bound was
+//  dropped only so the KISAK_SP row below can be appended.)
+const BuiltinMethodDef methods_0[] =
 {
   { "settext", &HECmd_SetText, 0 },
   { "clearalltextafterhudelem", &HECmd_ClearAllTextAfterHudElem, 0 },
@@ -208,6 +257,10 @@ const BuiltinMethodDef methods_0[26] =
   { "setmapnamestring", &HECmd_SetMapNameString, 0 },
   { "setgametypestring", &HECmd_SetGameTypeString, 0 },
   { "setwargamedata", &HECmd_SetWarGameData, 0 }
+#ifdef KISAK_SP
+  ,
+  { "changefontscaleovertime", &HECmd_SPStub_changefontscaleovertime, 0 },   // TODO(SP-STUB) SP 0x00A535C8 idx 22, 0x007ded10
+#endif // KISAK_SP
 };
 
 

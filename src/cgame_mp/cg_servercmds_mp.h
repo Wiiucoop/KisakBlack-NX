@@ -53,5 +53,11 @@ void __cdecl CG_WaterDropsServerCommand(int localClientNum);
 void __cdecl CG_ScrCamera(int localClientNum, int cmd);
 void __cdecl CG_ExecuteNewServerCommands(int localClientNum, int latestSequence);
 
+#ifdef KISAK_SP
+bool CG_IsViewModelHidden_SP(int localClientNum);
+void CG_ResetViewModelHidden_SP(int localClientNum);
+void CG_StartDeferred3DCinematic_SP(int localClientNum);
+#endif
+
 struct GfxFog;
 extern GfxFog cg_serverVolFog;

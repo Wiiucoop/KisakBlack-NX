@@ -87,6 +87,13 @@ void __cdecl G_AddPredictableEvent(gentity_s *ent, unsigned int event, unsigned 
 void __cdecl G_AddEvent(gentity_s *ent, unsigned int event, unsigned int eventParm);
 gentity_s *__cdecl G_PlaySoundAliasAtPoint(const float *origin, unsigned int alias);
 gentity_s *__cdecl G_PlaySoundAlias(gentity_s *ent, unsigned int alias, unsigned int notifyString, unsigned int bone);
+#ifdef KISAK_SP
+void __cdecl G_SPResetSoundNotifyState();
+void __cdecl G_SPShutdownSoundNotifyState();
+void __cdecl G_SPSetSoundLength(int entNum, int lengthMs);
+void __cdecl G_SPUpdateSoundNotify(gentity_s *ent);
+bool __cdecl G_SPIsWaitingOnSound(const gentity_s *ent);
+#endif
 void __cdecl G_AnimScriptSound(int client, snd_alias_list_t *aliasList);
 void __cdecl G_SetOrigin(gentity_s *ent, const float *origin);
 void __cdecl G_SetAngle(gentity_s *ent, const float *angle);

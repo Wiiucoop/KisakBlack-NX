@@ -1,5 +1,6 @@
 #include "r_sky_load_obj.h"
 #include "r_sky.h"
+#include <cstring>
 #include <universal/com_shared.h>
 #include <universal/q_shared.h>
 
@@ -29,4 +30,3 @@ void __cdecl R_LoadSun(const char *name, sunflare_t *sun)
     if ( sunFile[0] )
         R_LoadSunThroughDvars(sunFile, sun);
 }
-

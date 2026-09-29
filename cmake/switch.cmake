@@ -53,8 +53,20 @@ list(APPEND KB_SOURCES ${NX_SOURCES})
 set_target_properties(${BIN_NAME} PROPERTIES SOURCES "${KB_SOURCES}")
 
 # ----- Preprocessor defines -----
+# NX_SP: build the single-player executable (campaign and Zombies, from the
+# OpenBLOPS merge) instead of multiplayer: the same sources with KISAK_SP in
+# place of KISAK_MP. Use its own build directory:
+#   cmake -S . -B build-nx-sp -DNX_SP=ON
+option(NX_SP "Build the single-player / Zombies executable (KISAK_SP)" OFF)
+if(NX_SP)
+    set(NX_GAME_MODE KISAK_SP)
+    set(NX_NRO_NAME "KisakBlack SP")
+else()
+    set(NX_GAME_MODE KISAK_MP)
+    set(NX_NRO_NAME "KisakBlack")
+endif()
 target_compile_definitions(${BIN_NAME} PUBLIC
-    KISAK_MP
+    ${NX_GAME_MODE}
     KISAK_NX
     # From OpenBLOPS: the online checks in the menu expressions report success,
     # so Play and Combat Training open with no live layer. See
@@ -254,7 +266,7 @@ endif()
 
 # ----- NRO packaging -----
 nx_create_nro(${BIN_NAME}
-    NAME    "KisakBlack"
+    NAME    "${NX_NRO_NAME}"
     AUTHOR  "SwagSoftware"
     VERSION "0.1.0"
 )

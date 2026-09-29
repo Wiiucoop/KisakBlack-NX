@@ -1,4 +1,8 @@
 #include "actor_mp.h"
+#include <cstddef>
+#ifdef KISAK_SP
+#include <new>                             // placement new, to restore a memset vptr
+#endif
 #include "g_main_mp.h"
 #include "g_utils_mp.h"
 #include <game/actor_spawner.h>
@@ -35,6 +39,8 @@
 #include <xanim/dobj_utils.h>
 #include <game/actor_team_move.h>
 #include <glass/glass_server.h>
+#include <physics/phys_main.h>             // phys_ai_collision_mode
+#include <qcommon/common.h>                // zombiemode
 
 unsigned __int16 *modNames[21] =
 {
@@ -230,7 +236,10 @@ LABEL_2:
         ent->r.mins[2] = 0.0;
         ent->r.maxs[0] = actorMaxs[0];
         ent->r.maxs[1] = 15.0;
-        ent->r.maxs[2] = 48.0;
+        // retail SP SP_actor (BlackOps.exe 0x004F5A70) spawns actors 72 units tall;
+        // MP actors are 48.  Path prediction traces and nearest-node traces use the
+        // same height, so a 48-unit actor paths through gaps retail refuses.
+        ent->r.maxs[2] = actorMaxs[2];
         ent->clipmask = 0x2820011;
         ent->r.contents = 0x8000;
         ent->s.eType = ET_ACTOR;
@@ -313,7 +322,18 @@ LABEL_2:
         actor->fProneLastDiff = 0.0f;
         Actor_InitLookAt(actor);
         Actor_InitActorState(ent);
+#ifdef KISAK_SP
+        // SP actors are not dogs. MP ships one AI species so this hardcoded the 60-entry
+        // DOG_ANIMS table; SP animscripts index against the "generic_human" tree instead, and
+        // feeding a dog tree to one tripped "animIndex < anims->size" (xanim.cpp) the moment an
+        // actor played its first animation. "DOG_ANIMS" and "generic_dog" have ZERO hits in the
+        // SP binary; SP dogs get animtrees/dog.atr instead, installed per-entity by
+        // animscripts/dog_init.gsc's `self useAnimTree( #animtree )`, which goes through
+        // G_SetAnimTree and replaces ent->pAnimTree -- not through this shared pointer.
+        anims = BG_GetActorAnims();
+#else
         anims = Dog_GetAnims();
+#endif
         if ( !anims && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp", 403, 0, "%s", "anims") )
             __debugbreak();
         ent->pAnimTree = Com_XAnimCreateSmallTree(anims);
@@ -322,6 +342,7 @@ LABEL_2:
         {
             __debugbreak();
         }
+        g_scr_data.actorXAnimTrees[G_GetActorIndex(actor)] = ent->pAnimTree;
         G_DObjUpdate(ent);
         SV_LinkEntity(ent);
         Sentient_NearestNode(sentient);
@@ -351,14 +372,14 @@ void __cdecl Actor_InitActorState(gentity_s *ent)
         __debugbreak();
     }
     actorNum = G_GetActorIndex(actor);
-    if ( actorNum >= 0x10
+    if ( actorNum >= MAX_ACTORS
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp",
                     221,
                     0,
                     "actorNum doesn't index MAX_ACTORS\n\t%i not in [0, %i)",
                     actorNum,
-                    16) )
+                    MAX_ACTORS) )
     {
         __debugbreak();
     }
@@ -380,7 +401,7 @@ actor_s *__cdecl Actor_Alloc()
     {
         __debugbreak();
     }
-    for ( i = 0; i < 16; ++i )
+    for ( i = 0; i < MAX_ACTORS; ++i )
     {
         actor = &level.actors[i];
         if ( !actor->inuse )
@@ -405,22 +426,28 @@ void __cdecl Scr_FreeFields(const actor_field_t *fields, unsigned __int8 *base)
     }
 }
 
-const actor_field_t actorFields_0[9] =
+const actor_field_t actorFields_0[10] =
 {
-  { 540, { 2 }, AF_STRING },
-  { 516, { 2 }, AF_STRING },
-  { 518, { 2 }, AF_STRING },
-  { 520, { 2 }, AF_STRING },
-  { 236, { 2 }, AF_STRING },
-  { 5896, { 2 }, AF_STRING },
-  { 5992, { 2 }, AF_STRING },
-  { 5994, { 2 }, AF_STRING },
-  { 5996, { 2 }, AF_STRING }
+  { offsetof(actor_s, AnimScriptSpecific) + offsetof(scr_animscript_t, name), { 2 }, AF_STRING },
+  { offsetof(actor_s, damageHitLoc), { 2 }, AF_STRING },
+  { offsetof(actor_s, damageWeapon), { 2 }, AF_STRING },
+  { offsetof(actor_s, damageMod), { 2 }, AF_STRING },
+  { offsetof(actor_s, weaponName), { 2 }, AF_STRING },
+  { offsetof(actor_s, GrenadeTossMethod), { 2 }, AF_STRING },
+  { offsetof(actor_s, scriptState), { 2 }, AF_STRING },
+  { offsetof(actor_s, lastScriptState), { 2 }, AF_STRING },
+  { offsetof(actor_s, stateChangeReason), { 2 }, AF_STRING },
+  { 0, { 0 }, AF_NONE }
 };
+
+#include <game/g_sp_crosshair.h>
 
 void __cdecl Scr_FreeActorFields(actor_s *pActor)
 {
     Scr_FreeFields(actorFields_0, (unsigned __int8 *)pActor);
+#ifdef KISAK_SP
+    G_SPFreeActorName(pActor->ent);
+#endif
 }
 
 void __cdecl Actor_Free(actor_s *actor)
@@ -438,7 +465,7 @@ void __cdecl Actor_Free(actor_s *actor)
     {
         __debugbreak();
     }
-    if ( (actor < level.actors || actor >= &level.actors[16])
+    if ( (actor < level.actors || actor >= &level.actors[MAX_ACTORS])
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp",
                     521,
@@ -469,6 +496,8 @@ void __cdecl Actor_Free(actor_s *actor)
         __debugbreak();
     }
     ent = actor->ent;
+    const int actorIndex = G_GetActorIndex(actor);
+    g_scr_data.actorXAnimTrees[actorIndex] = 0;
     if ( actor->ent->pAnimTree )
     {
         XAnimClearTree(ent->pAnimTree);
@@ -484,7 +513,7 @@ void __cdecl Actor_Free(actor_s *actor)
         Actor_KillAnimScript(actor);
     Sentient_Dissociate(actor->sentient);
     entnum = ent->s.number;
-    for ( i = 0; i < 16; ++i )
+    for ( i = 0; i < MAX_ACTORS; ++i )
     {
         other = &level.actors[i];
         if ( other->inuse )
@@ -501,7 +530,7 @@ void __cdecl Actor_Free(actor_s *actor)
     Sentient_Free(actor->sentient);
     actor->sentient = 0;
     Scr_FreeActorFields(actor);
-    ent->s.lerp.u.actor.actorNum = 16;
+    ent->s.lerp.u.actor.actorNum = MAX_ACTORS;
     memset((unsigned __int8 *)actor, 0xF0u, sizeof(actor_s));
     actor->inuse = 0;
 }
@@ -663,6 +692,13 @@ void __cdecl Actor_FreeExpendable()
     Actor_ClearPath(pExpendable);
     Scr_Notify(pExpendable->ent, scr_const.death, 0);
     G_FreeEntity(pExpendable->ent);
+#ifdef KISAK_SP
+    // Retail SP Actor_FreeExpendable (BlackOps.exe 0x005696D0) returns
+    // immediately after G_FreeEntity.  The actor and sentient slots have been
+    // released (and are poison-filled in this build), so MP's post-free debug
+    // checks below dereference the dead pExpendable object.
+    return;
+#endif
     if ( pExpendable->ent->actor
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp",
@@ -714,7 +750,7 @@ void __cdecl G_InitActors()
 {
     int i; // [esp+4h] [ebp-4h]
 
-    for ( i = 0; i < 16; ++i )
+    for ( i = 0; i < MAX_ACTORS; ++i )
         level.actors[i].inuse = 0;
 }
 
@@ -732,7 +768,7 @@ int __cdecl G_GetActorIndex(actor_s *actor)
     {
         __debugbreak();
     }
-    if ( actor - level.actors >= 16
+    if ( actor - level.actors >= MAX_ACTORS
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp",
                     782,
@@ -747,15 +783,30 @@ int __cdecl G_GetActorIndex(actor_s *actor)
 
 XAnimTree_s *__cdecl G_GetActorAnimTree(actor_s *actor)
 {
-    return *(XAnimTree_s **)&g_scr_data.actorCorpseInfo[4 * G_GetActorIndex(actor) - 32];
+    return g_scr_data.actorXAnimTrees[G_GetActorIndex(actor)];
 }
+
+// IW-engine content bits (names per the CoD4 lineage; the repo has no shared contents enum yet).
+static const int CONTENTS_CLIPSHOT = 0x2000;    // stops bullet traces only
+static const int CONTENTS_CORPSE   = 0x4000000; // same bit Actor_BecomeCorpse assigns
 
 void __cdecl Actor_SetDefaults(actor_s *actor)
 {
     Actor_SetDefaultState(actor);
+#ifdef KISAK_SP
+    // Naming correction only -- the stored VALUE is unchanged (0). MP's single species is
+    // dog and it is enumerator 0; SP's enumerator 0 is human, so the MP spelling would now
+    // read as "every actor defaults to dog" while emitting the same instruction. The real
+    // per-actor species arrives later from aitype/<name>.gsc `self.type = "..."`, which
+    // routes through ActorScr_SetSpecies.
+    actor->species = AI_SPECIES_HUMAN;
+#else
     actor->species = AI_SPECIES_DOG;
+#endif
     actor->talkToSpecies = -1;
-    actor->deathContents = 0x4002000 /* nx-port: decompiled as (int)&objBuf[1824][4] */;
+    // Retail Actor_SetDefaults (0x4EFF50) stores the constant 0x04002000 here; the
+    // decompiler had mis-resolved it as the address of a global.
+    actor->deathContents = CONTENTS_CORPSE | CONTENTS_CLIPSHOT;
     actor->fovDot = ACTOR_DEFAULT_FOV_COS;
     actor->fMaxSightDistSqrd = 6.7108864e7f;
     actor->eTraverseMode = AI_TRAVERSE_NOGRAVITY;
@@ -935,9 +986,95 @@ void __cdecl Actor_InitAnimScript(actor_s *self)
 void __cdecl Actor_FinishSpawningAll()
 {
     actor_s *actor; // [esp+0h] [ebp-4h]
+#ifdef KISAK_SP
+    gentity_s *ent;
+    AITypeScript *typeScript;
+    unsigned __int16 hThread;
+    int entIndex;
+#endif
+#ifdef KISAK_SP
+    // PHASE 1, absent from this MP-derived body. Retail Actor_FinishSpawningAll is 0x0049cc70,
+    // reached from G_InitGame exactly where this tree calls it (g_main_mp.cpp:963, between
+    // Path_InitPaths and Path_AutoDisconnectPaths, and after GScr_LoadScripts has populated the
+    // type-0 file-data registry). Read from the disassembly, with the register-carried entity
+    // cursor decoded against known landmarks -- ESI walks g_entities at stride 0x34c biased by
+    // +0xBE, so [ESI] is s.eType, [ESI+0x1f] is r.inuse (+0xDD) and [ESI+0x9e] is classname
+    // (+0x15C, the same member Actor_FinishSpawning resolves):
+    //
+    //   for ( i = 0; i < level.num_entities; ++i ) {
+    //       ent = &g_entities[i];
+    //       if ( !ent->r.inuse ) continue;
+    //       if ( eType != ET_ACTOR && eType != ET_ACTOR_SPAWNER ) continue;
+    //       typeScript = Hunk_FindDataForFile(0, SL_ConvertToString(ent->classname, 0) + 6);
+    //       if ( eType == ET_ACTOR_SPAWNER ) {
+    //           h = Scr_ExecEntThread(ent, typeScript->spawner, 0); Scr_FreeThread(h, 0);
+    //       }
+    //       if ( typeScript->precache ) {
+    //           h = Scr_ExecThread(0, typeScript->precache, 0); Scr_FreeThread(h, 0);
+    //           typeScript->precache = 0;                  // once per level, not once per entity
+    //       }
+    //   }
+    //
+    // Retail's raw eType comparisons are 0x10/0x11 where this tree's enum is 0x11/0x12; the
+    // SYMBOLS are what SP_actor and SP_actor_spawner store, so the symbols are compared here.
+    //
+    // WHAT IT DOES: aitype/<name>::precache() is the ONLY thing that precaches an AI's models and
+    // weapons, and aitype/<name>::spawner() is what applies spawner-level defaults such as
+    // setspawnerteam. Neither ran before, so actors reached their own main() with nothing
+    // registered and threw on its first lines:
+    //     model 'c_usa_interrogation_silhouette_body' not precached
+    //     Can't find weapon [frag_grenade_sp]. It probably needs to be precached.
+    //
+    // TWO DEVIATIONS FROM RETAIL, both forced and both null checks. Retail dereferences
+    // typeScript unguarded and runs ->spawner untested, because its two-pass loader Com_Errors at
+    // load time on any handle that failed to resolve. This tree's entity walk deliberately passes
+    // bEnforceExists = 0 (see GScr_LoadScriptsAndAnimsForEntities), so a null typeScript or a null
+    // handle is reachable here and must be tested rather than dereferenced.
+    //
+    // ORDERING NOTE: this phase must precede the actor loop below. The precache threads register
+    // the models and weapons that aitype main() -- run by Actor_FinishSpawning in that loop --
+    // then asks for by name.
+    for ( entIndex = 0; entIndex < level.num_entities; ++entIndex )
+    {
+        ent = &g_entities[entIndex];
+        if ( !ent->r.inuse )
+            continue;
+        if ( ent->s.eType != ET_ACTOR && ent->s.eType != ET_ACTOR_SPAWNER )
+            continue;
+
+        typeScript = (AITypeScript *)Hunk_FindDataForFile(
+                                         0,
+                                         SL_ConvertToString(ent->classname, SCRIPTINSTANCE_SERVER) + 6);
+        if ( !typeScript )
+            continue;
+
+        if ( ent->s.eType == ET_ACTOR_SPAWNER && typeScript->spawner )
+        {
+            hThread = Scr_ExecEntThread(ent, typeScript->spawner, 0);
+            Scr_FreeThread(hThread, SCRIPTINSTANCE_SERVER);
+        }
+        if ( typeScript->precache )
+        {
+            hThread = Scr_ExecThread(SCRIPTINSTANCE_SERVER, typeScript->precache, 0);
+            Scr_FreeThread(hThread, SCRIPTINSTANCE_SERVER);
+            typeScript->precache = 0;
+        }
+    }
+#endif
+
 
     for ( actor = Actor_FirstActor(-1); actor; actor = Actor_NextActor(actor, -1) )
+    {
+#ifdef KISAK_SP
+        // Retail 0x0049cd29, immediately before the Actor_InitAnimScript below (0x0049cd2f).
+        // Without it a map-placed actor -- one that reaches the world through SP_actor at map
+        // spawn rather than through SpawnActor -- never runs its aitype main(), and so never
+        // gets its weapon, team, health or self.type. Script-spawned actors already get it from
+        // SpawnActor (actor_spawner.cpp).
+        Actor_FinishSpawning(actor);
+#endif
         Actor_InitAnimScript(actor);
+    }
 }
 
 void __cdecl Actor_DissociateSentient(actor_s *self, sentient_s *other)
@@ -978,7 +1115,7 @@ actor_s *__fastcall Actor_FirstActor(int iTeamFlags)
     {
         __debugbreak();
     }
-    for ( i = 0; i < 16; ++i )
+    for ( i = 0; i < MAX_ACTORS; ++i )
     {
         if ( level.actors[i].inuse )
         {
@@ -1018,7 +1155,7 @@ actor_s *__fastcall Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
     {
         __debugbreak();
     }
-    if ( (pPrevActor < level.actors || pPrevActor >= &level.actors[16])
+    if ( (pPrevActor < level.actors || pPrevActor >= &level.actors[MAX_ACTORS])
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp",
                     1017,
@@ -1038,7 +1175,7 @@ actor_s *__fastcall Actor_NextActor(actor_s *pPrevActor, int iTeamFlags)
     {
         __debugbreak();
     }
-    for ( i = pPrevActor - level.actors + 1; i < 16; ++i )
+    for ( i = pPrevActor - level.actors + 1; i < MAX_ACTORS; ++i )
     {
         if ( level.actors[i].inuse )
         {
@@ -1488,7 +1625,13 @@ actor_think_result_t __fastcall Actor_CallThink(actor_s *self)
         }
     }
     Actor_UpdateCloseEnt(self);
+#ifdef KISAK_SP
+    // Retail SP Actor_CallThink (0x007BC410) skips this probe for zombie actors.
+    if ( self->species != AI_SPECIES_ZOMBIE )
+        CM_CheckForTraps(self->ent);
+#else
     CM_CheckForTraps(self->ent);
+#endif
     currentOrigin = self->ent->r.currentOrigin;
     self->Physics.vOrigin[0] = *currentOrigin;
     self->Physics.vOrigin[1] = currentOrigin[1];
@@ -1500,6 +1643,11 @@ actor_think_result_t __fastcall Actor_CallThink(actor_s *self)
     eThinkResult = (actor_think_result_t)((int (__thiscall *)(actor_s *))AIFuncTable[self->species][self->eState[self->stateLevel]].pfnThink)(self);
     gjkcc_epilog(&gjkcc_in, self->Physics.vOrigin);
     self->Physics.m_gjkcc_input = 0;
+#ifdef KISAK_SP
+    // Retail SP returns here. The path/debug invariant block below belongs to the
+    // MP body and can reject valid SP zombie path state (0x007BC410..0x007BC4C6).
+    return eThinkResult;
+#endif
     if ( (unsigned int)eThinkResult > ACTOR_THINK_MOVE_TO_BODY_QUEUE
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp",
@@ -1778,14 +1926,14 @@ int __cdecl Actor_UpdateActorInfo(gentity_s *ent)
         __debugbreak();
     }
     actorNum = G_GetActorIndex(actor);
-    if ( actorNum >= 0x10
+    if ( actorNum >= MAX_ACTORS
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp",
                     1523,
                     0,
                     "actorNum doesn't index MAX_ACTORS\n\t%i not in [0, %i)",
                     actorNum,
-                    16) )
+                    MAX_ACTORS) )
     {
         __debugbreak();
     }
@@ -2021,7 +2169,14 @@ void __cdecl Actor_Die(
     }
     if ( actor->eState[actor->stateLevel] != AIS_DEATH )
     {
+#ifndef KISAK_SP
         Scr_ActorKilled(self, pInflictor, pAttacker, iDamage, iMod, iWeapon, (float*)vDir, hitLoc, timeOffset);
+#else
+        // Retail SP Actor_Die (0x0050BF00) is the native eight-argument
+        // state transition.  ActorCmd_finishActorDamage owns the sole
+        // Scr_ActorKilled call and consumes timeOffset before this dispatch.
+        (void)timeOffset;
+#endif
         actor->iDamageTaken = iDamage;
         actor->damageDir[0] = *vDir;
         actor->damageDir[1] = vDir[1];
@@ -2031,6 +2186,14 @@ void __cdecl Actor_Die(
         HitLocationString = G_GetHitLocationString(hitLoc);
         Scr_SetString(&actor->damageHitLoc, HitLocationString, SCRIPTINSTANCE_SERVER);
         Scr_SetString(&actor->damageMod, *modNames[iMod], SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+        const int damageWeapon = pInflictor && pInflictor->s.weapon ? pInflictor->s.weapon : iWeapon;
+        v10 = (char *)BG_WeaponName(damageWeapon);
+        Scr_SetStringFromCharString(&actor->damageWeapon, v10, SCRIPTINSTANCE_SERVER);
+
+        if ( self->tagInfo && actor->eState[actor->stateLevel] == AIS_SCRIPTEDANIM )
+            G_EntUnlink(self);
+#else
         if ( pInflictor )
         {
             if ( !BG_WeaponName(pInflictor->s.weapon)
@@ -2046,10 +2209,14 @@ void __cdecl Actor_Die(
             v10 = (char *)BG_WeaponName(pInflictor->s.weapon);
             Scr_SetStringFromCharString(&actor->damageWeapon, v10, SCRIPTINSTANCE_SERVER);
         }
+#endif
         Actor_ForceState(actor, AIS_DEATH);
         actor->Physics.bIsAlive = 0;
         self->sentient->lastAttacker.setEnt(pAttacker);
         Scr_SetString(&self->targetname, 0, SCRIPTINSTANCE_SERVER);
+#ifdef KISAK_SP
+        self->flags |= 0x00400000;
+#endif
         Actor_KillAnimScript(actor);
     }
 }
@@ -2690,6 +2857,29 @@ void __fastcall Actor_InitMove(actor_s *self)
     //}
 
     //self->Physics.proximity_data.__vftable = dummy_3.__vftable;
+#ifdef KISAK_SP
+    // RESTORE THE VTABLE POINTER. The memset above zeroes all of actor_s::Physics, which includes
+    // the embedded colgeom_visitor_inlined_t<200> -- and that object is POLYMORPHIC, so the
+    // memset destroys its vptr. The `= dummy_3` on the next line cannot put it back: it
+    // selects the implicit copy-assignment operator (the hand-written operator= takes a
+    // POINTER and is not viable here), and C++ copy-assignment never copies a vptr.
+    //
+    // Retail does restore it explicitly, which is what the commented-out __vftable line
+    // directly above was: Actor_InitMove 0x0054aa00 does MOV EAX,[dummy] / MOV [ESI+0xf04],EAX.
+    // Placement-new re-establishes it -- the same idiom this tree already uses for the
+    // identical defect at Engine/Animation/ik/ik_import.cpp:2648.
+    //
+    // The two statements after this one are then redundant but produce identical state,
+    // so they are left alone to keep the diff minimal.
+    // WHY IT ONLY BITES NOW: this is the crash at gjk_query+0x9d that stopped SP actors
+    //   mov ecx,[esi+0x60]  ; m_proximity_data -- NON-null, the guard above it passes
+    //   mov eax,[ecx]       ; the vptr        -- 0
+    //   call [eax+0x14]     ; ::update        -- faults
+    // ECX matched &g_actors[0].Physics.proximity_data exactly. The defect dates to the
+    // initial import (git blame: 28cbd7d); it only became reachable once actors lived
+    // long enough to run AIPhys_GroundTrace.
+    new (&self->Physics.proximity_data) colgeom_visitor_inlined_t<200>();
+#endif
     self->Physics.proximity_data = dummy_3;
     //colgeom_visitor_inlined_t<500>::reset(&self->Physics.proximity_data);
     self->Physics.proximity_data.reset();
@@ -2727,7 +2917,8 @@ bool __cdecl Actor_IsDodgeEntity(actor_s *self, int entnum)
 {
     gentity_s *ent; // [esp+0h] [ebp-4h]
 
-    if ( (FL_OBSTACLE /* nx-port: decompiled as &objBuf[1758][2] */ & level.gentities[1023].flags) == 0
+#ifndef KISAK_SP
+    if ( (FL_OBSTACLE & level.gentities[ENTITYNUM_NONE].flags) == 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp",
                     2598,
@@ -2737,10 +2928,15 @@ bool __cdecl Actor_IsDodgeEntity(actor_s *self, int entnum)
     {
         __debugbreak();
     }
+#endif
     ent = &level.gentities[entnum];
     if ( ent->sentient )
         return level.time < self->iTeamMoveDodgeTime;
-    if ( (FL_OBSTACLE /* nx-port: decompiled as &objBuf[1758][2] */ & ent->flags) != 0 )
+    // Retail SP 0x00519950 has no ENTITYNUM_NONE sentinel assertion and tests
+    // the addressed entity with immediate 0x400 (SP's FL_OBSTACLE).  The old
+    // `&objBuf[1758][2]` expression was a decompiler artifact whose address
+    // happened to encode the MP mask in the source binary.
+    if ( (FL_OBSTACLE & ent->flags) != 0 )
         return 0;
     return self->Path.iPathTime > ent->iDisconnectTime;
 }
@@ -2869,7 +3065,14 @@ LABEL_41:
             bSuccess = 0;
         }
     }
+#ifdef KISAK_SP
+    // Retail SP 0x00575439: the "teleport along the wish delta" failsafe only
+    // runs in zombiemode with phys_ai_collision_mode 0; otherwise a failed move
+    // keeps whatever origin the physics step produced.
+    if ( !phys_ai_collision_mode->current.integer && zombiemode->current.enabled && !bSuccess )
+#else
     if ( !bSuccess )
+#endif
     {
         Vec3Add(self->ent->r.currentOrigin, self->Physics.vWishDelta, self->Physics.vOrigin);
         self->Physics.vVelocity[2] = 0.0f;
@@ -2935,7 +3138,21 @@ int __fastcall Actor_PhysicsAndDodge(actor_s *self)
     }
     iHitEntnum = self->Physics.iHitEntnum;
     newFlags = 0;
-    if ( !self->Physics.bStuck && Actor_IsDodgeEntity(self, self->Physics.iHitEntnum) && Path_IsTrimmed(&self->Path) )
+    bool shouldDodge = !self->Physics.bStuck
+        && Actor_IsDodgeEntity(self, self->Physics.iHitEntnum)
+        && Path_IsTrimmed(&self->Path);
+#ifdef KISAK_SP
+    if ( shouldDodge )
+    {
+        // Retail SP 0x007bd009: only dodge when movement error exceeds 10%.
+        const float moveError[2] = {
+            self->Physics.vOrigin[0] - (self->ent->r.currentOrigin[0] + self->Physics.vWishDelta[0]),
+            self->Physics.vOrigin[1] - (self->ent->r.currentOrigin[1] + self->Physics.vWishDelta[1])
+        };
+        shouldDodge = Vec2Length(moveError) / Vec2Length(self->Physics.vWishDelta) > 0.1;
+    }
+#endif
+    if ( shouldDodge )
     {
         if ( self->Path.wNegotiationStartNode < 0
             && !Assert_MyHandler(
@@ -2957,8 +3174,8 @@ int __fastcall Actor_PhysicsAndDodge(actor_s *self)
         {
             __debugbreak();
         }
-        //pathDir = (float *)(&self->Physics.proximity_data.prims[194].4 + 7 * self->Path.wPathLen);
-        pathDir = (float *)(&self->Physics.proximity_data.prims[194].tree + 7 * self->Path.wPathLen);
+        // Read the segment direction, not coordinates through the physics buffer.
+        pathDir = self->Path.pts[self->Path.wPathLen - 2].fDir2D;
         length = Vec2Length(self->Physics.vWishDelta);
         for ( attempts = 0; attempts < 2; ++attempts )
         {
@@ -3328,7 +3545,7 @@ int __cdecl Actor_MoveAwayNoWorse(actor_s *self)
     int i; // [esp+28h] [ebp-4h]
 
     bResult = 1;
-    for ( i = 0; i < 16; ++i )
+    for ( i = 0; i < MAX_ACTORS; ++i )
     {
         other = &level.actors[i];
         if ( other->inuse
@@ -3848,7 +4065,12 @@ void __fastcall Actor_RecalcPath(actor_s *self)
 
 bool __fastcall Actor_FindPathToNode(actor_s *self, pathnode_t *pGoalNode, int bSuppressable)
 {
+#ifdef KISAK_SP
+    // Retail SP 0x005F3580: ignoreBadPlaces = (badPlaceAwareness == 0).
+    return Actor_FindPathToNode(self, pGoalNode, bSuppressable, self->badPlaceAwareness == 0.0f);
+#else
     return Actor_FindPathToNode(self, pGoalNode, bSuppressable, 0);
+#endif
 }
 
 bool __fastcall Actor_FindPathToNode(actor_s *self, pathnode_t *pGoalNode, int bSuppressable, int bIgnoreBadplaces)
@@ -3895,6 +4117,19 @@ bool __fastcall Actor_FindPathToNode(actor_s *self, pathnode_t *pGoalNode, int b
         if ( !pGoalNode )
             return 0;
     }
+#ifdef KISAK_SP
+    // Retail SP 0x004179F0 honours the caller's ignoreBadPlaces argument
+    // (suppression planes are not reconstructed, so iPlaneCount stays 0).
+    Path_FindPathFromTo(
+        &self->Path,
+        self->sentient->eTeam,
+        pNearestNode,
+        self->ent->r.currentOrigin,
+        pGoalNode,
+        pGoalNode->constant.vOrigin,
+        1,
+        bIgnoreBadplaces);
+#else
     if ( iPlaneCount )
     {
         if ( self->badPlaceAwareness == 0.0 )
@@ -3948,6 +4183,7 @@ bool __fastcall Actor_FindPathToNode(actor_s *self, pathnode_t *pGoalNode, int b
             1,
             0);
     }
+#endif
     return Actor_HasPath(self);
 }
 
@@ -4055,6 +4291,15 @@ void __fastcall Actor_ClearPath(actor_s *self)
         __debugbreak();
     if ( self->Path.wPathLen )
     {
+#ifdef KISAK_SP
+        if ( zm_pathdebug->current.integer
+            && (zm_pathdebug->current.integer < 0 || zm_pathdebug->current.integer == self->ent->s.number) )
+        {
+            Com_Printf(15, "ZM_PATH_CLEAR t=%d e=%d dbg=%s len=%d neg=%d reeval=%d\n", level.time, self->ent->s.number,
+                self->pszDebugInfo ? self->pszDebugInfo : "-", self->Path.wPathLen, self->Path.wNegotiationStartNode,
+                Path_NeedsReevaluation(&self->Path));
+        }
+#endif
         Path_AddTrimmedAmount(&self->Path, self->ent->r.currentOrigin);
         Path_Clear(&self->Path);
         self->iTeamMoveDodgeTime = 0;
@@ -4311,6 +4556,37 @@ bool __fastcall Actor_SkipPathEndActions(actor_s *self)
 
     if ( !self && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp", 4768, 0, "%s", "self") )
         __debugbreak();
+#ifdef KISAK_SP
+    if ( self->Path.wNegotiationStartNode > 0
+        && self->Path.wNegotiationStartNode < self->Path.wPathLen
+        && level.time % 1000 == 0 )
+    {
+        const pathpoint_t &negotiationPoint = self->Path.pts[self->Path.wNegotiationStartNode];
+        const float deltaX = negotiationPoint.vOrigPoint[0] - self->ent->r.currentOrigin[0];
+        const float deltaY = negotiationPoint.vOrigPoint[1] - self->ent->r.currentOrigin[1];
+        const float velocityBudget =
+            (self->Physics.vVelocity[0] * self->Physics.vVelocity[0]
+             + self->Physics.vVelocity[1] * self->Physics.vVelocity[1]
+             + self->Physics.vVelocity[2] * self->Physics.vVelocity[2])
+            * 0.0049999999f + 0.000001f;
+        Com_Printf(
+            15,
+            "ZM_BARRICADE path_end_gate time=%d ent=%d species=%d path=%p pathEnd=%d ground=%d groundEnt=%d flags=0x%X neg=%d len=%d lookahead=%d budget=%g deltaSq=%g\n",
+            level.time,
+            self->ent->s.number,
+            self->species,
+            &self->Path,
+            self->Path.iPathEndTime,
+            self->Physics.bHasGroundPlane,
+            self->Physics.groundEntNum,
+            self->Path.flags,
+            self->Path.wNegotiationStartNode,
+            self->Path.wPathLen,
+            self->Path.lookaheadNextNode,
+            velocityBudget,
+            deltaX * deltaX + deltaY * deltaY);
+    }
+#endif
     if ( self->Path.iPathEndTime )
         return 0;
     if ( !self->Physics.bHasGroundPlane && self->Physics.groundEntNum == 1023 )
@@ -4328,13 +4604,39 @@ bool __fastcall Actor_SkipPathEndActions(actor_s *self)
                                              * 0.0049999999)
                              + 0.000001) >= (float)((float)(vGoalDelta * vGoalDelta) + (float)(vGoalDelta_4 * vGoalDelta_4)) )
         {
-            if ( Actor_PushState(self, AIS_NEGOTIATION) )
+            const bool pushed = Actor_PushState(self, AIS_NEGOTIATION);
+            if ( pushed )
             {
                 Path_GetObstacleNegotiationScript(&self->Path, &self->AnimScriptSpecific);
                 self->Physics.vWishDelta[0] = vGoalDelta;
                 self->Physics.vWishDelta[1] = vGoalDelta_4;
                 self->Physics.vWishDelta[2] = vGoalDelta_8;
             }
+#ifdef KISAK_SP
+            if ( pushed )
+            {
+                Com_Printf(
+                    15,
+                    "ZM_BARRICADE negotiation_push time=%d ent=%d pushed=1 script=%s func=0x%08X wish=(%g,%g,%g)\n",
+                    level.time,
+                    self->ent->s.number,
+                    self->AnimScriptSpecific.name
+                        ? SL_ConvertToString(self->AnimScriptSpecific.name, SCRIPTINSTANCE_SERVER)
+                        : "<none>",
+                    self->AnimScriptSpecific.func,
+                    self->Physics.vWishDelta[0],
+                    self->Physics.vWishDelta[1],
+                    self->Physics.vWishDelta[2]);
+            }
+            else
+            {
+                Com_Printf(
+                    15,
+                    "ZM_BARRICADE negotiation_push time=%d ent=%d pushed=0\n",
+                    level.time,
+                    self->ent->s.number);
+            }
+#endif
         }
         return 1;
     }
@@ -4345,6 +4647,47 @@ bool __fastcall Actor_SkipPathEndActions(actor_s *self)
                 || Actor_IsMovingToMeleeAttack(self);
     }
 }
+
+#ifdef KISAK_SP
+// Port diagnostic (not retail): one line per actor per 100ms while zm_pathdebug
+// is -1 (all actors) or an entity number.  'pre' is the origin before the move.
+static void Actor_PathDebugLog_SP(actor_s *self, const float *pre)
+{
+    const int sel = zm_pathdebug->current.integer;
+    if ( !sel || (sel > 0 && sel != self->ent->s.number) || level.time % 100 )
+        return;
+    const path_t *path = &self->Path;
+    const gentity_s *ent = self->ent;
+    const int len = path->wPathLen;
+    const pathpoint_t *first = len > 0 ? &path->pts[len - 1] : NULL;
+    const pathpoint_t *next = len > 1 ? &path->pts[len - 2] : NULL;
+    const pathnode_t *nearest = self->sentient->pNearestNode;
+    Com_Printf(
+        15,
+        "ZM_PATH t=%d e=%d st=%d/%d dbg=%s anim=%d mv=%d pre=(%.1f,%.1f,%.1f) org=(%.1f,%.1f,%.1f) vel=(%.1f,%.1f) wish=(%.2f,%.2f) "
+        "len=%d olen=%d neg=%d la=%d fl=0x%X ladir=(%.2f,%.2f) ladist=%.1f laamt=%.1f lanext=%.1f fwd=(%.2f,%.2f) "
+        "curr=(%.1f,%.1f,%.1f) currlen=%.1f n0=%d n1=%d n1org=(%.1f,%.1f) final=(%.1f,%.1f,%.1f) goal=(%.1f,%.1f,%.1f) r=%.1f "
+        "near=%d nearbad=%d close=%d pile=%d hit=%d stuck=%d defl=%d ground=%d wait=%d tmwait=%d enemygoal=%d dodge=%d/%d\n",
+        level.time, ent->s.number, self->eState[self->stateLevel], self->eSubState[self->stateLevel],
+        self->pszDebugInfo ? self->pszDebugInfo : "-", self->eAnimMode, self->moveMode,
+        pre[0], pre[1], pre[2], ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
+        self->Physics.vVelocity[0], self->Physics.vVelocity[1], self->Physics.vWishDelta[0], self->Physics.vWishDelta[1],
+        len, path->wOrigPathLen, path->wNegotiationStartNode, path->lookaheadNextNode, path->flags,
+        path->lookaheadDir[0], path->lookaheadDir[1], path->fLookaheadDist, path->fLookaheadAmount,
+        path->fLookaheadDistToNextNode, path->forwardLookaheadDir2D[0], path->forwardLookaheadDir2D[1],
+        path->vCurrPoint[0], path->vCurrPoint[1], path->vCurrPoint[2], path->fCurrLength,
+        first ? first->iNodeNum : -1, next ? next->iNodeNum : -1,
+        next ? next->vOrigPoint[0] : 0.0f, next ? next->vOrigPoint[1] : 0.0f,
+        path->vFinalGoal[0], path->vFinalGoal[1], path->vFinalGoal[2],
+        self->codeGoal.pos[0], self->codeGoal.pos[1], self->codeGoal.pos[2], self->codeGoal.radius,
+        nearest ? (int)Path_ConvertNodeToIndex(nearest) : -1, self->sentient->bNearestNodeBad,
+        self->pCloseEnt.isDefined() ? self->pCloseEnt.entnum() : -1,
+        self->pPileUpActor ? self->pPileUpActor->ent->s.number : -1,
+        self->Physics.iHitEntnum, self->Physics.bStuck, self->Physics.bDeflected, self->Physics.bHasGroundPlane,
+        self->pathWaitTime - level.time, self->iTeamMoveWaitTime - level.time, self->useEnemyGoal,
+        path->wDodgeCount, path->wDodgeEntity);
+}
+#endif
 
 void __fastcall Actor_UpdateOriginAndAngles(actor_s *self)
 {
@@ -4372,8 +4715,14 @@ void __fastcall Actor_UpdateOriginAndAngles(actor_s *self)
         }
         else
         {
+#ifdef KISAK_SP
+            const float preMove[3] = { ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2] };
+#endif
             Actor_UpdateAnglesAndDelta(self);
             Actor_DoMove(self);
+#ifdef KISAK_SP
+            Actor_PathDebugLog_SP(self, preMove);
+#endif
             GlassSv_PredictTouch(self->ent);
             if ( level.gentities[self->Physics.iHitEntnum].sentient )
             {
@@ -4468,7 +4817,7 @@ void __fastcall Actor_CheckCollisions(actor_s *self)
         vOrgSelf[2] = currentOrigin[2];
         v1 = self->pAnimScriptFunc == &g_animScriptTable[self->species]->grenade_cower || Actor_AtClaimNode(self);
         bDontDisturb = v1;
-        for ( i = 0; i < 16; ++i )
+        for ( i = 0; i < MAX_ACTORS; ++i )
         {
             other = &level.actors[i];
             if ( other->inuse
@@ -4774,13 +5123,41 @@ void Path_UpdateMovementDelta(actor_s *self, float fMoveDist)
     perp[0] = pPath->lookaheadDir[0];
     perp[1] = pPath->lookaheadDir[1];
     perp[2] = pPath->lookaheadDir[2];
+#ifdef KISAK_SP
+    // Retail SP 0x00500691..0x0050082B: outside zombiemode, ai_useBetterLookahead
+    // rotates the previous wish delta toward the lookahead with a per-frame yaw
+    // clamp of ai_turnRate * 0.05 instead of snapping to lookaheadDir.
+    // (Retail also honours a per-actor turn-rate override at actor_s+0x2250 that
+    // the reconstructed actor_s does not carry; unset it falls back to the dvar.)
+    if ( ai_useBetterLookahead->current.enabled
+        && !zombiemode->current.enabled
+        && ((pPath->lookaheadNextNode >= 1 && pPath->lookaheadNextNode != pPath->wNegotiationStartNode)
+            || pPath->fLookaheadDist > 24.0f)
+        && Vec3LengthSq(self->Physics.vWishDelta) > 0.001f )
+    {
+        const float curYaw = vectoyaw(self->Physics.vWishDelta);
+        float yawDelta = AngleDelta(vectoyaw(pPath->lookaheadDir), curYaw);
+        const float maxYawDelta = ai_turnRate->current.value * 0.05f;
+        if ( yawDelta > maxYawDelta )
+            yawDelta = maxYawDelta;
+        else if ( yawDelta < -maxYawDelta )
+            yawDelta = -maxYawDelta;
+        YawVectors(AngleNormalize360(yawDelta + curYaw), perp, 0);
+    }
+#endif
     moveHistoryIndex = self->moveHistoryIndex;
     float speed = g_actorAssumedSpeed[self->species];
     float t = ((fMoveDist * 20.0f) - (speed * 0.5f)) / (speed * 0.5f);
 
     float vLookDir[2];
 
+#ifdef KISAK_SP
+    // Retail SP 0x00500835: lean-run animations suppress the forward-lookahead
+    // blend of the move history outside zombiemode.
+    if ((!ai_useLeanRunAnimations->current.enabled || zombiemode->current.enabled) && t > 0.0f)
+#else
     if (t > 0.0f)
+#endif
     {
         if (t < 1.0f)
         {
@@ -4807,6 +5184,19 @@ void Path_UpdateMovementDelta(actor_s *self, float fMoveDist)
     }
     if (self->sideMove != 0.0 && !Path_CompleteLookahead(pPath))
     {
+#ifdef KISAK_SP
+        // Retail SP 0x0050095F..0x00500A61 clamps the lateral request to
+        // half the remaining lookahead distance and preserves its sign.
+        float sideClamp = pPath->fLookaheadDist * 0.5f;
+        const float absSideMove = fabsf(self->sideMove);
+        if (sideClamp > absSideMove)
+            sideClamp = absSideMove;
+        if (self->sideMove < 0.0f)
+            sideClamp = -sideClamp;
+
+        maxSideMove[0] = pPath->fLookaheadDist * perp[0] + sideClamp * perp[1];
+        maxSideMove[1] = pPath->fLookaheadDist * perp[1] + sideClamp * -perp[0];
+#else
         vNewDir[1] = perp[1];
         vNewDir[2] = (-perp[0]);
         vNewDir[0] = pPath->fLookaheadDist;
@@ -4826,6 +5216,7 @@ void Path_UpdateMovementDelta(actor_s *self, float fMoveDist)
         vNewDir[2] = vEndPos[2] * vNewDir[2];
         maxSideMove[0] = maxSideMove[0] + vNewDir[1];
         maxSideMove[1] = maxSideMove[1] + vNewDir[2];
+#endif
         Vec2Normalize(maxSideMove);
         dot[0] = (60.0f * maxSideMove[0]) + vWishDir[0];
         dot[1] = (60.0f * maxSideMove[1]) + vWishDir[1];
@@ -4847,20 +5238,35 @@ void Path_UpdateMovementDelta(actor_s *self, float fMoveDist)
     //__libm_sse2_log(v4);
     //__libm_sse2_exp(v5);
 
+#ifdef KISAK_SP
+    // Retail SP 0x00500AC5..0x00500ADA computes the cube root by scaling
+    // the logarithm before exponentiation.
+    calculatedLen = exp(0.333 * log(lookAheadLen));
+#else
     lookAheadLen = log(lookAheadLen);
     lookAheadLen = exp(lookAheadLen);
-
     calculatedLen = 0.333 * lookAheadLen;
+#endif
 
     if (calculatedLen < 0.6f)
         calculatedLen = 0.6f;
 
+#ifdef KISAK_SP
+    // Retail SP 0x00500AF3: the corner slowdown is skipped when the smooth-turn
+    // path above is active (ai_useBetterLookahead outside zombiemode).
+    if (!ai_useBetterLookahead->current.enabled || zombiemode->current.enabled)
+#endif
     fMoveDist = fMoveDist * calculatedLen;
 
     if (fMoveDist > pPath->fLookaheadDist)
         fMoveDist = pPath->fLookaheadDist;
 
+#ifdef KISAK_SP
+    // Retail SP 0x005886b0: dog predicate covers AI_SPECIES_ZOMBIE_DOG too.
+    if ((self->species == AI_SPECIES_DOG || self->species == AI_SPECIES_ZOMBIE_DOG) && (self->Path.flags & 2) != 0)
+#else
     if (self->species == AI_SPECIES_DOG && (self->Path.flags & 2) != 0)
+#endif
         fMoveDist = Path_UpdateMomentum(self, perp, fMoveDist);
 
     self->Physics.vWishDelta[0] = fMoveDist * perp[0];
@@ -4868,7 +5274,11 @@ void Path_UpdateMovementDelta(actor_s *self, float fMoveDist)
     self->Physics.vWishDelta[2] = fMoveDist * perp[2];
 
     self->moveHistory[moveHistoryIndex][0] = vLookDir[0];
+#ifdef KISAK_SP
+    self->moveHistory[moveHistoryIndex][1] = vLookDir[1];
+#else
     self->moveHistory[moveHistoryIndex][0] = vLookDir[1];
+#endif
 
     Actor_UpdateMoveHistory(self);
 }
@@ -4915,6 +5325,10 @@ bool __fastcall Actor_IsMoving(actor_s *self)
 {
     return self->eAnimMode == AI_ANIM_MOVE_CODE && self->moveMode;
 }
+
+#ifdef KISAK_SP
+extern const dvar_t *enable_moving_paths; // physics/phys_main.cpp
+#endif
 
 void __fastcall Actor_UpdateGoalPos(actor_s *self)
 {
@@ -4981,13 +5395,36 @@ void __fastcall Actor_UpdateGoalPos(actor_s *self)
         }
         else
         {
+#ifdef KISAK_SP
+            // Retail SP 0x0040ABB2: with moving paths enabled the script goal
+            // follows its (possibly parented/moving) goal node.
+            if ( enable_moving_paths->current.integer == 1 && self->scriptGoal.node )
+            {
+                self->scriptGoal.pos[0] = self->scriptGoal.node->constant.vOrigin[0];
+                self->scriptGoal.pos[1] = self->scriptGoal.node->constant.vOrigin[1];
+                self->scriptGoal.pos[2] = self->scriptGoal.node->constant.vOrigin[2];
+            }
+#endif
             self->codeGoal.pos[0] = self->scriptGoal.pos[0];
             self->codeGoal.pos[1] = self->scriptGoal.pos[1];
             self->codeGoal.pos[2] = self->scriptGoal.pos[2];
+#ifdef KISAK_SP
+            // Retail SP 0x0040AAA0 also copies the script goal angles.
+            self->codeGoal.ang[0] = self->scriptGoal.ang[0];
+            self->codeGoal.ang[1] = self->scriptGoal.ang[1];
+            self->codeGoal.ang[2] = self->scriptGoal.ang[2];
+#endif
             self->codeGoalSrc = AI_GOAL_SRC_SCRIPT_GOAL;
             self->codeGoal.node = self->scriptGoal.node;
             self->codeGoal.volume = self->scriptGoal.volume;
         }
+#ifdef KISAK_SP
+        // Retail SP 0x0040AAA0: goal radius is capped at 64 while the actor's
+        // sentient is in a melee charge.
+        if ( self->sentient && self->sentient->bInMeleeCharge && self->scriptGoal.radius > 64.0f )
+            Actor_SetGoalRadius(&self->codeGoal, 64.0f);
+        else
+#endif
         Actor_SetGoalRadius(&self->codeGoal, self->scriptGoal.radius);
         Actor_SetGoalHeight(&self->codeGoal, self->scriptGoal.height);
         Actor_CheckOverridePos(self, prevGoalPos);

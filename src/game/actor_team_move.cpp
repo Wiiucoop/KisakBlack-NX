@@ -3,8 +3,19 @@
 #include "actor_navigation.h"
 #include <game_mp/actor_mp.h>
 #include "bullet.h"
+#ifdef KISAK_SP
+#include <game_mp/g_spawn_mp.h>
+#include <clientscript/cscr_vm.h>
+#include <clientscript/scr_const.h>
+#include <server/sv_world.h>
+#endif
 
-const float g_actorAssumedSpeed[1] = { 300.0 };
+#ifdef KISAK_SP
+// Retail SP table at 0x00A50CD4, indexed by the four-value SP AISpecies.
+const float g_actorAssumedSpeed[4] = { 190.0f, 300.0f, 190.0f, 300.0f };
+#else
+const float g_actorAssumedSpeed[1] = { 300.0f };
+#endif
 
 
 void __fastcall Actor_TeamMoveBlocked(actor_s *self)
@@ -51,6 +62,105 @@ LABEL_9:
     }
     return 1;
 }
+
+#ifdef KISAK_SP
+// Retail SP FUN_00492930 (unnamed): true when the actor is heading for a negotiation node or
+// for its claimed cover node, and the animscript has not overridden the run-to position.
+static bool Actor_WantsCornerApproachNotify(actor_s *self)
+{
+    const pathnode_t *node; // claimed node
+
+    if ( self->arrivalInfo.animscriptOverrideRunTo )
+        return 0;
+    if ( Path_HasNegotiationNode(&self->Path) )
+        return 1;
+    node = self->sentient->pClaimedNode;
+    if ( !node || ((1 << (node->constant.type & 0x1F)) & 0x83FFC) == 0 )
+        return 0;
+    if ( !Actor_HasPath(self) )
+        return 0;
+    return Vec3Compare(self->Path.vFinalGoal, node->constant.vOrigin) != 0;
+}
+
+// Retail SP FUN_00627530 (unnamed): walks the path back from the negotiation/claimed node to find
+// the furthest path point with a clear line to it, then notifies "corner_approach" with the
+// 2D approach direction.
+static void Actor_NotifyCornerApproach(actor_s *self)
+{
+    const pathnode_t *node;
+    path_t *pPath;
+    trace_t trace;
+    float vEnd[3];
+    float vStart[3];
+    float vDir[3];
+    float dx;
+    float dy;
+    int firstIndex;
+    int i;
+
+    memset(&trace, 0, sizeof(trace));
+    pPath = &self->Path;
+    if ( Path_HasNegotiationNode(pPath) )
+    {
+        node = Path_GetNegotiationNode(pPath);
+        vEnd[0] = node->constant.vOrigin[0];
+        vEnd[1] = node->constant.vOrigin[1];
+        vEnd[2] = node->constant.vOrigin[2];
+    }
+    else
+    {
+        node = self->sentient->pClaimedNode;
+        vEnd[0] = pPath->vFinalGoal[0];
+        vEnd[1] = pPath->vFinalGoal[1];
+        vEnd[2] = pPath->vFinalGoal[2];
+    }
+    vEnd[2] = vEnd[2] + 18.0f;
+    firstIndex = pPath->wNegotiationStartNode + 1;
+    for ( i = firstIndex; i < pPath->wPathLen; ++i )
+    {
+        dx = vEnd[0] - pPath->pts[i].vOrigPoint[0];
+        dy = vEnd[1] - pPath->pts[i].vOrigPoint[1];
+        if ( i > firstIndex && (float)(dx * dx + dy * dy) > 250000.0f )
+            break;
+        if ( (float)(node->constant.forward[0] * dx + node->constant.forward[1] * dy) >= 0.0f )
+        {
+            vStart[0] = pPath->pts[i].vOrigPoint[0];
+            vStart[1] = pPath->pts[i].vOrigPoint[1];
+            vStart[2] = pPath->pts[i].vOrigPoint[2] + 18.0f;
+            col_context_t context;
+            G_TraceCapsule(
+                &trace,
+                vStart,
+                vec3_origin,
+                vec3_origin,
+                vEnd,
+                self->ent->s.number,
+                self->Physics.iTraceMask,
+                &context);
+            if ( trace.allsolid || trace.fraction < 1.0f )
+                break;
+        }
+    }
+    if ( i == firstIndex )
+        return;
+    dx = vEnd[0] - (pPath->lookaheadDir[0] * pPath->fLookaheadDist + self->ent->r.currentOrigin[0]);
+    dy = vEnd[1] - (pPath->lookaheadDir[1] * pPath->fLookaheadDist + self->ent->r.currentOrigin[1]);
+    if ( (float)(dx * dx + dy * dy) >= 225.0f )
+    {
+        vDir[0] = vEnd[0] - pPath->pts[i - 1].vOrigPoint[0];
+        vDir[1] = vEnd[1] - pPath->pts[i - 1].vOrigPoint[1];
+    }
+    else
+    {
+        vDir[0] = pPath->lookaheadDir[0];
+        vDir[1] = pPath->lookaheadDir[1];
+    }
+    Vec2Normalize(vDir);
+    vDir[2] = 0.0f;
+    Scr_AddVector(vDir, SCRIPTINSTANCE_SERVER);
+    Scr_Notify(self->ent, scr_const.corner_approach, 1u);
+}
+#endif
 
 void __cdecl Actor_MoveAlongPathWithTeam(actor_s *self, bool bRun, bool bUseInterval, bool bAllowGoalPileUp)
 {
@@ -99,7 +209,14 @@ LABEL_18:
             else
                 Actor_AnimTryWalk(self);
             if ( self->goalPosChanged && wasMoving || self->arrivalInfo.arrivalNotifyRequested )
+            {
+#ifdef KISAK_SP
+                // Retail SP 0x00464630: send the "corner_approach" arrival notify before clearing the request.
+                if ( Actor_WantsCornerApproachNotify(self) )
+                    Actor_NotifyCornerApproach(self);
+#endif
                 self->arrivalInfo.arrivalNotifyRequested = 0;
+            }
             if ( !wasMoving && Actor_IsMoving(self) )
             {
                 Actor_ClearMoveHistory(self);
@@ -250,6 +367,9 @@ LABEL_44:
                 if ( pOtherActor )
                     mask = self->Physics.iTraceMask | 4;
                 else
+                    // retail SP 0x007D099B ORs in 0x4004: SP actors carry contents 0x4000.
+                    // This reconstruction keeps the MP actor bit (0x8000, see SP_actor) in
+                    // both builds, so the mask has to keep using it too.
                     mask = self->Physics.iTraceMask | 0x8004;
                 Actor_TeamMoveTooCloseMoveAway(self, mask, &context);
                 vVelPerp[0] = context.vVelDirSelf[1] * 37.5;

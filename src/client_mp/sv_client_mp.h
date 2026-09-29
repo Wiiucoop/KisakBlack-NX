@@ -30,7 +30,7 @@ void __cdecl SV_SetClientDStringStat(unsigned int clientNum, ddlState_t *searchS
 void __cdecl SV_SetClientDInt64Stat(unsigned int clientNum, ddlState_t *searchState, unsigned __int64 value);
 unsigned int __cdecl SV_GetClientDIntStat(unsigned int clientNum, ddlState_t *searchState);
 char *__cdecl SV_GetClientDStringStat(unsigned int clientNum, ddlState_t *searchState);
-unsigned int __cdecl SV_GetClientDInt64Stat(unsigned int clientNum, ddlState_t *searchState);
+unsigned __int64 __cdecl SV_GetClientDInt64Stat(unsigned int clientNum, ddlState_t *searchState);
 void __cdecl SV_UploadStats(int clientNum);
 void __cdecl SV_UploadStats();
 void __cdecl SV_SteamAuthClientRequest(netadr_t to, unsigned __int64 serverSteamID);

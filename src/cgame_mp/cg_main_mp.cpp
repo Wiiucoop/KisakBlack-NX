@@ -1,4 +1,9 @@
 #include "cg_main_mp.h"
+#ifdef KISAK_SP
+#include "cg_animscripted_mp.h"
+#include <set>
+#include <string>
+#endif
 #include <universal/q_shared.h>
 #include <universal/com_memory.h>
 #include <universal/assertive.h>
@@ -393,6 +398,9 @@ const dvar_s *cg_canSeeFriendlyFrustumMinDistance;
 const dvar_s *cg_watersheeting;
 const dvar_s *cg_debug_triggers;
 const dvar_s *cg_cameraWaterClip;
+#ifdef KISAK_SP
+const dvar_s *cg_cameraUseTagCamera;
+#endif
 const dvar_s *cg_cameraVehicleExitTweenTime;
 const dvar_s *cg_vehicle_piece_damagesfx_threshold;
 const dvar_s *cg_debugLocHit;
@@ -443,9 +451,17 @@ void __cdecl CG_SetupSplitscreenDvars()
     Dvar_SetFloat((dvar_s *)cg_fovScale, 1.0);
 }
 
+#include <cgame/cg_draw_names.h>
+
 void __cdecl CG_RegisterDvars()
 {
     bool v0; // al
+#ifdef KISAK_SP
+    CG_RegisterLookAtDvars_SP();
+    const float extraCamDefaultFov = 65.0f;
+#else
+    const float extraCamDefaultFov = 30.0f;
+#endif
 
     v0 = G_ExitAfterToolComplete();
     cg_loadScripts = _Dvar_RegisterBool("g_loadScripts", !v0, 0, "Disable scripts from loading");
@@ -517,7 +533,7 @@ void __cdecl CG_RegisterDvars()
     cg_fovMin = _Dvar_RegisterFloat("cg_fovMin", 10.0, 1.0, 160.0, 0x80u, "The minimum possible field of view");
     cg_fovExtraCam = _Dvar_RegisterFloat(
                                          "cg_fovExtraCam",
-                                         30.0,
+                                         extraCamDefaultFov,
                                          1.0,
                                          160.0,
                                          0x80u,
@@ -1740,6 +1756,16 @@ void __cdecl CG_RegisterDvars()
                                                                 0x80u,
                                                                 "Enables the use of the extra physics collision hulls on the feet while prone.");
     CG_ViewRegisterDvars();
+#ifdef KISAK_SP
+    // Retail SP helper 0x005e6430, called by CG_RegisterDvars at 0x004a6b4b.
+    // The frontend Zombies action tests ui_sp_unlock before opening its next
+    // menu; without this registration UI_DvarValueTest rejects the action.
+    _Dvar_RegisterInt("mis_01", 0, 0, 50, 1u, "");
+    _Dvar_RegisterString("mis_difficulty", "0000000000000000000000000", 1u, "");
+    _Dvar_RegisterBool("mis_cheat", 0, 0, "");
+    _Dvar_RegisterInt("mis_01_unlock", 21, 0, 50, 1u, "");
+    _Dvar_RegisterInt("ui_sp_unlock", 0, 0, 1, 1u, "");
+#endif
     DynEntCl_RegisterDvars();
     CG_OffhandRegisterDvars();
     CG_CompassRegisterDvars();
@@ -1850,6 +1876,16 @@ void __cdecl CG_RegisterDvars()
                                                  100.0,
                                                  0x1080u,
                                                  "Min distance between camera and water surface. To prevent camera seeing water edge-on. Set to -1 to disable");
+#ifdef KISAK_SP
+    // Retail SP registers this here, immediately after cg_cameraWaterClip and
+    // immediately before cg_forceSniperBobHack: 0x004a6d5d-0x004a6d73 pushes
+    // "cg_cameraUseTagCamera" (0x00a0ccc8), default 1, flags 0x1000,
+    // description "" (0x009dd354), and calls Dvar_RegisterBool (0x0045bb20);
+    // the handle is stored to the global at 0x02ff66f4, which is the same
+    // global CG_UpdateCameraMode reads at 0x00623cbb. Gates the tag-camera
+    // view override -- see CG_ComputeUseTagCamera in cg_camera.cpp.
+    cg_cameraUseTagCamera = _Dvar_RegisterBool("cg_cameraUseTagCamera", 1, 0x1000u, "");
+#endif
     cg_cameraVehicleExitTweenTime = _Dvar_RegisterFloat(
                                                                         "cg_cameraVehicleExitTweenTime",
                                                                         0.40000001,
@@ -1878,6 +1914,15 @@ void __cdecl CG_RegisterDvars()
                                                  0x7FFFFFFF,
                                                  0x80u,
                                                  "Time duration of g_debugLocHit lines");
+#ifdef KISAK_SP
+    // Retail SP CG_RegisterDvars registers this saved HUD group together. These
+    // dvars are consumed by server-side SetSavedDvar calls in the SP scripts.
+    _Dvar_RegisterBool("hud_showTextNoAmmo", 1, 0x1000u, "");
+    _Dvar_RegisterBool("hud_showObjectives", 1, 0x1000u, "");
+    _Dvar_RegisterBool("hud_showStance", 1, 0x1000u, "");
+    _Dvar_RegisterBool("hud_drawHUD", 1, 0x1000u, "");
+    _Dvar_RegisterBool("hud_missionFailed", 0, 0x1000u, "");
+#endif
     CG_SetupSplitscreenDvars();
 }
 
@@ -2344,14 +2389,45 @@ unsigned __int16 __cdecl CG_GetWeaponAttachBone(clientInfo_t *ci, weapType_t wea
     return SL_FindString(bg_weaponrightbone->current.string, SCRIPTINSTANCE_SERVER);
 }
 
+// Client-side mirror of the GSCR_* script-path macros in g_scr_main_mp.cpp. Same zone evidence:
+// SP's compiled GSC lives under bare "maps/", the "maps/mp/..." spellings appear in no zone SP
+// loads (maps/frontend.gsc = 7926 B in frontend.ff; maps/_destructible = 1793 B in
+// code_post_gfx.ff). Unlike the server side these misses are NON-FATAL - CGScr_LoadScriptAndLabel
+// only Com_Printf's "Could not find script '%s'" (cg_main_mp.cpp:2384) - so this is not a boot
+// blocker; without it the frontend's client-side script simply never runs.
+// Audit finding 5e (frontend-map-load audit).
+// TODO(SP): the sibling "clientscripts/mp/" prefix (CGScr_LoadClientScripts and the inst!=0
+// branches here) is NOT changed - neither audit examined SP's clientscripts/ layout, and no
+// evidence was gathered either way. Settle it by scanning the SP zones for
+// "clientscripts/frontend" vs "clientscripts/mp/frontend" before touching it.
+#ifdef KISAK_SP
+#define CGSCR_SERVER_SCRIPT_DIR "maps/"
+#else
+#define CGSCR_SERVER_SCRIPT_DIR "maps/mp/"
+#endif
+
 void __cdecl CGScr_LoadGameTypeScript(scriptInstance_t inst, const char *gametype, ScriptFunctions *functions)
 {
     char filename[68]; // [esp+4h] [ebp-48h] BYREF
 
+#ifdef KISAK_SP
+    if (inst == SCRIPTINSTANCE_SERVER)
+    {
+        // Match GScr_LoadGameTypeScript's compiler roots without storing its
+        // server callback handles. Loading the file compiles every function.
+        CGScr_LoadScriptAndLabel(inst, "maps/_callbacksetup", "CodeCallback_StartGameType", functions);
+        if (ui_gametype)
+        {
+            Com_sprintf(filename, sizeof(filename), "maps/gametypes/%s", ui_gametype->current.string);
+            CGScr_LoadScriptAndLabel(inst, filename, "init", functions);
+        }
+        return;
+    }
+#endif
     if ( inst )
         Com_sprintf(filename, 64, "%sgametypes/%s", "clientscripts/mp/", gametype);
     else
-        Com_sprintf(filename, 64, "%sgametypes/%s", "maps/mp/", gametype);
+        Com_sprintf(filename, 64, "%sgametypes/%s", CGSCR_SERVER_SCRIPT_DIR, gametype);
     CGScr_LoadScriptAndLabel(inst, filename, "main", functions);
 }
 
@@ -2395,6 +2471,97 @@ char __cdecl CGScr_LoadScriptAndLabel(
     }
 }
 
+#ifdef KISAK_SP
+static void CGScr_LoadActorAnimScripts_SP(ScriptFunctions *functions)
+{
+    // Retail remote LOAD helpers 0088f800 (zombie) / 0088f450 (human).
+    // Compile the same roots as the server without writing server script handles.
+    static const char *const human[] = {
+        "combat", "concealment_crouch", "concealment_prone", "concealment_stand",
+        "cover_arrival", "cover_crouch", "cover_left", "cover_pillar", "cover_prone",
+        "cover_right", "cover_stand", "cover_wide_left", "cover_wide_right", "death",
+        "grenade_return_throw", "init", "pain", "react", "move", "scripted", "stop",
+        "grenade_cower", "flashed"
+    };
+    static const char *const zombie[] = {
+        "zombie_combat", "zombie_death", "zombie_init", "zombie_pain", "zombie_move",
+        "zombie_scripted", "zombie_stop"
+    };
+    static const char *const zombieDog[] = {
+        "zombie_dog_combat", "zombie_dog_death", "zombie_dog_init", "zombie_dog_pain",
+        "zombie_dog_move", "zombie_dog_scripted", "zombie_dog_stop", "zombie_dog_flashed", "zombie_dog_turn"
+    };
+    const auto load = [functions](const char *name) {
+        char filename[64];
+        Com_sprintf(filename, sizeof(filename), "animscripts/%s", name);
+        CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "main", functions);
+    };
+    if (zombiemode->current.enabled)
+    {
+        for (const char *name : zombie) load(name);
+        CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, "animscripts/zombie_scripted", "init", functions);
+        for (const char *name : zombieDog) load(name);
+    }
+    else
+    {
+        for (const char *name : human) load(name);
+        CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, "animscripts/scripted", "init", functions);
+        CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, "animscripts/init_mode_sp", "init", functions);
+    }
+}
+
+static void CGScr_LoadEntityAnimScripts_SP(ScriptFunctions *functions)
+{
+    // Remote equivalent of GScr_LoadScriptsAndAnimsForEntities: no AITypeScript
+    // registry or server-global handles, just the same compiler roots.
+    SpawnVar spawnVar;
+    std::set<std::string> seen;
+    std::set<std::string> seenTraversal;
+    bool dogsLoaded = false;
+    G_ResetEntityParsePoint();
+    if (!G_ParseSpawnVars(&spawnVar)) Com_Error(ERR_DROP, "CGScr_LoadEntityAnimScripts_SP: no entities");
+    while (G_ParseSpawnVars(&spawnVar))
+    {
+        const char *classname;
+        if (!G_SpawnString(&spawnVar, "classname", "", &classname)) continue;
+        // Retail005efbb0,005efd08-005efdaa: raw entity negotiation branch.
+        if (!I_stricmp(classname, "node_negotiation_begin"))
+        {
+            const char *animscript;
+            if (G_SpawnString(&spawnVar, "animscript", "", &animscript) && *animscript
+                && seenTraversal.insert(animscript).second)
+            {
+                char filename[64];
+                Com_sprintf(filename, sizeof(filename), "animscripts/traverse/%s", animscript);
+                CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "main", functions);
+                Com_Printf(16, "SP remote path animation root: '%s'\n", filename);
+            }
+            continue;
+        }
+        if (I_strnicmp(classname, "actor_", 6)) continue;
+        if (!seen.insert(classname+6).second) continue;
+        if (!zombiemode->current.enabled && !dogsLoaded && (strstr(classname, "dog") || strstr(classname, "hound")))
+        {
+            static const char *const dog[] = { "dog_combat", "dog_death", "dog_init", "dog_pain", "dog_move", "dog_scripted", "dog_stop", "dog_flashed" };
+            for (const char *name : dog)
+            {
+                char filename[64];
+                Com_sprintf(filename, sizeof(filename), "animscripts/%s", name);
+                CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "main", functions);
+            }
+            dogsLoaded = true;
+        }
+        char filename[64];
+        Com_sprintf(filename, sizeof(filename), "aitype/%s", classname+6);
+        CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "main", functions);
+        CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "precache", functions);
+        CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, filename, "spawner", functions);
+    }
+    G_ResetEntityParsePoint();
+}
+
+#endif
+
 void __cdecl CGScr_LoadScripts(const char *mapname, const char *gametype, ScriptFunctions *functions)
 {
     Scr_BeginLoadScripts(SCRIPTINSTANCE_SERVER, 0);
@@ -2402,14 +2569,28 @@ void __cdecl CGScr_LoadScripts(const char *mapname, const char *gametype, Script
     CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, "codescripts/struct", "initstructs", functions);
     CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, "codescripts/struct", "createstruct", functions);
     CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, "codescripts/struct", "findstruct", functions);
-    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_SERVER, "maps/mp/_destructible", "CodeCallback_DestructibleEvent", functions);
+    CGScr_LoadScriptAndLabel(
+        SCRIPTINSTANCE_SERVER,
+        CGSCR_SERVER_SCRIPT_DIR "_destructible",
+        "CodeCallback_DestructibleEvent",
+        functions);
+    // NOTE(SP): maps/mp/gametypes/_spawning is deliberately left as-is even though it ships in no
+    // SP zone. Unlike the server-side twin this call is non-fatal (Com_Printf only), and skipping
+    // it would shift every later functions->address[] index by one - CScr_SetUniqueClientScripts
+    // reads that array positionally. Costs one "Could not find script" log line.
     CGScr_LoadScriptAndLabel(
         SCRIPTINSTANCE_SERVER,
         "maps/mp/gametypes/_spawning",
         "CodeCallback_UpdateSpawnPoints",
         functions);
     CGScr_LoadGameTypeScript(SCRIPTINSTANCE_SERVER, gametype, functions);
+#ifdef KISAK_SP
+    CGScr_LoadActorAnimScripts_SP(functions);
+#endif
     CGScr_LoadLevelScript(SCRIPTINSTANCE_SERVER, mapname, functions);
+#ifdef KISAK_SP
+    CGScr_LoadEntityAnimScripts_SP(functions);
+#endif
     G_ResetEntityParsePoint();
     Scr_PostCompileScripts(SCRIPTINSTANCE_SERVER);
     Scr_EndLoadScripts(SCRIPTINSTANCE_SERVER);
@@ -2421,14 +2602,203 @@ void __cdecl CGScr_LoadLevelScript(scriptInstance_t inst, const char *mapname, S
     char filename[68]; // [esp+4h] [ebp-48h] BYREF
 
     if ( inst )
+#ifdef KISAK_SP
+        // SP's client level script lives at clientscripts/<mapname>, with no "mp/" component.
+        // Fact 1 (producer): retail SP's CGScr_LoadClientScripts (0x006555a0) builds this path at
+        //   0x0065579a-0x006557b3 as Com_sprintf(buf, 0x40, "%s%s", "clientscripts/", mapname),
+        //   pushing the literal at 0x00a2ca98 ("clientscripts/") -- NOT 0x00a39480
+        //   ("clientscripts/mp/_callbacks", the only "clientscripts/mp/" text in the binary).
+        // Fact 2 (corpus): the shipped SP zones contain clientscripts/frontend.csc; there is no
+        //   clientscripts/mp/ directory in them at all.
+        // Note the CONSUMER half, CScr_SetLevelScript (cg_scr_main.cpp:10111), already builds
+        // "clientscripts/<mapname>" in BOTH configs -- it only uses the string for an error
+        // message, so MP has always been internally inconsistent here. Producer is ground truth.
+        Com_sprintf(filename, 64, "%s%s", "clientscripts/", mapname);
+#else
         Com_sprintf(filename, 64, "%s%s", "clientscripts/mp/", mapname);
+#endif
     else
-        Com_sprintf(filename, 64, "%s%s", "maps/mp/", mapname);
+        Com_sprintf(filename, 64, "%s%s", CGSCR_SERVER_SCRIPT_DIR, mapname);
     CGScr_LoadScriptAndLabel(inst, filename, "main", functions);
 }
 
+#ifdef KISAK_SP
+// ===========================================================================
+// SP client-script load list, transcribed from retail BlackOps.exe.
+//
+// PRODUCER: CGScr_LoadScriptAndLabel calls in CGScr_LoadClientScripts
+// (Ghidra 0x006555a0). The name is now live in the database and its plate
+// cites THIS transcription as its corroborating evidence, so the two agree.
+// That function passes `filename` in EDI and
+// `functions` in ESI (a compiler regparm optimisation -- the decompiler shows
+// only 2 stack args), so the filenames are recoverable ONLY from the
+// disassembly's `MOV EDI, <addr>` hoists, not from the decompile. Every string
+// address below was read out of the image and is listed in the row comments.
+//
+// CONSUMER: FUN_00408ee0 (0x00408ee0), SP's CScr_SetUniqueClientScripts --
+// still FUN_* in Ghidra as of 2026-08-26, so that name remains this tree's own
+// hypothesis and not an attested symbol, unlike the producer above. Its
+// 30 rows land 1:1 on the 30 producer rows here, in the same order, writing
+// cg_scr_data at 0x00c207d0 with exactly the field layout cscr_data_t already
+// declares (delete_@0 ... gibEvent@0x64). That positional agreement is the
+// second, independent fact behind this list.
+//
+// *** DO NOT "CORRECT" THE clientscripts/mp/ STRINGS IN THE CONSUMER. ***
+// SP's consumer still passes "clientscripts/mp/_callbacks" (0x00a39480) for
+// six rows -- playerspawned, the four CodeCallback_Player* rows and
+// glass_smash -- while the PRODUCER for those same six rows has EDI =
+// "clientscripts/_callbacks" (0x00a49b8c). CScr_SetScriptAndLabel only ever
+// uses filename/label to format an error message, so this is a cosmetic
+// retail bug: SP genuinely loads from clientscripts/_callbacks and merely
+// misnames it if the label is missing. Reproduced verbatim in
+// CScr_SetUniqueClientScripts so the two halves keep matching retail.
+//
+// DIFFERENCES FROM MP worth naming: SP has no client-side gametype script and
+// no maps/mp/gametypes/_spawning row; _dogs (playDogstep/soundNotify),
+// CodeCallback_CreatingCorpse, demo_jump and demo_player_switch are absent;
+// and SP adds scriptmodelspawned, _footsteps::playAIFootstep,
+// callback_(de)activate_exploder, sound_notify, zombie_eye_callback,
+// CodeCallback_PlayWeapon{Death,Damage}Effects and CodeCallback_GibEvent.
+// 31 rows total (30 + level script) against MP's 27.
+//
+// _destructible IS SINGULAR HERE ON PURPOSE. The literal at 0x009dd6dc is
+// byte-for-byte "clientscripts/_destructible\0" (read directly, not via
+// Ghidra's string table). The shipped SP zones contain _destructibleS.csc
+// (plural), so retail SP loads a file that does not exist -- harmless,
+// because CGScr_LoadScriptAndLabel only Com_Printf's and the consumer row is
+// bEnforceExists=0. Transcribed as retail has it, not as the corpus has it.
+// ===========================================================================
+static void __cdecl CGScr_LoadClientScripts_SP(const char *mapname, ScriptFunctions *functions)
+{
+    Scr_BeginLoadScripts(SCRIPTINSTANCE_CLIENT, 0);
+
+    // NOTE(SP, RESOLVED+PORTED 2026-08-26; demoted from an open marker by a triage pass that
+    // confirmed the Scr_FindAnim call is live at line 2566 below):
+    // retail calls Scr_FindAnim (Ghidra 0x004bd6f0) here, at 0x006555dc -- BEFORE any
+    // script load. IDENTITY RESOLVED 2026-08-26 (was "not identified; something face/anim
+    // related"): 0x004bd6f0 is named Scr_FindAnim in the live Ghidra database (tags
+    // openblops-source-match + machine-proposed) and its body is this tree's own Scr_FindAnim
+    // (cscr_animtree.cpp:2977) statement for statement -- SL_GetLowercaseString_(animName,0,4,
+    // inst), Scr_UsingTreeInternal, Scr_EmitAnimationInternal, SL_RemoveRefToString, same order.
+    // Read off the raw listing at 0x006555a6-0x006555dc the five arguments are
+    //     Scr_FindAnim(SCRIPTINSTANCE_CLIENT, "generic_human", "body", <anim>, <user>)
+    // with both literals read out of the image (0x009f4d50 == "generic_human", 0x00a336b4 ==
+    // "body"), <anim> = bgs->animData + 0x8d38c and <user> = bgs[0x10], where bgs is the client
+    // BgsGlobals fetched from TLS ([FS:0x2c][DAT_03956508*4] + 0x1c). That is the CLIENT-side
+    // counterpart of BG_FindAnims (bg_animation.cpp:4221), which makes the same call three times
+    // with ("multiplayer", "main"/"torso"/"legs") on the server instance -- an animtree lookup,
+    // not a face registration. So "generic_human" is the animtree FILENAME here and "body" the
+    // anim NAME, matching MP's (filename, animName) argument roles.
+    // DONE 2026-08-26: ported below, and the two RAW OFFSETS the note above carried are now
+    // resolved to real fields rather than transcribed as numbers. Both close exactly against the
+    // headers, which is what makes them safe to write:
+    //   * animScriptData_t is sizeof=0x8D388 (bg_animation.h:236) and is bgsAnim_s's FIRST member
+    //     (bg_animation.h:270), so generic_human starts at 0x8D388. Its members are
+    //     tree/body/main/torso/legs, 4 bytes each -> body @ 0x8D38C, main @ 0x8D390,
+    //     torso @ 0x8D394, legs @ 0x8D398; then generic_dog (0x8) and done_notify (0x4) land the
+    //     end at 0x8D3A8, which IS the declared sizeof(bgsAnim_s). The retail argument
+    //     `animData + 0x8d38c` is therefore &animData->generic_human.body, exactly.
+    //   * `bgs[0x10]` is bgs_t +0x10, which bg_local.h:906 declares as `int anim_user` (animData,
+    //     time, latestSnapshotTime, frametime, anim_user at 0/4/8/0xC/0x10).
+    // The 16-bit tail at 0x006557E7-0x00655805 resolves the same way and is ported at the end of
+    // this function: 0x8D370 is animScriptData_t::bodyAnim (counting back from the struct end --
+    // 4 trailing pad, playSoundAlias @0x8D380, soundAlias @0x8D37C, 2 pad, turningAnim @0x8D378,
+    // legsAnim @0x8D376, torsoAnim @0x8D374, mainAnim @0x8D372, bodyAnim @0x8D370), and the
+    // 16-bit read at 0x8D38C is scr_anim_s::index (cscr_animtree.h:13, the low half of the
+    // union). That makes the tail `animScriptData.bodyAnim = generic_human.body.index`, the exact
+    // structural sibling of MP's BG_InitAnimTree lines at bg_animation.cpp:3392-3394
+    // (`animScriptData.mainAnim = generic_human.main.index`, ditto torso/legs). It is ported with
+    // the call because it reads back the handle this call writes; note that nothing in this tree
+    // currently READS bodyAnim, so the tail is inert here and is fidelity work only.
+    Scr_FindAnim(
+        SCRIPTINSTANCE_CLIENT,
+        "generic_human",
+        "body",
+        &bgs->animData->generic_human.body,
+        bgs->anim_user);
+
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "codescripts/delete", "main", functions);          // EDI=0x009e6adc
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "codescripts/struct", "initstructs", functions);   // EDI=0x009d8548
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "codescripts/struct", "createstruct", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "codescripts/struct", "findstruct", functions);
+    // --- EDI = 0x00a49b8c "clientscripts/_callbacks" (set at 0x00655626) -------------------
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "statechange", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "maprestart", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "localclientconnect", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "localclientdisconnect", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "entityspawned", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "playerspawned", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "scriptmodelspawned", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "client_flag_callback", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "client_flagasval_callback", functions);
+    // --- EDI = 0x009dd6dc "clientscripts/_destructible" (set at 0x0065569d) ----------------
+    CGScr_LoadScriptAndLabel(
+        SCRIPTINSTANCE_CLIENT,
+        "clientscripts/_destructible",
+        "CodeCallback_DestructibleEvent",
+        functions);
+    // --- EDI back to "clientscripts/_callbacks" (set at 0x006556ae) ------------------------
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "CodeCallback_PlayerFootstep", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "CodeCallback_PlayerJump", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "CodeCallback_PlayerLand", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "CodeCallback_PlayerFoliage", functions);
+    // --- EDI = 0x009ae898 "clientscripts/_footsteps" (set at 0x006556e3) -------------------
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_footsteps", "playAIFootstep", functions);
+    // --- EDI back to "clientscripts/_callbacks" (set at 0x006556f4) ------------------------
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "callback_activate_exploder", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "callback_deactivate_exploder", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "level_notify", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "sound_notify", functions);
+    // --- 0x00655725-0x00655745: EDI = "clientscripts/_zombietron" (0x009dab44) when the
+    //     `zombietron` dvar is set, else "clientscripts/_zombiemode" (0x009cc4d4).
+    // TODO(SP): `zombietron` is registered in Com_InitDvars at 0x0082bcf0 with default 0 and
+    // flags 0x40, so the DEFAULT path is _zombiemode; that is what is hardcoded here. Wire the
+    // real branch up if/when a `zombietron` dvar is added to this reconstruction (it is not
+    // registered anywhere in this tree today). Non-fatal either way: consumer row is
+    // bEnforceExists=0 and neither .csc ships in the campaign zones.
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_zombiemode", "zombie_eye_callback", functions);
+    // --- EDI back to "clientscripts/_callbacks" (set at 0x00655754) ------------------------
+    CGScr_LoadScriptAndLabel(
+        SCRIPTINSTANCE_CLIENT,
+        "clientscripts/_callbacks",
+        "CodeCallback_PlayWeaponDeathEffects",
+        functions);
+    CGScr_LoadScriptAndLabel(
+        SCRIPTINSTANCE_CLIENT,
+        "clientscripts/_callbacks",
+        "CodeCallback_PlayWeaponDamageEffects",
+        functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "airsupport", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "entityshutdown_callback", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "glass_smash", functions);
+    CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "clientscripts/_callbacks", "CodeCallback_GibEvent", functions);
+    // --- clientscripts/<mapname>, "main" (0x0065579a-0x006557c6) ---------------------------
+    CGScr_LoadLevelScript(SCRIPTINSTANCE_CLIENT, mapname, functions);
+
+    // 0x006557cb `PUSH 1; CALL 0x00651a30` sits exactly where MP's
+    // Scr_PostCompileScripts(SCRIPTINSTANCE_CLIENT) is -- and 0x00651a30 is this binary's
+    // shared do-nothing function (it is also the registered handler for openfile/closefile/
+    // fprintln/freadln/fgetarg/playrumble*), so retail SP's call there is a no-op. The
+    // reconstruction's Scr_PostCompileScripts is real and needed here, so it is kept.
+    Scr_PostCompileScripts(SCRIPTINSTANCE_CLIENT);
+    CScr_PostLoadScripts();                                                   // 0x006557d2
+    Scr_PrecacheAnimTrees(SCRIPTINSTANCE_CLIENT, (void *(__cdecl *)(int))Hunk_AllocXAnimCreate, 0, 1); // 0x006557e2
+    // Retail's tail (0x006557E7-0x00655805): re-reads the TLS bgs, then
+    //     MOV CX,  word ptr [EAX + 0x8d38c]      ; generic_human.body.index
+    //     MOV word ptr [EAX + 0x8d370], CX       ; animScriptData.bodyAnim
+    // BOTH fields are identified now -- see the derivation on the Scr_FindAnim call at the head
+    // of this function. This is MP's BG_InitAnimTree pattern (bg_animation.cpp:3392-3394) with
+    // "body" in place of main/torso/legs.
+    bgs->animData->animScriptData.bodyAnim = bgs->animData->generic_human.body.index;
+}
+#endif // KISAK_SP
+
 void __cdecl CGScr_LoadClientScripts(const char *mapname, ScriptFunctions *functions)
 {
+#ifdef KISAK_SP
+    CGScr_LoadClientScripts_SP(mapname, functions);
+    return;
+#else
     Scr_BeginLoadScripts(SCRIPTINSTANCE_CLIENT, 0);
     CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "codescripts/delete", "main", functions);
     CGScr_LoadScriptAndLabel(SCRIPTINSTANCE_CLIENT, "codescripts/struct", "initstructs", functions);
@@ -2476,6 +2846,7 @@ void __cdecl CGScr_LoadClientScripts(const char *mapname, ScriptFunctions *funct
     Scr_PostCompileScripts(SCRIPTINSTANCE_CLIENT);
     CScr_PostLoadScripts();
     Scr_PrecacheAnimTrees(SCRIPTINSTANCE_CLIENT, (void *(__cdecl *)(int))Hunk_AllocXAnimCreate, 0, 1);
+#endif // !KISAK_SP
 }
 
 void __cdecl CGScr_LoadClientScriptsAndAnims()
@@ -2799,6 +3170,11 @@ void __cdecl CG_Init(int localClientNum, int serverMessageNum, int serverCommand
     memset(cg_weaponsArray[localClientNum], 0, 2048 * sizeof(weaponInfo_s) /*0x12000u*/);
     memset(&cg_viewModelArray[localClientNum], 0, sizeof(ViewModelInfo));
     memset(&cg_BattleChatters[0].WhichSoundIsPlaying, 0, sizeof(cg_BattleChatters));
+#ifdef KISAK_SP
+    // Retail's hideViewModel lives in cg_s and is cleared by the cg_s memset
+    // above. Keep the SP sidecar on the same frontend-to-map lifecycle.
+    CG_ResetViewModelHidden_SP(localClientNum);
+#endif
 
     cgDC[localClientNum].contextIndex = localClientNum;
 
@@ -2848,6 +3224,42 @@ void __cdecl CG_Init(int localClientNum, int serverMessageNum, int serverCommand
     cgameGlob->groundTiltEntNum = -1;
     cgameGlob->lastPlayerStateOverride = -1;
     cgameGlob->extraCamEntity = 1023;
+#ifdef KISAK_SP
+    // Seed the OTHER extra-cam sentinel -- cg_s::cameraData.extraCamEntNum, not
+    // cg_s::extraCamEntity above.  They are two distinct fields (cg+0xa46cc and
+    // cg+0xce4d8 in SP; see the shared-facts block in cg_scr_main_mp.cpp:281),
+    // and until now only the second was ever initialised on a fresh
+    // CL_InitCGame.  cg_s is zeroed there, so extraCamEntNum came up 0, which
+    // made CG_IsExtraCamActive() (cg_camera.cpp:569, `!= 1023`) report an active
+    // extra cam on entity 0 from frame zero, and made the FIRST
+    // `camera isExtraCam( 0 )` in clientscripts/frontend.csc:60 raise
+    // "There can be only one extra camera active in the level."
+    //
+    // THIS IS A TRANSCRIPTION, NOT A CHOSEN SPOT.  Retail SP does it right here,
+    // in CG_Init, and this is the only place in the whole binary besides
+    // CG_MapRestart that writes the sentinel.  Located by sweeping every
+    // instruction referencing cg+0xa46cc program-wide (14 sites, 1.55M
+    // instructions scanned): exactly two store 0x3ff, CG_Init @ 0x0064f96d and
+    // CG_MapRestart @ 0x00490aa4 (the latter already mirrored at
+    // cg_servercmds_mp.cpp:568).
+    //
+    // The line lands here and not elsewhere in CG_Init because retail's store
+    // sits between the CALL to Dvar_SetBoolByName at 0x0064f933 and the CALL to
+    // CG_ParseServerInfo at 0x0064f990 -- i.e. between :3071 and :3083 -- with
+    // no other call in between.
+    //
+    // extraCamFov is seeded in the same breath: `MOVSS [EBP+0xa46d0],XMM0` at
+    // 0x0064f977, with XMM0 loaded at 0x0064f938 from 0x009ac544, read back as
+    // 00 00 82 42 == 0x42820000 == 65.0f.  That is the same constant and the
+    // same pair CScr_StopExtraCam restores (cg_scr_main_mp.cpp:424-425).
+    //
+    // NOTE the MP line above is retained untouched: retail SP does NOT write
+    // cg+0xce4d8 in CG_Init (its only writers are CG_AddPacketEntities and
+    // CG_Missile), so the two lines are not alternatives -- and extraCamEntity
+    // still gates the ammo-counter/camera-sensor logic in this tree.
+    cgameGlob->cameraData.extraCamEntNum = 1023;
+    cgameGlob->cameraData.extraCamFov = 65.0f;
+#endif
     cgameGlob->lastHealthLerpDelay = 1;
 
     cgs->processedSnapshotNum = serverMessageNum;
@@ -3344,16 +3756,115 @@ void __cdecl CG_LoadHudMenu(int localClientNum)
     MenuList *menuListb; // [esp+8h] [ebp-8h]
     const rectDef_s *rect; // [esp+Ch] [ebp-4h]
 
+    // SP HUD menufiles live under "ui/", and SP's set is genuinely DIFFERENT from MP's - not
+    // just re-prefixed. Evidence (zone scan of all 139 shipped .ff files, plus the retail
+    // BlackOps.exe string table):
+    //   ui_mp/hud.txt       -> common_mp only | ui/hud.txt        -> code_post_gfx.ff, and the
+    //                                            literal "ui/hud.txt" IS in the SP exe
+    //   ui_mp/hud_%s.txt    -> ...             | "ui/hud_%s.txt" IS in the SP exe, and
+    //                                            ui/hud_sp.txt, ui/hud_zombie.txt,
+    //                                            ui/hud_coop.txt, ui/hud_demo.txt,
+    //                                            ui/hud_splitscreen.txt all ship in code_post_gfx
+    //   ui_mp/hud_hardcore.txt, ui_mp/hud_spectator.txt, ui_mp/hud_popups.txt,
+    //   ui_mp/hud_demo.txt  -> common_mp only, and NO literal of any spelling exists in the
+    //                          retail SP exe -> SP does not load these at all.
+    // Non-fatal either way (a missing menufile only warns), so this is accuracy work, not a boot
+    // fix. Audit finding C8 (asset-availability audit) / 5a (frontend-map-load audit).
+    // NOTE(SP, RESOLVED+IMPLEMENTED 2026-08-26): the ARGUMENT to the hud_%s.txt format WAS wrong
+    // here; it is now known and the fix is implemented below. Demoted from an open marker on
+    // 2026-08-26 by a triage pass that re-verified the KISAK_SP block below against retail
+    // 0x0088EFD0.
+    // SETTLED 2026-08-26 by decompiling 0x0088efd0 -- which the live Ghidra database now names
+    // CG_LoadHudMenu (tags openblops-source-match + machine-proposed + custom-abi; localClientNum
+    // arrives in EDI). Ghidra is available again; the "Ghidra is unavailable in this session"
+    // deferral below no longer applies and the old hypothesis is disproved:
+    //   * The format argument is NEITHER g_gametype NOR a mode string. Retail does
+    //         0088f07c PUSH 0x9ae25c ("mapname")  ->  Dvar_GetString  ->  sprintf(buf, "ui/hud_%s.txt")
+    //     i.e. it formats the MAP NAME. Both candidates previously on the table were wrong.
+    //   * The three-way sp/zombie/coop branch that docs/SP_MP_STARTUP_AUDIT.md row #11 / Q7
+    //     describes is REAL but is a DIFFERENT load, not the "%s" selector. Retail's actual
+    //     sequence is: ui/hud.txt unconditionally; then ui/hud_zombie.txt or ui/hud_sp.txt on a
+    //     dvar's current.enabled byte (dvar_s at 0x0243fdd4); then ui/hud_coop.txt if either of
+    //     two further dvars (0x0247fed0 / 0x0290bf04) has current.enabled set; then the
+    //     ui/hud_<mapname>.txt load; then ui/vs_hud.txt when a dvar string (0x02562a14) equals
+    //     "vs". Conflating the two is what produced the mode-string guess.
+    //   * There is no IsHardcoreMode gate in retail at all, and retail only calls UI_AddMenuList
+    //     for the hud_%s.txt list when UI_LoadMenus returned non-NULL -- a guard this
+    //     reconstruction does not have.
+    // IMPLEMENTED 2026-08-26 under KISAK_SP. Re-verified against retail 0x0088EFD0 immediately
+    // before writing; the sequence above is confirmed exactly, and EVERY UI_LoadMenus call in
+    // retail passes 7 as its second argument (checked, because the ingame path uses 3 -- 7 does
+    // carry over here).
+    // THE FOUR GATING DVARS ARE NOW ALL NAMED, by the registrar string-table walk (agents.md
+    // "The registrar string-table walk"), i.e. find the global's sole WRITE xref, then read the
+    // name string pushed before the register call one call EARLIER than the store:
+    //   0x0243FDD4 = "zombiemode"  -- writer 0x0082BCB1 in Com_InitDvars, name push 0x0082BC88
+    //                                -> 0x00A2921C. (Already on record; the chain was re-run.)
+    //   0x0247FED0 = "onlinegame"  -- writer 0x0082BDE3 in Com_InitDvars, name push 0x0082BDC6
+    //                                -> 0x00A499C4. Corroborated independently: retail registers
+    //                                it with value 0 / flags 0 and the very next registration is
+    //                                0x00A06548 "xblive_rankedmatch" -- exactly this tree's
+    //                                common.cpp:2336-2345 ordering and constants.
+    //   0x0290BF04 = "systemlink"  -- writer 0x00590D6A in CL_InitOnceForAllClients, name push
+    //                                0x00590D4D -> 0x00A01E4C. The next registration is
+    //                                0x00A07188 "systemlink_warning_shown", which is what a
+    //                                systemlink flag would sit beside.
+    //   0x02562A14 = "ui_gametype" -- writer 0x00836079 in FUN_00835D00, name push 0x00836056
+    //                                -> 0x009C69C0. Registered as a STRING dvar with value ""
+    //                                and flags 0 (matching ui_main.cpp:3389), and the next
+    //                                registration is 0x009C3CB0 "ui_mapname".
+    // Three of the four have a live global here; "systemlink" is registered by retail but by
+    // NOTHING in this reconstruction, so it is read by name with Dvar_GetBool, which returns
+    // false for an unregistered dvar (dvar.cpp:951-957) -- the same result retail gets from its
+    // default-false global. That is the one place this transcription is not pointer-for-pointer.
+    // HAZARD, live: UI_AddMenu asserts "touchMenu == menu" (ui_shared.cpp:11090) when a menu NAME
+    // resolves in the asset DB to a different menuDef than the one in the list just loaded - i.e.
+    // when the same menu name exists in two loaded zones. These loads were previously all no-ops
+    // on SP (every ui_mp/ file missed), so this is the first time SP feeds real menus through
+    // UI_AddMenuList from here. If SP asserts at boot in UI_AddMenu, this block is the first
+    // suspect.
+#ifdef KISAK_SP
+    // ui/hud.txt, unconditional -- retail has NO IsHardcoreMode gate here.
+    v2 = UI_LoadMenus(SP_UI_DIR "hud.txt", 7);
+    UI_AddMenuList(localClientNum, &cgDC[localClientNum], v2, 0);
+    // zombie vs sp, on zombiemode->current.enabled (0x0088EFF9 tests the +0x18 byte).
+    if ( zombiemode->current.enabled )
+        Menus = UI_LoadMenus(SP_UI_DIR "hud_zombie.txt", 7);
+    else
+        Menus = UI_LoadMenus(SP_UI_DIR "hud_sp.txt", 7);
+    UI_AddMenuList(localClientNum, &cgDC[localClientNum], Menus, 0);
+    // ui/hud_coop.txt when EITHER onlinegame or systemlink is set (0x0088F040 / 0x0088F04F).
+    if ( onlinegame->current.enabled || Dvar_GetBool("systemlink") )
+    {
+        v5 = UI_LoadMenus(SP_UI_DIR "hud_coop.txt", 7);
+        UI_AddMenuList(localClientNum, &cgDC[localClientNum], v5, 0);
+    }
+    // ui/hud_<mapname>.txt -- the %s is Dvar_GetString("mapname") (0x0088F07C), NOT g_gametype.
+    // Retail formats into a 0x40 stack buffer with sprintf; va() is kept because the result is
+    // consumed immediately by the very next call and it is what this site already used.
+    // The non-NULL guard is retail's (0x0088F0A0) and this reconstruction lacked it.
+    String = Dvar_GetString("mapname");
+    v4 = va(SP_UI_DIR "hud_%s.txt", String);
+    menuLista = UI_LoadMenus(v4, 7);
+    if ( menuLista )
+        UI_AddMenuList(localClientNum, &cgDC[localClientNum], menuLista, 0);
+    // ui/vs_hud.txt when ui_gametype's string is "vs" (I_stricmp against 0x009B04D4 at 0x0088F0C5).
+    if ( !I_stricmp(ui_gametype->current.string, "vs") )
+    {
+        menuListb = UI_LoadMenus(SP_UI_DIR "vs_hud.txt", 7);
+        UI_AddMenuList(localClientNum, &cgDC[localClientNum], menuListb, 0);
+    }
+#else
     Menus = UI_LoadMenus("ui_mp/hud_hardcore.txt", 7);
     UI_AddMenuList(localClientNum, &cgDC[localClientNum], Menus, 0);
     menuList = UI_LoadMenus("ui_mp/hud_spectator.txt", 7);
     UI_AddMenuList(localClientNum, &cgDC[localClientNum], menuList, 0);
     if ( !IsHardcoreMode(localClientNum) )
     {
-        v2 = UI_LoadMenus("ui_mp/hud.txt", 7);
+        v2 = UI_LoadMenus(SP_UI_DIR "hud.txt", 7);
         UI_AddMenuList(localClientNum, &cgDC[localClientNum], v2, 0);
         String = Dvar_GetString("g_gametype");
-        v4 = va("ui_mp/hud_%s.txt", String);
+        v4 = va(SP_UI_DIR "hud_%s.txt", String);
         menuLista = UI_LoadMenus(v4, 7);
         UI_AddMenuList(localClientNum, &cgDC[localClientNum], menuLista, 0);
     }
@@ -3361,6 +3872,7 @@ void __cdecl CG_LoadHudMenu(int localClientNum)
     UI_AddMenuList(localClientNum, &cgDC[localClientNum], v5, 0);
     menuListb = UI_LoadMenus("ui_mp/hud_demo.txt", 7);
     UI_AddMenuList(localClientNum, &cgDC[localClientNum], menuListb, 0);
+#endif
     if ( CL_LocalClient_GetActiveCount() == 1 )
         menu = Menus_FindByName(&cgDC[localClientNum], "Compass");
     else
@@ -3622,6 +4134,9 @@ int CGScr_LoadScriptsAndAnims()
     CGScr_LoadScripts(mapname, gametype, &functions);
     BG_LoadAnim(mapname);
     BG_PostLoadAnim(mapname);
+#ifdef KISAK_SP
+    CG_CaptureRemoteAnimTrees_SP();
+#endif
     return functions.count;
 }
 
@@ -3667,11 +4182,23 @@ void __cdecl CG_LoadAnimTreeInstances(int localClientNum)
         //*(unsigned int *)&cgs->corpseinfo[1480 * ia + 1332] = (unsigned int)XAnimCreateTree(generic_human, Hunk_AllocXAnimClient);
     }
 
+#ifdef KISAK_SP
+    // SP actors are not dogs. MP ships one AI species so this hardcoded the 60-entry
+    // DOG_ANIMS table; SP animscripts index against the "generic_human" tree instead, and
+    // feeding a dog tree to one tripped "animIndex < anims->size" (xanim.cpp) the moment an
+    // actor played its first animation. "DOG_ANIMS" and "generic_dog" have ZERO hits in the
+    // SP binary; SP dogs get animtrees/dog.atr instead, installed per-entity by
+    // animscripts/dog_init.gsc's `self useAnimTree( #animtree )`, which goes through
+    // G_SetAnimTree and replaces ent->pAnimTree -- not through this shared pointer.
+    // Client mirror of G_LoadAnimTreeInstances; same lockstep requirement.
+    anims = BG_GetActorAnims();
+#else
     anims = Dog_GetAnims();
+#endif
 
     iassert(anims);
 
-    for ( int i = 0; i < 16; ++i )
+    for ( int i = 0; i < MAX_ACTORS; ++i )
         cgameGlob->bgs.actorinfo[i].pXAnimTree = XAnimCreateTree(anims, Hunk_AllocXAnimClient);
 
     for ( int i = 0; i < 8; ++i )
@@ -3690,6 +4217,9 @@ void __cdecl CG_SetupGameInformation(int localClientNum)
 
 void __cdecl CG_Shutdown(int localClientNum)
 {
+#ifdef KISAK_SP
+    CG_ClearRemoteAnimTrees_SP();
+#endif
     colgeom_visitor_inlined_t<200> *v1; // [esp+0h] [ebp-28h]
     int i; // [esp+14h] [ebp-14h]
     cg_s *cgameGlob; // [esp+18h] [ebp-10h]
@@ -3785,7 +4315,7 @@ void __cdecl CG_FreeAnimTreeInstances(int localClientNum)
             cgs->corpseinfo[i].pXAnimTree = 0;
         }
     }
-    for (i = 0; i < 16; ++i)
+    for (i = 0; i < MAX_ACTORS; ++i)
     {
         if (cgameGlob->bgs.actorinfo[i].pXAnimTree)
         {

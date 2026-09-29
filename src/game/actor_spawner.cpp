@@ -26,6 +26,24 @@ const float g_vSpawnCheckPoints[11][3] =
   { 0.0, 0.0, 0.0 }
 };
 
+#ifdef KISAK_SP
+// Retail SP's setailimit/getailimit/resetailimit handlers at
+// 0x00804AD0/0x00804B10/0x00804D60 share the dword at 0x01C08AE4.
+// SpawnActor reads it before allocating an actor and refuses the spawn once
+// the number of in-use actors reaches the non-zero limit.
+static int s_aiLimit;
+
+void G_SetAILimit_SP(int limit)
+{
+    s_aiLimit = limit;
+}
+
+int G_GetAILimit_SP()
+{
+    return s_aiLimit;
+}
+#endif
+
 
 int __cdecl SpotWouldTelefrag(gentity_s *spot)
 {
@@ -106,6 +124,20 @@ gentity_s *__cdecl SpawnActor(gentity_s *ent, unsigned int targetname, enumForce
         Com_DPrintf(18, "Attempted spawn prevented by ai_disableSpawn.\n");
         return 0;
     }
+#ifdef KISAK_SP
+    const int aiLimit = G_GetAILimit_SP();
+    if ( aiLimit )
+    {
+        int actorCount = 0;
+        for ( int actorIndex = 0; actorIndex < MAX_ACTORS; ++actorIndex )
+        {
+            if ( level.actors[actorIndex].inuse )
+                ++actorCount;
+        }
+        if ( actorCount >= aiLimit )
+            return 0;
+    }
+#endif
     if ( forceSpawn == CHECK_SPAWN )
     {
         if ( SpotWouldTelefrag(ent) )
@@ -169,6 +201,37 @@ gentity_s *__cdecl SpawnActor(gentity_s *ent, unsigned int targetname, enumForce
             for ( pEnemy = Sentient_FirstSentient(-1); pEnemy; pEnemy = Sentient_NextSentient(pEnemy, -1) )
                 Actor_GetPerfectInfo(spawn->actor, pEnemy);
         }
+#ifdef KISAK_SP
+        // Runs the spawned AI's aitype/<name>.gsc main(), which is where its weapon, sidearm,
+        // team, health and self.type come from. Actor_FinishSpawning had NO CALLER anywhere in
+        // this tree -- Actor_FinishSpawningAll (actor_mp.cpp:944) calls Actor_InitAnimScript
+        // instead, so nothing ever ran an aitype script and every spawned actor reached
+        // animscripts/init with its weapon fields undefined:
+        //     undefined is not an array index: animscripts/init.gsc:37
+        //       self.weaponInfo[weapon] = SpawnStruct();   <- from initWeapon(self.sidearm)
+        //
+        // POSITION IS RETAIL'S, not chosen: SpawnActor at 0x00526e50 calls Actor_FinishSpawning
+        // (0x0048a750) exactly here -- after the spawnflags & 8 perfect-info loop and before
+        // the getEnemyInfo block reads ent->pActor. 0x0048a750 is identified by its body, not
+        // by position: it resolves the classname, skips the "actor_" prefix, looks the scripts
+        // up with Hunk_FindDataForFile(0, classname + 6) and runs typeScript->main through
+        // Scr_ExecEntThread/Scr_FreeThread -- statement for statement this tree's
+        // Actor_FinishSpawning head. The type-0 registry key is the same one
+        // GScr_LoadScriptsAndAnimsForEntities now writes.
+        //
+        // COUPLING worth knowing: Actor_FinishSpawning asserts typeScript and typeScript->main
+        // are non-null, and Assert_MyHandler __debugbreak()s in Release. The entity walk loads
+        // aitype scripts with bEnforceExists = 0, so a map that names an actor type whose
+        // script did not ship trades a soft "Could not find script" at load for a hard stop at
+        // spawn. That is retail's own shape (its two-pass loader Com_Errors on a null handle),
+        // and a missing aitype is a content error that should be loud, so it is left alone.
+        //
+        // NOT changed, and deliberately not guessed: retail's 0x0048a750 has a tail this
+        // tree's Actor_FinishSpawning lacks -- a memset of a 0x47c per-actor block plus four
+        // field writes (two zeros, two 0x3ff) and an eFlags |= 0x800 under one condition.
+        // Those offsets are retail actor_s offsets and are not mapped here.
+        Actor_FinishSpawning(spawn->actor);
+#endif
         pSelf = spawn->actor;
         if ( getEnemyInfo )
         {

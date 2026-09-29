@@ -2,8 +2,8 @@
 #include <game/sentient.h>
 #include <game/actor.h>
 #include <game/actor_fields.h>
+#include <bgame/bg_actor_constants.h>
 
-#define MAX_ACTORS 16
 #define ACTOR_STOP_TIME 500
 
 struct PhysicsInputs // sizeof=0x1C

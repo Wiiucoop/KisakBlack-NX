@@ -1,4 +1,6 @@
 #pragma once
+#include "live_stats_layout.h"
+#include <cstddef>
 #include <DemonWare/bdCore/bdContainers/bdByteBuffer.h>
 #include <DemonWare/bdPlatform/bdPlatformLog/bdPlatformLog.h>
 #include <DemonWare/bdCore/bdContainers/bdArray.h>
@@ -173,14 +175,19 @@ struct __declspec(align(8)) TaskDefinition // sizeof=0x20
     // padding byte
 };
 
-struct persistentStats // sizeof=0x996C
+struct persistentStats
 {                                       // XREF: .data:s_otherPlayerStats/r
-    unsigned __int8 statsBuffer[39272];
+    unsigned __int8 statsBuffer[STATS_PERSISTENT_PAYLOAD_SIZE];
     bool isChecksumValid;
     bool statsWriteNeeded;
     bool statsValidatedWithDDL;
     bool statsFetched;
 };
+
+#ifdef KISAK_MP
+static_assert(offsetof(persistentStats, isChecksumValid) == STATS_BUFFER_SIZE, "Stats metadata follows the blob");
+static_assert(sizeof(persistentStats) == STATS_RECORD_SIZE, "Stats record contains four metadata bytes");
+#endif
 
 enum bdWriteType //bdStats::bdWriteType : __int32
 {                                       // XREF: bdStatsInfo/r
@@ -731,13 +738,13 @@ struct fileShareWriteFileInfo // sizeof=0x34
 
 struct playerNetworkData // sizeof=0x3AD90
 {                                       // XREF: .data:controllerNetworkData/r
-    _BYTE playerStats[40172];
-    _BYTE playerStatsBackup[40172];     // XREF: LiveStorage_GetPersStatsBuffer+81/o
-    _BYTE stableStatsBuffer[40172];     // XREF: LiveStorage_GetPersStatsBuffer+94/o
-    _BYTE basicTrainingStats[40172];    // XREF: LiveStorage_GetPersStatsBuffer+B1/o
+    _BYTE playerStats[STATS_RECORD_SIZE];
+    _BYTE playerStatsBackup[STATS_RECORD_SIZE];     // XREF: LiveStorage_GetPersStatsBuffer+81/o
+    _BYTE stableStatsBuffer[STATS_RECORD_SIZE];     // XREF: LiveStorage_GetPersStatsBuffer+94/o
+    _BYTE basicTrainingStats[STATS_RECORD_SIZE];    // XREF: LiveStorage_GetPersStatsBuffer+B1/o
                                         // LiveStorage_GetPersStatsBuffer+117/o
-    _BYTE globalplayerStats[40172];     // XREF: LiveStorage_GetPersStatsBuffer+C5/o
-    _BYTE globalStablePlayerStats[40172];
+    _BYTE globalplayerStats[STATS_RECORD_SIZE];     // XREF: LiveStorage_GetPersStatsBuffer+C5/o
+    _BYTE globalStablePlayerStats[STATS_RECORD_SIZE];
                                         // XREF: LiveStorage_GetPersStatsBuffer+D8/o
     bool firstTimeRunning;              // XREF: LiveStorage_PlayerStatsFileNotFound+49/w
                                         // LiveStorage_ReadPlayerStatsSuccessful+79/w ...
@@ -1015,6 +1022,10 @@ void __cdecl LiveStorage_NewUser(int controllerIndex);
 void __cdecl LiveStorage_ClearPlayerStats(int controllerIndex);
 int LiveStorage_ResetAllFileOps();
 char __cdecl LiveStorage_Init();
+bool LiveStorage_UsesOfflineStats();
+bool LiveStorage_OfflineStatsReady(int controllerIndex);
+bool LiveStorage_OfflineStatsAccessible(int controllerIndex);
+bool LiveStorage_InitOfflineStats(int controllerIndex);
 void __cdecl LiveStorage_WriteBackupStatsCmd();
 void __cdecl LiveStorage_ReadStatsBackupCmd();
 void __cdecl LiveStorage_GetFriendStatsCmd();

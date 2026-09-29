@@ -92,6 +92,14 @@
 #include <client/cl_debugdata.h>
 #include <win32/win_steam.h>
 #include <universal/base64.h>
+#ifdef KISAK_SP
+#include <database/db_registry.h>
+#include <gfx_d3d/r_cinematic.h>
+#include <universal/q_parse.h>
+#endif
+
+#include <cstdlib>
+#include <cstring>
 
 const dvar_t *cl_noprint;
 const dvar_t *playlist;
@@ -1139,6 +1147,247 @@ void __cdecl CL_ShutdownDemo()
     }
 }
 
+#ifdef KISAK_SP
+enum MovieToPlayScriptOp : int
+{
+    MTPSOP_PLUS,
+    MTPSOP_MINUS,
+    MTPSOP_MUL,
+    MTPSOP_GT,
+    MTPSOP_LT,
+    MTPSOP_EQ,
+    MTPSOP_STRCMP,
+    MTPSOP_STRCAT,
+    MTPSOP_NOT,
+    MTPSOP_DUP,
+    MTPSOP_DROP,
+    MTPSOP_SWAP,
+    MTPSOP_GETDVAR,
+    MTPSOP_GETMAPNAME,
+    MTPSOP_IF,
+    MTPSOP_THEN,
+    MTPSOP_PLAY,
+    MTPSOP_LITERAL,
+};
+
+struct MovieToPlayScriptOpInfo
+{
+    MovieToPlayScriptOp op;
+    const char *opName;
+    unsigned int inValues;
+    unsigned int outValues;
+};
+
+static const MovieToPlayScriptOpInfo s_movieToPlayScriptOpInfo[] =
+{
+    { MTPSOP_PLUS, "+", 2, 1 },
+    { MTPSOP_MINUS, "-", 2, 1 },
+    { MTPSOP_MUL, "*", 2, 1 },
+    { MTPSOP_GT, ">", 2, 1 },
+    { MTPSOP_LT, "<", 2, 1 },
+    { MTPSOP_EQ, "==", 2, 1 },
+    { MTPSOP_STRCMP, "strcmp", 2, 1 },
+    { MTPSOP_STRCAT, "strcat", 2, 1 },
+    { MTPSOP_NOT, "!", 1, 1 },
+    { MTPSOP_DUP, "dup", 1, 2 },
+    { MTPSOP_DROP, "drop", 1, 0 },
+    { MTPSOP_SWAP, "swap", 2, 2 },
+    { MTPSOP_GETDVAR, "getdvar", 1, 1 },
+    { MTPSOP_GETMAPNAME, "getmapname", 0, 1 },
+    { MTPSOP_IF, "if", 1, 0 },
+    { MTPSOP_THEN, "then", 0, 0 },
+    { MTPSOP_PLAY, "play", 1, 0 },
+    { MTPSOP_LITERAL, nullptr, 0, 1 },
+};
+
+// Retail SP 0x008825B0. The source-attested postfix interpreter is kept local to SP because MP
+// does not own the cin_levels.txt-driven startup sequence.
+void __cdecl CL_MapLoading_CalcMovieToPlay(
+    const char *buffer,
+    const char *inMapName,
+    char *outMovieName)
+{
+    constexpr unsigned int VALUE_STACK_COUNT = 8;
+    constexpr unsigned int VALUE_SIZE = 64;
+    const char *parsePos = buffer;
+    char valueStack[VALUE_STACK_COUNT][VALUE_SIZE] = {};
+    char scratch[VALUE_SIZE];
+    unsigned int valueCount = 0;
+    int skipDepth = 0;
+
+    outMovieName[0] = '\0';
+    Com_BeginParseSession("video/cin_levels.txt");
+
+    do
+    {
+        const char *token = Com_Parse(&parsePos)->token;
+        if ( !token[0] )
+            break;
+
+        if ( skipDepth )
+        {
+            if ( !strcmp(token, "then") )
+                --skipDepth;
+            else if ( !strcmp(token, "if") )
+                ++skipDepth;
+            continue;
+        }
+
+        const MovieToPlayScriptOpInfo *opInfo = s_movieToPlayScriptOpInfo;
+        while ( opInfo->opName && strcmp(token, opInfo->opName) )
+            ++opInfo;
+
+        const char *operationDescription = opInfo->opName ? "do special command" : "push literal";
+        if ( valueCount < opInfo->inValues )
+        {
+            Com_Error(
+                ERR_FATAL,
+                "Stack underflow in %s, trying to %s '%s'.",
+                "video/cin_levels.txt",
+                operationDescription,
+                token);
+        }
+
+        const unsigned int resultCount = valueCount - opInfo->inValues + opInfo->outValues;
+        if ( resultCount >= VALUE_STACK_COUNT )
+        {
+            Com_Error(
+                ERR_FATAL,
+                "Stack overflow in %s, trying to %s '%s'.",
+                "video/cin_levels.txt",
+                operationDescription,
+                token);
+        }
+
+        char *const lhs = valueCount >= 2 ? valueStack[valueCount - 2] : nullptr;
+        char *const rhs = valueCount >= 1 ? valueStack[valueCount - 1] : nullptr;
+
+        switch ( opInfo->op )
+        {
+        case MTPSOP_PLUS:
+            Com_sprintf(lhs, VALUE_SIZE, "%i", atoi(lhs) + atoi(rhs));
+            break;
+        case MTPSOP_MINUS:
+            Com_sprintf(lhs, VALUE_SIZE, "%i", atoi(lhs) - atoi(rhs));
+            break;
+        case MTPSOP_MUL:
+            Com_sprintf(lhs, VALUE_SIZE, "%i", atoi(lhs) * atoi(rhs));
+            break;
+        case MTPSOP_GT:
+            Com_sprintf(lhs, VALUE_SIZE, "%i", atoi(lhs) > atoi(rhs));
+            break;
+        case MTPSOP_LT:
+            Com_sprintf(lhs, VALUE_SIZE, "%i", atoi(lhs) < atoi(rhs));
+            break;
+        case MTPSOP_EQ:
+            Com_sprintf(lhs, VALUE_SIZE, "%i", atoi(lhs) == atoi(rhs));
+            break;
+        case MTPSOP_STRCMP:
+            Com_sprintf(lhs, VALUE_SIZE, "%i", strcmp(lhs, rhs));
+            break;
+        case MTPSOP_STRCAT:
+            Com_sprintf(scratch, VALUE_SIZE, "%s%s", lhs, rhs);
+            I_strncpyz(lhs, scratch, VALUE_SIZE);
+            break;
+        case MTPSOP_NOT:
+            Com_sprintf(rhs, VALUE_SIZE, "%i", atoi(rhs) == 0);
+            break;
+        case MTPSOP_DUP:
+            I_strncpyz(valueStack[valueCount], rhs, VALUE_SIZE);
+            break;
+        case MTPSOP_DROP:
+        case MTPSOP_THEN:
+            break;
+        case MTPSOP_SWAP:
+            I_strncpyz(scratch, lhs, VALUE_SIZE);
+            I_strncpyz(lhs, rhs, VALUE_SIZE);
+            I_strncpyz(rhs, scratch, VALUE_SIZE);
+            break;
+        case MTPSOP_GETDVAR:
+            I_strncpyz(rhs, Dvar_GetVariantString(rhs), VALUE_SIZE);
+            break;
+        case MTPSOP_GETMAPNAME:
+            I_strncpyz(valueStack[valueCount], inMapName, VALUE_SIZE);
+            break;
+        case MTPSOP_IF:
+            if ( !atoi(rhs) )
+                skipDepth = 1;
+            break;
+        case MTPSOP_PLAY:
+            I_strncpyz(outMovieName, rhs, 256);
+            break;
+        case MTPSOP_LITERAL:
+            I_strncpyz(valueStack[valueCount], token, VALUE_SIZE);
+            break;
+        }
+
+        valueCount = resultCount;
+    }
+    while ( !outMovieName[0] );
+
+    Com_EndParseSession();
+    if ( skipDepth )
+        Com_Error(ERR_FATAL, "Unterminated if in %s", "video/cin_levels.txt");
+    if ( !outMovieName[0] )
+        Com_Error(ERR_FATAL, "No loading movie specified by %s", "video/cin_levels.txt");
+}
+
+// Retail SP 0x00882A50. A missing loose-file script is a warning and leaves an empty result.
+void __cdecl CL_MapLoading_CalcMovieToPlay_LoadObj(const char *inMapName, char *outMovieName)
+{
+    void *buffer = nullptr;
+    if ( FS_ReadFile("video/cin_levels.txt", &buffer) < 0 )
+    {
+        Com_PrintWarning(1, "Could not open %s", "video/cin_levels.txt");
+        outMovieName[0] = '\0';
+        return;
+    }
+
+    CL_MapLoading_CalcMovieToPlay(static_cast<const char *>(buffer), inMapName, outMovieName);
+    FS_FreeFile(static_cast<char *>(buffer));
+}
+
+// Retail SP 0x00882AB0. The RawFile buffer is the parser input; the asset itself is already
+// present in code_post_gfx.ff/patch.ff in the retail install.
+void __cdecl CL_MapLoading_CalcMovieToPlay_FastFile(const char *inMapName, char *outMovieName)
+{
+    XAssetHeader asset = DB_FindXAssetHeader(
+        ASSET_TYPE_RAWFILE,
+        const_cast<char *>("video/cin_levels.txt"),
+        true,
+        -1);
+
+    if ( !asset.rawfile || !asset.rawfile->buffer )
+    {
+        Com_PrintWarning(1, "Could not open %s", "video/cin_levels.txt");
+        outMovieName[0] = '\0';
+        return;
+    }
+
+    CL_MapLoading_CalcMovieToPlay(asset.rawfile->buffer, inMapName, outMovieName);
+}
+
+// Retail SP 0x00882B00. Retail's custom EDX input ABI is a binary-only detail; this reconstruction
+// exposes the source-attested ordinary C interface. SP uses flag 4 and treats spinner as a wait-UI
+// sentinel rather than attempting to open spinner.bik.
+void __cdecl CL_MapLoading_StartCinematic(const char *mapName, float volume)
+{
+    char movieName[256];
+    if ( useFastFile->current.enabled )
+        CL_MapLoading_CalcMovieToPlay_FastFile(mapName, movieName);
+    else
+        CL_MapLoading_CalcMovieToPlay_LoadObj(mapName, movieName);
+
+    if ( !I_stricmp(movieName, "spinner") )
+    {
+        Dvar_SetBool((dvar_s *)long_blocking_call, true);
+        return;
+    }
+
+    R_Cinematic_StartPlayback(movieName, 4, volume);
+}
+#endif
+
 void __cdecl CL_MapLoading(const char *mapname)
 {
     int localClientNum; // [esp+8h] [ebp-Ch]
@@ -1220,7 +1469,9 @@ void __cdecl CL_MapLoading(const char *mapname)
                 }
             }
         }
+#ifndef KISAK_SP
         SND_FadeOut();
+#endif
     }
 }
 
@@ -1814,8 +2065,16 @@ void __cdecl CL_DownloadsComplete(int localClientNum)
                 LoadMapLoadscreen(mapname);
             UI_SetMap(mapname, gametype);
             SCR_UpdateScreen();
-            CL_ShutdownAll();
-            Com_Restart();
+#ifdef KISAK_SP
+            // CL_ParseGamestate already restarted before preloading this zone
+            // for CCS validation. Restarting again would erase its clipmap.
+            const bool spMapPreloaded = useFastFile->current.enabled && DB_IsZoneLoaded(mapname);
+            if (!spMapPreloaded)
+#endif
+            {
+                CL_ShutdownAll();
+                Com_Restart();
+            }
             if ( cls.hunkUsersStarted
                 && !Assert_MyHandler(
                             "C:\\projects_pc\\cod\\codsrc\\src\\client_mp\\cl_main_mp.cpp",
@@ -1826,7 +2085,10 @@ void __cdecl CL_DownloadsComplete(int localClientNum)
             {
                 __debugbreak();
             }
-            CL_InitRenderer();
+#ifdef KISAK_SP
+            if (!spMapPreloaded)
+#endif
+                CL_InitRenderer();
             CL_StartHunkUsers();
             SCR_UpdateScreen();
             for ( client = 0; client < 1; ++client )
@@ -1986,6 +2248,7 @@ void __cdecl CL_CheckForResend(int localClientNum)
     clientConnection_t *clc; // [esp+93Ch] [ebp-414h]
     char pkt[1036]; // [esp+940h] [ebp-410h] BYREF
 
+#ifndef OPENBLOPS_NO_STEAM_AUTH
     unsigned char *pSteamClientTicket = NULL;
     uint32 steamClientTicketSize = 0;
     char steamIDbuf[25];
@@ -1995,6 +2258,7 @@ void __cdecl CL_CheckForResend(int localClientNum)
     unsigned char steamTicketDecodeBuf[1024]{ 0 };
 #endif
 
+#endif
     connstate = CL_GetLocalClientConnectionState(localClientNum);
     if ( connstate == CA_CONNECTING || connstate == CA_CHALLENGING || connstate == CA_SENDINGSTATS )
     {
@@ -2036,12 +2300,18 @@ void __cdecl CL_CheckForResend(int localClientNum)
                     //NET_OutOfBandPrint(Com_LocalClient_GetNetworkID(localClientNum), serverAddress, va("getchallenge 0 \"%s\"", md5Str));
                     //NET_OutOfBandPrint(Com_LocalClient_GetNetworkID(localClientNum), clc->serverAddress, va("getchallenge 0 \"%s\"", dummy));
 
+#ifdef OPENBLOPS_NO_STEAM_AUTH
+                    NET_OutOfBandPrint(Com_LocalClient_GetNetworkID(localClientNum),
+                        clc->serverAddress, "getchallenge 0");
+#else
                     bool got = Steam_GetRawClientTicket(&pSteamClientTicket, &steamClientTicketSize);
                     iassert(got);
                     b64_encode(pSteamClientTicket, steamClientTicketSize, steamTicketBase64);
                     iassert(b64_decode(steamTicketBase64, strlen((char *)steamTicketBase64), steamTicketDecodeBuf) == steamClientTicketSize);
 
                     NET_OutOfBandPrint(Com_LocalClient_GetNetworkID(localClientNum), clc->serverAddress, va("getchallenge 0 \"%s\" \"%llu\"", steamTicketBase64, Steam_GetClientSteamID64()));
+
+#endif
 
                     *(&clc->nonce + 1) = 0;
                     clc->nonce = 0;
@@ -2051,6 +2321,10 @@ void __cdecl CL_CheckForResend(int localClientNum)
             {
                 I_strncpyz(info, Dvar_InfoString(localClientNum, 2), 1024);
                 Info_SetValueForKey(info, "protocol", va("%i", 1044));
+                Info_SetValueForKey(info, "openblops_mode", OPENBLOPS_GAME_MODE);
+#ifdef KISAK_SP
+                Info_SetValueForKey(info, "openblops_sp_anim", OPENBLOPS_SP_ANIM_PROTOCOL);
+#endif
                 Info_SetValueForKey(info, "challenge", va("%i", clc->challenge));
                 Uid = LiveSteam_GetUid();
                 Int64ToString(Uid, clientSteamIDStr);
@@ -2483,7 +2757,7 @@ char    CL_DispatchConnectionlessPacket(int localClientNum, netadr_t from, msg_t
                     statPacketsNeeded = I_atoi64(v12);
                     if ( statPacketsNeeded )
                     {
-                        v13 = BYTE4(statPacketsNeeded) & 7;
+                        v13 = BYTE4(statPacketsNeeded) & STATS_PACKET_MASK_HIGH;
                         v14 = clc;
                         LODWORD(clc->statPacketsToSend) = statPacketsNeeded;
                         HIDWORD(v14->statPacketsToSend) = v13;
@@ -2548,8 +2822,8 @@ char    CL_DispatchConnectionlessPacket(int localClientNum, netadr_t from, msg_t
                                 v11 = Com_LocalClient_GetControllerIndex(localClientNum);
                                 LiveStats_MakeStableGlobalStatsBuffer(v11);
                             }
-                            memset((unsigned __int8 *)clc->statPacketSendTime, 0, 0x8Cu);
-                            clc->statPacketsToSend = 0x7FFFFFFFFLL;
+                            memset(clc->statPacketSendTime, 0, sizeof(clc->statPacketSendTime));
+                            clc->statPacketsToSend = STATS_PACKET_MASK;
                         }
                         clc->lastPacketTime = cls.realtime;
                         clc->lastPacketSentTime = -9999;
@@ -3147,6 +3421,11 @@ void __cdecl CL_RunOncePerClientFrame(int localClientNum, int msec)
     }
     cls.realFrametime = msec;
     cls.frametime = msec;
+#ifdef KISAK_SP
+    // Retail SP (0x0047e930): paused local gameplay must not accumulate
+    // command time while CL_SetCGameTime holds the simulation clock still.
+    if ( !sv_paused->current.integer || !cl_paused->current.integer || !com_sv_running->current.enabled )
+#endif
     cls.realtime += msec;
     frame_msec = com_frameTime - old_com_frameTime;
     if ( com_frameTime == old_com_frameTime )
@@ -3396,7 +3675,19 @@ void __cdecl CL_InitRenderer()
     cls.vidConfig.isToolMode = r_reflectionProbeGenerate->current.enabled;
     v0 = cls.vidConfig.isToolMode || G_OnlyConnectingPaths();
     cls.vidConfig.isToolMode = v0;
+    // SP retail divergence, found by the 2026-08-06 SP-vs-MP startup audit
+    // (docs/SP_MP_STARTUP_AUDIT.md, finding #1 -- FULL confidence): the real SP binary calls
+    // R_SetIsMultiplayer(0) here (sole caller of R_SetIsMultiplayer confirmed via get_xrefs_to),
+    // not MP's hardcoded 1. This flag is exactly what R_UI3D_CheckRenderTarget reads to route the
+    // SP main menu to the diegetic interrogation-room texture-window terminal vs. MP's flat
+    // fullscreen placement -- building KISAK_SP from the unguarded line below would silently
+    // defeat the diegetic terminal entirely. This is a fix to the RECONSTRUCTION, not a
+    // discovered SP-side quirk: the real retail SP executable already does the right thing.
+#ifdef KISAK_SP
+    R_SetIsMultiplayer(0);
+#else
     R_SetIsMultiplayer(1);
+#endif
     R_BeginRegistration(&cls.vidConfig);
     CL_SetupViewport();
     cls.whiteMaterial = Material_RegisterHandle("white", 3);
@@ -3630,6 +3921,16 @@ void __cdecl CL_startSingleplayer_f()
     Sys_QuitAndStartProcess("CoDSP_rd.exe");
 }
 
+#ifdef KISAK_SP
+// Retail SP 0x0044FF00.  Zombies/multiplayer are a separate Steam application;
+// the SP frontend deliberately quits and asks Steam to launch BlackOpsMP.exe.
+void __cdecl CL_startMultiplayer_f()
+{
+    Com_Printf(14, "SP startMultiplayer command: handing off to BlackOpsMP.exe\n");
+    Sys_QuitAndStartProcess("BlackOpsMP.exe");
+}
+#endif
+
 void __cdecl CL_DrawLogo(int localClientNum)
 {
     float fade; // [esp+40h] [ebp-24h]
@@ -3834,6 +4135,9 @@ cmd_function_s CL_OpenedIWDList_f_VAR;
 cmd_function_s CL_ReferencedIWDList_f_VAR;
 cmd_function_s CL_UpdateLevelHunkUsage_VAR;
 cmd_function_s CL_startSingleplayer_f_VAR;
+#ifdef KISAK_SP
+cmd_function_s CL_startMultiplayer_f_VAR;
+#endif
 cmd_function_s CL_ParseBadPacket_f_VAR;
 cmd_function_s CL_CubemapShot_f_VAR;
 cmd_function_s CL_OpenScriptMenu_f_VAR;
@@ -4161,6 +4465,10 @@ void __cdecl CL_InitOnceForAllClients()
     Cmd_AddCommandInternal("fs_openedList", CL_OpenedIWDList_f, &CL_OpenedIWDList_f_VAR);
     Cmd_AddCommandInternal("fs_referencedList", CL_ReferencedIWDList_f, &CL_ReferencedIWDList_f_VAR);
     Cmd_AddCommandInternal("updatehunkusage", CL_UpdateLevelHunkUsage, &CL_UpdateLevelHunkUsage_VAR);
+#ifdef KISAK_SP
+    // Retail CL_InitOnceForAllClients 0x00591803-0x00591812.
+    Cmd_AddCommandInternal("startMultiplayer", CL_startMultiplayer_f, &CL_startMultiplayer_f_VAR);
+#endif
     Cmd_AddCommandInternal("startSingleplayer", CL_startSingleplayer_f, &CL_startSingleplayer_f_VAR);
     Cmd_AddCommandInternal("parseBadPacket", CL_ParseBadPacket_f, &CL_ParseBadPacket_f_VAR);
     Cmd_AddCommandInternal("cubemapShot", (void (__cdecl *)())CL_CubemapShot_f, &CL_CubemapShot_f_VAR);
@@ -4579,6 +4887,10 @@ void __cdecl CL_Shutdown(int localClientNum)
             Cmd_RemoveCommand("SaveTranslations");
             Cmd_RemoveCommand("SaveNewTranslations");
             Cmd_RemoveCommand("LoadTranslations");
+#ifdef KISAK_SP
+            // Retail shutdown 0x00424C62.
+            Cmd_RemoveCommand("startMultiplayer");
+#endif
             Cmd_RemoveCommand("startSingleplayer");
             Cmd_RemoveCommand("buyNow");
             Cmd_RemoveCommand("singlePlayLink");

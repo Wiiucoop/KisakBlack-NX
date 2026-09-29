@@ -25,6 +25,7 @@
 #include <live/live_fileshare.h>
 #include <ui/ui_screenshot.h>
 #include <client_mp/cl_cgame_mp.h>
+#include <client_mp/cl_main_mp.h> // KISAK_SP: UI_SetActiveMenu needs CL_PauseGame
 #include <gfx_d3d/r_ui3d.h>
 #include <live/live_combatrecord.h>
 #include <live/live_contracts.h>
@@ -45,6 +46,11 @@
 #include <demo/demo_ui.h>
 #include <database/db_file_load.h>
 #include <cgame/cg_info.h>
+#ifdef KISAK_SP
+#include <gfx_d3d/r_cinematic.h>
+#include <qcommon/common.h>
+#include <ui/ui_main.h>                 // ui_menuLvlNotify, for the sendMenuNotify menu script
+#endif
 
 const char *lbTypeEnum_3[17] =
 {
@@ -212,8 +218,115 @@ void __cdecl UI_Project_AssetCache()
     sharedUiInfo.assets.lineGraph = Material_RegisterHandle((char *)"ui_line_graph", 3);
 }
 
+#ifdef KISAK_SP
+// SP-only addition (Ghidra 0x0040FC70). Retail's own plate leaves this function deliberately
+// unnamed ("naming it would be fabrication") -- confirmed statically by decompiling the address
+// directly, body verified against disassembly line-for-line: unpause, fade to clear over 3
+// seconds, close all menus, promote a queued cinematic (or stop playback if none is queued), mark
+// com_introPlayed, and (retail only) rearm an idle/attract timer. It is the SP intro/attract-movie
+// dismiss handler, reached (per retail xrefs) from UI_Project_RunMenuScript's "playerstart"
+// command, from UI_SetActiveMenu's case 4 ("pregame") gate (TODO'd, not transcribed, see
+// UI_SetActiveMenuSp case 4 above), and from the per-frame lifecycle helper below. The name here
+// is this reconstruction's own descriptive label, not a claimed retail symbol.
+//
+// TWO retail statements are deliberately NOT ported:
+//  - a raw global-byte write (FUN_0057fc70(0), Ghidra 0x0057fc70) with no confirmed reader
+//    anywhere in the binary (get_xrefs_to found only this one write) and no corresponding state
+//    in this reconstruction to hook it to;
+//  - an idle/attract-timer rearm (FUN_004f46b0, Ghidra 0x004f46b0) that arms a retail-only
+//    "return to attract screen after N seconds idle" timer. This reconstruction has no
+//    attract-mode/idle-timeout subsystem anywhere else (same reasoning this project has already
+//    applied to declining an unrelated PunkBuster port -- see ORCHESTRATOR.md Sec.10): inventing
+//    one here would be exactly the kind of new-subsystem guess that's out of scope for a
+//    behavior-preserving port.
+// TODO(SP): FUN_0057fc70 (Ghidra 0x0057fc70) -- unidentified global write, not ported.
+// TODO(SP): FUN_004f46b0 (Ghidra 0x004f46b0) -- idle/attract-timer rearm, no reconstruction
+// subsystem to attach it to, not ported.
+// STILL BLOCKED, re-checked 2026-08-26 against the live database (19673 functions): BOTH
+// addresses are still bare FUN_* -- no name has landed on either since these TODOs were written,
+// so neither is any closer to being portable. The second one is blocked on a missing subsystem
+// regardless of naming, so a future name would not unblock it by itself.
+static void UI_Sp_DismissCinematic(int localClientNum)
+{
+    uiInfo_s *uiInfo = UI_GetInfo(localClientNum);
+
+    Dvar_SetIntByName("cl_paused", 0);
+    Cbuf_AddText(localClientNum, "fade 0 0 0 0 3\n");
+    Menus_CloseAll(localClientNum, &uiInfo->uiDC);
+    if ( R_Cinematic_IsNextReady_Internal() )
+        R_Cinematic_StartNextPlayback();
+    else
+        R_Cinematic_StopPlayback();
+    Dvar_SetBool((dvar_s *)com_introPlayed, true);
+}
+#endif
+
 void __cdecl UI_Project_Refresh(int localClientNum)
 {
+#ifdef KISAK_SP
+    // SP-only, Ghidra 0x00612B90 (called every UI_Refresh at retail 0x004AFE0A, as the very first
+    // statement -- before this reconstruction's shared UI_SetShaderTime/emblem work below, which
+    // matches retail's own call ordering). Per-frame SP cinematic/menu lifecycle: while the
+    // "pregame" (briefing/loading) menu is active and the current cinematic has finished with
+    // nothing queued or targeted, dismiss it and fall back to UISP_NONE; otherwise, once the
+    // active cinematic finishes and a next one is ready, promote it. Confirmed by decompiling the
+    // address directly.
+    //
+    // The two dvar-handle writes in retail's dismiss branch (two unidentified cached-dvar-pointer
+    // globals, DAT_02562a3c/DAT_02598f5c) are the SAME pair already flagged unresolved on
+    // UI_SetActiveMenuSp's case 8 above ("likely campaign mission/act progress trackers") --
+    // confirmed by decompiling UI_SetActiveMenu (0x005852c0) case 8 directly, which writes -1 to
+    // both. Left unported here for the same reason: no second independent fact to name or thread
+    // them through.
+    //
+    // Retail structures this as nested ifs with a `goto` past the second block once the dismiss
+    // path is taken; every other path (any conjunct false) falls into the second block instead.
+    // That is exactly an if/else, transcribed as one below with no behavior change.
+    if ( (int)UI_GetActiveMenu(localClientNum) == UISP_PREGAME && !Dvar_GetString("com_errorMessage")[0] &&
+         R_Cinematic_IsFinished() && !R_Cinematic_IsTargetSet() && !R_Cinematic_IsNextReady_Internal() )
+    {
+        UI_Sp_DismissCinematic(localClientNum);
+        UI_SetActiveMenuSp(localClientNum, UISP_NONE);
+        // IMPLEMENTED 2026-08-26, retail 0x00612be2-0x00612c10 (immediately after the
+        // UI_SetActiveMenu(localClientNum, 0) call at 0x00612bdd, then JMP past the second
+        // block). The dvar pair is the one resolved on UI_SetActiveMenuSp's case 8 above:
+        //   0x00612be2  MOV EAX,[ui_controllerPulled]; MOV EAX,[EAX+0x18]   (current.integer)
+        //   0x00612bed  CMP EAX,-1 ; JZ  -> skip
+        //   0x00612bfa  Dvar_SetInt(ui_pendingControllerPullEvent, EAX)
+        //   0x00612c08  Dvar_SetInt(ui_controllerPulled, -1)
+        // i.e. promote the pulled-controller index into the pending-event dvar and re-arm the
+        // sentinel.
+        //
+        // DIVERGENCE, stated rather than hidden: retail reads a cached dvar_s* whose registered
+        // default is -1, so before anything sets it the guard is false. Neither dvar is
+        // registered in this reconstruction, and Dvar_GetInt returns 0 (not -1) for a name that
+        // does not resolve, which would make the guard spuriously true on the first pass. The
+        // existence test below restores retail's default so the transcription is behaviourally
+        // faithful; it is not extra logic retail has, it stands in for retail's registration.
+        {
+            int controllerPulled = Dvar_FindVar("ui_controllerPulled")
+                                 ? Dvar_GetInt("ui_controllerPulled")
+                                 : -1;
+            if ( controllerPulled != -1 )
+            {
+                Dvar_SetIntByName("ui_pendingControllerPullEvent", controllerPulled);
+                Dvar_SetIntByName("ui_controllerPulled", -1);
+            }
+        }
+    }
+    else if ( R_Cinematic_IsFinished() && R_Cinematic_IsNextReady_Internal() )
+    {
+        R_Cinematic_WaitForUpdateFrame();
+        R_Cinematic_StartNextPlayback();
+        R_Cinematic_UpdateFrame(1);
+        R_Cinematic_WaitForUpdateFrame();
+    }
+    // TODO(SP): retail's tail (0x00612c3d) also calls an unidentified ~500-byte redacted-intel
+    // image-viewer helper (Ghidra 0x00424730, gated on Key_IsCatcherActive(localClientNum, 0x40)).
+    // It consumes K_MOUSE1/K_MOUSE2 and updates the pan/zoom globals initialized while loading
+    // "<name>_redact.csv" and consumed by the timed-redaction overlay renderer. Its behavior is
+    // confirmed, but no exact original source symbol is attested. Not ported in this slice.
+#endif
     UI_SetShaderTime(localClientNum);
     if ( localClientNum == Com_LocalClients_GetPrimary() && Key_IsCatcherActive(localClientNum, 128) )
         UI_EmblemUpdate(localClientNum);
@@ -2323,6 +2436,85 @@ void __cdecl UI_Project_RunMenuScript(
 {
     uiInfo_s *dc; // [esp+Ch] [ebp-34h]
 
+#ifdef KISAK_SP
+    // Retail UI_Project_RunMenuScript 0x00420652-0x00420684.  Shipped frontend.gsc
+    // normally reaches the same command through StartMultiplayerGame(), but retail also
+    // exposes this direct menu-script producer.
+    if ( !I_stricmp(name, "startMultiplayer") )
+    {
+        Com_Printf(13, "SP UI startMultiplayer: queueing command\n");
+        Cbuf_AddText(localClientNum, "startMultiplayer\n");
+        return;
+    }
+
+    // SP-only, Ghidra 0x00420432 (UI_Project_RunMenuScript, retail function 0x00420240 --
+    // confirmed by decompiling the retail function directly). The "playerstart" menu-script
+    // command: if a cinematic has been specifically targeted (R_Cinematic_IsTargetSet) or the
+    // queued "next" cinematic is ready, promote/advance it; otherwise run the same dismiss path
+    // as the per-frame lifecycle helper in UI_Project_Refresh above.
+    if ( !I_stricmp(name, "playerstart") )
+    {
+        if ( R_Cinematic_IsTargetSet() || R_Cinematic_IsNextReady_Internal() )
+        {
+            R_Cinematic_WaitForUpdateFrame();
+            R_Cinematic_StartNextPlayback();
+            R_Cinematic_UpdateFrame(1);
+            R_Cinematic_WaitForUpdateFrame();
+        }
+        else
+        {
+            UI_Sp_DismissCinematic(localClientNum);
+        }
+        return;
+    }
+
+    // SP-only, retail UI_Project_RunMenuScript 0x00420960-0x004209aa (read by decompilation and
+    // by read_memory on the operands). One of the three producers of the "cmd mlvl ..." client
+    // command; without it the SP frontend never tells script that a menu item was chosen.
+    //
+    //   0x00420960  I_stricmp(name, "sendMenuNotify")
+    //               CMP byte ptr [DAT_02598ef4 + 0x18],0 -> ui_menuLvlNotify->current.enabled.
+    //               DAT_02598ef4 is identified by the registrar string-table walk run against
+    //               this binary this pass: 0x008361c8 pushes 0x009b7560 ("ui_menuLvlNotify") and
+    //               the register call's return lands in 0x02598ef4 at 0x008361eb (MSVC's usual
+    //               delayed store). The same global gates both ui_shared.cpp emitters.
+    //   0x00420992  PUSH 0x009ec1c0 -> va("cmd mlvl %s\n", buf)
+    //
+    // ONE token, not two. Retail runs a single String_Parse into a 1024-byte buffer and drops the
+    // whole thing into one "%s", so a menu writing sendMenuNotify "startlevel 0" sends
+    // `cmd mlvl startlevel 0`, which the server side then splits into argv[1]/argv[2]. Splitting
+    // it here would produce `cmd mlvl startlevel` and an argc of 2, which Cmd_MenuLevelMessage_f
+    // rejects.
+    //
+    // Retail does NOT fall through to the "unknown UI script" print when the dvar is off or the
+    // parse fails -- it reaches the function's tail return -- so the unconditional return matches.
+    if ( !I_stricmp(name, "sendMenuNotify") )
+    {
+        Com_Printf(15, "SP sendMenuNotify: localClient %i enabled %i args '%s'\n",
+                   localClientNum,
+                   ui_menuLvlNotify->current.enabled,
+                   args ? *args : "<null>");
+
+        // The gate here is ONE dvar, not two: retail's sendMenuNotify arm does not consult
+        // cl_paused, unlike the two ui_shared.cpp emitters.
+        if ( ui_menuLvlNotify->current.enabled )
+        {
+            char szNotify[1024];        // [esp+...] BYREF
+
+            if ( String_Parse(args, szNotify, 1024) )
+            {
+                Com_Printf(15, "SP sendMenuNotify parsed: '%s'\n", szNotify);
+                Cbuf_AddText(localClientNum, va("cmd mlvl %s\n", szNotify));
+            }
+            else
+            {
+                Com_Printf(15, "SP sendMenuNotify parse failed\n");
+            }
+        }
+        return;
+    }
+#endif
+
     UI_UIContext_GetInfo(contextIndex);
     if ( I_stricmp(name, "StartServer") )
     {
@@ -2590,6 +2782,435 @@ void __cdecl UI_Project_InitOnceForAllClients()
     _Dvar_RegisterBool("ui_multiplayer", 1, 0x40u, "True if the game is multiplayer");
 }
 
+#ifdef KISAK_SP
+// SP retail divergence (Ghidra 0x005852c0 UI_SetActiveMenu, hand-verified 2026-08-05 -- full
+// case-by-case evidence trail in this function's own Ghidra plate; read it before touching this
+// block again). *** SP uses a STRUCTURALLY DIFFERENT, LARGER uiMenuCommand_t than the 11-value MP
+// enum in ui_shared.h:251-263 -- this is NOT a renumbering. The SP-only uiMenuCommandSp_t enum
+// below preserves the retail SP values without extending or reusing that MP-authoritative enum. SP value 2 is "main"
+// (MP's UIMENU_MAIN is 1); SP has several campaign-only menus (briefing/victoryscreen/
+// savegameloading/savegamesaving) with no MP counterpart at all; SP's scoreboard/menu_playercard
+// analogues sit at different values (0xD/0xE) than MP's UIMENU_SCOREBOARD/UIMENU_GAMERCARD (7/8). ***
+//
+// 2026-08-06 FIX - the SP block above was landing every shared caller on the WRONG case, which is
+// why no SP menu could ever appear. Every UI_SetActiveMenu call site in the tree passes an MP
+// `uiMenuCommand_t` (~20 of them, in common.cpp, cl_keys.cpp, cl_main_mp.cpp, ui_main.cpp,
+// cg_draw_mp.cpp, cg_scoreboard_mp.cpp, cg_consolecmds_mp.cpp), and those values were being fed
+// straight into SP's differently-numbered switch. The concrete failure:
+//   Com_UpdateMenu (common.cpp:3333, runs EVERY FRAME) passes UI_GetMenuScreen(), which returns
+//   the constant 1 (ui_shared.cpp:11147-11156) meaning MP's UIMENU_MAIN. Under SP, 1 is
+//   "fullscreen_error". Worse, the SP re-entrancy guard below refuses all further work once
+//   currentMenuType == UISP_FULLSCREEN_ERROR, so the very first frame permanently locked the UI into
+//   fullscreen_error and no later UI_SetActiveMenu call of any kind could succeed.
+// Fixed by translating at the boundary rather than by #ifdef-ing ~20 call sites: a boundary
+// translation fixes every caller at once and cannot be half-applied.
+// Audit finding B2 (frontend-map-load audit).
+//
+// Mapping derived by MENU NAME - the SP case that opens the same menu the MP case opens (both
+// switch bodies are in this file, so this is directly checkable):
+//   UIMENU_NONE(0)            -> UISP_NONE(0)              both Menus_CloseAll
+//   UIMENU_MAIN(1)            -> UISP_MAIN(2)              both open "main" + error_popmenu +
+//                                                          Menus_CloseAllBehindMain + SND_FadeIn
+//   UIMENU_INGAME(2)          -> UISP_PAUSEDMENU(3)        WEAKEST ROW - see TODO below
+//   UIMENU_PREGAME(3)         -> UISP_PREGAME(4)           "pregame_loaderror_mp" vs
+//                                                          "pregame"/"pregame_loaderror"
+//   UIMENU_WM_QUICKMESSAGE(5) -> UISP_QUICKMESSAGE(6)      both open "quickmessage"
+//   UIMENU_SCOREBOARD(7)      -> UISP_SCOREBOARD(0xD)      both open "scoreboard"
+//   UIMENU_GAMERCARD(8)       -> UISP_MENU_PLAYERCARD(0xE) both open "menu_playercard"
+//   UIMENU_ENDOFGAME(0xA)     -> UISP_ENDOFGAME(5)         both open "endofgame"
+//   UIMENU_POSTGAME(4) and UIMENU_SCRIPT_POPUP(6) have no case in MP's own switch either, and
+//   UIMENU_MUTEERROR(9) opens "unmute_error_popup_live" which SP has no case for -> all refused.
+//
+// TODO(SP): UIMENU_INGAME -> UISP_PAUSEDMENU is the one row NOT established by a matching menu
+// name. MP's UIMENU_INGAME opens CG_ScriptMainMenu()'s menu (falling back to "main");
+// UISP_PAUSEDMENU is the SP pause menu, and the SP header above calls it "SP-only, no MP
+// counterpart". It is mapped
+// here because ESC in-game (cl_keys.cpp:2040) and CL_ToggleMenu_f (cl_main_mp.cpp:3765) pass
+// UIMENU_INGAME and the SP pause menu is what should appear; before this change those landed on
+// UISP_MAIN ("main") by accident. Settled by decompiling SP's own ESC/pause key handler and
+// reading which value it passes; Ghidra is unavailable in this session.
+//
+// TODO(SP): the READ side is NOT fixed by this and remains a known, separate SP defect.
+// uiInfo->currentMenuType now holds SP values - which is what retail SP stores, and what the
+// re-entrancy guard below and UISP_MAIN's `currentMenuType = UISP_FULLSCREEN_ERROR` assignment
+// were transcribed against - but ~12 comparisons elsewhere still test it against MP enum values
+// and so never match under SP:
+// ui_main.cpp:228, ui_main.cpp:2120, cg_view_mp.cpp:4289, demo_playback.cpp:782,
+// cg_scoreboard_mp.cpp:1786, cl_input_mp.cpp:1116, cg_gamepad.cpp:100, cl_keys.cpp:2211,
+// cl_gamepad.cpp:729/750, cg_newDraw_mp.cpp:491, cl_main_mp.cpp:3759, plus ui_main.cpp:2081-2105
+// which WRITES UIMENU_SCRIPT_POPUP into currentMenuType as a sentinel (UISP_QUICKMESSAGE in SP).
+// All are in-game states; none block reaching the main menu, so they are left for a dedicated
+// pass rather than half-converted here.
+uiMenuCommandSp_t __cdecl UI_SpMenuFromMpMenu(uiMenuCommand_t menu)
+{
+    switch ( menu )
+    {
+    case UIMENU_NONE:            return UISP_NONE;
+    case UIMENU_MAIN:            return UISP_MAIN;
+    case UIMENU_INGAME:          return UISP_PAUSEDMENU;
+    case UIMENU_PREGAME:         return UISP_PREGAME;
+    case UIMENU_WM_QUICKMESSAGE: return UISP_QUICKMESSAGE;
+    case UIMENU_SCOREBOARD:      return UISP_SCOREBOARD;
+    case UIMENU_GAMERCARD:       return UISP_MENU_PLAYERCARD;
+    case UIMENU_ENDOFGAME:       return UISP_ENDOFGAME;
+    default:                     return UISP_INVALID;
+    }
+}
+
+// MP-signature shim kept so every shared call site compiles and behaves unchanged.
+int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
+{
+    uiMenuCommandSp_t spMenu = UI_SpMenuFromMpMenu(menu);
+
+    // Refuse unmapped MP values WITHOUT touching currentMenuType, so asking for a state SP does
+    // not have cannot leave a nonsense value behind for the read side.
+    if ( spMenu == UISP_INVALID )
+        return 0;
+
+    return UI_SetActiveMenuSp(localClientNum, spMenu);
+}
+
+int __cdecl UI_SetActiveMenuSp(int localClientNum, uiMenuCommandSp_t menu)
+{
+    uiInfo_s *uiInfo;
+    const char *errMsg;
+
+    if ( localClientNum == -1 )
+        return 0;
+
+    uiInfo = UI_GetInfo(localClientNum);
+
+    // Re-entrancy guard: confirmed via disassembly to be TWO conditions here, not just Menu_Count
+    // like MP -- also refuses re-entry while a fullscreen error is already active.
+    if ( static_cast<int>(uiInfo->currentMenuType) == UISP_FULLSCREEN_ERROR || Menu_Count(&uiInfo->uiDC) <= 0 )
+        return 0;
+
+    // TODO(SP): unconfirmed, see Ghidra 0x005852c0 plate addendum. Real body has a pre-switch
+    // special case for menu == UISP_PAUSEDMENU ("pausedmenu"): if FUN_00415580(localClientNum) is true (a bare
+    // global-flag read at DAT_02ff5354+0xa9b38, identity not resolved), it recursively calls
+    // UI_SetActiveMenu(localClientNum, UISP_NONE) BEFORE proceeding to the switch below. Not transcribed.
+    // STILL BLOCKED: 0x00415580 re-checked 2026-08-26 against the live database, still a bare
+    // FUN_*. Naming it would not have unblocked this anyway -- the gap is what the flag MEANS,
+    // and its 12-byte body is a single global read.
+
+    // Stores the SP value, matching retail SP (and the `currentMenuType == UISP_FULLSCREEN_ERROR`
+    // guard above, which
+    // was transcribed from the SP binary and only makes sense against SP values). See the
+    // read-side TODO(SP) above UI_SpMenuFromMpMenu.
+    uiInfo->currentMenuType = static_cast<uiMenuCommand_t>(menu);
+    switch ( menu )
+    {
+    case UISP_NONE:
+        Key_RemoveCatcher(localClientNum, -17);
+        Key_ClearStates(localClientNum);
+        CL_PauseGame(false);
+        Menus_CloseAll(localClientNum, &uiInfo->uiDC);
+        return 1;
+
+    case UISP_FULLSCREEN_ERROR:
+        Key_SetCatcher(localClientNum, 16);
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "fullscreen_error");
+        // NOTE: confirmed SP does NOT apply MP's `I_stricmp(errMsg, ";")` exclusion here -- only a
+        // bare non-empty check (see 0x005852c0 plate addendum).
+        errMsg = Dvar_GetString("com_errorMessage");
+        if ( *errMsg )
+            Menus_OpenByName(localClientNum, &uiInfo->uiDC, "error_popmenu");
+        SND_FadeIn();
+        return 1;
+
+    case UISP_MAIN:
+    {
+        int contextIndex = Com_LocalClient_GetUIContextIndex(localClientNum);
+        Key_ContextIndex_SetCatcher(contextIndex, 16);
+        // TODO(SP): unconfirmed, see Ghidra 0x00610a60. An unnamed __fastcall helper taking one
+        // register argument (writes into a stack buffer via 0x00445ff0) runs here, between the
+        // catcher set and opening "main". Not transcribed -- identity not resolved.
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "main");
+        if ( Dvar_GetInt("loc_language") == 8 && Dvar_GetInt("com_first_time_pc") )
+            Menus_OpenByName(localClientNum, &uiInfo->uiDC, "russian_content_warning");
+        Dvar_SetIntByName("com_first_time_pc", 0);
+        // NOTE: confirmed SP does NOT apply MP's `I_stricmp(errMsg, ";")` exclusion here either,
+        // and additionally forces currentMenuType to fullscreen_error before opening
+        // "error_popmenu" -- both directly visible in disassembly, neither present in MP.
+        errMsg = Dvar_GetString("com_errorMessage");
+        if ( *errMsg )
+        {
+            uiInfo->currentMenuType = static_cast<uiMenuCommand_t>(UISP_FULLSCREEN_ERROR);
+            Menus_OpenByName(localClientNum, &uiInfo->uiDC, "error_popmenu");
+        }
+        Menus_CloseAllBehindMain(localClientNum, &uiInfo->uiDC);
+        SND_FadeIn();
+        return 1;
+    }
+
+    case UISP_PAUSEDMENU:
+        // TODO(SP): unconfirmed guard chain, see Ghidra 0x005852c0 plate addendum -- NOT
+        // transcribed: real body refuses (returns 0) if the current map is a "menu_"/frontend map
+        // (Com_IsMenuLevel, Ghidra 0x00684eb0 -- now named in the live database) or the "outro"
+        // map (0x00640ce0), if the "ingameoptions" menu can't be found or is already in the menu
+        // stack, or on two further raw-global flag checks gating an unresolved
+        // FUN_005e2800/FUN_0048b550 pair (STILL BLOCKED: both re-checked 2026-08-26 against the
+        // live database, still bare FUN_*). Deliberately not guessed at here -- an
+        // incorrectly-transcribed refusal gate would silently break pause entirely, which is worse
+        // than an honest gap. What IS confirmed and implemented below is the success tail.
+        //
+        // NARROWED 2026-08-26: the CL_PauseGame call is NOT unconditional in retail. At
+        // 0x005855xx (case 3, immediately before Menus_OpenByName "pausedmenu") retail tests the
+        // current.enabled byte of two cached dvar pointers and pauses only when BOTH are clear:
+        //     if (!DAT_0247fed0->current.enabled && !DAT_0290bf04->current.enabled)
+        //         CL_PauseGame(true);
+        // Both are now identified by the registrar string-table walk, run against this binary
+        // this pass (store lags the name push by one call):
+        //   0x0247FED0 = "onlinegame"  -- sole WRITE 0x0082bde3 in Com_InitDvars; the name pushed
+        //                for the preceding register call is 0x0082bdc6 -> 0x00A499C4. The next
+        //                registration in program order is 0x00A06548 "xblive_rankedmatch", which
+        //                is this tree's common.cpp ordering. Registered via the Dvar_RegisterBool
+        //                registrar (0x0045bb20) with value 0, so current.enabled is the right
+        //                field.
+        //   0x0290BF04 = "systemlink"  -- sole WRITE 0x00590d6a in CL_InitOnceForAllClients; the
+        //                name pushed for the preceding register call is 0x00590d4d -> 0x00A01E4C.
+        //                The next registration is 0x00A07188 "systemlink_warning_shown". Same
+        //                bool registrar. This independently reproduces the identification already
+        //                recorded at cg_main_mp.cpp:3622.
+        // "systemlink" is registered by retail but by NOTHING in this reconstruction, so it is
+        // read by name with Dvar_GetBool, which returns false for an unregistered dvar
+        // (dvar.cpp:951-957) -- the same result retail gets from its default-false global. That
+        // is the identical accommodation cg_main_mp.cpp:3651 already makes for this dvar.
+        //
+        // STRICTLY SCOPED: only this gate is transcribed. The refusal gates above it
+        // (FUN_005e2800/FUN_0048b550 and the 0x0243fd3c / 0x0286d01c pair) remain unresolved and
+        // are deliberately still absent, per the paragraph above.
+        if ( !onlinegame->current.enabled && !Dvar_GetBool("systemlink") )
+            CL_PauseGame(true);
+        if ( !Menus_OpenByName(localClientNum, &uiInfo->uiDC, "pausedmenu") )
+            return 0;
+        Key_SetCatcher(localClientNum, 16);
+        return 1;
+
+    case UISP_PREGAME:
+        // TODO(SP): unconfirmed gate, see Ghidra 0x005852c0 plate addendum. Transcribed here is
+        // only the confirmed simple path, which matches MP's own UIMENU_PREGAME shape.
+        //
+        // *** TWO CORRECTIONS to this marker, both re-read off retail case 4 this pass. ***
+        //  (1) The two flag reads in the gate are NOT per-local-client. They are the SAME two
+        //      global cached dvar pointers case 3 uses -- DAT_0247fed0 = "onlinegame" and
+        //      DAT_0290bf04 = "systemlink" (identifications derived in the case 3 comment above)
+        //      -- read as `*(char *)(dvar + 0x18)`, i.e. current.enabled, with no client index
+        //      anywhere in the addressing. The full gate is
+        //          if (!FUN_004efe20() && !onlinegame->current.enabled && !systemlink->current.enabled)
+        //      and only its false side does the unidentified bookkeeping
+        //      (Dvar_SetBool(DAT_0247fed8, 0); FUN_0040fc70()) and returns 1 with no menu change.
+        //      FUN_004efe20 is still bare FUN_* in the live database, so the gate as a whole is
+        //      still NOT transcribed -- but the reason is that one unresolved predicate, not the
+        //      two dvars, which are now known.
+        //  (2) This marker never mentioned case 4's PRELUDE, which runs before the gate and is
+        //      unconditional with respect to it:
+        //          if (Com_IsMenuLevel(0))
+        //              UI_AddMenuList(localClientNum, &UI_GetInfo(localClientNum)->uiDC,
+        //                             UI_LoadMenus("ui/menus.txt", 3), 1);
+        //      Com_IsMenuLevel is the same already-named 0x00684eb0 predicate case 3 uses.
+        //
+        //      *** NOW PORTED (2026-08-27). The earlier refusal above -- "not transcribed
+        //      either, because it is only coherent together with the gate it precedes" -- was
+        //      wrong, and this is why. ***
+        //      The prelude is NOT half of the gate; it is independent of it. Re-read off retail
+        //      this pass with capstone (image base 0x00400000, .text 0x00401000-0x009a2a10):
+        //          0058555b  push 0 / call 0x684eb0   ; Com_IsMenuLevel(NULL)
+        //          00585565  test al,al / je 0x58558a
+        //          00585569  push 3 / push 0xa1db18   ; "ui/menus.txt" (string verified)
+        //          00585570  call 0x5e6d20            ; UI_LoadMenus(file, 3)
+        //          00585575  push esi / call 0x46be80 ; UI_GetInfo(localClientNum)
+        //          0058557d  push 1 / push ebx / push eax / push esi
+        //          00585582  call 0x555bf0            ; UI_AddMenuList(lc, dc, list, 1)
+        //          00585587  add esp,0x1c
+        //          0058558a  call 0x4efe20            ; <-- the gate, i.e. the je TARGET
+        //      The `je` lands on the gate call itself, so a non-menu level skips ONLY the two
+        //      reload lines and still falls through into the gate. The prelude and the gate are
+        //      therefore separable, and porting the prelude alone is a complete transcription of
+        //      a complete retail control-flow region, not "half of case 4". The gate at
+        //      0x004efe20 remains untranscribed for the unchanged reason (unresolved predicate).
+        //
+        //      WHY THIS MATTERS: ui/menus.txt holds 102 menus INCLUDING "main", and ships only in
+        //      frontend.ff. UI_InitUIInfos requests it at boot, before that zone is mounted, so it
+        //      fails ("Error: Could not load menufile \"ui/menus.txt\"") and registers a DEFAULT
+        //      entry. frontend.ff links the real asset later ("Redundant asset:
+        //      'menufile','ui/menus.txt'" -> DB_LinkXAssetEntry, which does
+        //      --g_defaultAssetCount + DB_CloneXAssetEntry(.., DB_CLONE_FROM_DEFAULT) and so
+        //      replaces the placeholder IN PLACE). Nothing ever asked again, so the UI context
+        //      only ever held the 111 menus from ui/code.txt + ui/patch_menus.txt + the HUD
+        //      menufiles -- "main" was never among them and no main menu could open. This prelude
+        //      is retail's own mechanism for asking again, at the one moment the zone is mounted.
+        //
+        //      Deliberately reloads ONLY menus.txt, exactly as retail does -- NOT code.txt or
+        //      patch_menus.txt. The three files define disjoint menu names, which is what keeps
+        //      UI_AddMenu's `touchMenu == menu` assert (ui_shared.cpp) clear. Re-running this is
+        //      inert: UI_AddMenu returns early on pointer identity and the second UI_LoadMenus
+        //      returns the same DB asset, so a repeat `map frontend` is a no-op. No NULL check
+        //      and no SP_UI_DIR, matching retail and the sibling call at ui_main.cpp:3634;
+        //      UI_AddMenuList is itself NULL-safe.
+        if ( Com_IsMenuLevel(0) )
+            UI_AddMenuList(localClientNum, &uiInfo->uiDC, UI_LoadMenus("ui/menus.txt", 3), 1);
+
+        // Retail SP UI_SetActiveMenu 0x005852c0 calls FUN_004efe20 here. Its full predicate also
+        // handles auto-continue/lobby cases which are still outside this reconstruction, but one
+        // state path is unconditional and fully established: when no cinematic is currently
+        // started, FUN_004efe20 returns true and case 4 clears long_blocking_call, invokes the
+        // 0x0040fc70 dismiss/promote helper, and returns without opening "pregame".
+        //
+        // This is the boot-critical path. Com_Init queues number_lady_intro in the NEXT slot;
+        // SV_SpawnServer then reaches case 4 before anything has promoted it. Omitting this branch
+        // left that movie queued until frontend.gsc's Start3DCinematic("frontend", 1, 1) replaced
+        // the active target. Keep the transcription deliberately limited to the proven
+        // !R_Cinematic_IsStarted() arm; the remaining auto-continue predicate is still TODO.
+        if ( !R_Cinematic_IsStarted() )
+        {
+            Com_Printf(
+                14,
+                "SP cinematic boot gate: no active playback, nextReady=%i; running retail case-4 promote path\n",
+                R_Cinematic_IsNextReady_Internal());
+            Dvar_SetBool((dvar_s *)long_blocking_call, false);
+            UI_Sp_DismissCinematic(localClientNum);
+            return 1;
+        }
+
+        Key_ClearStates(localClientNum);
+        Key_SetCatcher(localClientNum, 16);
+        Menus_CloseAll(localClientNum, &uiInfo->uiDC);
+        errMsg = Dvar_GetString("com_errorMessage");
+        if ( !*errMsg )
+            Menus_OpenByName(localClientNum, &uiInfo->uiDC, "pregame");
+        else
+            Menus_OpenByName(localClientNum, &uiInfo->uiDC, "pregame_loaderror");
+        return 1;
+
+    case UISP_ENDOFGAME:
+        Key_SetCatcher(localClientNum, 16);
+        Menus_CloseAll(localClientNum, &uiInfo->uiDC);
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "endofgame");
+        return 1;
+
+    case UISP_QUICKMESSAGE:
+        uiInfo->uiDC.cursor.x = 639.0f;
+        uiInfo->uiDC.cursor.y = 479.0f;
+        UI_SetSystemCursorPos(&uiInfo->uiDC, 639.0, 479.0);
+        Key_SetCatcher(localClientNum, 16);
+        CL_LocalClient_SetCUIFlag(localClientNum, 64);
+        Menus_CloseAll(localClientNum, &uiInfo->uiDC);
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "quickmessage");
+        return 1;
+
+    case UISP_BRIEFING:
+        // IMPLEMENTED 2026-08-26. The two Dvar_SetInt(dvarPtr, -1) calls at retail 0x00585631 /
+        // 0x0058563d are now identified -- the earlier "likely campaign mission/act progress
+        // trackers" guess was wrong. Both globals are written by the sole registrar FUN_0051d1f0
+        // and resolved by the registrar string-table walk (store lags the name push by one call):
+        //   store 0x0051d35e -> DAT_02562a3c, name pushed 0x0051d359 -> 0x00A3B428
+        //       = "ui_controllerPulled"
+        //   store 0x0051d376 -> DAT_02598f5c, name pushed 0x0051d371 ... (see below)
+        // Careful with the pairing: the name for DAT_02562a3c is the one pushed for the call that
+        // PRECEDES its store, i.e. 0x00A3B428 pushed at 0x0051d33f, and DAT_02598f5c's is
+        // 0x00A19AFC pushed at 0x0051d359 = "ui_pendingControllerPullEvent". Both are registered
+        // through _Dvar_RegisterInt with default value -1 (PUSH -0x1 at 0x0051d33d / 0x0051d357).
+        // Retail's order is ui_controllerPulled first, then ui_pendingControllerPullEvent.
+        //
+        // Neither dvar is registered anywhere in this reconstruction, and registering new globals
+        // on this shared path is out of scope, so both are driven by name -- the same technique
+        // cg_main_mp.cpp already uses for "systemlink". Dvar_SetIntByName creates the dvar as a
+        // 0x4000-flagged string dvar when it is absent (dvar.cpp:3066), which Dvar_GetInt reads
+        // back through Dvar_StringToInt, so the pair still round-trips.
+        Dvar_SetIntByName("ui_controllerPulled", -1);
+        Dvar_SetIntByName("ui_pendingControllerPullEvent", -1);
+        Menus_CloseAll(localClientNum, &uiInfo->uiDC);
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "briefing");
+        return 1;
+
+    case UISP_VICTORYSCREEN:
+        // Cursor-set helper independently re-decompiled this pass (0x005cdcb0): writes
+        // dc->cursor.x/y then calls UI_SetSystemCursorPos -- same helper as case 6, floats decoded
+        // from the literal words 0x43a00000/0x43e00000.
+        uiInfo->uiDC.cursor.x = 320.0f;
+        uiInfo->uiDC.cursor.y = 448.0f;
+        UI_SetSystemCursorPos(&uiInfo->uiDC, 320.0, 448.0);
+        Key_SetCatcher(localClientNum, 16);
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "victoryscreen");
+        return 1;
+
+    case UISP_SAVEGAMELOADING:
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "savegameloading");
+        return 1;
+
+    case UISP_SAVEGAMESAVING:
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "savegamesaving");
+        Key_SetCatcher(localClientNum, 16);
+        return 1;
+
+    case UISP_SCOREBOARD:
+        // NOTE: confirmed SP does NOT check com_errorMessage here at all, unlike MP's
+        // UIMENU_SCOREBOARD case just below in the #else branch.
+        Key_SetCatcher(localClientNum, 16);
+        Menus_CloseAll(localClientNum, &uiInfo->uiDC);
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "scoreboard");
+        return 1;
+
+    case UISP_MENU_PLAYERCARD:
+        Key_SetCatcher(localClientNum, 16);
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "menu_playercard");
+        errMsg = Dvar_GetString("com_errorMessage");
+        if ( strlen(errMsg) && I_stricmp(errMsg, ";") )
+            Menus_OpenByName(localClientNum, &uiInfo->uiDC, "error_popmenu");
+        return 1;
+
+    case UISP_MAIN_SYSTEMLINK:
+        Key_SetCatcher(localClientNum, 16);
+        Dvar_SetBoolByName("ui_skipMainLockout", true);
+        // TODO(SP): unconfirmed, see Ghidra 0x0040e110. Single-int-arg helper (called with literal
+        // 0) runs here; identity not resolved.
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "main");
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "main_text");
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "main_online");
+        Menus_SetFocusToItem(localClientNum, &uiInfo->uiDC, "main_online", "systemlinkselect");
+        Menus_CloseAllBehindMain(localClientNum, &uiInfo->uiDC);
+        SND_FadeIn();
+        return 1;
+
+    case UISP_XBOXLIVE_LOBBY:
+    case UISP_XBOXLIVE_PRIVATE_LOBBY:
+    case UISP_SYSTEMLINK_LOBBY:
+        // TODO(SP): deliberately NOT transcribed, see Ghidra 0x005852c0 plate. These three cases'
+        // decompile shows `Actor_InitAnim(self)` calls with an uninitialised `self`; this is a
+        // confirmed DECOMPILER ARTIFACT (Ghidra misapplying the doubtful name/prototype at
+        // 0x00651A30 -- six prior agents have flagged that address as a folded empty stub with no
+        // real identity, see agents.md), re-confirmed independently this pass via
+        // disassemble_function: the real call at that point (0x005857cc / 0x005858e6 / 0x00585a12)
+        // has ZERO arguments pushed immediately before it, contradicting the decompiler's
+        // single-argument rendering. Beyond that artifact, each case's body threads several more
+        // still-unnamed FUN_* helpers (a controllerIndex getter at 0x004f3c70, a buffer-format call
+        // at 0x0057cdd0, unnamed helpers at 0x00480a00/0x006850c0/0x0059b090) building up the
+        // Cbuf_ExecuteBuffer command string and lobby menu stack. Not guessed at here -- would need
+        // a dedicated pass. Collapsed to a safe refusal for all three distinct real behaviors.
+        return 0;
+
+    case UISP_MAIN_ONLINE:
+        Key_SetCatcher(localClientNum, 16);
+        SND_FadeIn();
+        // TODO(SP): unconfirmed real controllerIndex, see Ghidra 0x004f3c70 -- the real body
+        // threads an unnamed FUN_004f3c70(localClientNum) result through as Cbuf_ExecuteBuffer's
+        // controllerIndex argument instead of a literal. 0 is used here as the only value it could
+        // plausibly resolve to for this reimplementation's single-local-client build (same
+        // reasoning as Com_LoadFrontEnd's own TODO in common.cpp), not as a verified literal.
+        // STILL BLOCKED: 0x004f3c70 re-checked 2026-08-26 against the live database, still a bare
+        // FUN_*, so nothing here has become resolvable.
+        Cbuf_ExecuteBuffer(localClientNum, 0, (char *)"set systemlink 0; set splitscreen 0; set onlinegame 1;");
+        Menus_OpenByName(localClientNum, &uiInfo->uiDC, "main");
+        Menus_CloseAllBehindMain(localClientNum, &uiInfo->uiDC);
+        return 1;
+
+    // 7, 0xA, 0xF, 0x10, 0x12 and anything > 0x16 fall to default in the real binary too.
+    default:
+        return 0;
+    }
+}
+#else
 int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
 {
     int result; // eax
@@ -2737,6 +3358,7 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
     }
     return result;
 }
+#endif
 
 char *__cdecl UI_TranslateIntegerToOrdinal(int integer)
 {

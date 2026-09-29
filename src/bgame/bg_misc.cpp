@@ -2792,6 +2792,7 @@ void __cdecl BG_PlayerToEntityProcessEvents_Internal(
         oldSequenceNum = *oldEventSequence;
     else
         oldSequenceNum = *oldEventSequence - 256;
+#ifndef KISAK_SP
     if ( *eventSequence < oldSequenceNum
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\bgame\\bg_misc.cpp",
@@ -2802,6 +2803,9 @@ void __cdecl BG_PlayerToEntityProcessEvents_Internal(
     {
         __debugbreak();
     }
+#endif
+    // Retail SP (0x0075d56a) skips a regressed sequence and resynchronizes
+    // oldEventSequence below, without replaying stale ring-buffer entries.
     for ( i = oldSequenceNum; i < *eventSequence; ++i )
     {
         event = events[i & 3];
@@ -3600,7 +3604,6 @@ void __cdecl BG_CheckThread()
 
 int __cdecl BG_GetMaxSprintTime(const playerState_s *ps)
 {
-    float sprintDuration; // [esp+10h] [ebp-14h]
     float maxSprintTime; // [esp+20h] [ebp-4h]
 
     if ( (ps->eFlags & 0x4000) != 0 )
@@ -3609,13 +3612,26 @@ int __cdecl BG_GetMaxSprintTime(const playerState_s *ps)
     }
     else
     {
-        sprintDuration = (float)ps->sprintState.sprintDuration;
+#ifdef KISAK_SP
+        // Retail SP (0x0067FDC0) uses the fixed four-second sprint duration,
+        // scaled by the current weapon.  The MP-owned sprintDuration field is
+        // cleared during SP client spawn and is never populated by retail SP.
+        maxSprintTime = BG_GetWeaponDef(ps->weapon)->sprintDurationScale * 4000.0f;
+#else
+        const float sprintDuration = (float)ps->sprintState.sprintDuration;
         maxSprintTime = sprintDuration * BG_GetWeaponDef(ps->weapon)->sprintDurationScale;
         if ( player_sprintTime->current.value == 0.0 )
             maxSprintTime = 0.0f;
+#endif
     }
+#ifdef KISAK_SP
+    const unsigned int sprintPerkTier = ps->perks[0] & 3u;
+    if ( sprintPerkTier )
+        maxSprintTime *= (float)sprintPerkTier * (1.0f / 3.0f) * perk_sprintMultiplier->current.value;
+#else
     if ( (ps->perks[0] & 0x40000000) != 0 )
         maxSprintTime = (float)(perk_sprintMultiplier->current.value * 1.0) * maxSprintTime;
+#endif
     if ( (int)maxSprintTime > 0x3FFF )
         return 0x3FFF;
     else

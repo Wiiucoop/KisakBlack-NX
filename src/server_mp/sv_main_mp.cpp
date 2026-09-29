@@ -1294,13 +1294,16 @@ void __cdecl SV_PostFrame()
     Scr_UpdateDebugger(SCRIPTINSTANCE_SERVER);
     SV_CheckTimeouts();
     SV_SendClientMessages();
-
+#ifndef OPENBLOPS_NO_STEAM_AUTH
     // LWSS ADD: Steam Periodic Auth Check
     if (IsDedicatedServer())
     {
         Steam_CheckClients();
     }
     // LWSS END
+#endif
+
+
 }
 
 void SV_RunEventLoop()

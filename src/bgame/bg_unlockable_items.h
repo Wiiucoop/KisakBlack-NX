@@ -1,4 +1,8 @@
 #pragma once
+
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+bool BG_UnlockablesBuildServerDefaults(char *buffer, unsigned char *purchasedItems);
+#endif
 #include <ui/ui_shared.h>
 #include "bg_weapons_attachment.h"
 #include <live/live_combatrecord.h>

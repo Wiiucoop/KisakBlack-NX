@@ -636,14 +636,13 @@ inline bool IsDedicatedServer()
 #endif
 }
 
-#ifndef KISAK_DEDICATED
-    #ifdef KISAK_SP
-        #define DEFAULT_CFG "default.cfg"
-    #else
-        #define DEFAULT_CFG "default_mp.cfg"
-    #endif
-#else
+#ifdef KISAK_SP
+    // SP assets do not contain the MP-only default_dedicated.cfg.
+    #define DEFAULT_CFG "default.cfg"
+#elif defined(KISAK_DEDICATED)
     #define DEFAULT_CFG "default_dedicated.cfg"
+#else
+    #define DEFAULT_CFG "default_mp.cfg"
 #endif
 
 template <typename T>
@@ -678,3 +677,15 @@ inline constexpr T truncate_cast(U value)
 
     return static_cast<T>(value);
 }
+// Mode capability for reconstructed clients sharing protocol 1044.
+#ifdef KISAK_SP
+#define OPENBLOPS_GAME_MODE "sp"
+// SP wire capability: v3 added the separate entity animation-index netfield;
+// v4 adds the server-authored look-at configstring range. Keep the existing
+// userinfo key so older clients are rejected before receiving unknown slots.
+#define OPENBLOPS_SP_ANIM_PROTOCOL "4"
+#define OPENBLOPS_DEMO_VERSION 3
+#else
+#define OPENBLOPS_GAME_MODE "mp"
+#define OPENBLOPS_DEMO_VERSION 1
+#endif

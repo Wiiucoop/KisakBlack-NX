@@ -405,6 +405,14 @@ void __cdecl Scr_AddPathnode(pathnode_t *node);
 void __cdecl Scr_GetNode();
 void __cdecl Scr_GetNodeArray();
 void __cdecl Scr_GetAllNodes();
+// SP-only (retail SP 0x00642a80 / 0x00563f90 / 0x00522eb0 / 0x004587d0 / 0x005896c0)
+void __cdecl Scr_SetEnableNode();
+void __cdecl Scr_LinkNodes();
+void __cdecl Scr_UnlinkNodes();
+void __cdecl Path_LinkNodes(pathnode_t *nodeFrom, pathnode_t *nodeTo);
+void __cdecl Path_UnlinkNodes(pathnode_t *nodeFrom, pathnode_t *nodeTo);
+void __cdecl Path_ResetNodeMaps(int restart);
+void __cdecl Path_BuildParentedNodeLists();
 pathnode_t *__cdecl Scr_GetPathnode(unsigned int index, scriptInstance_t inst);
 bool __cdecl Path_CompareNodesIncreasing(const pathsort_t &ps1, const pathsort_t &ps2);
 unsigned int __cdecl Path_ConvertNodeToIndex(const pathnode_t *node);

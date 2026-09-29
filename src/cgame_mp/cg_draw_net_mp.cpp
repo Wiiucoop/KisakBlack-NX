@@ -153,6 +153,11 @@ void __cdecl CG_DrawLagometer(int localClientNum)
 
 void __cdecl CG_DrawDisconnect(int localClientNum)
 {
+#ifdef KISAK_SP
+    // Retail SP (0x0088e0f0) excludes local servers, paused games and offline play.
+    if ( com_sv_running->current.enabled || cg_paused->current.integer || !Dvar_GetBool("onlinegame") )
+        return;
+#endif
     int i; // [esp+24h] [ebp-60h]
     Material *disconnectMaterial; // [esp+28h] [ebp-5Ch]
     Font_s *font; // [esp+2Ch] [ebp-58h]

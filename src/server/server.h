@@ -1,4 +1,5 @@
 #pragma once
+#include <live/live_stats_layout.h>
 #include <qcommon/msg_mp.h>
 #include <bgame/bg_local.h>
 #include <qcommon/net_chan_mp.h>
@@ -9,7 +10,7 @@
 #define KISAK_STATS
 #endif
 
-#define ALL_STATS_PACKETS_RECEIVED 0x7FFFFFFFF
+#define ALL_STATS_PACKETS_RECEIVED STATS_PACKET_MASK
 
 struct gentity_s;
 
@@ -128,11 +129,11 @@ struct client_t // sizeof=0x84D00
     int voicePacketCount;
     bool muteList[32];
     bool sendVoice;
-    unsigned __int8 stats[40168];
+    unsigned __int8 stats[STATS_BUFFER_SIZE];
     unsigned __int8 purchasedItems[32];
-    unsigned __int8 globalStats[40168];
-    unsigned __int8 globalStatsStable[40168];
-    unsigned __int8 modifiedStatBytes[5021];
+    unsigned __int8 globalStats[STATS_BUFFER_SIZE];
+    unsigned __int8 globalStatsStable[STATS_BUFFER_SIZE];
+    unsigned __int8 modifiedStatBytes[MODIFIED_STATS_BYTE_SIZE];
     // padding byte
     // padding byte
     int statsSentIndex;

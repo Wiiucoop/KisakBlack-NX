@@ -397,6 +397,9 @@ int __cdecl BG_GetPlayerWeaponForDObj(int localClientNum, entityState_s *es);
 int __cdecl BG_GetPlayerOffhandWeaponForDObj(int localClientNum, entityState_s *es);
 void __cdecl BG_FindAnimTrees();
 scr_animtree_t __cdecl BG_FindAnimTree(const char *filename, int bEnforceExists);
+#ifdef KISAK_SP
+XAnim_s *__cdecl BG_GetActorAnims();   // SP-only: the "generic_human" AI actor animtree
+#endif
 void __cdecl BG_LoadAnim(const char *levelName);
 void __cdecl BG_AnimParseAnimScript(
                 animScriptData_t *scriptData,

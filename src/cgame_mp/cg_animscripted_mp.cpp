@@ -6,6 +6,336 @@
 #include <clientscript/cscr_memorytree.h>
 #include <client_mp/cl_cgame_mp.h>
 #include <clientscript/cscr_stringlist.h>
+#ifdef KISAK_SP
+#include <xanim/xanim.h>
+#include <xanim/dobj.h>
+#include <xanim/xanim_clientnotify.h>
+#include <qcommon/common.h>
+#include <mutex>
+#include <cstring>
+#include "cg_sp_anim_snapshot.inl"
+#endif
+
+#ifdef KISAK_SP
+namespace
+{
+constexpr unsigned int SP_ANIM_COMMAND_CAPACITY = 1024;
+
+struct StoredAnimCommand_SP
+{
+    AnimCommand_SP command;
+    bool occupied;
+    bool processed;
+};
+
+StoredAnimCommand_SP g_animCommands_SP[SP_ANIM_COMMAND_CAPACITY] = {};
+unsigned int g_nextAnimCommandSequence_SP = 1;
+int g_lastAnimCommandServerTime_SP = -1;
+std::mutex g_animCommandMutex_SP;
+int g_lastAppliedAnimIndex_SP[1024] = {};
+int g_lastAppliedAnimType_SP[1024] = {};
+
+bool CG_ApplyAnimCommand_SP(int localClientNum, const AnimCommand_SP &command, DObj *obj)
+{
+    if ( !obj || !obj->localTree || !obj->localTree->anims )
+        return false;
+
+    XAnimTree_s *tree = obj->localTree;
+    XAnim_s *anims = tree->anims;
+    if ( command.animIndex < 0 || static_cast<unsigned int>(command.animIndex) >= anims->size )
+    {
+        Com_PrintWarning(
+            15,
+            "SP anim command rejected: client %d ent %d type %d anim %d outside tree size %u\n",
+            localClientNum,
+            command.entNum,
+            command.type,
+            command.animIndex,
+            anims->size);
+        return false;
+    }
+
+    int error = 0;
+    const unsigned int notifyType = command.weight > 0.001f ? 2 : 0;
+    XAnimClientNotifyList notifyList;
+    DObjSetClientNotifies(&notifyList);
+    switch ( command.type )
+    {
+        case 1:
+            if ( command.flags & 1 )
+                XAnimClearTreeGoalWeights(tree, command.animIndex, command.goalTime, -1);
+            else
+                XAnimClearGoalWeight(tree, command.animIndex, command.goalTime, static_cast<unsigned short>(-1));
+            break;
+        case 2:
+            XAnimClearTreeGoalWeightsStrict(tree, command.animIndex, command.goalTime, -1);
+            break;
+        case 3:
+            if ( command.flags & 1 )
+            {
+                error = XAnimSetCompleteGoalWeight(
+                    obj,
+                    command.animIndex,
+                    command.weight,
+                    command.goalTime,
+                    command.rate,
+                    0,
+                    notifyType,
+                    (command.flags & 2) != 0,
+                    -1);
+            }
+            else
+            {
+                error = XAnimSetGoalWeight(
+                    obj,
+                    command.animIndex,
+                    command.weight,
+                    command.goalTime,
+                    command.rate,
+                    0,
+                    notifyType,
+                    (command.flags & 2) != 0,
+                    -1);
+            }
+            break;
+        case 4:
+            if ( command.flags & 1 )
+            {
+                error = XAnimSetCompleteGoalWeightKnob(
+                    obj,
+                    command.animIndex,
+                    command.weight,
+                    command.goalTime,
+                    command.rate,
+                    0,
+                    notifyType,
+                    (command.flags & 2) != 0,
+                    -1);
+            }
+            else
+            {
+                error = XAnimSetGoalWeightKnob(
+                    obj,
+                    command.animIndex,
+                    command.weight,
+                    command.goalTime,
+                    command.rate,
+                    0,
+                    notifyType,
+                    (command.flags & 2) != 0,
+                    -1);
+            }
+            break;
+        case 5:
+            if ( command.rootAnimIndex < 0 || static_cast<unsigned int>(command.rootAnimIndex) >= anims->size )
+            {
+                DObjClearClientNotifies();
+                return false;
+            }
+            if ( command.flags & 1 )
+            {
+                error = XAnimSetCompleteGoalWeightKnobAll(
+                    obj,
+                    command.animIndex,
+                    command.rootAnimIndex,
+                    command.weight,
+                    command.goalTime,
+                    command.rate,
+                    0,
+                    notifyType,
+                    (command.flags & 2) != 0,
+                    -1);
+            }
+            else
+            {
+                error = XAnimSetGoalWeightKnobAll(
+                    obj,
+                    command.animIndex,
+                    command.rootAnimIndex,
+                    command.weight,
+                    command.goalTime,
+                    command.rate,
+                    0,
+                    notifyType,
+                    (command.flags & 2) != 0,
+                    -1);
+            }
+            break;
+        case 6:
+            XAnimSetTime(tree, command.animIndex, command.goalTime, 0xFFFFu);
+            break;
+        default:
+            Com_PrintWarning(15, "SP anim command rejected: unknown type %d\n", command.type);
+            DObjClearClientNotifies();
+            return true;
+    }
+
+    const int clientTime = CG_GetLocalClientGlobals(localClientNum)->time;
+    const int elapsedMs = clientTime > command.serverTime ? clientTime - command.serverTime : 0;
+    if ( command.type >= 3 && command.type <= 5 )
+        XAnimApplyClientCommandCatchup_SP(obj, command.animIndex, elapsedMs);
+    const float animTime = command.type >= 3 && command.type <= 6
+        ? static_cast<float>(XAnimGetTime(tree, command.animIndex))
+        : -1.0f;
+    CG_ProcessFakeEntClientNoteTracks(localClientNum, command.entNum);
+    const int notifyCount = notifyList.m_numNotifies;
+    DObjClearClientNotifies();
+    if ( command.entNum >= 0 && command.entNum < 1024 && command.type >= 3 && command.type <= 6 )
+    {
+        g_lastAppliedAnimIndex_SP[command.entNum] = command.animIndex;
+        g_lastAppliedAnimType_SP[command.entNum] = command.type;
+    }
+    Com_Printf(
+        15,
+        "SP anim command apply: seq %d client %d ent %d type %d anim %d root %d tree %p weight %.3f blend %.3f rate %.3f flags 0x%x lag %d error %d animTime %.3f notifies %d\n",
+        command.sequence,
+        localClientNum,
+        command.entNum,
+        command.type,
+        command.animIndex,
+        command.rootAnimIndex,
+        tree,
+        command.weight,
+        command.goalTime,
+        command.rate,
+        command.flags,
+        clientTime - command.serverTime,
+        error,
+        animTime,
+        notifyCount);
+    return true;
+}
+}
+
+int __cdecl CG_StoreServerAnimCommand_SP(
+    int entNum,
+    int serverTime,
+    int type,
+    unsigned int animIndex,
+    unsigned int rootAnimIndex,
+    float weight,
+    float goalTime,
+    float rate,
+    int flags)
+{
+    std::lock_guard<std::mutex> lock(g_animCommandMutex_SP);
+    if ( serverTime < g_lastAnimCommandServerTime_SP )
+    {
+        memset(g_animCommands_SP, 0, sizeof(g_animCommands_SP));
+        g_nextAnimCommandSequence_SP = 1;
+    }
+    g_lastAnimCommandServerTime_SP = serverTime;
+
+    const unsigned int sequence = g_nextAnimCommandSequence_SP++;
+    const unsigned int slot = sequence % SP_ANIM_COMMAND_CAPACITY;
+    StoredAnimCommand_SP &stored = g_animCommands_SP[slot];
+    if ( stored.occupied && !stored.processed )
+        Com_PrintWarning(15, "SP anim command ring overwrote unprocessed sequence %d\n", stored.command.sequence);
+
+    stored.command.index = static_cast<int>(slot);
+    stored.command.type = type;
+    stored.command.serverTime = serverTime;
+    stored.command.sequence = static_cast<int>(sequence);
+    stored.command.entNum = entNum;
+    stored.command.animIndex = static_cast<int>(animIndex);
+    stored.command.rootAnimIndex = static_cast<int>(rootAnimIndex);
+    stored.command.weight = weight;
+    stored.command.goalTime = goalTime;
+    stored.command.rate = rate;
+    stored.command.flags = flags;
+    stored.occupied = true;
+    stored.processed = false;
+
+    Com_Printf(
+        15,
+        "SP anim command store: seq %u slot %u ent %d type %d anim %u root %u weight %.3f time %.3f rate %.3f flags 0x%x serverTime %d\n",
+        sequence,
+        slot,
+        entNum,
+        type,
+        animIndex,
+        rootAnimIndex,
+        weight,
+        goalTime,
+        rate,
+        flags,
+        serverTime);
+    return static_cast<int>(slot);
+}
+
+void __cdecl CG_ApplyPendingAnimCommandsForDObj_SP(int localClientNum, int entNum, DObj *obj)
+{
+    if (CG_ApplyRemoteAnimSnapshot_SP(localClientNum, entNum, obj, true))
+        return;
+    if ( localClientNum != 0 || !obj || !obj->localTree )
+        return;
+
+    std::lock_guard<std::mutex> lock(g_animCommandMutex_SP);
+    const unsigned int firstSequence = g_nextAnimCommandSequence_SP > SP_ANIM_COMMAND_CAPACITY
+                                     ? g_nextAnimCommandSequence_SP - SP_ANIM_COMMAND_CAPACITY
+                                     : 1;
+    for ( unsigned int sequence = firstSequence; sequence < g_nextAnimCommandSequence_SP; ++sequence )
+    {
+        StoredAnimCommand_SP &stored = g_animCommands_SP[sequence % SP_ANIM_COMMAND_CAPACITY];
+        if ( stored.occupied
+            && static_cast<unsigned int>(stored.command.sequence) == sequence
+            && stored.command.entNum == entNum )
+            CG_ApplyAnimCommand_SP(localClientNum, stored.command, obj);
+    }
+}
+
+void __cdecl CG_ApplyPendingAnimCommands_SP(int localClientNum)
+{
+    if (!com_sv_running->current.enabled)
+    {
+        for (int entNum = 0; entNum < 1023; ++entNum)
+            CG_ApplyRemoteAnimSnapshot_SP(localClientNum, entNum, Com_GetClientDObj(entNum, localClientNum), false);
+        return;
+    }
+    if ( localClientNum != 0 )
+        return;
+
+    std::lock_guard<std::mutex> lock(g_animCommandMutex_SP);
+    const unsigned int firstSequence = g_nextAnimCommandSequence_SP > SP_ANIM_COMMAND_CAPACITY
+                                     ? g_nextAnimCommandSequence_SP - SP_ANIM_COMMAND_CAPACITY
+                                     : 1;
+    for ( unsigned int sequence = firstSequence; sequence < g_nextAnimCommandSequence_SP; ++sequence )
+    {
+        StoredAnimCommand_SP &stored = g_animCommands_SP[sequence % SP_ANIM_COMMAND_CAPACITY];
+        if ( !stored.occupied
+            || static_cast<unsigned int>(stored.command.sequence) != sequence
+            || stored.processed )
+            continue;
+        DObj *obj = Com_GetClientDObj(stored.command.entNum, localClientNum);
+        if ( obj && obj->localTree )
+            stored.processed = CG_ApplyAnimCommand_SP(localClientNum, stored.command, obj);
+    }
+
+    static int lastProbeTime_SP[1024] = {};
+    const int clientTime = CG_GetLocalClientGlobals(localClientNum)->time;
+    for ( int entNum = 100; entNum <= 120; ++entNum )
+    {
+        const int animIndex = g_lastAppliedAnimIndex_SP[entNum];
+        if ( !animIndex || clientTime - lastProbeTime_SP[entNum] < 1000 )
+            continue;
+        DObj *obj = Com_GetClientDObj(entNum, localClientNum);
+        XAnimTree_s *tree = obj ? obj->localTree : NULL;
+        if ( !tree || static_cast<unsigned int>(animIndex) >= tree->anims->size )
+            continue;
+        lastProbeTime_SP[entNum] = clientTime;
+        Com_Printf(
+            15,
+            "SP client anim probe: time %d ent %d type %d anim %d animTime %.3f weight %.3f tree %p\n",
+            clientTime,
+            entNum,
+            g_lastAppliedAnimType_SP[entNum],
+            animIndex,
+            XAnimGetTime(tree, animIndex),
+            XAnimGetWeight(tree, animIndex),
+            tree);
+    }
+}
+#endif
 
 void __cdecl CG_GetTagMatrix(int localClientNum, int linkEntNum, unsigned __int16 tagName, float (*resultTagMat)[3])
 {

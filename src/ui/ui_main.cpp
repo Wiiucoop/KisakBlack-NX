@@ -231,6 +231,36 @@ bool __cdecl UI_KeysBypassMenu(int localClientNum)
             || UI_GetActiveMenu(localClientNum) == UIMENU_SCOREBOARD;
 }
 
+#ifdef KISAK_SP
+// Retail SP 0x0069AA20. True when the focused menu renders into a UI3D window
+// (menuDef_t::ui3dWindowId, +0xAC; default -1, ui_shared_obj.cpp:3762). Retail gates
+// BOTH the mouse-motion router (CL_MouseEvent 0x0041EE50) and the ui_cursor blit
+// (UI_Refresh 0x004AFFF8) on this, so the SP 3D frontend keeps the mouse on the view
+// with no pointer drawn.
+//
+// NOTE: the name UI_MenuIsUI3D is INVENTED. 0x0069AA20 is unnamed in the SP binary and
+// the real Treyarch symbol is unknown; the name was checked to collide with nothing in
+// this tree. Do not treat it as a recovered symbol.
+//
+// Retail discards its Com_LocalClient_GetUIContextIndex result and reads uiInfo[0]
+// because MAX_LOCAL_CLIENTS == 1; UI_GetInfo reproduces that.
+//
+// Must key on Menu_GetFocused ONLY. Widening this to scan dc->menuStack or to use
+// Menus_AnyFullScreenVisible would strand the player with no cursor on a 2D popup:
+// focused-menu-only is what lets the cursor come back when a normal 2D dialog takes
+// focus above the 3D frontend menu.
+bool __cdecl UI_MenuIsUI3D(int localClientNum)
+{
+    uiInfo_s *uiInfo;
+    menuDef_t *menu;
+
+    uiInfo = UI_GetInfo(localClientNum);
+    menu = Menu_GetFocused(&uiInfo->uiDC);
+
+    return menu && menu->ui3dWindowId >= 0;
+}
+#endif
+
 char *__cdecl UI_GetMenuBuffer(char *filename)
 {
     if ( useFastFile->current.enabled )
@@ -826,7 +856,21 @@ void __cdecl UI_Refresh(int localClientNum)
         UI_BuildFindPlayerList();
         if ( UI_ShouldDrawBuildNumber(localClientNum) )
             UI_DrawBuildNumber(contextIndex);
+        // Retail SP UI_Refresh (0x004AFFF8) gates the ui_cursor blit on 0x0069AA20, not on
+        // the function this MP reconstruction has here. CG_IsShowingZombieMap() is a
+        // hardcoded `return 0` stub (cg_compass.cpp:4029) that the matcher applied to 39
+        // unrelated call sites -- a COMDAT-folded stub that got over-applied, so the third
+        // term in the MP line is almost certainly wrong here too. In SP that slot is the
+        // UI3D predicate. Recorded so the stub's misapplication is on file.
+        //
+        // REQUIRED half of a pair: without this, the CL_MouseEvent change would leave
+        // uiDC.isCursorVisible latched at its last value (ui_main.cpp UI_MouseEvent is the
+        // only writer) and the cursor would be blitted at a frozen position forever.
+#ifdef KISAK_SP
+        if ( uiInfo->uiDC.isCursorVisible && !UI_KeysBypassMenu(localClientNum) && !UI_MenuIsUI3D(localClientNum) )
+#else
         if ( uiInfo->uiDC.isCursorVisible && !UI_KeysBypassMenu(localClientNum) && !CG_IsShowingZombieMap() )
+#endif
             UI_DrawHandlePic(
                 &scrPlaceView[contextIndex],
                 uiInfo->uiDC.cursor.x
@@ -892,7 +936,13 @@ MenuList *__cdecl Load_ScriptMenuInternal(const char *pszMenu, int imageTrack)
 {
     char szMenuFile[260]; // [esp+0h] [ebp-108h] BYREF
 
-    strcpy(szMenuFile, "ui_mp/scriptmenus/");
+    // SP_UI_DIR: "ui/" on SP, "ui_mp/" on MP - see ui_shared.h for the evidence.
+    // SP's three script menus (ui/scriptmenus/{invert_axis_pc,select_difficulty,
+    // special_features}.menu) all ship in code_post_gfx.ff; ui_mp/scriptmenus/ has 24 entries in
+    // common_mp.ff and zero in any SP zone. Non-fatal (Load_ScriptMenu returns 0 on failure,
+    // ui_main.cpp:881-882) but select_difficulty.menu is the SP campaign difficulty picker, so
+    // the main-menu flow is broken without it. Audit finding C6 / 5c.
+    strcpy(szMenuFile, SP_UI_DIR "scriptmenus/");
     I_strncat(szMenuFile, 256, pszMenu);
     I_strncat(szMenuFile, 256, ".menu");
     return UI_LoadMenu(szMenuFile, imageTrack);
@@ -905,7 +955,7 @@ char *__cdecl UI_GetMapDisplayName(const char *pszMap)
     for ( i = 0; i < sharedUiInfo.mapCount; ++i )
     {
         if ( !I_stricmp(pszMap, sharedUiInfo.mapList[i].mapLoadName) )
-            return UI_SafeTranslateString(&sharedUiInfo.joinGameTypes[32].gameType[304 * i]);
+            return UI_SafeTranslateString(sharedUiInfo.mapList[i].mapName);
     }
     return (char *)pszMap;
 }
@@ -923,7 +973,7 @@ char *__cdecl UI_GetMapDisplayNameFromPartialLoadNameMatch(const char *mapName, 
     {
         *mapLoadNameLen = strlen(sharedUiInfo.mapList[i].mapLoadName);
         if ( !I_strnicmp(mapName, sharedUiInfo.mapList[i].mapLoadName, *mapLoadNameLen) )
-            return UI_SafeTranslateString(&sharedUiInfo.joinGameTypes[32].gameType[304 * i]);
+            return UI_SafeTranslateString(sharedUiInfo.mapList[i].mapName);
     }
     return 0;
 }
@@ -3418,7 +3468,24 @@ void UI_RegisterDvars()
                                             "If set, only menus using this name will draw.");
     ui_menuLvlNotify = _Dvar_RegisterBool(
                                              "ui_menuLvlNotify",
+#ifdef KISAK_SP
+                                             // Retail SP registers this ON. Read out of the
+                                             // registrar this pass: 0x008361c8 PUSH 0x009b7560
+                                             // ("ui_menuLvlNotify"), 0x008361c6 PUSH 0x1 (the
+                                             // value), 0x008361c1 PUSH 0x80 (the flags, which
+                                             // this tree already matches).
+                                             //
+                                             // This is not cosmetic. All three "cmd mlvl"
+                                             // producers -- UI_Project_RunMenuScript's
+                                             // sendMenuNotify arm and both ui_shared.cpp menu
+                                             // stack emitters -- are gated on
+                                             // current.enabled, so with the default at 0 every
+                                             // one of them is silent and the SP frontend can
+                                             // never tell script a menu was used.
+                                             1,
+#else
                                              0,
+#endif
                                              0x80u,
                                              "If set, send code notification to script; default off");
     selectedFriendName = _Dvar_RegisterString(
@@ -3604,6 +3671,25 @@ void UI_InitUIInfos()
         else
             uiInfo->uiDC.bias = (float)((float)uiInfo->uiDC.screenWidth - (float)((float)uiInfo->uiDC.screenHeight * 1.3333334))
                                                 * 0.5;
+        // SP retail divergence, already confirmed and reviewed in an earlier campaign slice
+        // (Ghidra 0x00837c10 UI_InitUIInfos): a genuine restructuring, not just a "ui_mp/" ->
+        // "ui/" swap. SP has no "patch.txt" equivalent at all; keeps "code.txt" fastfile-gated;
+        // and loads "menus.txt" + "patch_menus.txt" UNCONDITIONALLY (no useFastFile/mapname
+        // guard), where MP gates "menus.txt" separately and has no "patch_menus.txt" at all.
+        // Found chasing the same real SP boot investigation as the gametypes-path fix
+        // (2026-08-05) -- these two were non-fatal warnings rather than the actual blocker, but
+        // the same disease, already-evidenced.
+#ifdef KISAK_SP
+        if ( useFastFile->current.enabled )
+        {
+            menuList = UI_LoadMenus("ui/code.txt", 3);
+            UI_AddMenuList(0, &uiInfo->uiDC, menuList, 1);
+        }
+        menuList = UI_LoadMenus("ui/menus.txt", 3);
+        UI_AddMenuList(0, &uiInfo->uiDC, menuList, 1);
+        menuList = UI_LoadMenus("ui/patch_menus.txt", 3);
+        UI_AddMenuList(0, &uiInfo->uiDC, menuList, 1);
+#else
         if ( useFastFile->current.enabled )
         {
             Com_sprintf(menuname, 0x80u, "%spatch.txt", "ui_mp/");
@@ -3619,6 +3705,7 @@ void UI_InitUIInfos()
             menuList = UI_LoadMenus(menuname, 3);
             UI_AddMenuList(0, &uiInfo->uiDC, menuList, 1);
         }
+#endif
         Menus_CloseAll(0, &uiInfo->uiDC);
     }
 }
@@ -3873,10 +3960,59 @@ void __cdecl UI_DrawMapLevelshot(int localClientNum)
     {
         if ( g_showLoadingScreenMenu )
         {
+#ifdef KISAK_SP
+            // SP retail divergence -- and the ROOT CAUSE of the map-frontend deadlock
+            // (found 2026-08-07 by a 6-angle Ghidra workflow; four angles converged on it).
+            //
+            // SP's loading-screen menu is "briefing", not MP's "connect". Ghidra 0x005ceef0
+            // (= this function in the SP binary) is a line-for-line structural match to this
+            // body but names "briefing" (0x00a38324), which it references at BOTH branches.
+            // Corroborating: the string "connect" occurs exactly once in BlackOps.exe and its
+            // only xref is SV_ConnectionlessPacket -- it is not a menu name in SP at all.
+            //
+            // Why the wrong name DEADLOCKED rather than merely looking wrong:
+            //  * The `connect` menuDef ships in code_post_gfx.ff (offset 0x503412-0x503d33) and
+            //    contains a dangling text reference "@MENU_INTEL" at 0x503acf.
+            //  * `MENU_INTEL` does NOT exist as a LocalizeEntry in ANY of the 138 shipped
+            //    fastfiles. Exact NUL-terminated search over every inflated zone/Common and
+            //    zone/English .ff returns exactly one hit -- that reference itself. The string
+            //    was renamed to MENU_INTEL_CAPS (value "INTEL", en_code_post_gfx.ff+0x16037)
+            //    and this one reference was never updated. It is a shipped retail content bug.
+            //    (Beware: a substring search for "MENU_INTEL" DOES hit inside "MENU_INTEL_CAPS"
+            //    and will fool you into thinking the asset exists. It does not.)
+            //  * Item_Text_Paint strips the '@' and calls UI_SafeTranslateString("MENU_INTEL")
+            //    -> SE_GetString_FastFile -> DB_FindXAssetHeader(ASSET_TYPE_LOCALIZE_ENTRY,
+            //    "MENU_INTEL", 1, **-1**). ASSET_TYPE_LOCALIZE_ENTRY is one of four types that
+            //    never receive a default entry (db_registry.cpp:1457-1463), so the miss cannot
+            //    short-circuit, and waitTime == -1 makes the loop guard vacuous.
+            //  * That lookup runs on the RENDER thread inside RB_RenderThread's remote-screen
+            //    -update pump, which holds CRITSECT_DBHASH (rb_backend.cpp:5321). The database
+            //    thread then blocks in DB_AddXAsset on that same lock, so it can never finish
+            //    the zone and never lets anyone reach Sys_DatabaseCompleted2() -- which is the
+            //    only way Sys_IsDatabaseReady2() could flip and release the wait. The render
+            //    thread's own escape (DB_PostLoadXZone via Sys_QueryRGRegisteredEvent) is shut
+            //    because RB_RenderThread clears that event at rb_backend.cpp:5275. Three-way
+            //    deadlock, keyed on a string that does not exist.
+            //
+            // Retail is exposed to the identical latent hazard -- the lock topology, the
+            // waitTime -1 and the missing string are all byte-identical there -- and survives
+            // only because it never paints `connect`. Retail's `briefing` menuDef
+            // (0x501b0a-0x503412) contains ZERO '@'-prefixed references, so retail's render
+            // thread makes no SE_GetString call at all during a level load.
+            //
+            // Therefore the fix is "don't paint a menu whose strings can't resolve", never
+            // "stop entering the wait" -- changing waitTime, reordering DB_SetInitializing(0)
+            // or forcing the RG event would all diverge from retail and hide the real bug.
+            if ( useFastFile->current.enabled )
+                menua = DB_FindXAssetHeader(ASSET_TYPE_MENU, (char*)"briefing", 1, -1).menu;
+            else
+                menua = Menus_FindByName(&uiInfo->uiDC, "briefing");
+#else
             if ( useFastFile->current.enabled )
                 menua = DB_FindXAssetHeader(ASSET_TYPE_MENU, (char*)"connect", 1, -1).menu;
             else
                 menua = Menus_FindByName(&uiInfo->uiDC, "connect");
+#endif
         }
         else
         {
@@ -3911,10 +4047,42 @@ void __cdecl UI_LoadIngameMenus(int contextIndex)
     if ( !g_ingameMenusLoaded[contextIndex] )
     {
         g_ingameMenusLoaded[contextIndex] = 1;
-        v1 = va("%singame.txt", "ui_mp/");
+        // SP_UI_DIR: "ui/" on SP - see ui_shared.h. ui/ingame.txt ships in code_post_gfx.ff;
+        // ui_mp/ingame.txt is common_mp.ff only. Non-fatal, and only fires when the in-game menu
+        // is first opened, so not boot-blocking. Audit finding C7 / 5b.
+        // NOTE(SP, SETTLED+DONE 2026-08-26; demoted from an open marker by a triage pass that
+        // confirmed the KISAK_SP block below is present): the retail SP exe also carries a
+        // "%singame_options.txt" format string
+        // (0x620dac) with no call site in this reconstruction, suggesting SP loads a second menu
+        // list here. Not added - no evidence for where or under what condition. Would be settled
+        // by an xref on that literal in BlackOps.exe; Ghidra is unavailable in this session.
+        // SETTLED 2026-08-26, Ghidra available again: the xref is HERE. Retail 0x00523090 (now
+        // named UI_LoadIngameMenus in the live database) repeats the identical three-step
+        // sequence for va("%singame_options.txt", SP_UI_DIR) -> UI_LoadMenus(v, 3) ->
+        // UI_AddMenuList(contextIndex, dc, menuList, 1) immediately after the ingame.txt block
+        // and INSIDE this same g_ingameMenusLoaded guard. There is no additional condition --
+        // the "where and under what condition" the note asks for is simply "right here, same
+        // guard".
+        // DONE 2026-08-26: the second block is now ported below, under KISAK_SP. Re-verified
+        // against retail 0x00523090 immediately before writing it -- the body is exactly
+        //     if (flag[ctx] == 0) { flag[ctx] = 1;
+        //         va("%singame.txt", dir);         UI_LoadMenus(v, 3); UI_AddMenuList(ctx, dc, v, 1);
+        //         va("%singame_options.txt", dir); UI_LoadMenus(v, 3); UI_AddMenuList(ctx, dc, v, 1); }
+        // Both loads use the literal 3 and both adds the trailing 1, and the second block reuses
+        // the SAME dc pointer as the first (retail folds UI_UIContext_GetInfo to the fixed
+        // 0x0256AA50 because SP has one UI context), so `uiInfo` is reused rather than re-fetched.
+        v1 = va("%singame.txt", SP_UI_DIR);
         menuList = UI_LoadMenus(v1, 3);
         uiInfo = UI_UIContext_GetInfo(contextIndex);
         UI_AddMenuList(contextIndex, &uiInfo->uiDC, menuList, 1);
+#ifdef KISAK_SP
+        // SP-only second menu list. ui/ingame_options.txt ships in code_post_gfx.ff (which SP
+        // loads at startup); there is no ui_mp/ingame_options.txt in any zone MP loads, which is
+        // why this block is SP-gated rather than driven off SP_UI_DIR alone.
+        v1 = va("%singame_options.txt", SP_UI_DIR);
+        menuList = UI_LoadMenus(v1, 3);
+        UI_AddMenuList(contextIndex, &uiInfo->uiDC, menuList, 1);
+#endif
     }
 }
 

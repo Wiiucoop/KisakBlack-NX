@@ -1,6 +1,6 @@
 #pragma once
 #include "demo_common.h"
-#include "../../tl/jobqueue/jobqueue_all.h"
+#include <tl/jobqueue/jobqueue_all.h>
 #include <qcommon/sv_msg_write_mp.h>
 
 struct uploadSendInfo // sizeof=0x8

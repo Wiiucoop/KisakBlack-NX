@@ -39,6 +39,31 @@ extern const dvar_t *perk_armorPiercing;
 extern const dvar_t *perk_dogsAttackGhost;
 extern const dvar_t *perk_blackbirdShowsGpsJammer;
 
+#ifdef KISAK_SP
+enum { BG_SP_PERK_COUNT = 15 };
+
+inline unsigned int __cdecl BG_GetSPPerkMask(unsigned int perkIndex)
+{
+    if (perkIndex >= BG_SP_PERK_COUNT
+        && !Assert_MyHandler(
+            "c:\\projects_pc\\cod\\codsrc\\src\\bgame\\../bgame/bg_perks.h",
+            136,
+            0,
+            "perkIndex doesn't index SP_PERK_COUNT\n\t%i not in [0, %i)",
+            perkIndex,
+            BG_SP_PERK_COUNT))
+    {
+        __debugbreak();
+    }
+    return 3u << (2 * perkIndex);
+}
+
+inline bool __cdecl BG_HasSPPerk(const unsigned int *perks, unsigned int perkIndex)
+{
+    return (*perks & BG_GetSPPerkMask(perkIndex)) != 0;
+}
+#endif
+
 inline bool __cdecl BG_HasPerk(const unsigned int *perks, unsigned int perkIndex)
 {
     if (perkIndex >= 0x34

@@ -671,6 +671,40 @@ bool Assert_MyHandler(const char *filename, int line, int type, const char *fmt,
     Sys_LeaveCriticalSection(CRITSECT_ASSERT);
     return shouldBreak == 0;
 #else
+#ifdef KISAK_SP
+    // SP-ONLY DIAGNOSTIC. The real handler above is #if 0'd, so a failing assert reaches
+    // __debugbreak() with nothing written anywhere: the SP exception filter turns the
+    // unhandled EXCEPTION_BREAKPOINT into a bare Com_Error(ERR_FATAL, "Fatal Error") with no
+    // file, no line and no message (win_main.cpp PrivateUnhandledExceptionFilter ->
+    // Win_LocalizeRef("WIN_ERROR")). Print the assert first so the log names it.
+    {
+        va_list vaDiag;
+        char diagMessage[1024];
+
+        va_start(vaDiag, fmt);
+        _vsnprintf(diagMessage, sizeof(diagMessage) - 1, fmt, vaDiag);
+        va_end(vaDiag);
+        diagMessage[sizeof(diagMessage) - 1] = 0;
+        Com_Printf(
+            16,
+            "\nASSERTBEGIN -------------------------------------------------------------------\n"
+            "Assert Expression: %s\nFile: %s\nLine: %d\n",
+            diagMessage,
+            filename,
+            line);
+        {
+            void *frames[24];
+            unsigned short frameCount = CaptureStackBackTrace(0, 24, frames, 0);
+            unsigned short frameIndex;
+
+            for ( frameIndex = 0; frameIndex < frameCount; ++frameIndex )
+                Com_Printf(16, "  frame %2u: %08x\n", frameIndex, (unsigned int)frames[frameIndex]);
+        }
+        Com_Printf(
+            16,
+            "ASSERTEND ---------------------------------------------------------------------\n");
+    }
+#endif
     __debugbreak();
     return 1;
 #endif

@@ -3,6 +3,24 @@
 #include <universal/com_expressions.h>
 #include <database/database.h>
 
+// UI asset directory prefix. SP uses bare "ui/" where MP uses "ui_mp/".
+// Evidence:
+//   - the retail SP BlackOps.exe contains NO "ui_mp/" literal at all (binary-wide zero), while
+//     "ui/", "ui/menus.txt", "ui/code.txt", "ui/patch_menus.txt", "ui/default.menu",
+//     "ui/hud.txt", "ui/hud_%s.txt", "ui/scriptmenus/" and the "%singame.txt" format string are
+//     all present.
+//   - zone scan of all 139 shipped .ff files: ui/ingame.txt, ui/ingame_options.txt and three
+//     ui/scriptmenus/*.menu (invert_axis_pc, select_difficulty, special_features) ship in
+//     code_post_gfx.ff, which SP loads at startup; every ui_mp/ counterpart is in common_mp.ff
+//     or patch_mp.ff, zones SP never loads.
+// Used by ui_main.cpp (script menus, in-game menu list) and cg_main_mp.cpp (HUD menufiles).
+// Audit findings C6/C7/C8 (asset-availability audit) and 5a/5b/5c (frontend-map-load audit).
+#ifdef KISAK_SP
+#define SP_UI_DIR "ui/"
+#else
+#define SP_UI_DIR "ui_mp/"
+#endif
+
 enum language_t : __int32
 {                                       // XREF: Item_ListBox_PaintTextElem/r
                                         // Item_ListBox_LanguageScale/r

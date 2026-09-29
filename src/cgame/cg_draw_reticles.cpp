@@ -1,4 +1,8 @@
 #include "cg_draw_reticles.h"
+#ifdef KISAK_SP
+#include <qcommon/common.h>
+#include <bgame/bg_weapons.h>
+#endif
 #include <universal/com_math_anglevectors.h>
 #include <bgame/bg_weapons_def.h>
 #include <cgame_mp/cg_main_mp.h>
@@ -662,6 +666,29 @@ double __cdecl CG_DrawWeapReticle(int localClientNum)
 
 void __cdecl CG_CalcCrosshairColor(int localClientNum, float alpha, float *color)
 {
+#ifdef KISAK_SP
+    // Retail SP 0x00773DB0: current server-authored flags, no MP name timer.
+    const cg_s *cg = CG_GetLocalClientGlobals(localClientNum);
+    const playerState_s *ps = &cg->predictedPlayerState;
+    const WeaponDef *def = BG_GetWeaponDef(CG_GetPlayerWeapon(ps, localClientNum));
+    color[0] = color[1] = color[2] = 1.0f;
+    if ((ps->eFlags & 0x4000) || def->crosshairColorChange)
+    {
+        const bool alternate = team_indicator->current.integer == 3;
+        if (ps->weapFlags & 8)
+            Dvar_GetUnpackedColor(alternate ? cg_TeamColor_MyTeamAlt : cg_TeamColor_MyTeam, color);
+        else if ((ps->weapFlags & 0x10) && cg_crosshairEnemyColor->current.enabled)
+            Dvar_GetUnpackedColor(alternate ? cg_TeamColor_EnemyTeamAlt : cg_TeamColor_EnemyTeam, color);
+        else if (zombiemode->current.enabled && (ps->weapFlags & 0x200000))
+        {
+            const bool humanGun = !I_strncmp(BG_WeaponName(ps->weapon), "humangun_", 9);
+            color[0] = humanGun ? 1.0f : 0.0f;
+            color[1] = 1.0f;
+            color[2] = humanGun ? 0.0f : 1.0f;
+        }
+    }
+    color[3] = alpha * cg_crosshairAlpha->current.value;
+#else
     cg_s *cgameGlob; // [esp+8h] [ebp-20h]
     int isInVehicle; // [esp+18h] [ebp-10h]
     int weaponIndex; // [esp+1Ch] [ebp-Ch]
@@ -753,6 +780,7 @@ LABEL_27:
         Dvar_GetUnpackedColor(cg_TeamColor_EnemyTeam, color);
 LABEL_28:
     color[3] = alpha * cg_crosshairAlpha->current.value;
+#endif
 }
 
 void __cdecl CG_DrawTurretCrossHair(int localClientNum)

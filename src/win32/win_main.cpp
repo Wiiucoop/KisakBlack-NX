@@ -821,6 +821,50 @@ int __cdecl PrivateUnhandledExceptionFilter(_EXCEPTION_POINTERS *ExceptionInfo)
             ExceptionInfo->ContextRecord->Ebx,
             ExceptionInfo->ContextRecord->Ecx,
             ExceptionInfo->ContextRecord->Edx);
+#ifdef KISAK_SP
+    // SP-ONLY DIAGNOSTIC. g_ExceptionStr is fully built here and then thrown away -- the only
+    // thing that reaches the log is Com_Error(ERR_FATAL, "Fatal Error"), which names neither the
+    // exception nor the address. Print the header (type + faulting address + registers) and the
+    // module base so the address can be turned into an RVA.
+    Com_Printf(16, "\n%s", g_ExceptionStr);
+    Com_Printf(16, "ModuleBase: %08x\n", (unsigned int)GetModuleHandleA(0));
+    // Walk the frame chain as well. The registers alone name the faulting instruction but not
+    // how it was reached, which is the expensive half to recover by hand -- the Assert_MyHandler
+    // diagnostic already prints a CaptureStackBackTrace, and that is what made the animscript
+    // failures cheap to diagnose.
+    //
+    // CaptureStackBackTrace cannot be used here: it walks the CURRENT stack, and this filter runs
+    // on a different frame from the fault. Walk ContextRecord->Ebp instead, which IS the faulting
+    // frame. This build is compiled with /Oy- (frame pointers kept), so the chain is valid; each
+    // frame is [ebp] = caller ebp, [ebp+4] = return address. Every step is bounds-checked and the
+    // depth is capped rather than trusted, because by definition memory is already known to be
+    // bad by the time this runs -- the handler must not fault while reporting a fault.
+    {
+        unsigned int frameEbp = ExceptionInfo->ContextRecord->Ebp;
+        unsigned int prevEbp = 0;
+        int depth;
+
+        Com_Printf(16, "BACKTRACEBEGIN (EIP first, then return addresses)\n");
+        Com_Printf(16, "  frame  0: %08x\n", ExceptionInfo->ContextRecord->Eip);
+        for ( depth = 1; depth < 24; ++depth )
+        {
+            unsigned int retAddr;
+
+            // Monotonic, aligned and plausible, or stop.
+            if ( frameEbp <= prevEbp || frameEbp < 0x10000 || (frameEbp & 3) != 0 )
+                break;
+            if ( IsBadReadPtr((const void *)frameEbp, 8) )
+                break;
+            retAddr = ((const unsigned int *)frameEbp)[1];
+            if ( !retAddr )
+                break;
+            Com_Printf(16, "  frame %2d: %08x\n", depth, retAddr);
+            prevEbp = frameEbp;
+            frameEbp = ((const unsigned int *)frameEbp)[0];
+        }
+        Com_Printf(16, "BACKTRACEEND\n");
+    }
+#endif
     if ((ExceptionInfo->ContextRecord->ContextFlags & 0x10001) != 0)
     {
         strcat(g_ExceptionStr, "Stack Bytes: \n");
@@ -862,13 +906,32 @@ int __stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, char *
     char *v5; // eax
     //jpeg_decompress_struct *SCRIPT_DEBUGGER_SMOKE_TEST_SUCCESS_EXIT_CODE; // [esp+0h] [ebp-4h]
 
-    if ( !StartingDedicatedServer(lpCmdLine) && CheckRemoteSession() )
+    if ( !IsDedicatedServer() && !StartingDedicatedServer(lpCmdLine) && CheckRemoteSession() )
         return 0;
     g_allowMature = 1;
+#ifdef KISAK_MP
     if ( I_stristr(lpCmdLine, "minidump") || !I_stristr(lpCmdLine, "nodump") )
         Sys_StartMiniDump(1);
     else
         SetUnhandledExceptionFilter((LPTOP_LEVEL_EXCEPTION_FILTER)PrivateUnhandledExceptionFilter);
+#elif KISAK_SP
+    // SP retail divergence (Ghidra 0x0050a730 WinMain, RESOLVED bootchain3 slice, 2026-08-05):
+    // SP checks "autominidump" before "minidump" and passes an explicit prompt-mode argument to
+    // Sys_StartMiniDump, instead of MP's single fixed Sys_StartMiniDump(1) call gated by
+    // "minidump" OR NOT "nodump" (i.e. MP enables minidumps by default unless "nodump" is
+    // passed). SP has no "nodump" catch-all at all -- minidumps are opt-in only. Confirmed
+    // directly from decompile control flow (plain if/else chain, no setjmp/obfuscation), so
+    // transcribed as real code rather than a TODO:
+    //   autominidump present -> Sys_StartMiniDump(0)  (silent/non-prompting mode)
+    //   minidump present     -> Sys_StartMiniDump(1)  (prompting mode, matches MP's literal)
+    //   neither              -> SetUnhandledExceptionFilter(...), same as MP's else branch
+    if ( I_stristr(lpCmdLine, "autominidump") )
+        Sys_StartMiniDump(0);
+    else if ( I_stristr(lpCmdLine, "minidump") )
+        Sys_StartMiniDump(1);
+    else
+        SetUnhandledExceptionFilter((LPTOP_LEVEL_EXCEPTION_FILTER)PrivateUnhandledExceptionFilter);
+#endif
     Sys_InitializeCriticalSections();
     Sys_InitMainThread();
     PMem_Init();
@@ -910,9 +973,28 @@ int __stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, char *
             }
 
             // LWSS ADD: Steam Init
-            Steam_Init();
+#ifdef OPENBLOPS_NO_STEAM_AUTH
+            if (!IsDedicatedServer())
+#endif
+                Steam_Init();
             // LWSS END
 
+#ifdef KISAK_SP
+            // FINDING SETTLED 2026-08-26, DELIBERATELY NOT ACTED ON. Retail SP's WinMain
+            // (0x0050a730) really does call Com_Init with TWO arguments, and the first really is
+            // the empty string: 0x009dd354 reads as four zero bytes, and it is the same literal
+            // Com_Init itself compares sv_mapname->current.string against at 0x00406a26. So the
+            // earlier "more consistent with a decompiler mis-attribution" reading was wrong on
+            // the first argument -- &DAT_009dd354 is not sys_cmdline because it is "", not
+            // because Ghidra mis-attributed it.
+            // Com_Init's own body (0x004069c0) reads only [EBP+8], so whatever the second
+            // argument is, this function does not consume it.
+            // STILL NOT CHANGED, and this is a scope decision rather than an evidence gap:
+            // Com_Init is a SHARED signature and altering it touches every MP call site, which
+            // this pass is required to leave byte-identical. Recorded as settled so a future
+            // pass does not re-derive it; changing the signature needs its own pass that can
+            // audit the MP callers.
+#endif
             Com_Init(sys_cmdline);
 
             if (!IsDedicatedServer())
@@ -930,7 +1012,7 @@ int __stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, char *
 #ifdef KISAK_MP
                 if (g_wv.isMinimized || IsDedicatedServer())
 #elif KISAK_SP
-                if (g_wv.isMinimized)
+                if (g_wv.isMinimized || IsDedicatedServer())
 #endif
                 {
                     Sleep(5);
@@ -938,7 +1020,29 @@ int __stdcall WinMain(HINSTANCE__ *hInstance, HINSTANCE__ *hPrevInstance, char *
 
                 // run the game
                 Com_Frame();
-                
+
+#ifdef KISAK_SP
+                // SP retail divergence (Ghidra 0x0050a730 WinMain, RESOLVED bootchain3 slice,
+                // 2026-08-05): immediately after Com_Frame(), SP's main loop calls
+                // PbClientProcessEvents() unconditionally, then PbServerProcessEvents() gated
+                // behind Dvar_GetBool("onlinegame") -- the live counterpart of the commented-out
+                // MP reconstruction lines directly below. Both are PunkBuster anti-cheat event
+                // pumps: confirmed via a LoadLibraryA("pbcl.dll"/"pbcl old/new.dll") +
+                // GetProcAddress("ca"/"cb") chain one call level under PbClientProcessEvents
+                // (Ghidra 0x005cc940), mirroring the already-confirmed PbServerProcessEvents
+                // (Ghidra 0x006010a0, "pbsv.dll" / "sa"/"sb").
+                //
+                // TODO(SP): NOT implemented here -- deliberately left as a no-op. PunkBuster
+                // integration does not exist anywhere else in this reimplementation (no
+                // pbcl.dll/pbsv.dll loader, no PB_* subsystem of any kind), so calling these
+                // would require inventing an entire anti-cheat subsystem out of six still-unnamed
+                // Ghidra helper functions -- out of scope for a first SP boot-chain pass. Also
+                // note "PbClientProcessEvents" is itself a reviewer-proposed name by symmetry
+                // with the confirmed PbServerProcessEvents, not an attested original Treyarch
+                // symbol (see its own plate, which flags it as this slice's weakest-evidenced
+                // row) -- treat its exact behavior as lower-confidence than the rest of this
+                // table even once someone does implement it.
+#endif
                 //while ( !Dvar_GetBool("onlinegame") );
                 //PbServerProcessEvents();
             }
@@ -1009,10 +1113,26 @@ void PrintWorkingDir()
 
 char __cdecl CheckRemoteSession()
 {
+    // 2026-08-07 REGRESSION FIX. A previous batch changed this guard to a bare `#if 0`, which
+    // disabled the remote-desktop check for BOTH configurations. That silently changed KISAK_MP
+    // behavior, breaking the project's standing invariant that the MP path stays byte-for-byte
+    // identical -- an unguarded change is exactly the class of defect that invariant exists to
+    // prevent, so it is corrected rather than left because it "seems harmless".
+    //
+    // The bypass is kept, but SP-only: retail SP does perform this check (it is visible in the
+    // SP binary's own WinMain), so this is a deliberate local deviation to keep the SP build
+    // runnable in environments where GetSystemMetrics(SM_REMOTESESSION) reports true, not a
+    // reconstruction of retail behavior.
+    // TODO(SP): if the SP build is ever run somewhere this check would pass anyway, consider
+    // restoring retail behavior here and dropping the deviation entirely.
+#ifndef KISAK_SP
     if ( !GetSystemMetrics(4096) )
         return 0;
     MessageBoxA(0, "The game can not be run over a remote desktop connection.", "CoD", 0);
     return 1;
+#else
+    return 0;
+#endif
 }
 
 bool __cdecl StartingDedicatedServer(char *cmdline)

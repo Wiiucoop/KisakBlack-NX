@@ -29,6 +29,9 @@ void __cdecl G_DamageClient(
                 unsigned int mod,
                 unsigned int weapon,
                 hitLocation_t hitLoc,
+#ifdef KISAK_SP
+                int modelIndex,
+#endif
                 int timeOffset);
 unsigned int __cdecl G_GetWeaponIndexForEntity(const gentity_s *ent);
 void __cdecl G_DamageActor(
@@ -42,6 +45,9 @@ void __cdecl G_DamageActor(
                 unsigned int mod,
                 unsigned int weapon,
                 hitLocation_t hitLoc,
+#ifdef KISAK_SP
+                unsigned int modelIndex,
+#endif
                 int timeOffset);
 void __cdecl G_DamageVehicle(
                 gentity_s *targ,

@@ -34,10 +34,16 @@ struct clientState_s // sizeof=0xD0
         int prestige;
         int lastDamageTime;
         int lastStandStartTime;
+#ifdef KISAK_SP
+        // Retail SP client-state field +0x44. Occupies the existing alignment
+        // gap at +116 in this MP-derived layout; all later offsets stay fixed.
+        int beingRevived;
+#else
         // padding byte
         // padding byte
         // padding byte
         // padding byte
+#endif
         //$4EE974FEE7F16CD9507A14B5D3A2E3FF ___u12;
         union //$4EE974FEE7F16CD9507A14B5D3A2E3FF // sizeof=0x8
         {                                                                             // XREF: clientState_s/r

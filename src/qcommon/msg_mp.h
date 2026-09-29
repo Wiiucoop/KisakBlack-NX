@@ -3,6 +3,14 @@
 #include <qcommon/bitarray.h>
 #include "ent.h"
 
+// The reconstructed SP wire adds the retail beingRevived value in an existing
+// alignment gap; the MP wire remains unchanged.
+#ifdef KISAK_SP
+#define NUM_CLIENT_STATE_FIELDS 51
+#else
+#define NUM_CLIENT_STATE_FIELDS 50
+#endif
+
 enum compressionType_t : unsigned __int8 // LWSS: Not a real enum name
 {
     COMPRESSION_TYPE_NONE = 0,
@@ -314,37 +322,45 @@ void __cdecl MSG_InitHuffman();
 void MSG_initHuffmanInternal();
 void __cdecl MSG_DumpNetFieldChanges_f();
 
+// SP adds its animation identity in entityState_s trailing padding. MP tables
+// and all existing offsets remain unchanged.
+#ifdef KISAK_SP
+constexpr unsigned SP_ENTITY_ANIM_FIELDS = 1;
+#else
+constexpr unsigned SP_ENTITY_ANIM_FIELDS = 0;
+#endif
+
 // These prolly should use the const int as the array size, but yeah
 extern const int numEventEntityStateFields;
-extern const NetField eventEntityStateFields[69];
+extern const NetField eventEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS];
 extern const int numActorStateFields;
-extern const NetField actorStateFields[69];
+extern const NetField actorStateFields[69 + SP_ENTITY_ANIM_FIELDS];
 extern const int numVehicleEntityStateFields;
-extern const NetField vehicleEntityStateFields[71];
-extern const NetField planeStateFields[66];
-extern const NetField helicopterEntityStateFields[71];
+extern const NetField vehicleEntityStateFields[71 + SP_ENTITY_ANIM_FIELDS];
+extern const NetField planeStateFields[66 + SP_ENTITY_ANIM_FIELDS];
+extern const NetField helicopterEntityStateFields[71 + SP_ENTITY_ANIM_FIELDS];
 extern const int numTurretEntityStateFields;
-extern const NetField turretEntityStateFields[69];
+extern const NetField turretEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS];
 extern const int numLoopFxEntityStateFields;
-extern const NetField loopFxEntityStateFields[69];
-extern const NetField fxStateFields[68];
+extern const NetField loopFxEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS];
+extern const NetField fxStateFields[68 + SP_ENTITY_ANIM_FIELDS];
 extern const int numSoundBlendEntityStateFields;
-extern const NetField soundBlendEntityStateFields[68];
-extern const NetField scriptMoverStateFields[72];
+extern const NetField soundBlendEntityStateFields[68 + SP_ENTITY_ANIM_FIELDS];
+extern const NetField scriptMoverStateFields[72 + SP_ENTITY_ANIM_FIELDS];
 extern const int numMissileEntityStateFields;
-extern const NetField missileEntityStateFields[69];
+extern const NetField missileEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS];
 extern const int numItemEntityStateFields;
-extern const NetField itemEntityStateFields[69];
+extern const NetField itemEntityStateFields[69 + SP_ENTITY_ANIM_FIELDS];
 extern const int numCorpseEntityStateFields;
-extern const NetField corpseEntityStateFields[68];
+extern const NetField corpseEntityStateFields[68 + SP_ENTITY_ANIM_FIELDS];
 extern const int numPlayerEntityStateFields;
-extern const NetField playerEntityStateFields[74];
+extern const NetField playerEntityStateFields[74 + SP_ENTITY_ANIM_FIELDS];
 extern const int numArchivedEntityFields;
 extern const NetField archivedEntityFields[8];
-extern const NetField entityStateFields[69];
+extern const NetField entityStateFields[69 + SP_ENTITY_ANIM_FIELDS];
 
 extern const int numClientStateFields;
-extern const NetField clientStateFields[50];
+extern const NetField clientStateFields[NUM_CLIENT_STATE_FIELDS];
 extern const int numPlayerStateFields;
 extern const NetField playerStateFields[179];
 extern const int numObjectiveFields;
@@ -356,28 +372,28 @@ extern const NetField matchStateFields[15];
 // should be const
 static NetFieldList s_entityNetFieldList[22] =
 {
-  { entityStateFields, 69u, "entityStateFields" },
-  { playerEntityStateFields, 74u, "playerEntityStateFields" },
-  { corpseEntityStateFields, 68u, "corpseEntityStateFields" },
-  { itemEntityStateFields, 69u, "itemEntityStateFields" },
-  { missileEntityStateFields, 69u, "missileEntityStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { scriptMoverStateFields, 72u, "scriptMoverStateFields" },
-  { soundBlendEntityStateFields, 68u, "soundBlendEntityStateFields" },
-  { fxStateFields, 68u, "fxStateFields" },
-  { loopFxEntityStateFields, 69u, "loopFxEntityStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { turretEntityStateFields, 69u, "turretEntityStateFields" },
-  { helicopterEntityStateFields, 71u, "helicopterEntityStateFields" },
-  { planeStateFields, 66u, "planeStateFields" },
-  { vehicleEntityStateFields, 71u, "vehicleEntityStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { actorStateFields, 69u, "actorStateFields" },
-  { actorStateFields, 69u, "actorStateFields" },
-  { actorStateFields, 69u, "actorStateFields" },
-  { entityStateFields, 69u, "entityStateFields" },
-  { eventEntityStateFields, 69u, "eventEntityStateFields" }
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { playerEntityStateFields, 74u + SP_ENTITY_ANIM_FIELDS, "playerEntityStateFields" },
+  { corpseEntityStateFields, 68u + SP_ENTITY_ANIM_FIELDS, "corpseEntityStateFields" },
+  { itemEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "itemEntityStateFields" },
+  { missileEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "missileEntityStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { scriptMoverStateFields, 72u + SP_ENTITY_ANIM_FIELDS, "scriptMoverStateFields" },
+  { soundBlendEntityStateFields, 68u + SP_ENTITY_ANIM_FIELDS, "soundBlendEntityStateFields" },
+  { fxStateFields, 68u + SP_ENTITY_ANIM_FIELDS, "fxStateFields" },
+  { loopFxEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "loopFxEntityStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { turretEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "turretEntityStateFields" },
+  { helicopterEntityStateFields, 71u + SP_ENTITY_ANIM_FIELDS, "helicopterEntityStateFields" },
+  { planeStateFields, 66u + SP_ENTITY_ANIM_FIELDS, "planeStateFields" },
+  { vehicleEntityStateFields, 71u + SP_ENTITY_ANIM_FIELDS, "vehicleEntityStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { actorStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "actorStateFields" },
+  { actorStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "actorStateFields" },
+  { actorStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "actorStateFields" },
+  { entityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "entityStateFields" },
+  { eventEntityStateFields, 69u + SP_ENTITY_ANIM_FIELDS, "eventEntityStateFields" }
 };
 
 static const NetField hudElemFields[43] =
@@ -430,7 +446,7 @@ static const NetField hudElemFields[43] =
 static NetFieldList s_otherNetFieldList[6] =
 {
   { archivedEntityFields, 8u, "archivedEntityFields" },
-  { clientStateFields, 50u, "clientStateFields" },
+  { clientStateFields, NUM_CLIENT_STATE_FIELDS, "clientStateFields" },
   { playerStateFields, 179u, "playerStateFields" },
   { objectiveFields, 9u, "objectiveFields" },
   { hudElemFields, 43u, "hudElemFields" },

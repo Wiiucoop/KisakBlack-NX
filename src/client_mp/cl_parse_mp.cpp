@@ -23,6 +23,9 @@
 #include "cl_input_mp.h"
 #include <database/db_registry.h>
 #include "sv_client_mp.h"
+#ifdef KISAK_SP
+#include <cgame_mp/cg_animscripted_mp.h>
+#endif
 
 // this seems slightly wrong in the real binary, guessing it wasn't kept up to date
 const char *svc_strings[] =
@@ -332,6 +335,9 @@ void __cdecl CL_ParseMapCenter()
 
 void __cdecl CL_ParseGamestate(int localClientNum, msg_t *msg)
 {
+#ifdef KISAK_SP
+    CG_ResetRemoteAnimSnapshots_SP();
+#endif
     unsigned int v4; // [esp+0h] [ebp-1A0h]
     unsigned int v5; // [esp+10h] [ebp-190h]
     unsigned int v6; // [esp+20h] [ebp-180h]
@@ -359,6 +365,7 @@ void __cdecl CL_ParseGamestate(int localClientNum, msg_t *msg)
     CL_AllocatePerLocalClientMemory();
     clc = CL_GetLocalClientConnection(localClientNum);
     clc->connectPacketCount = 0;
+#ifndef KISAK_SP
     if ( !clc->demoplaying )
     {
         weaponOffset = 0;
@@ -377,6 +384,37 @@ void __cdecl CL_ParseGamestate(int localClientNum, msg_t *msg)
             Dvar_SetIntByName("primaryWeaponOffset", 6);
         }
     }
+#else
+    // SP retail divergence: this collector's-edition / pre-order weapon-offset block does not
+    // exist in retail SP's CL_ParseGamestate (0x00445a60) at all.
+    //
+    // Proven by exhaustive xref, live this pass. LiveStorage_Init_Platform (retail 0x0056ec20)
+    // registers all three dvars -- "collectors" (string 0x00a125a4-adjacent, global 0x0384dca0,
+    // written 0x0056ec81), "presell" (string 0x00a125a4, global 0x0384dc98, written 0x0056ec99)
+    // and "primaryWeaponOffset" (string 0x00a25efc, global 0x0243fd4c, written 0x0056ecb5) --
+    // and get_xrefs_to on each of those three globals returns EXACTLY ONE reference: that write.
+    // Nothing in the entire SP binary ever READS any of them, so no SP code path, CL_ParseGamestate
+    // included, can be branching on them. The feature is MP-only.
+    //
+    // This was a live crash, not a theoretical divergence. A debugger caught it as
+    // 0xC0000005 reading 0x00000018 (the offset of dvar_s::current.enabled) at this exact
+    // block, with presell == nullptr:
+    //   CL_ParseGamestate -> CL_ParseServerMessage -> CL_PacketEvent -> Com_PacketEventLoop
+    //   -> Com_ClientPacketEvent -> Com_EventLoop -> Com_Frame_Try_Block_Function -> Com_Frame
+    // Mechanism: "collectors" is registered TWICE in this reconstruction -- common.cpp:1965 on
+    // the always-run Com_Init path, and again in LiveStorage_Init_Platform -- whereas "presell"
+    // is registered ONLY in LiveStorage_Init_Platform (live_storage_win.cpp:442). Booting with
+    // the standing "+set live_service 0" workaround skips LiveStorage_Init entirely, so
+    // collectors ends up valid while presell stays null. Short-circuit evaluation then hides the
+    // null on the first two conditions (collectors->current.enabled is false, so && stops; then
+    // !collectors->current.enabled is true, so || stops) and dereferences it on the third.
+    //
+    // Guarding the block out is what retail does, and it removes the crash at its source rather
+    // than papering over the null pointer. It also leaves the underlying ddl/stats.ddl zone
+    // question (the reason live_service is disabled at all) untouched and still open --
+    // see docs/SP_MAIN_MENU_BOOTCHAIN.md.
+    (void)weaponOffset;
+#endif
     CL_ClearState(localClientNum);
     MSG_ClearLastReferencedEntity(msg);
     cls.mapCenter[0] = 0.0;
@@ -385,6 +423,25 @@ void __cdecl CL_ParseGamestate(int localClientNum, msg_t *msg)
     clc->serverCommandSequence = MSG_ReadLong(msg);
     MSG_ReadString(msg, mapname, 0x20u);
     MSG_ReadString(msg, gametype, 0x20u);
+#ifdef KISAK_SP
+    Com_SetSpMapMode(mapname);
+    if (!com_sv_running->current.enabled && useFastFile->current.enabled
+        && !DB_IsZoneLoaded(mapname))
+    {
+        Com_SyncThreads();
+        CL_ShutdownAll();
+        // Restart before loading the level: CM_Shutdown clears the clipmap
+        // populated by fastfile loading, including the script entity string.
+        Com_Restart();
+        Com_UnloadFrontEnd();
+        Com_UnloadLevelFastFiles();
+        DB_SyncXAssets();
+        CL_InitRenderer();
+        // The level can override patch's CCS table; synchronize before comparing it.
+        Com_LoadLevelFastFiles(mapname);
+        DB_SyncXAssets();
+    }
+#endif
     serverConfigStringChecksum = MSG_ReadLong(msg);
     party = 1;
     if ( CCS_ShouldLoadConstConfigStrings(1) )
@@ -792,6 +849,10 @@ void __cdecl CL_ParseSnapshot(int localClientNum, msg_t *msg)
     else
     {
         GlassCl_ParseSnapshot(localClientNum, msg);
+#ifdef KISAK_SP
+        if (!msg->overflowed && clc->serverAddress.type != NA_LOOPBACK)
+            CL_ReadAnimSnapshot_SP(msg, newSnap.serverTime, newSnap.messageNum);
+#endif
         if (msg->overflowed)
         {
             newSnap.valid = 0;

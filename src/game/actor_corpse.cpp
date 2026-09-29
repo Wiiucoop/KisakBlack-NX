@@ -20,7 +20,7 @@ int __cdecl G_GetActorCorpseIndex(gentity_s *ent)
 
     for ( i = 0; i < 8; ++i )
     {
-        if ( *(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * i + 36] == ent->s.number )
+        if ( g_scr_data.actorCorpseInfo[i].entnum == ent->s.number )
             return i;
     }
     if ( !Assert_MyHandler(
@@ -81,7 +81,7 @@ int __cdecl G_GetFreeActorCorpseIndex(int reuse)
     found = 0;
     for ( i = 0; i < level.actorCorpseCount; ++i )
     {
-        if ( *(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * i + 36] == -1 )
+        if ( g_scr_data.actorCorpseInfo[i].entnum == -1 )
         {
             if ( reuse )
                 return i;
@@ -89,7 +89,7 @@ int __cdecl G_GetFreeActorCorpseIndex(int reuse)
         else
         {
             found = 1;
-            ent = &level.gentities[*(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * i + 36]];
+            ent = &level.gentities[g_scr_data.actorCorpseInfo[i].entnum];
             vDelta[0] = ent->r.currentOrigin[0] - vRefPos[0];
             vDelta[1] = ent->r.currentOrigin[1] - vRefPos[1];
             vDelta[2] = ent->r.currentOrigin[2] - vRefPos[2];
@@ -127,9 +127,9 @@ int __cdecl G_GetFreeActorCorpseIndex(int reuse)
         {
             bestIndex = farthestBehindIndex;
         }
-        ent = &level.gentities[*(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * bestIndex + 36]];
+        ent = &level.gentities[g_scr_data.actorCorpseInfo[bestIndex].entnum];
         G_FreeEntity(ent);
-        *(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * bestIndex + 36] = -1;
+        g_scr_data.actorCorpseInfo[bestIndex].entnum = -1;
         return bestIndex;
     }
     else
@@ -155,9 +155,9 @@ void __cdecl G_RemoveOneActorCorpse()
 
     for ( i = 0; i < level.actorCorpseCount; ++i )
     {
-        if ( *(int *)&g_scr_data.actorCorpseInfo[1504 * i + 36] >= 0 )
+        if ( g_scr_data.actorCorpseInfo[i].entnum >= 0 )
         {
-            G_FreeEntity(&level.gentities[*(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * i + 36]]);
+            G_FreeEntity(&level.gentities[g_scr_data.actorCorpseInfo[i].entnum]);
             return;
         }
     }
@@ -169,8 +169,8 @@ void __cdecl G_RemoveAllActorCorpses()
 
     for ( i = 0; i < level.actorCorpseCount; ++i )
     {
-        if ( *(int *)&g_scr_data.actorCorpseInfo[1504 * i + 36] >= 0 )
-            G_FreeEntity(&level.gentities[*(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * i + 36]]);
+        if ( g_scr_data.actorCorpseInfo[i].entnum >= 0 )
+            G_FreeEntity(&level.gentities[g_scr_data.actorCorpseInfo[i].entnum]);
     }
 }
 
@@ -191,8 +191,8 @@ void __cdecl G_RemoveActorCorpses(unsigned int allowedCorpseCount)
     }
     for ( i = allowedCorpseCount; i < level.actorCorpseCount; ++i )
     {
-        if ( *(int *)&g_scr_data.actorCorpseInfo[1504 * i + 36] >= 0 )
-            G_FreeEntity(&level.gentities[*(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * i + 36]]);
+        if ( g_scr_data.actorCorpseInfo[i].entnum >= 0 )
+            G_FreeEntity(&level.gentities[g_scr_data.actorCorpseInfo[i].entnum]);
     }
     level.actorCorpseCount = allowedCorpseCount;
 }
@@ -236,7 +236,7 @@ void __cdecl ActorCorpse_Free(gentity_s *ent)
     int actorCorpseIndex; // [esp+0h] [ebp-4h]
 
     actorCorpseIndex = G_GetActorCorpseIndex(ent);
-    if ( *(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * actorCorpseIndex + 36] != ent->s.number
+    if ( g_scr_data.actorCorpseInfo[actorCorpseIndex].entnum != ent->s.number
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_corpse.cpp",
                     401,
@@ -246,7 +246,17 @@ void __cdecl ActorCorpse_Free(gentity_s *ent)
     {
         __debugbreak();
     }
-    *(unsigned int *)&g_scr_data.actorCorpseInfo[1504 * actorCorpseIndex + 36] = -1;
+#ifdef KISAK_SP
+    // Retail SP moves the actor's per-entity small tree into the corpse slot.
+    // G_FreeEntity has already detached the DObj and cleared the tree by the
+    // time it reaches this callback; release the small-tree allocation here.
+    if ( g_scr_data.actorCorpseInfo[actorCorpseIndex].tree )
+    {
+        Com_XAnimFreeSmallTree(g_scr_data.actorCorpseInfo[actorCorpseIndex].tree);
+        g_scr_data.actorCorpseInfo[actorCorpseIndex].tree = 0;
+    }
+#endif
+    g_scr_data.actorCorpseInfo[actorCorpseIndex].entnum = -1;
 }
 
 void __cdecl Actor_GetBodyPlantAngles(
@@ -620,6 +630,79 @@ void __cdecl Actor_OrientPitchToGround(gentity_s *self, int bLerp)
 
 int __cdecl Actor_BecomeCorpse(gentity_s *self)
 {
+#ifdef KISAK_SP
+    // Retail SP FUN_00642b80 converts the actor entity in place.  It swaps the
+    // actor's exact XAnimTree into actorCorpseInfo and never calls
+    // XAnimCloneAnimTree.  That ownership transfer is required for zombies:
+    // useAnimTree installs a species-specific tree whose layout cannot be
+    // cloned into MP's preallocated generic/dog corpse tree.
+    const int corpseIndex = G_GetFreeActorCorpseIndex(1);
+    if ( corpseIndex < 0 )
+        return 0;
+
+    actor_s *actor = self->actor;
+    const int actorIndex = G_GetActorIndex(actor);
+    XAnimTree_s *tree = self->pAnimTree;
+    if ( !tree )
+    {
+        if ( !Assert_MyHandler(
+                    "C:\\projects_pc\\cod\\codsrc\\src\\game\\actor_corpse.cpp",
+                    840,
+                    0,
+                    "%s",
+                    "self->pAnimTree") )
+        {
+            __debugbreak();
+        }
+        return 0;
+    }
+
+    const trType_t origType = (trType_t)self->s.lerp.pos.trType;
+    float origin[3];
+    Vec3Copy(self->r.currentOrigin, origin);
+
+    Actor_EventListener_RemoveEntity(self->s.number);
+
+    // Detach the live tree before Actor_Free so normal actor teardown does not
+    // destroy it.  G_DObjUpdate below rebuilds the same entity's DObj around
+    // the transferred tree after its actor/sentient ownership is gone.
+    DObj *dobj = Com_GetServerDObj(self->s.number);
+    if ( dobj )
+        DObjSetTree(dobj, 0);
+    self->pAnimTree = 0;
+    g_scr_data.actorXAnimTrees[actorIndex] = 0;
+    Actor_Free(actor);
+
+    corpseInfo_t *corpseInfo = &g_scr_data.actorCorpseInfo[corpseIndex];
+    corpseInfo->tree = tree;
+    corpseInfo->entnum = self->s.number;
+    corpseInfo->time = level.time;
+    corpseInfo->falling = true;
+    self->pAnimTree = tree;
+
+    self->handler = 3;
+    self->r.contents = 0x4000000;
+    self->s.eType = ET_ACTOR_CORPSE;
+    self->clipmask = 0x820011;
+    self->physicsObject = 1;
+    self->s.lerp.eFlags |= 0x40010;
+    self->s.groundEntityNum = 1023;
+    self->item[0].ammoCount = level.time;
+
+    G_SetOrigin(self, origin);
+    if ( origType >= TR_FIRST_RAGDOLL && origType <= TR_LAST_RAGDOLL )
+        AssignToSmallerType<unsigned char>(&self->s.lerp.pos.trType, origType);
+    else
+        self->s.lerp.pos.trType = TR_STATIONARY;
+
+    self->s.lerp.u.actor.actorNum = corpseIndex;
+    ScrNotify_FaceEvent(self, scr_const.death);
+    Scr_Notify(self, scr_const.death, 0);
+    Scr_FreeEntityNum(self->s.number, 0, SCRIPTINSTANCE_SERVER);
+    G_DObjUpdate(self);
+    SV_LinkEntity(self);
+    return 1;
+#else
     XAnimTree_s *tree; // [esp+40h] [ebp-44h]
     const DObj *dobj; // [esp+44h] [ebp-40h]
     trType_t origType; // [esp+64h] [ebp-20h]
@@ -677,7 +760,7 @@ int __cdecl Actor_BecomeCorpse(gentity_s *self)
         __debugbreak();
     }
     body->item[0].ammoCount = level.time;
-    corpseInfo = (corpseInfo_t *)&g_scr_data.actorCorpseInfo[1504 * G_GetFreeActorCorpseIndex(1) + 32];
+    corpseInfo = &g_scr_data.actorCorpseInfo[G_GetFreeActorCorpseIndex(1)];
     corpseInfo->entnum = body->s.number;
     corpseInfo->time = level.time;
     corpseInfo->falling = 1;
@@ -770,5 +853,6 @@ int __cdecl Actor_BecomeCorpse(gentity_s *self)
     G_DObjUpdate(body);
     SV_LinkEntity(body);
     return 0;
+#endif
 }
 

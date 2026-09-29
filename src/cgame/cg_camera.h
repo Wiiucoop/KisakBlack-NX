@@ -10,9 +10,16 @@ enum CameraMode : __int32
     CAM_VEHICLE_GUNNER      = 0x4,
     CAM_TURRET              = 0x5,
     CAM_MISSILE             = 0x6,
+#ifdef KISAK_SP
+    CAM_EQUIPMENT           = 0x7,
+    CAM_EXTRACAM            = 0x8,
+    CAM_RADIANT             = 0x9,
+    CAM_TOP_DOWN            = 0xA,
+#else
     CAM_EXTRACAM            = 0x7,
     CAM_RADIANT             = 0x8,
     CAM_TOP_DOWN            = 0x9,
+#endif
 };
 
 struct cg_s;
@@ -53,6 +60,9 @@ void __cdecl CG_OffsetVehicleGunner(int localClientNum, cg_s *cgameGlob);
 void __cdecl CG_OffsetVehicleAnimCam(int localClientNum);
 void __cdecl CG_GetExtraCamOrigin(int localClientNum, float *out);
 void __cdecl CG_CalcExtraCamViewValues(int localClientNum);
+#ifdef KISAK_SP
+void __cdecl CG_CalcScriptExtraCamViewValues(int localClientNum);
+#endif
 void __cdecl CG_CalcMissileViewValues(int localClientNum);
 void __cdecl CG_GetMissileViewOrigin(int localClientNum, float *out);
 void __cdecl CG_CalcMissileAngleValues(int localClientNum);

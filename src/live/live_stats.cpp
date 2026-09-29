@@ -18,6 +18,7 @@
 #include <server_mp/sv_main_mp.h>
 #include "live_storage_win.h"
 #include <ddl/ddl_cmd.h>
+#include <time.h>
 
 const char *lbTypeEnum_7[17] =
 {
@@ -117,6 +118,230 @@ bool s_statsBufferInitialised[1];
 ddlState_t g_statsActiveContractsState;
 ddlState_t g_statsContractsState;
 
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+bool LiveStats_ServerDefaultElement(const ddlState_t *array, ddlState_t *result, int index)
+{
+    if (!array || !result || !array->ddl || !array->member || index < 0 ||
+        index >= array->member->arraySize || array->member->arraySize <= 1 || array->arrayIndex != -1)
+        return false;
+    if (array->member->enumIndex >= 0)
+    {
+        const int enumIndex = array->member->enumIndex;
+        if (!array->ddl->enumList || enumIndex >= array->ddl->enumCount)
+            return false;
+        const ddlEnumDef_t &enumeration = array->ddl->enumList[enumIndex];
+        if (!enumeration.members || enumeration.memberCount != array->member->arraySize ||
+            !enumeration.members[index])
+            return false;
+        return DDL_MoveToName(array, result, enumeration.members[index]) != 0;
+    }
+    return array->member->enumIndex == -1 && DDL_MoveToIndex(array, result, index, true) != 0;
+}
+
+bool LiveStats_ServerDefaultInt(char *buffer, const ddlState_t *state, unsigned int value)
+{
+    if (!buffer || !state || !state->ddl || !state->member)
+        return false;
+    const ddlMemberDef_t *member = state->member;
+    if (member->type < 0 || member->type > 2 || member->arraySize <= 0 ||
+        member->size <= 0 || member->size % member->arraySize ||
+        (member->arraySize > 1 && (state->arrayIndex < 0 || state->arrayIndex >= member->arraySize)))
+        return false;
+    const int bits = member->size / member->arraySize;
+    if (bits > 32 || state->absoluteOffset < 0 || state->absoluteOffset > state->ddl->size - bits ||
+        state->absoluteOffset > STATS_BUFFER_SIZE * 8 - 320 - bits || value < member->min || value > member->max)
+        return false;
+    return DDL_SetInt(state, value, buffer);
+}
+
+bool LiveStats_InitServerSchema()
+{
+    // No controller/login/UI initialization belongs in this path. These assets must
+    // already be resident; callers bind again at each server map transition.
+    ddlDef_t *schema = DDL_LoadAsset(STATS_DDL_ASSET_NAME);
+    if (!schema || schema->version <= 0 || schema->size <= 0 ||
+        schema->size > STATS_BUFFER_SIZE * 8 - 320 || !schema->structList || schema->structCount <= 0)
+    {
+        Com_PrintError(16, "Offline server stats: missing/oversized schema %s (capacity %d).\n",
+            STATS_DDL_ASSET_NAME, STATS_BUFFER_SIZE);
+        return false;
+    }
+    ddlState_t root, cac = {}, active = {}, contracts = {}, rank = {};
+    DDL_Reset(&root, schema);
+#ifndef KISAK_SP
+    const char *required[] = { "CacLoadouts", "activeContracts", "contracts" };
+    ddlState_t *states[] = { &cac, &active, &contracts };
+    for (int i = 0; i < 3; ++i)
+    {
+        if (!DDL_MoveToName(&root, states[i], required[i]))
+        {
+            Com_PrintError(16, "Offline server stats: schema %s v%d lacks %s.\n",
+                STATS_DDL_ASSET_NAME, schema->version, required[i]);
+            return false;
+        }
+    }
+    if (!DDL_MoveTo(&root, &rank, 2, "PlayerStatsList", "RANKXP"))
+    {
+        Com_PrintError(16, "Offline server stats: schema v%d lacks PlayerStatsList.RANKXP.\n", schema->version);
+        return false;
+    }
+#endif
+    g_statsDDL = schema;
+    g_statsRootState = root;
+    g_statsCacState = cac;
+    g_statsActiveContractsState = active;
+    g_statsContractsState = contracts;
+    g_statsRankXPState = rank;
+    return true;
+}
+
+static bool LiveStats_ClearServerDefaultStruct(char *buffer, const ddlState_t *base, int structIndex, int depth)
+{
+    if (depth > 16 || structIndex < 0 || structIndex >= base->ddl->structCount)
+        return false;
+    const ddlStructDef_t &structure = base->ddl->structList[structIndex];
+    if (!structure.members || structure.memberCount <= 0)
+        return false;
+    for (int i = 0; i < structure.memberCount; ++i)
+    {
+        const ddlMemberDef_t &member = structure.members[i];
+        ddlState_t field;
+        if (!member.name || member.arraySize <= 0 || member.size <= 0 || member.size % member.arraySize ||
+            !DDL_MoveToName(base, &field, member.name))
+            return false;
+        for (int index = 0; index < member.arraySize; ++index)
+        {
+            ddlState_t value = field;
+            if (member.arraySize > 1 && !LiveStats_ServerDefaultElement(&field, &value, index))
+                return false;
+            const int bits = member.size / member.arraySize;
+            if (value.absoluteOffset < 0 || value.absoluteOffset > value.ddl->size - bits ||
+                value.absoluteOffset > STATS_BUFFER_SIZE * 8 - 320 - bits)
+                return false;
+            bool ok = false;
+            if (member.type >= 0 && member.type <= 2)
+                ok = member.min == 0 && LiveStats_ServerDefaultInt(buffer, &value, 0);
+            else if (member.type == 3)
+                ok = bits == 64 && DDL_SetInt64(&value, 0, buffer);
+            else if (member.type == 5)
+                ok = bits % 8 == 0 && DDL_SetString(&value, "", buffer) != 0;
+            else if (member.type == 6)
+                ok = LiveStats_ClearServerDefaultStruct(buffer, &value, member.externalIndex, depth + 1);
+            if (!ok)
+            {
+                Com_PrintError(16, "Offline server defaults: unsupported %s.%s[%d], schema v%d.\n",
+                    structure.name, member.name, index, base->ddl->version);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool LiveStats_BuildServerDefaults(char *normal, char *global, unsigned char *purchasedItems)
+{
+#ifdef KISAK_SP
+    // Reviewed shipped patch.ff v8: numeric leaves have min=0, webtoken is
+    // the sole string (empty), and no CAC/contract/MP timestamp trees exist.
+    // Zombie counters, map skip flags, sidequests, title/protip flags start at
+    // zero. Initialize each actual leaf; refuse future schemas without review.
+    if (!normal || !global || !purchasedItems || !g_statsDDL ||
+        g_statsDDL->version != 8 || g_statsDDL->size != 6056)
+    {
+        Com_PrintError(16, "Offline Zombies defaults require reviewed ddl/stats.ddl v8 (6056 bits).\n");
+        return false;
+    }
+    memset(normal, 0, STATS_BUFFER_SIZE);
+    memset(global, 0, STATS_BUFFER_SIZE);
+    memset(purchasedItems, 0, 32);
+    if (!DDL_AssociateBuffer(normal, STATS_BUFFER_SIZE, g_statsDDL) ||
+        !LiveStats_ClearServerDefaultStruct(normal, &g_statsRootState, 0, 0))
+        return false;
+    memcpy(global, normal, STATS_BUFFER_SIZE);
+    LiveStats_WriteChecksumToBuffer(reinterpret_cast<unsigned char *>(normal), STATS_BUFFER_SIZE);
+    LiveStats_WriteChecksumToBuffer(reinterpret_cast<unsigned char *>(global), STATS_BUFFER_SIZE);
+    return DDL_AssociateBuffer(normal, STATS_BUFFER_SIZE, g_statsDDL) &&
+        DDL_AssociateBuffer(global, STATS_BUFFER_SIZE, g_statsDDL);
+#else
+    if (!normal || !global || !purchasedItems || !g_statsDDL || g_statsRootState.ddl != g_statsDDL)
+        return false;
+    // The session provider implements normal multiplayer, not the separate combat
+    // training grants in stats_init.cfg. Refuse that policy instead of mutating dvars.
+    if (xblive_basictraining && xblive_basictraining->current.enabled)
+    {
+        Com_PrintError(16, "Offline server stats: basic training defaults are unsupported; set xblive_basictraining 0.\n");
+        return false;
+    }
+    memset(normal, 0, STATS_BUFFER_SIZE);
+    memset(global, 0, STATS_BUFFER_SIZE);
+    memset(purchasedItems, 0, 32);
+    if (!DDL_AssociateBuffer(normal, STATS_BUFFER_SIZE, g_statsDDL) ||
+        !DDL_AssociateBuffer(global, STATS_BUFFER_SIZE, g_statsDDL))
+        return false;
+    // Reviewed MP v100 has only zero-min integer, int64, string and struct
+    // leaves. Explicit traversal validates every progression flag and string,
+    // including purchased/pro-unlock flags, before publishing a fresh profile.
+    if (!LiveStats_ClearServerDefaultStruct(normal, &g_statsRootState, 0, 0))
+        return false;
+
+    // stats_init.cfg starts with a cleared record then playerstats_reset.cfg.
+    // Iterate the actual PlayerStatsList enum: legacy cfg names absent from this
+    // schema have no buffer effect, while every extant counter is explicitly zeroed.
+    ddlState_t list;
+    if (!DDL_MoveToName(&g_statsRootState, &list, "PlayerStatsList") || !list.member ||
+        list.member->arraySize <= 0 || list.member->type > 2)
+    {
+        Com_PrintError(16, "Offline server stats: schema v%d has unsupported PlayerStatsList.\n", g_statsDDL->version);
+        return false;
+    }
+    for (int i = 0; i < list.member->arraySize; ++i)
+    {
+        ddlState_t value;
+        if (!LiveStats_ServerDefaultElement(&list, &value, i) ||
+            !LiveStats_ServerDefaultInt(normal, &value, 0) || !LiveStats_ServerDefaultInt(global, &value, 0))
+        {
+            Com_PrintError(16, "Offline server stats: cannot initialize PlayerStatsList[%d], schema v%d.\n", i, g_statsDDL->version);
+            return false;
+        }
+    }
+    // Match LiveStorage_ResetStats's version/timestamp semantics, independently of
+    // LiveStorage_Init (which is deliberately skipped with live_service=0).
+    if (!stat_version)
+        stat_version = _Dvar_RegisterInt("stat_version", 10, 0, 0x7FFFFFFF, 0, "Stats version number");
+    if (!stat_version->current.integer)
+    {
+        Com_PrintError(16, "Offline server stats: stat_version must be nonzero.\n");
+        return false;
+    }
+    const char *names[] = { "STATS_VERSION", "WEEKLY_TIMESTAMP", "MONTHLY_TIMESTAMP" };
+    const __time64_t now = _time64(NULL);
+    if (now < 0 || static_cast<unsigned __int64>(now) > 0xFFFFFFFFu)
+        return false;
+    const unsigned int values[] = { stat_version->current.unsignedInt, static_cast<unsigned int>(now), static_cast<unsigned int>(now) };
+    for (int i = 0; i < 3; ++i)
+    {
+        ddlState_t value;
+        if (!DDL_MoveToName(&list, &value, names[i]) ||
+            !LiveStats_ServerDefaultInt(normal, &value, values[i]) ||
+            !LiveStats_ServerDefaultInt(global, &value, values[i]))
+        {
+            Com_PrintError(16, "Offline server stats: cannot initialize PlayerStatsList.%s, schema v%d.\n", names[i], g_statsDDL->version);
+            return false;
+        }
+    }
+    if (!BG_UnlockablesBuildServerDefaults(normal, purchasedItems))
+        return false;
+    // The entire schema is present in both records; permissions choose which one
+    // is used. Copy valid CAC/default strings too, without a second controller.
+    memcpy(global, normal, STATS_BUFFER_SIZE);
+    LiveStats_WriteChecksumToBuffer(reinterpret_cast<unsigned char *>(normal), STATS_BUFFER_SIZE);
+    LiveStats_WriteChecksumToBuffer(reinterpret_cast<unsigned char *>(global), STATS_BUFFER_SIZE);
+    return DDL_AssociateBuffer(normal, STATS_BUFFER_SIZE, g_statsDDL) &&
+        DDL_AssociateBuffer(global, STATS_BUFFER_SIZE, g_statsDDL);
+#endif
+}
+#endif
+
 int __cdecl LiveStats_GetDDLHeaderVersion(unsigned __int8 *statsBuffer)
 {
     if ( !g_statsDDL
@@ -129,7 +354,7 @@ int __cdecl LiveStats_GetDDLHeaderVersion(unsigned __int8 *statsBuffer)
 
 int __cdecl LiveStats_ValidateGlobalWithDDL(int controllerIndex)
 {
-    char backupBuffer[40172]; // [esp+0h] [ebp-9CF8h] BYREF
+    char backupBuffer[STATS_RECORD_SIZE]; // [esp+0h] [ebp-9CF8h] BYREF
     char *buffer; // [esp+9CF0h] [ebp-8h]
     int bufferSize; // [esp+9CF4h] [ebp-4h]
 
@@ -145,8 +370,8 @@ int __cdecl LiveStats_ValidateGlobalWithDDL(int controllerIndex)
         LiveStorage_SetStatsDDLValidated(controllerIndex, STATS_LOCATION_NORMAL, 1);
         return 1;
     }
-    else if ( DDL_FixBufferVersion(buffer, g_statsDDL, "ddl_mp/stats.ddl", backupBuffer, 40168)
-                 || DDL_FixBufferVersion(buffer, g_statsDDL, "ddl_mp/stats_archive.ddl", backupBuffer, 40168) )
+    else if ( DDL_FixBufferVersion(buffer, g_statsDDL, STATS_DDL_ASSET_NAME, backupBuffer, STATS_BUFFER_SIZE)
+                 || DDL_FixBufferVersion(buffer, g_statsDDL, STATS_ARCHIVE_DDL_ASSET_NAME, backupBuffer, STATS_BUFFER_SIZE) )
     {
         DDL_NoCheckPrintWarning(
             "DDL: Stats buffer updated to version %d for controller index %d.\n",
@@ -163,8 +388,15 @@ int __cdecl LiveStats_ValidateGlobalWithDDL(int controllerIndex)
 
 int __cdecl LiveStats_CanPerformStatOperation(int controllerIndex)
 {
-    if ( !Live_IsUserSignedInToLive() || !Live_IsUserSignedInToDemonware(controllerIndex) )
+    if (LiveStorage_UsesOfflineStats())
+    {
+        if (!LiveStorage_OfflineStatsAccessible(controllerIndex))
+            return 0;
+    }
+    else if (!Live_IsUserSignedInToLive() || !Live_IsUserSignedInToDemonware(controllerIndex))
+    {
         return 0;
+    }
     if ( LiveStorage_DoWeHaveCurrentStats(controllerIndex) )
     {
         if ( LiveStorage_AreStatsDDLValidated(controllerIndex, STATS_LOCATION_NORMAL)
@@ -810,7 +1042,7 @@ void __cdecl LiveStats_SetStatChanged(int controllerIndex, const char *hexMsg)
             statChangeCommand[runCount] = hexMsg[i];
             if ( sizeFound && runCount == 2 * size - 1 )
             {
-                LiveStats_ProcessStatChangedData(controllerIndex, (char *)buffer, 40168, startOffset, size, statChangeCommand);
+                LiveStats_ProcessStatChangedData(controllerIndex, (char *)buffer, STATS_BUFFER_SIZE, startOffset, size, statChangeCommand);
                 runCount = 0;
                 offsetFound = 0;
                 sizeFound = 0;
@@ -4787,7 +5019,50 @@ cmd_function_s LiveStats_PresetigeStatsResetCmd_VAR;
 bool s_initCalledOnce = false;
 void __cdecl LiveStats_Init()
 {
-    g_statsDDL = DDL_LoadAsset("ddl_mp/stats.ddl");
+    // SP retail divergence: the DDL zone-path prefix drops "_mp" ("ddl/stats.ddl", not
+    // "ddl_mp/stats.ddl"), matching the same "_mp" -> bare substitution already confirmed for
+    // "code_pre_gfx"/"code_post_gfx"/"patch". Evidence here is one level indirect from the usual
+    // standard (this exact call site's own containing function was not individually located in
+    // the SP binary), but the literal itself is solidly corroborated: "ddl/stats.ddl" is a real
+    // string in the SP binary (Ghidra 0x009d0cd0), referenced by TWO independent DDL
+    // stats-buffer-version-fixup helpers (Ghidra 0x0060bd60 and 0x00665490, the latter already
+    // documented in agents.md as an SP-only outlined helper with no reconstruction counterpart)
+    // that both do the equivalent "check/fix the stats DDL buffer against ddl/stats.ddl" work
+    // this Init function's load feeds. Found chasing a real SP boot failure on 2026-08-05 (fatal
+    // "Could not load default asset '' for asset type 'ddl'. Tried to load asset
+    // 'ddl_mp/stats.ddl'." immediately after "--- Initializing Voice ---").
+    // 2026-08-06: the literal moved to STATS_DDL_ASSET_NAME in live_stats.h so that the 12 other
+    // occurrences of the same name (live_stats.cpp:148-149, live_storage.cpp:551-552,
+    // live_storage_win.cpp:1687/1688/2477/2478/2494/2495, live_combatrecord.cpp:971/974), which
+    // this original fix missed, cannot drift from it again. Zone-data confirmation of
+    // "ddl/stats.ddl" -> zone/Common/patch.ff is recorded there.
+    g_statsDDL = DDL_LoadAsset(STATS_DDL_ASSET_NAME);
+    // TODO(SP): these three DDL_MoveToName lookups ALWAYS FAIL on SP, silently, and are left
+    // running deliberately - do not "fix" them by guarding them out. Recorded so nobody
+    // re-derives this:
+    //   - SP's shipped ddl/stats.ddl (patch.ff, version 8) has no "CacLoadouts",
+    //     "activeContracts" or "contracts" root member. Its full root member list, read out of
+    //     the decompressed zone in the sorted order DDL_Lookup_FindMemberDef's binary search
+    //     requires, is: cg_mature, cg_subtitles, clantagstats, connectionid, consoleinfo,
+    //     gpad_buttonsconfig, gpad_rumble, gpad_sticksconfig, input_autoaim, input_invertpitch,
+    //     lastconsolesave, playerstatsbymap, playerstatslist, playerxuid, r_stereo3davailable,
+    //     r_stereo3don, snd_*, start_in_mp, team_indicator, uploadbandwidth, webtoken,
+    //     zombieprotips, zombietitles. (byte counts in patch.ff: cacloadouts 0, activecontracts
+    //     0, contracts 0; controls in the same blob: playerstatslist 1, rankxp 2.)
+    //   - the failure is harmless AND invisible: DDL_Lookup_MoveTo takes its member==NULL branch
+    //     (ddl_lookup.cpp:271-284), returns 0, leaves resultState->ddl at the g_statsDDL that
+    //     DDL_Reset just wrote, and LiveStats_Init ignores all three return values. The
+    //     "Could not find 'X' in 'root'" message is gated on ddl_verbose, off by default.
+    //   - WHY NOT GUARD: guarding the DDL_Reset/DDL_MoveToName pairs would leave
+    //     g_statsCacState.ddl == NULL, and the later consumers (live_stats.cpp:4025 and
+    //     :4386/:4407) call DDL_MoveTo on those states unconditionally -> DDL_Lookup_MoveTo
+    //     ddl_lookup.cpp:273 dereferences searchState->ddl->structList -> null deref. The
+    //     current unguarded form is strictly safer. (Same class of mistake as suppressing a
+    //     data load while leaving its consumers running.)
+    //   - Unconfirmed: whether retail SP's LiveStats_Init issues these three lookups at all or
+    //     omits them. Not resolvable without decompiling SP's LiveStats_Init; Ghidra is
+    //     unavailable in this session. Behaviour is identical either way, so it is not blocking.
+    // Audit finding F2 (live/stats/progression audit).
     DDL_Reset(&g_statsCacState, g_statsDDL);
     DDL_MoveToName(&g_statsCacState, &g_statsCacState, "CacLoadouts");
     DDL_Reset(&g_statsActiveContractsState, g_statsDDL);
@@ -4797,7 +5072,41 @@ void __cdecl LiveStats_Init()
     DDL_Reset(&g_statsRootState, g_statsDDL);
     DDL_MoveTo(&g_statsRootState, &g_statsRankXPState, 2, "PlayerStatsList", "RANKXP");
     CL_BuildRankXPTable();
+#ifndef KISAK_SP
+    // SP retail divergence (2026-08-06), found by an actual SP boot failure and then a SECOND one
+    // after an initial fix that was too narrow -- both recorded here because the sequence is the
+    // evidence.
+    //
+    // First failure: BG_UnlockableItemsInit -> BG_LoadWeaponAttachmentTable raised
+    //   Com_ERROR: Couldn't load file or file is invalid 'mp/attachmenttable.csv'
+    // That call was guarded out (see bg_unlockable_items.cpp). The next run then asserted
+    // repeatedly one level deeper, in BG_UnlockableItemsInit -> BG_InitUnlockables ->
+    // BG_UnlockablesBuildDefaultItems -> BG_UnlockablesGetItemIndexFromName, printing
+    //   "No default item defined for loadout slot 'primaryattachmenttop'..." (and ...bottom,
+    //   ...trigger) and hitting __debugbreak via Assert_MyHandler.
+    // i.e. suppressing only the table LOAD left the consumers of that table running against data
+    // that was never populated. The correct granularity is this whole subtree, not one call.
+    //
+    // Decisive supporting fact, about shipped DATA rather than code: mp/attachmenttable.csv does
+    // not exist anywhere in the retail install -- verified by decompressing every candidate
+    // fastfile (plain zlib after a 12-byte header) and scanning every .iwd archive, with the scan
+    // itself sanity-checked against two strings known to be present (ui/menus.txt in frontend.ff,
+    // ddl/stats.ddl in patch.ff), both found. So no code path depending on it can succeed.
+    //
+    // Semantically this whole subtree -- unlockables, loadout slots, Create-a-Class default items,
+    // weapon attachments -- is MP progression, which the SP campaign has no equivalent of. Same
+    // argument and same MP-progression family already used to guard out BG_EmblemsInit for SP.
+    // This only became reachable at SP boot once the patch.ff/ddl-override fixes let LiveStats_Init
+    // run to completion for the first time.
+    //
+    // TODO(SP): Ghidra unavailable when written, so it is NOT confirmed whether retail SP skips
+    // this call or runs it against data absent from this install. Note UI_Gametype_BuildDefaultCustomClasses
+    // below is deliberately left ACTIVE -- it has not been observed failing, and guarding code that
+    // has not been shown to be a problem would be speculation, not evidence. If it turns out to
+    // depend on the unlockables state this call would have built, guard it then, with that
+    // observation as the reason.
     BG_UnlockableItemsInit();
+#endif
     UI_Gametype_BuildDefaultCustomClasses();
     if ( !s_initCalledOnce )
     {

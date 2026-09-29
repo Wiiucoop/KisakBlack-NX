@@ -1,4 +1,5 @@
 #include "common.h"
+#include <live/live_storage.h>
 
 #include <string.h>
 #include <universal/mem_userhunk.h>
@@ -8,6 +9,7 @@
 #include <client/cl_console.h>
 #include <win32/win_net.h>
 #include <win32/win_main.h>
+#include <win32/win_content.h>
 #include <monkey/monkey.h>
 #include <universal/com_files.h>
 #include <ctime>
@@ -154,6 +156,7 @@ const dvar_t *dedicated;
 const dvar_t *com_maxfps;
 const dvar_t *arcademode;
 const dvar_t *zombiemode;
+const dvar_t *zombiemode_path_minz_bias;
 const dvar_t *legacy_zombiemode;
 const dvar_t *zombieStopSplitScreen;
 const dvar_t *zombietron;
@@ -308,7 +311,21 @@ bool __cdecl Com_IsRunningMenuLevel(const char *name)
     if ( !com_sv_running->current.enabled )
         return 0;
     if ( I_strnicmp(name, "menu_", 5) )
+#ifdef KISAK_SP
+        // SP retail: Ghidra FUN_004f3ca0, structure-for-structure identical to this function
+        // (null-name -> null-check sv_mapname -> current.string; com_sv_running gate; "menu_"
+        // prefix; then the second literal). ONLY the literal differs: SP tests "frontend".
+        // Live in SP -- called from SV_SpawnServer (0x0050f081) and from the GSC set-dvar
+        // guard GScr_SetDvar (Ghidra 0x007f0570; named in the live database 2026-08-14, and its
+        // plate cites THIS comment as corroboration) ("Menu-Writable Dvars ... only from levels
+        // that start with '%s'"). 0x004f3ca0 itself is still FUN_* in Ghidra -- the campaign
+        // records it as Com_IsRunningMenuLevel only in prose, never as a written symbol.
+        // Currently inert here: this function has no callers in our tree yet. Corrected now so
+        // the predicate is right when a consumer is reconstructed.
+        return I_strcmp(name, "frontend") == 0;
+#else
         return I_strcmp(name, "ui") == 0;
+#endif
     return 1;
 }
 
@@ -317,7 +334,36 @@ bool __cdecl Com_IsMenuLevel(const char *name)
     if ( !name )
         name = sv_mapname->current.string;
 
+#ifdef KISAK_SP
+    // SP retail divergence (audit1 + audit4, independently, 2026-08-07).
+    // SP's main menu IS the map "frontend" -- Com_LoadFrontEnd issues `map frontend\n` -- so
+    // every menu-level gate in shared code is meant to fire for it. SP has NO "ui"/"ui_mp" test.
+    // Fact 1: Com_IsMenuLevel (Ghidra 0x00684eb0 -- unnamed when this note was written, named in
+    //   the live database since, its plate citing this very comment) decompiles to
+    //     if (!name) name = sv_mapname->current.string;
+    //     if (!I_strnicmp(name,"menu_",5)) return 1;
+    //     return I_strcmp(name,"frontend") == 0;
+    //   (DAT_02899cec proven == sv_mapname by SV_SpawnServer+0x21f doing Dvar_SetString(it, server).)
+    // Fact 2: the same body is INLINED three times inside Com_LoadLevelFastFiles (Ghidra 0x004c8890,
+    //   likewise now named in the live database)
+    //   at 0x004c88f3 / 0x004c8940 / 0x004c89fd, read from raw disassembly -- each copy pushes
+    //   only 0x009e7398 ("menu_") and 0x009e357c ("frontend"). No "ui"/"ui_mp" literal appears in
+    //   any copy. Five further inlined copies sit in Com_InitDynamicRender (0x0062d980).
+    //
+    // PRIMARY EFFECT: Com_LoadLevelFastFiles now SKIPS Com_LoadCommonFastFile() for the frontend
+    // map, matching retail -- we were loading common.ff (~28.7 MB inflated) that retail never
+    // loads there. Verified safe before landing: every asset the frontend path needs was
+    // confirmed present without common.ff -- codescripts/delete, codescripts/struct,
+    // maps/_callbacksetup, maps/_destructible and maps/gametypes/cmp all ship in
+    // code_post_gfx.ff, and the seven dog animscripts ship in frontend.ff as well as common.ff.
+    //
+    // NOT changed here: the zone allocFlags migration (level 0x4000 -> 0x800, menu -> 0x2000000
+    // plus a patch_ui zone). That is a separate FIVE-part interlocking change -- see the note in
+    // Com_LoadLevelFastFiles -- and is deliberately not bundled with this predicate fix.
+    return !I_strnicmp(name, "menu_", 5) || !I_strcmp(name, "frontend");
+#else
     return !I_strnicmp(name, "menu_", 5) || !I_strcmp(name, "ui") || !I_strcmp(name, "ui_mp");
+#endif
 }
 
 void __cdecl Com_BeginRedirect(char *buffer, unsigned int buffersize, void (__cdecl *flush)(char *))
@@ -531,6 +577,9 @@ void Com_PrintWarning(int channel, const char *fmt, ...)
 
 void __cdecl Com_Shutdown(const char *finalmsg)
 {
+    // SP note (Ghidra 0x0069d250, hand-verified, bootchain2 slice): body order
+    // (Com_ShutdownInternal -> CL_InitRenderer -> Com_AssetLoadUI, with finalmsg passed through
+    // unchanged) matches this MP source exactly. No KISAK_SP-specific code needed here.
     Com_ShutdownInternal(finalmsg);
 
     if (!IsDedicatedServer())
@@ -542,6 +591,10 @@ void __cdecl Com_Shutdown(const char *finalmsg)
 
 void __cdecl Com_ShutdownInternal(const char *finalmsg)
 {
+    // SP note (Ghidra 0x0082cc60, hand-verified, bootchain2 slice, weakest of that slice's three
+    // bonus-find rows): overall shape (flat cleanup call sequence ending in a free-only
+    // DB_LoadXAssets call) is consistent with this function's role, though individual unnamed
+    // callees were not resolved to two-fact standard. No KISAK_SP-specific code change made.
     int localClientNum; // [esp+0h] [ebp-4h]
 
     for ( localClientNum = 0; localClientNum < 1; ++localClientNum )
@@ -1094,7 +1147,7 @@ void __cdecl Com_PacketEventLoop(int localClientNum, msg_t *netmsg)
 
 void __cdecl Com_DispatchClientPacketEvent(netadr_t adr, msg_t *netmsg)
 {
-    CL_PacketEvent(0, adr, netmsg, Sys_Milliseconds(), 0);
+    CL_PacketEvent(0, adr, netmsg, Sys_Milliseconds(), IsDedicatedServer());
 }
 
 void __cdecl Com_ReadCDKey()
@@ -1521,7 +1574,16 @@ void __cdecl Com_ExecStartupConfigs(int localClientNum, const char *configFile)
     Com_RunAutoExec(localClientNum, Com_LocalClient_GetControllerIndex(localClientNum));
 
     if ( Com_SafeMode() )
+    {
+#ifdef KISAK_SP
+        // Retail SP (Ghidra 0x009db230, xref'd from Com_ExecStartupConfigs): bare
+        // "safemode.cfg", not "_mp"-suffixed -- confirmed string literal, no KISAK_MP
+        // counterpart found anywhere in this binary's string table.
+        Cbuf_AddText(localClientNum, "exec safemode.cfg\n");
+#else
         Cbuf_AddText(localClientNum, "exec safemode_mp.cfg\n");
+#endif
+    }
 
     Cbuf_Execute(localClientNum, Com_LocalClient_GetControllerIndex(localClientNum));
 }
@@ -1567,8 +1629,46 @@ void __cdecl Com_Init(char *commandLine)
     if ( !_setjmp((int*)Sys_GetValue(2)) )
         Com_AddStartupCommands();
 
+#ifdef KISAK_SP
+    // IMPLEMENTED 2026-08-26. Re-verified at instruction level against retail Com_Init
+    // (0x004069c0), block 0x00406a1d-0x00406a65, immediately before the com_errorEntered check.
+    //
+    // *** CORRECTION to the previous marker's standing guess. *** It supposed
+    // Com_InitUIAndCommonXAssets was inlined here "with its UI3D/RB_Resource setup portions
+    // dead-code-eliminated". That is not what this block is. The XZoneInfo built on the stack is
+    //     { name = NULL, allocFlags = 0, freeFlags = 0x4000800 }
+    // -- 0x00406a4b / 0x00406a52 / 0x00406a59 store 0, 0 and 0x4000800 into the three
+    // consecutive dwords at [ebp-0Ch]..[ebp-04h], and LEA ECX,[ebp-0Ch] is what is passed as
+    // zoneInfo. XZoneInfo is { const char *name; int allocFlags; int freeFlags; }
+    // (db_registry.h:85), so this record names no zone and requests no allocation: it is a
+    // FREE-ONLY DB_LoadXAssets transaction that UNLOADS whatever matches freeFlags and loads
+    // nothing at all. Com_InitUIAndCommonXAssets's actual work (Com_UnloadLevelFastFiles,
+    // CL_AllocatePerLocalClientMemory, the RB_Resource/UI3D setup, DB_LoadFastFilesForPC) does
+    // not appear here in any form. What survives at this site is the *unload* half.
+    //
+    // The guard is `!I_strcmp(sv_mapname->current.string, "") && useFastFile->current.enabled`:
+    //   - 0x00406a2c I_strcmp(sv_mapname->current.string, "")  ("" is 0x009dd354, read as four
+    //     zero bytes). sv_mapname == DAT_02899cec, sole WRITE 0x00698430 in SV_Init; by the
+    //     registrar string-table walk the name pushed one call earlier (0x00698410 -> 0x009ae25c)
+    //     reads "mapname", which is exactly how this tree registers sv_mapname
+    //     (sv_init_mp.cpp:1039).
+    //   - 0x00406a3d tests byte [useFastFile + 0x18] (current.enabled). useFastFile ==
+    //     DAT_0247fec8, sole WRITE 0x0082be2e in Com_InitDvars, name pushed one call earlier at
+    //     0x0082be11 -> 0x009b4374 = "useFastFile".
+    // Argument order confirmed from the pushes at 0x00406a43/48/4a: DB_LoadXAssets(&zoneInfo, 1, 0).
+    if ( !I_strcmp(sv_mapname->current.string, "") && useFastFile->current.enabled )
+    {
+        XZoneInfo zoneInfo[1];
+
+        zoneInfo[0].name = NULL;
+        zoneInfo[0].allocFlags = 0;
+        zoneInfo[0].freeFlags = 0x4000800;
+        DB_LoadXAssets(zoneInfo, 1u, 0);
+    }
+#else
     if ( !I_strcmp(sv_mapname->current.string, "") )
         Com_InitUIAndCommonXAssets();
+#endif
 
     if ( com_errorEntered )
         Com_ErrorCleanup();
@@ -1581,6 +1681,14 @@ void __cdecl Com_Init(char *commandLine)
             Sys_Error(va("Error during initialization:\n%s\n", com_errorMessage));
         }
 
+        // SP note (Ghidra 0x004069c0 Com_Init / 0x0082cd10 Com_Init_Try_Block_Function, this
+        // pass): resolved an ambiguity the prior handoff flagged as unclear -- SP's compiled
+        // binary calls CL_InitRenderer() from BOTH this conditional block (`if
+        // (!cls.rendererStarted)`) AND, unconditionally, from Com_Init_Try_Block_Function's own
+        // body. Both call sites are directly visible in the current decompile and both match
+        // this MP source exactly (Com_Init_Try_Block_Function's own CL_InitRenderer() call
+        // matches common.cpp line ~1933). This is a confirmed MATCH, not a divergence -- no
+        // KISAK_SP-specific code needed for either call site.
         if (!cls.rendererStarted)
         {
             CL_InitRenderer();
@@ -1592,13 +1700,66 @@ void __cdecl Com_Init(char *commandLine)
     }
 #endif
 
-    if ( !com_sv_running->current.enabled )
+#ifdef KISAK_SP
+    // SP retail divergence, RESOLVED (2026-08-06) -- a dedicated research pass plus independent
+    // orchestrator re-verification of every address cited (see ORCHESTRATOR.md's "Intro-movie
+    // playback (Bink)" section for the full trail). SP's compiled Com_Init tail (Ghidra
+    // 0x004069c0) never falls through to the MP shape in the #else branch below:
+    //   if (!com_sv_running->current.enabled) {
+    //       if (*com_errorMessage) { UI_SetActiveMenu(<menuCtx>, 1); return; }
+    //       if (!com_startupIntroPlayed->current.enabled) {
+    //           R_Cinematic_SetNextPlayback("number_lady_intro", 0);
+    //           Dvar_SetBool(com_startupIntroPlayed, true);
+    //       }
+    //       Com_LoadFrontEnd();
+    //   }
+    // Confirmed: the error-path UI_SetActiveMenu-then-return (cross-confirmed independently by
+    // Com_LoadFrontEnd's own plate, Ghidra 0x00449e80); the gating dvar is com_startupIntroPlayed,
+    // NOT the cosmetically similar com_introPlayed -- confirmed via get_xrefs_to, com_introPlayed
+    // is only ever WRITTEN, never read, anywhere in the binary, while com_startupIntroPlayed is
+    // read in exactly two places, both here; the queued movie name "number_lady_intro"; and the
+    // queueing call itself (R_Cinematic_SetNextPlayback, Ghidra 0x006DA060), independently
+    // source-attested by OpenWarfare and distinct from the direct three-argument playback wrapper.
+    // Com_LoadUiFastFile() is never called from here in SP, consistent with it being confirmed
+    // dead code elsewhere (Com_AssetLoadUI's plate, Ghidra 0x00678f80).
+    //
+    // NOT resolved, deliberately left as future work rather than guessed at: whether skip-input
+    // works during the intro movie at all (traced the per-frame consumer side; no explicit
+    // skip-on-keypress logic was located); whether "number_lady_intro" is a single combined reel
+    // or implies additional publisher-logo movies sequenced by a data asset outside this binary
+    // (no second boot-time queueing call site exists in code, but that can't rule out data-driven
+    // sequencing); and the real localClientNum/menu-context argument to UI_SetActiveMenu on the
+    // error path -- 0 used below as the only value plausible for this reimplementation's
+    // single-local-client build, same reasoning as this project's other single-client TODOs
+    // (e.g. Com_LoadFrontEnd's own "map frontend" tail), not a verified literal.
+    if ( !IsDedicatedServer() && !com_sv_running->current.enabled )
+    {
+        if ( *Dvar_GetString("com_errorMessage") )
+        {
+            // 2026-08-06: switched to the SP-native entry point. This "1" is an SP menu value
+            // (fullscreen_error) read from the SP binary, NOT an MP uiMenuCommand_t - MP's 1 is
+            // UIMENU_MAIN. UI_SetActiveMenu now translates MP enum values into SP ones for the
+            // ~20 shared call sites (see UI_SpMenuFromMpMenu in ui_main_mp.cpp), so passing a raw
+            // 1 through it would have opened "main" here instead of the error screen.
+            UI_SetActiveMenuSp(0, UISP_FULLSCREEN_ERROR);
+            return;
+        }
+        if ( !com_startupIntroPlayed->current.enabled )
+        {
+            R_Cinematic_SetNextPlayback("number_lady_intro", 0);
+            Dvar_SetBool((dvar_s *)com_startupIntroPlayed, true);
+        }
+        Com_LoadFrontEnd();
+    }
+#else
+    if ( !IsDedicatedServer() && !com_sv_running->current.enabled )
     {
         if ( *Dvar_GetString("com_errorMessage") )
             Com_LoadUiFastFile();
         //BLOPS_NULLSUB();
         Com_LoadFrontEnd();
     }
+#endif
 
     if (IsDedicatedServer())
     {
@@ -1736,6 +1897,48 @@ void Com_ErrorCleanup()
         Monkey_Event("disconnected");
 }
 
+#if defined(OPENBLOPS_NO_STEAM_AUTH) && !defined(KISAK_DEDICATED)
+// Startup commands run before Com_Init finishes loading the frontend. Retain a
+// direct-connect request until a normal client frame can safely tear it down.
+static char com_startupConnect[1024];
+
+void Com_CancelStartupConnect()
+{
+    com_startupConnect[0] = 0;
+}
+
+static bool Com_DeferStartupConnect(const char *command)
+{
+    if (IsDedicatedServer())
+        return false;
+    Cmd_TokenizeString(command);
+    const bool connect = Cmd_Argc() == 2 && !I_stricmp(Cmd_Argv(0), "connect");
+    if (connect)
+        I_strncpyz(com_startupConnect, command, sizeof(com_startupConnect));
+    Cmd_EndTokenizedString();
+    return connect;
+}
+
+static void Com_RunStartupConnect()
+{
+    if (!com_startupConnect[0] || IsDedicatedServer() || !cls.rendererStarted || !cls.uiStarted)
+        return;
+#ifdef KISAK_SP
+    // The frontend is an actual local map in SP. Also allow an explicit +map
+    // startup to finish instead of waiting forever for the frontend map name.
+    if (CL_GetLocalClientConnectionState(0) != CA_ACTIVE)
+        return;
+#endif
+    char command[sizeof(com_startupConnect)];
+    I_strncpyz(command, com_startupConnect, sizeof(command));
+    // Consume before executing: a failed connect/ERR_DROP must not retry on
+    // every frame or rejoin automatically after the player disconnects.
+    Com_CancelStartupConnect();
+    Com_Printf(0, "Executing deferred startup command: %s\n", command);
+    Cbuf_ExecuteBuffer(0, Com_LocalClient_GetControllerIndex(0), command);
+}
+#endif
+
 void Com_AddStartupCommands()
 {
     int ControllerIndex; // eax
@@ -1748,6 +1951,10 @@ void Com_AddStartupCommands()
         {
             if ( !Com_StartupProcessSetCommand(i, 0) )
             {
+#if defined(OPENBLOPS_NO_STEAM_AUTH) && !defined(KISAK_DEDICATED)
+                if (Com_DeferStartupConnect(com_consoleLines[i]))
+                    continue;
+#endif
                 Com_sprintf(localBuffer, 0x401u, "%s\n", com_consoleLines[i]);
                 ControllerIndex = Com_LocalClient_GetControllerIndex(0);
                 Cbuf_ExecuteBuffer(0, ControllerIndex, localBuffer);
@@ -1794,6 +2001,13 @@ void __cdecl Com_Init_Try_Block_Function(char *commandLine)
     Stream_Init();
     //BLOPS_NULLSUB();
 
+    // SP note (Ghidra 0x0082cd10 Com_Init_Try_Block_Function): confirmed via exact zoneInfo
+    // shape match that SP's compiled binary has Com_InitCodeXAssets fully inlined at this call
+    // site rather than a standalone call -- a compiler-inlining detail, not a source-level
+    // behavior change, so no #ifdef is needed for the call shape itself. The one directly
+    // observed content difference is the zone name string SP loads here; see the real
+    // #ifdef KISAK_SP transcription of that single confirmed literal inside Com_InitCodeXAssets
+    // itself, below.
     if ( useFastFile->current.enabled )
         TL_DebugDumpHunk("before Com_InitCodeXAssets");
         Com_InitCodeXAssets();
@@ -1942,6 +2156,13 @@ void __cdecl Com_Init_Try_Block_Function(char *commandLine)
         R_InitThreads();
 
         //KISAK_NULLSUB();
+        // SP note (Ghidra 0x0082cd10 Com_Init_Try_Block_Function / 0x004069c0 Com_Init, this
+        // pass): resolved an ambiguity the prior handoff flagged as unclear -- SP's compiled
+        // binary calls CL_InitRenderer() from BOTH here (unconditionally) AND, conditionally
+        // under `if (!cls.rendererStarted)`, from Com_Init's own tail (see the matching note
+        // there). Both call sites are directly visible in the current decompile and both match
+        // this source exactly. Confirmed MATCH, not a divergence -- no KISAK_SP-specific code
+        // needed here.
         CL_InitRenderer();
         Expression_Init();
         //KISAK_NULLSUB();
@@ -1958,14 +2179,92 @@ void __cdecl Com_Init_Try_Block_Function(char *commandLine)
 
     Sys_LoadingKeepAlive();
     Live_Init();
+    Content_Init(); // retail SP FUN_004e8350: registers dlc1..dlc5, which the zombie map select menus gate on
     PC_InitSigninState();
     Playlist_Init();
     R_BeginRemoteScreenUpdate();
+#ifndef KISAK_SP
+    // SP retail divergence, moderate confidence (not verified to the usual two-fact standard --
+    // this call site's own containing address was not individually located in the SP binary, so
+    // treat this as a reasoned inference, not a confirmed fact; revisit if it turns out wrong).
+    // Found chasing a real SP boot failure on 2026-08-05 (fatal "Could not load default asset ''
+    // for asset type 'emblemset'. Tried to load asset 'emblemset'." right after "--- Initializing
+    // Voice ---", once live_service was worked around). Three points of evidence: (1) emblem
+    // customization is a pure Create-a-Class MP concept with no SP campaign equivalent; (2) the
+    // "emblemset" string's only two live-binary references are generic DB_XAssetPool-style
+    // asset-type-name table entries (matching db_assetnames.cpp's own generic 43-entry table),
+    // not a specific call site passing it as an asset NAME; (3) Com_Init_Try_Block_Function's
+    // decompile around this exact source region has roughly half the expected call count versus
+    // this MP source block (Sys_LoadingKeepAlive..COM_PlayIntroMovies), consistent with a
+    // contiguous block of MP-only init being eliminated rather than one call subtly renamed.
+    // Guarded out entirely rather than chasing a corrected asset name, since the semantic
+    // argument (SP has no emblem system to initialize) is stronger than any specific string
+    // substitution would be.
     BG_EmblemsInit();
+    // Offline CAC defaults need storage, sign-in/profile dvars and item assets.
+    // Publish local stats readiness only after those subsystems are initialized.
+    if (!IsDedicatedServer() && LiveStorage_UsesOfflineStats() && !LiveStorage_InitOfflineStats(0))
+        Com_Error(ERR_DROP, "Could not initialize local multiplayer stats");
+#endif
+    // *** CORRECTED 2026-08-07 -- SV_InitServerThread() IS present in SP. ***
+    //
+    // The 2026-08-06 intro-movie research pass claimed all three of SV_InitServerThread(),
+    // Demo_InitFileHandlerSystem() and COM_PlayIntroMovies() were absent from SP, and this
+    // block guarded out all three. That was WRONG for SV_InitServerThread, and guarding it
+    // out is what hung SP on the loading screen after `map frontend`.
+    //
+    // Direct evidence: get_xrefs_to(0x005a9760) returns exactly one caller --
+    //   "From 0082d25a in Com_Init_Try_Block_Function [UNCONDITIONAL_CALL]"
+    // and 0x005a9760 is SV_InitServerThread (identified independently in campaign slice p1s7:
+    // its sole argument FUN_0087e2a0 -- still FUN_* in the live Ghidra database as of 2026-08-26,
+    // i.e. p1s7's identification was never written back as a symbol -- self-identifies as
+    // SV_ServerThread via Sys_GetValue(2) +
+    // __setjmp3 prologue, 1000/sv_network_fps, and named SV_CalcPings/SV_CheckTimeouts/
+    // SV_SendClientMessages).
+    //
+    // How the earlier pass went wrong: it measured the instruction gap on the wrong side of
+    // mjpeg_initonce(). SP's real call order in Com_Init_Try_Block_Function is
+    //   0082d24b Live_Init -> 0082d250 PC_InitSigninState -> 0082d255 R_BeginRemoteScreenUpdate
+    //   -> 0082d25a SV_InitServerThread -> 0082d25f/0082d28b the two dvar registrations
+    //   -> 0082d298 mjpeg_initonce -> 0082d29d useFastFile tail
+    // The zero-gap observation was real, but it only ever proved COM_PlayIntroMovies() is
+    // absent -- that is the one of the three which FOLLOWS mjpeg_initonce in source order.
+    //
+    // Why its absence hangs rather than crashes, two independent mechanisms from one cause:
+    //  (1) No server thread => serverCompletedEvent stays NULL => WaitForSingleObject(NULL, t)
+    //      returns WAIT_FAILED forever => SV_WaitServer() (sv_main_mp.cpp:1330) spins with no
+    //      timeout and no diagnostic. SV_WakeServer() sets com_inServerFrame=1 immediately
+    //      before, so its guard always passes.
+    //  (2) Com_ServerPacketEvent() is reachable ONLY from SV_RunEventLoop(), which is called
+    //      ONLY from SV_ServerThread. With no thread, loopbacks[NS_SERVER] is never drained,
+    //      the client's `connect` is never seen, and connstate sticks at CA_CHALLENGING --
+    //      which CL_CheckTimeout provably never times out, so it retries silently forever.
+    //      CL_InitCGame never runs, so cl_serverLoadingMap is never cleared and the loading
+    //      screen never tears down. SV_RunFrame never runs either, so no GSC executes -- which
+    //      is also why the expected briefing->main menu transition never arrives.
     SV_InitServerThread();
+#ifndef KISAK_SP
+    // Demo_InitFileHandlerSystem remains confirmed absent in SP: the two source call slots
+    // after SV_InitServerThread hold unrelated dvar registrations instead ("ui_skipMainLockout"
+    // @0x00a029fc registered at 0x0082d25f, "ui_playCoastOutroMovie" @0x00a195dc at 0x0082d28b)
+    // -- a real elimination, not a 1:1 substitution.
     Demo_InitFileHandlerSystem();
+#endif
+#ifdef KISAK_SP
+    // SP registers two dvars here that this reconstruction never registered anywhere
+    // (audit3, 2026-08-07). These are the very registrations cited just above as evidence
+    // that Demo_InitFileHandlerSystem is absent -- that reasoning was correct, but the
+    // registrations themselves were only ever *observed*, never transcribed.
+    // ui_main_mp.cpp:2841 already does Dvar_SetBoolByName("ui_skipMainLockout", true)
+    // against a dvar that, until now, existed in neither configuration.
+    _Dvar_RegisterBool("ui_skipMainLockout",     0, 0x4000u, "");
+    _Dvar_RegisterBool("ui_playCoastOutroMovie", 0, 0x4000u, "");
+#endif
     mjpeg_initonce();
-    COM_PlayIntroMovies();
+#ifndef KISAK_SP
+    if (!IsDedicatedServer())
+        COM_PlayIntroMovies();
+#endif
 
     if ( useFastFile->current.enabled )
     {
@@ -2052,7 +2351,11 @@ void Com_InitDvars()
 {
     unsigned int CpuCount; // eax
 
+#if defined(KISAK_SP) && defined(KISAK_DEDICATED)
+    com_maxclients = _Dvar_RegisterInt("com_maxclients", 4, 1, 4, 0x44u, "Maximum Zombies clients");
+#else
     com_maxclients = _Dvar_RegisterInt("com_maxclients", 18, 1, 32, 0x44u, "Maximum amount of clients on the server");
+#endif
     com_freemoveScale = _Dvar_RegisterFloat(
                                                 "com_freemoveScale",
                                                 1.0,
@@ -2085,6 +2388,9 @@ void Com_InitDvars()
     dedicated = _Dvar_RegisterEnum("dedicated", g_dedicatedEnumNames, 0, 32, "Dedicated Server");
     if (dedicated->current.integer)
         _Dvar_RegisterEnum("dedicated", g_dedicatedEnumNames, 0, 64, "Dedicated Server");
+#else
+    dedicated = _Dvar_RegisterEnum("dedicated", g_dedicatedEnumNames, 2, 0x40u, "Dedicated Server");
+    Dvar_SetInt((dvar_s *)dedicated, 2);
 #endif
     com_maxfps = _Dvar_RegisterInt("com_maxfps", 85, 0, 1000, 1u, "Cap frames per second");
     arcademode = _Dvar_RegisterBool("arcademode", 0, 0x100u, "Current game is an arcade mode game");
@@ -2097,12 +2403,19 @@ void Com_InitDvars()
                                                         "Force Split Screen to Fullscreen (for HUD)");
     zombietron = _Dvar_RegisterBool("zombietron", 0, 0x40u, "Current game is an zombietron top down game");
     zombietron_discovered = _Dvar_RegisterBool("zombietron_discovered", 0, 0x4001u, "Zombietron mode discovered");
+#ifdef KISAK_SP
+    // retail SP 0082bd22 registers this with a default of 1
+    zombiefive_discovered = _Dvar_RegisterBool("zombiefive_discovered", 1, 0x4001u, "Zombie Five map discovered");
+#else
     zombiefive_discovered = _Dvar_RegisterBool("zombiefive_discovered", 0, 0x4001u, "Zombie Five map discovered");
+#endif
 
     // KISAKTODO
-    //zombiemode_path_minz_bias
-    //zombietron_discovered_override
-    //zombiefive_discovered_override
+    // retail SP Com_InitDvars @ 0082bb60
+    zombiemode_path_minz_bias = _Dvar_RegisterFloat("zombiemode_path_minz_bias", 50.0f, 0.0f, 200.0f, 0x1000u, "Zombie mode nearest-node search: how far below the origin to look for path nodes");
+    // retail SP 0082bd3d / 0082bd58: both default to 1 with flags 0x4000
+    _Dvar_RegisterBool("zombietron_discovered_override", 1, 0x4000u, "");
+    _Dvar_RegisterBool("zombiefive_discovered_override", 1, 0x4000u, "");
 
     _Dvar_RegisterBool(
         "zombiefive_norandomchar",
@@ -2268,10 +2581,22 @@ void Com_InitDvars()
 
 void __cdecl Com_StartupConfigs(int localClientNum)
 {
+#ifdef KISAK_SP
+    // Retail SP (Ghidra 0x0082ce33-0x0082ce40, Com_Init_Try_Block_Function): calls
+    // Com_ExecStartupConfigs(localClientNum, "config.cfg") directly. No validation-gate
+    // call exists in the real sequence -- the call immediately preceding it (FUN_00496de0, still
+    // unnamed in Ghidra) is an unrelated trivial global-array store, not config validation.
+    // CLAIM RE-VERIFIED 2026-08-26 by decompiling 0x00496de0: its entire body is
+    // `(&DAT_0243fc88)[param_1 * 5] = param_2;` -- a one-line store into a 5-dword-stride global
+    // array. The note above is exactly right. Con_Restricted_
+    // ValidateConfig/"config_mp.cfg" has no retail counterpart on the SP boot path.
+    Com_ExecStartupConfigs(localClientNum, "config.cfg");
+#else
     if ( Con_Restricted_ValidateConfig("config_mp.cfg") )
         Com_ExecStartupConfigs(localClientNum, "config_mp.cfg");
     else
         Com_ExecStartupConfigs(localClientNum, 0);
+#endif
 }
 
 int g_loadedPreXAssets = 0;
@@ -2284,7 +2609,17 @@ void __cdecl Com_InitCodeXAssets()
     if ( !g_loadedPreXAssets )
     {
         g_loadedPreXAssets = 1;
+#ifdef KISAK_SP
+        // SP retail divergence (Ghidra 0x0082cd10 Com_Init_Try_Block_Function, this function's
+        // body fully inlined there -- see the note at its call site above): confirmed directly
+        // from decompile -- the zone name loaded here is the literal string "code_pre_gfx" (no
+        // "_mp" suffix), not MP's "code_pre_gfx_mp". Everything else in this function's shape
+        // (single-zone alloc, allocFlags 1, freeFlags 0, DB_SyncXAssets after) matches MP
+        // exactly, so only the literal changes.
+        zoneInfo[0].name = "code_pre_gfx";
+#else
         zoneInfo[0].name = "code_pre_gfx_mp";
+#endif
         zoneInfo[0].allocFlags = 1;
         zoneInfo[0].freeFlags = 0;
         zoneCount = 1;
@@ -2545,7 +2880,11 @@ void __cdecl Com_UnloadLevelFastFiles()
     {
         zoneInfo[0].name = 0;
         zoneInfo[0].allocFlags = 0;
+#ifdef KISAK_SP
         zoneInfo[0].freeFlags = 0x4000;
+#else
+        zoneInfo[0].freeFlags = 0x800;
+#endif
         DB_LoadXAssets(zoneInfo, 1u, 0);
     }
 }
@@ -2564,12 +2903,41 @@ void __cdecl Com_LoadLevelFastFiles(char *mapName)
     DB_ResetZoneSize(0);
     UI_SetLoadingScreenMaterial(mapName);
     Com_sprintf(levelPatchZoneName, 0x40u, "%s_patch", mapName);
+#ifndef KISAK_SP
+    // Confirmed absent from retail SP's Com_LoadLevelFastFiles (Ghidra 0x004c8890, now named
+    // Com_LoadLevelFastFiles in the live database; full
+    // instruction-level diff): there is no push of any "ui_animate ..." literal anywhere in
+    // that function's body. It is also the second reference in this tree to the MP-only
+    // `connect` menu -- see the root-cause note in ui_main.cpp's UI_DrawMapLevelshot. Driving
+    // an animation on a menu SP never opens is at best a no-op and at worst re-touches the
+    // menu that carries the unresolvable @MENU_INTEL reference, so it is guarded out rather
+    // than left to chance.
     ControllerIndex = Com_LocalClient_GetControllerIndex(0);
     Cbuf_ExecuteBuffer(0, ControllerIndex, (char *)"ui_animate connect * meet 500 1;\n");
+#endif
     DB_AddUserMapDir(mapName);
+#ifdef KISAK_SP
+    // SP correction, Ghidra 0x004C8890 (Com_LoadLevelFastFiles), confirmed by decompiling the
+    // retail function directly (docs/SP_MAIN_MENU_BOOTCHAIN.md Sec.2 row 6 / Sec.5 item 3). Retail
+    // conditionally adds a `{"patch_ui", 0x4000000, 0}` XZoneInfo record here, gated on the SAME
+    // Com_IsMenuLevel predicate already used two lines below to skip Com_LoadCommonFastFile (that
+    // skip is independently confirmed correct and is NOT touched by this change). The previous
+    // KISAK_SP-unguarded code below (now moved to the KISAK_MP branch) added an unconditional
+    // {name=NULL, allocFlags=0, freeFlags=0x4000000} record instead -- wrong name, wrong
+    // condition (always added rather than menu-level-only), and allocFlags/freeFlags swapped
+    // relative to retail's record. Preserved verbatim under KISAK_MP since this pass has no MP
+    // retail evidence to justify changing it.
+    if ( Com_IsMenuLevel(mapName) )
+    {
+        zoneInfo[zoneCount].name = "patch_ui";
+        zoneInfo[zoneCount].allocFlags = 0x4000000;
+        zoneInfo[zoneCount++].freeFlags = 0;
+    }
+#else
     zoneInfo[zoneCount].name = 0;
     zoneInfo[zoneCount].allocFlags = 0;
-    zoneInfo[zoneCount++].freeFlags = 0x4000000;
+    zoneInfo[zoneCount++].freeFlags = 0x6000000;
+#endif
     if ( I_stristr(mapName, "zombietron") )
     {
         Dvar_SetBool((dvar_s *)zombiemode, 1);
@@ -2605,10 +2973,33 @@ void __cdecl Com_LoadLevelFastFiles(char *mapName)
         zoneInfo[zoneCount++].freeFlags = 0;
     }
     zoneInfo[zoneCount].name = mapName;
-    if ( I_strncmp("so_", mapName, strlen("so_")) )
+#ifdef KISAK_SP
+    // SP correction, Ghidra 0x004C8890, confirmed by decompiling the retail function directly
+    // (docs/SP_MAIN_MENU_BOOTCHAIN.md Sec.2 row 6 / Sec.5 item 3): retail gives the level's own
+    // zone record alloc flag 0x2000000 when Com_IsMenuLevel(mapName) is true, taking priority over
+    // the specops/ordinary-level branch below (which is otherwise unchanged and still used for
+    // every non-menu level). Previously this reconstruction had no menu-level branch at all here,
+    // so "frontend" fell into the ordinary (non-specops) case and was allocated the plain level
+    // flag 0x4000 instead of retail's 0x2000000.
+    if ( Com_IsMenuLevel(mapName) )
+        zoneInfo[zoneCount].allocFlags = 0x2000000;
+    else if ( I_strncmp("so_", mapName, strlen("so_")) )
         zoneInfo[zoneCount].allocFlags = 0x4000;
     else
         zoneInfo[zoneCount].allocFlags = 0x10000;
+    // TODO(SP): this pass's live decompile of retail 0x004C8890 also shows the specops
+    // (non-menu, "so_"-prefixed) branch using alloc flag 0x800, not this reconstruction's 0x10000
+    // -- a real, separately-confirmed divergence. Left UNCHANGED here: it is outside the
+    // "menu-level zone transaction" this item is scoped to, and fixing it wasn't requested.
+    // Flagged for a future pass rather than folded into this slice.
+#else
+    // Retail MP 0x006AAE95..0x006AAEA8: ordinary maps reuse the
+    // 0x800 zone class, releasing ui_viewer_mp before allocating the map.
+    if ( I_strncmp("so_", mapName, strlen("so_")) )
+        zoneInfo[zoneCount].allocFlags = 0x800;
+    else
+        zoneInfo[zoneCount].allocFlags = 0x4000;
+#endif
     zoneInfo[zoneCount++].freeFlags = 0;
     R_BeginRemoteScreenUpdate();
     DB_LoadXAssets(zoneInfo, zoneCount, 0);
@@ -2694,23 +3085,87 @@ void Com_LoadCommonFastFile()
             zoneInfo[zoneCount++].freeFlags = 0;
         }
     }
+#ifdef KISAK_SP
+    // SP retail divergence (2026-08-06). SP loads the bare "common" zone here, not MP's
+    // "common_mp" -- same allocFlags 256 tier, same DB_IsZoneLoaded guard. Confirmed three ways:
+    // zone/Common/common.ff and zone/english/en_common.ff both exist in the retail install
+    // (checked on disk); this matches the bare-name pattern already confirmed for
+    // code_pre_gfx/code_post_gfx/patch; and docs/SP_MP_STARTUP_AUDIT.md finding #5 records the SP
+    // binary's own body of this function loading bare "common" at this tier.
+    //
+    // This is the CORRECT home for the SP common-zone load. An earlier same-day edit wrongly put
+    // it in DB_LoadFastFilesForPC instead (see the correction note there); that both contradicted
+    // the audit's Ghidra evidence and, because Com_IsMenuLevel does not match "frontend", left
+    // this call site's common_mp guard unsatisfied so a SECOND common zone would load on the
+    // `map frontend` path.
+    //
+    // TODO(SP): the audit also found SP drops the WaW-legacy zombies tier entirely
+    // (legacy_zombiemode ? "waw_zombie" : "common_zombie") -- two independent zero-hit string
+    // searches for waw_zombie/legacy_zombiemode in the SP binary. Not touched here: that branch is
+    // zombie-mode only and cannot be reached on the campaign/frontend path this work targets.
+    else if ( !DB_IsZoneLoaded("common") )
+    {
+        zoneInfo[zoneCount].name = "common";
+        zoneInfo[zoneCount].allocFlags = 256;
+        zoneInfo[zoneCount++].freeFlags = 0;
+    }
+#else
     else if ( !DB_IsZoneLoaded("common_mp") )
     {
         zoneInfo[zoneCount].name = "common_mp";
         zoneInfo[zoneCount].allocFlags = 256;
         zoneInfo[zoneCount++].freeFlags = 0;
     }
+#endif
     if ( zoneCount )
         DB_LoadXAssets(zoneInfo, zoneCount, 0);
 }
 
 void __cdecl Com_LoadFrontEnd()
 {
+#ifdef KISAK_MP
     Dvar_SetBool((dvar_s *)xblive_matchEndingSoon, 0);
     if (!IsDedicatedServer())
     {
         CL_SetupClientsForFrontend();
     }
+#elif KISAK_SP
+    // SP retail divergence (Ghidra 0x00449e80 Com_LoadFrontEnd, HAND-VERIFIED, weakest-evidenced
+    // row of the whole boot-chain investigation -- re-confirmed at the instruction level in the
+    // bootchain2 pass; see that plate for the full evidence). The single most game-relevant
+    // function in this entire set: unlike MP's 2-line stub above, SP's Com_LoadFrontEnd does not
+    // go through the menu-stack mechanism at all. It ultimately issues a literal console command
+    // that loads the main menu as an actual in-game map:
+    //     Cbuf_ExecuteBuffer(<localClientNum>, <controllerIndex>, "map frontend\n");
+    // CONFIRMED by the source/body match: source Com_LoadFrontEnd resets
+    // xblive_matchEndingSoon and emits "map frontend\n" in that order, while the SP body retains
+    // those same endpoints around its larger frontend setup. The Com_Init tail call is supporting
+    // context, not an independent naming fact. The confirmed tail is transcribed below.
+    //
+    // TODO(SP): partial reconstruction; see Ghidra 0x00449e80 and the version-35 local-client
+    // plates. The full SP function body is substantially larger than this replacement. The
+    // xblive_matchEndingSoon reset, unload-style DB request, local-client routing, and map command
+    // are now statically resolved, but several intervening operations remain untranscribed:
+    //   - an early-return guard comparing the current menu/map name against a "menu_" prefix and
+    //     against the literal "frontend" (skips the rest of the function if already on a menu_*
+    //     or frontend map -- exact semantics not confirmed)
+    //   - a useFastFile-gated DB_LoadXAssets call with flags 0x100
+    //   - a memset over a block sized by (some count) * 0x406c0 bytes -- shape suggests a
+    //     per-client or per-entity array; identity not confirmed
+    //   - seven further calls shaped like Dvar_SetBool(<unidentified dvar>, false), beyond the
+    //     one xblive_matchEndingSoon reset this reimplementation already models
+    //   - additional frontend/menu bookkeeping around the resolved local-client calls
+    // Do not guess at these; a dedicated pass should name and confirm each before this is filled
+    // in for real. Retail obtains localClientNum from Com_LocalClients_GetPrimary, marks it being
+    // used when Com_LocalClients_GetUsedControllerCount returns zero, and passes
+    // Com_LocalClient_GetControllerIndex(localClientNum) to Cbuf_ExecuteBuffer. This replacement
+    // still folds both routed values to literal zero, which is valid for retail's one-client
+    // layout but does not reproduce the original call sequence. Until the rest is filled in, it
+    // is enough to reach a menu but is NOT a byte-faithful reconstruction of SP retail's boot
+    // sequence.
+    Dvar_SetBool((dvar_s *)xblive_matchEndingSoon, 0);
+    Cbuf_ExecuteBuffer(0, 0, "map frontend\n");
+#endif
 }
 
 void __cdecl Com_UnloadFrontEnd()
@@ -2743,6 +3198,52 @@ void __cdecl Com_UnloadFrontEnd()
 
 void __cdecl Com_AssetLoadUI()
 {
+#ifdef KISAK_SP
+    // TODO(SP): unconfirmed, see Ghidra 0x00678f80 (Com_AssetLoadUI) plate. SP retail's
+    // Com_AssetLoadUI carries a genuine extra parameter (a char* finalmsg/reason string -- e.g.
+    // Com_Shutdown's finalmsg, or literal 0 from Com_StartHunkUsers) with a guard: if it is
+    // non-null and contains the substring "EXE_MATCHENDED", the function returns immediately
+    // after the hunk-user/loading-screen block below, skipping the UI_SetActiveMenu/
+    // Com_LoadFrontEnd tail entirely ("if shutting down because the match already ended, don't
+    // reload the frontend menu"). Per project policy this is not enough evidence to add a
+    // parameter to a function that MP code also calls at its existing 0-arg signature
+    // (Com_Shutdown and Com_StartHunkUsers below both call it as Com_AssetLoadUI()); NOT
+    // transcribed.
+    //
+    // SP is also confirmed to add one extra call, UI_SetLoadingScreenMaterial(""), between
+    // UI_SetMap and R_BeginRemoteScreenUpdate, and its tail duplicates the same
+    // com_errorMessage-check / UI_SetActiveMenu-or-Com_LoadFrontEnd pattern already used in
+    // Com_Init's tail, rather than unconditionally falling through to Com_LoadFrontEnd() as MP
+    // does. NOT transcribed for the same signature-safety reason as above -- the
+    // EXE_MATCHENDED-guarded return and this duplicated tail are coupled (both come from the
+    // same missing parameter), and doing one without the other would misrepresent SP's real
+    // control flow rather than clarify it.
+    //
+    // The useFastFile-gated pre-block immediately below (Com_LoadCommonFastFile +
+    // Com_LoadUiFastFile) is CONFIRMED absent as a discrete unit in SP retail (four-point
+    // evidence chain on the plate: no DB_LoadXAssets / CL_AllocatePerLocalClientMemory /
+    // RB_Resource_* / R_UI3D_SetupTextureWindow call anywhere in this function's disassembly,
+    // and no "ui_mp"/"ui_viewer_mp" zone strings exist anywhere in the SP binary -- most likely
+    // fully inlined then dead-code-eliminated because SP retail never shipped a useFastFile UI
+    // zone).
+    //
+    // *** CORRECTION (2026-08-05): an earlier revision of this comment claimed "useFastFile
+    // defaults off in this reimplementation", used to argue this block is already inert and safe
+    // to leave unguarded. That claim is FALSE and was not re-checked against the actual
+    // registration before being written -- Com_Init registers it as
+    // `useFastFile = _Dvar_RegisterBool("useFastFile", 1, 0x10u, ...)` (this file, ~line 2206),
+    // i.e. it defaults ON (1/enabled), for BOTH KISAK_MP and KISAK_SP, same as MP retail. This
+    // means the "already inert in practice" rationale does NOT actually hold: with the default
+    // dvar value, this pre-block DOES run for a fresh KISAK_SP process unless something else
+    // (a config file, a `+set useFastFile 0` launch argument, etc.) overrides it first -- which is
+    // plausibly why it hasn't been observed failing yet if the user's own launch command happens to
+    // set it, but that is not evidenced here and should not be assumed. NOT guarded out under
+    // KISAK_SP in this pass regardless -- doing so is a real, separate fix (this function's
+    // signature-coupling issue above already blocks a full transcription) and is left for a
+    // dedicated follow-up rather than folded in silently while only fixing this comment's false
+    // claim. MP's build is unaffected either way and keeps exercising its own real, working
+    // behavior when useFastFile is enabled.
+#endif
     if ( useFastFile->current.enabled )
     {
         Com_LoadCommonFastFile();
@@ -2923,6 +3424,9 @@ unsigned int Com_Frame_Try_Block_Function()
         TaskManager2_ProcessTasks(localControllerIndex);
 
     Cbuf_Execute(0, Com_LocalClient_GetControllerIndex(0));
+#if defined(OPENBLOPS_NO_STEAM_AUTH) && !defined(KISAK_DEDICATED)
+    Com_RunStartupConnect();
+#endif
     ProcessStringEdCmds();
     ProcessGDTCmds();
 
@@ -2932,7 +3436,8 @@ unsigned int Com_Frame_Try_Block_Function()
     cls.inputRealMsec = msec;
     Demo_Frame(msec);
     mseca = Com_ModifyMsec(msec);
-    LiveSteam_Frame();
+    if (!IsDedicatedServer())
+        LiveSteam_Frame();
 
     {
         PROF_SCOPED("SV frame");
@@ -3001,7 +3506,19 @@ void __cdecl Com_WriteConfiguration(int localClientNum)
         if ( (dvar_modifiedFlags & 1) != 0 )
         {
             dvar_modifiedFlags &= ~1u;
+#ifdef KISAK_SP
+            // Retail SP (Ghidra 0x0082c680, Com_WriteConfiguration): builds the write
+            // target as "<fs_game>/config.cfg" via Dvar_GetString("fs_game"), which
+            // resolves to "/config.cfg" for the unmodded base game (fs_game defaults to
+            // an empty string, so the format leaves a bare leading slash) -- the important
+            // part is it's never "config_mp.cfg", which has no retail counterpart anywhere
+            // in this binary. Using plain "config.cfg" here (no leading slash) since this
+            // reconstruction doesn't otherwise implement fs_game-relative path building on
+            // this write path, and a stray leading slash is not something to introduce.
+            I_strncpyz(configFile, "config.cfg", 128);
+#else
             I_strncpyz(configFile, "config_mp.cfg", 128);
+#endif
             Com_WriteConfigToFile(localClientNum, configFile);
             //BLOPS_NULLSUB();
         }
@@ -3123,6 +3640,11 @@ char Com_UpdateMenu()
 
 void Com_StartHunkUsers()
 {
+    // SP note (Ghidra 0x0082cc00, hand-verified, bootchain2 slice): opening setjmp/Sys_Error
+    // fingerprint and the Com_AssetLoadUI(0) call match this MP source exactly (Com_AssetLoadUI's
+    // SP-side extra param, see its own note, receives literal 0 here -- consistent with this
+    // caller having no shutdown-reason string to thread through). No KISAK_SP-specific code
+    // needed here.
     void *Value; // eax
     int Primary; // eax
     uiMenuCommand_t MenuScreen; // [esp-4h] [ebp-4h]
@@ -3367,3 +3889,36 @@ void Com_Printf_NoFilter(const char *fmt, ...)
     Com_PrintMessage(0, string, 0);
 }
 
+
+#ifdef KISAK_SP
+bool Com_IsZombieMap(const char *mapname)
+{
+    return I_strnicmp(mapname, "zombie_", 7) == 0 || I_stristr(mapname, "zombietron") != nullptr;
+}
+
+// Both local map commands and remote gamestates must select the same SP assets.
+void Com_SetSpMapMode(const char *mapname)
+{
+    const bool isZombietronMap = I_stristr(mapname, "zombietron") != 0;
+    const bool isZombieMap = Com_IsZombieMap(mapname);
+    const bool isLegacyZombieMap = I_strnicmp(mapname, "zombie_cod5_", 12) == 0;
+    const bool wasZombieMode = zombiemode->current.enabled;
+
+
+    Dvar_SetBool((dvar_s *)zombiemode, isZombieMap);
+    Dvar_SetBool((dvar_s *)zombietron, isZombietronMap);
+    Dvar_SetBool((dvar_s *)legacy_zombiemode, isLegacyZombieMap);
+
+    if ( isZombieMap || wasZombieMode )
+        Dvar_SetStringByName("ui_gametype", (char *)(isZombieMap ? "zom" : "cmp"));
+
+    Com_Printf(
+        15,
+        "SP map mode: map=%s zombiemode=%d zombietron=%d legacy=%d ui_gametype=%s\n",
+        mapname,
+        isZombieMap,
+        isZombietronMap,
+        isLegacyZombieMap,
+        Dvar_GetString("ui_gametype"));
+}
+#endif

@@ -40,8 +40,31 @@ MantleAnimTransition s_mantleTrans[7] =
   { 7, 10, 21.0 }
 };
 
+// SP retail divergence (audit3, 2026-08-07). Two facts:
+//  (1) all eleven "player_mantle_*" strings are present in BlackOps.exe -- 0x009ba156,
+//      0x009c2538, 0x009e3c1c, 0x009fe6ac, 0x00a0d3f4, 0x009c7238, 0x009a52b0, 0x00a196c4,
+//      0x00a4074c, 0x00a04c1c, 0x009daa40;
+//  (2) "mp_mantle_" is a ZERO-hit substring binary-wide, in any spelling.
+// Note index 10 was already "player_mantle_over_low" in this array -- the ordinals were
+// always right, only the prefix was wrong, which is itself corroboration.
+// Reached twice on every level load: server-side Mantle_CreateAnims from G_InitGame
+// (g_main_mp.cpp:780) and client-side from CG_Init (cg_main_mp.cpp:2939). With the MP
+// prefix, Mantle_CreateAnims raises Com_Error(ERR_DROP, "Mantle anim [...] has X
+// translation ...") -- a hard fatal, not a degraded asset.
 const char *s_mantleAnimNames[11] =
 {
+#ifdef KISAK_SP
+  "player_mantle_root",
+  "player_mantle_up_57",
+  "player_mantle_up_51",
+  "player_mantle_up_45",
+  "player_mantle_up_39",
+  "player_mantle_up_33",
+  "player_mantle_up_27",
+  "player_mantle_up_21",
+  "player_mantle_over_high",
+  "player_mantle_over_mid",
+#else
   "mp_mantle_root",
   "mp_mantle_up_57",
   "mp_mantle_up_51",
@@ -52,7 +75,8 @@ const char *s_mantleAnimNames[11] =
   "mp_mantle_up_21",
   "mp_mantle_over_high",
   "mp_mantle_over_mid",
-  "player_mantle_over_low"
+#endif
+  "player_mantle_over_low"   // identical in both configurations
 };
 
 const float turretPronePitchMax = 8.0f;

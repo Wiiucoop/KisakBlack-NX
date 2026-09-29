@@ -360,11 +360,40 @@ void UI_LoadArenasFromFile_FastFile()
 {
     RawFile *rawfile; // [esp+8h] [ebp-8h]
 
+    // SETTLED 2026-08-26 by the xref this marker was waiting on. The two 2026-08-06 audits are
+    // resolved in favour of the asset-availability one: retail SP LOADS the arena asset here, it
+    // does not guard UI_LoadArenas out.
+    //
+    // Evidence, all re-run against BlackOps.exe this pass:
+    //   - "coopmaps.arena" lives at 0x009d93e4 (the earlier note's 0x5d83e4 was a stale/rebased
+    //     address) and has EXACTLY TWO xrefs, 0x0084d244 and 0x0084d257, both inside the single
+    //     function FUN_0084d240.
+    //   - FUN_0084d240 is this function: DB_FindXAssetHeader(0x24 = ASSET_TYPE_RAWFILE,
+    //     "coopmaps.arena", 1, -1); on NULL it does Com_PrintError(13, "file not found: %s\n",
+    //     "coopmaps.arena") and returns; otherwise it assigns (not +=) ui_numArenas =
+    //     UI_ParseInfos(rawfile->buffer, 128 - ui_numArenas, &ui_arenaInfos[ui_numArenas]).
+    //     rawfile->buffer is read at +8, matching RawFile { name; len; buffer } (db_registry.h:25).
+    //   - The caller chain is the one this reconstruction has: UI_LoadArenas (0x00427e20) selects
+    //     between the two loaders exactly as UI_LoadArenasFromFile does here --
+    //     `pfn = FUN_0084d240; if (!useFastFile->current.enabled) pfn = UI_LoadArenasFromFile_LoadObj;
+    //     (*pfn)();` -- so this is unambiguously the fastfile half.
+    // "mp/mpmaps.arena" is a binary-wide zero in SP, which is why the two "file not found"
+    // log lines showed up; with the correct asset name they stop and SP actually gets its arena
+    // list. Still non-fatal either way (ASSET_TYPE_RAWFILE is on DB_FindXAssetHeader's explicit
+    // non-fatal whitelist, db_registry.cpp:1454-1461).
+#ifdef KISAK_SP
+    rawfile = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, (char *)"coopmaps.arena", 1, -1).rawfile;
+    if ( rawfile )
+        ui_numArenas = UI_ParseInfos(rawfile->buffer, 128 - ui_numArenas, &ui_arenaInfos[ui_numArenas]);
+    else
+        Com_PrintError(13, "file not found: %s\n", "coopmaps.arena");
+#else
     rawfile = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, (char *)"mp/mpmaps.arena", 1, -1).rawfile;
     if ( rawfile )
         ui_numArenas = UI_ParseInfos(rawfile->buffer, 128 - ui_numArenas, &ui_arenaInfos[ui_numArenas]);
     else
         Com_PrintError(13, "file not found: %s\n", "mp/mpmaps.arena");
+#endif
 }
 
 void __cdecl UI_LoadMaps()
@@ -387,7 +416,28 @@ void __cdecl UI_LoadMaps()
     int mapPackCount; // [esp+34h] [ebp-8h]
     int count; // [esp+38h] [ebp-4h]
 
+#ifdef KISAK_SP
+    // SP's map table is "maps/mapsTable.csv", not "mp/mapsTable.csv".
+    // Evidence:
+    //   - retail BlackOps.exe: "maps/mapsTable.csv" present at 0x61ee78; "mp/mapsTable.csv" is a
+    //     binary-wide zero.
+    //   - zone scan: mp/mapstable.csv -> code_post_gfx_mp, common_mp, patch_mp, patch_ui_mp,
+    //     ui_mp only. maps/mapstable.csv -> code_post_gfx.ff (a genuine StringTable asset header,
+    //     13 columns x 13 rows, inline name at +0x46bb55), plus patch.ff and frontend.ff.
+    //     Every column this function reads (0,1,5, and field indices 3/10/11) is < 13.
+    // Not fatal before this change - a missing STRINGTABLE resolves through DB_CreateDefaultEntry
+    // to g_defaultAssetName[ASSET_TYPE_STRINGTABLE] == "mp/defaultStringTable.csv", which really
+    // does ship in SP's code_post_gfx.ff, and every StringTable_Lookup on an empty table returns
+    // "" without asserting. The symptom was silent: sharedUiInfo.mapCount == 0, i.e. an empty
+    // campaign level list. Audit finding C4 (asset-availability audit) / section 4 (frontend audit).
+    // SIZE: I_strncpyz's third argument is the DESTINATION SIZE, and it hard-writes
+    // dest[size-1] = 0 (q_shared.cpp:263-270). "maps/mapsTable.csv" is 18 chars, so it needs 19,
+    // not the 18 the MP literal used - leaving 18 would silently truncate to "maps/mapsTable.cs"
+    // and the fix would appear to do nothing. tableName is char[20], so 19 fits.
+    I_strncpyz(tableName, "maps/mapsTable.csv", 19);
+#else
     I_strncpyz(tableName, "mp/mapsTable.csv", 18);
+#endif
     StringTable_GetAsset(tableName, &table);
     if (!table.xmodelPieces
         && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ui_mp\\ui_gameinfo_mp.cpp", 434, 0, "%s", "table"))
@@ -451,6 +501,12 @@ void __cdecl UI_LoadCustomMatchGameTypes()
     }
     v0 = StringTable_Lookup(table, 0, "maxnum_gametype", 1);
     sharedUiInfo.numCustomMatchGameTypes = atoi(v0);
+#ifdef KISAK_MP
+    if (sharedUiInfo.numCustomMatchGameTypes < 0)
+        sharedUiInfo.numCustomMatchGameTypes = 0;
+    if (sharedUiInfo.numCustomMatchGameTypes > ARRAY_COUNT(sharedUiInfo.customMatchGameTypes))
+        sharedUiInfo.numCustomMatchGameTypes = ARRAY_COUNT(sharedUiInfo.customMatchGameTypes);
+#endif
     for ( i = 0; i < sharedUiInfo.numCustomMatchGameTypes; ++i )
     {
         Com_sprintf(index, 4u, "%i", i);
@@ -469,5 +525,26 @@ void __cdecl UI_LoadCustomMatchGameTypes()
         else
             sharedUiInfo.customMatchGameTypes[i].basictraining = 1;
     }
+#ifdef KISAK_MP
+    // The retail custom-match table excludes wager modes, but Gun Game's
+    // gameplay script also runs without wagering. Its metadata is already in
+    // the table (ID 10), beyond the eight entries listed for custom matches.
+    for (i = 0; i < sharedUiInfo.numCustomMatchGameTypes; ++i)
+    {
+        if (!I_stricmp(sharedUiInfo.customMatchGameTypes[i].gameType, "gun"))
+            return;
+    }
+    if (sharedUiInfo.numCustomMatchGameTypes < ARRAY_COUNT(sharedUiInfo.customMatchGameTypes))
+    {
+        const char *gunName = StringTable_Lookup(table, 0, "gun", 1);
+        if (gunName[0])
+        {
+            gameTypeInfo &gun = sharedUiInfo.customMatchGameTypes[sharedUiInfo.numCustomMatchGameTypes++];
+            gun = {};
+            I_strncpyz(gun.gameType, "gun", sizeof(gun.gameType));
+            I_strncpyz(gun.gameTypeName, gunName, sizeof(gun.gameTypeName));
+        }
+    }
+#endif
 }
 

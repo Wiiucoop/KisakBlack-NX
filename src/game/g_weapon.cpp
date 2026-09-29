@@ -1128,6 +1128,14 @@ void __cdecl G_CalcMuzzlePoints(const gentity_s *ent, weaponParms *wp, int shotC
         }
         AngleVectors(viewang, wp->forward, wp->right, wp->up);
         G_GetPlayerViewOrigin(&ent->client->ps, wp->muzzleTrace);
+#ifdef KISAK_SP
+        // Retail SP 0x00670C9D..0x00670CDD offsets the trace origin along the
+        // computed forward vector. This matters to getweaponmuzzlepoint when
+        // bg_gunXOffset is non-zero; keep the reconstructed MP path unchanged.
+        wp->muzzleTrace[0] += bg_gunXOffset->current.value * wp->forward[0];
+        wp->muzzleTrace[1] += bg_gunXOffset->current.value * wp->forward[1];
+        wp->muzzleTrace[2] += bg_gunXOffset->current.value * wp->forward[2];
+#endif
     }
 }
 
@@ -1844,8 +1852,16 @@ void __cdecl G_SetupWeaponDef()
         Com_SetWeaponInfoMemory(1);
         ClearRegisteredItems();
         BG_ClearWeaponDef();
+#ifdef KISAK_SP
+        // SP retail divergence, hand-verified (Ghidra 0x0065b3f0, G_SetupWeaponDef, already
+        // named/plated from an earlier campaign): the default-weapon literal drops "_mp", AND
+        // the second call below (BG_LoadWeaponTable("_mp", ...)) is dropped entirely -- confirmed
+        // by a full instruction-level disassembly pass, no third call site exists in the SP body.
+        G_GetWeaponIndexForName((char*)"defaultweapon");
+#else
         G_GetWeaponIndexForName((char*)"defaultweapon_mp");
         BG_LoadWeaponTable("_mp", G_RegisterWeapon);
+#endif
     }
     Com_DPrintf(17, "----------------------\n");
 }

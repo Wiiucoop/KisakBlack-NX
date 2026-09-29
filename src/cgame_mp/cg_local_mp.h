@@ -849,6 +849,13 @@ struct __declspec(align(128)) cg_s // sizeof=0x71C80
         int alliesFlagAway;
         int axisFlagAway;
         int resetWeaponStateFlag;
+#ifdef KISAK_SP
+        // Retail SP cg_s +0xCE534. Client-script Use/ClearAlternateAimParams
+        // owns this flag; several SP-only aim/view paths consume it. Placing
+        // the semantic field in the existing aligned tail preserves cg_s's
+        // normal memset lifetime without disturbing the MP member layout.
+        int useAlternateAimParams;
+#endif
         // padding byte
         // padding byte
         // padding byte
@@ -1337,6 +1344,37 @@ inline cgs_t *CG_GetLocalClientStaticGlobals(int32_t localClientNum)
 
     return &cgsArray[localClientNum];
 }
+
+#ifdef KISAK_SP
+// Retail SP 0x0063dcd0. Verified against the retail disassembly:
+//
+//   0063dcd0  mov  eax, [esp+8]                 ; entnum
+//   0063dcd4  cmp  eax, 0x400                   ; real vs fake centity
+//   0063dcd9  mov  ecx, [esp+4]                 ; localClientNum
+//   0063dcf9  imul eax, eax, 0x31c              ; sizeof(centity_s), retail SP
+//   0063dcff  add  eax, [ecx*4 + 0x2ff6684]     ; cg_entitiesArray[local]
+//   0063dd06  cmp  word [eax+0x222], 1          ; nextState.eType == ET_PLAYER
+//   0063dd0e  je   0063dd13
+//   0063dd10  xor  eax, eax / ret               ;   ...else NULL
+//   0063dd13  movzx eax, byte [eax+0x236]       ; nextState.clientNum  <-- index
+//   0063dd21  imul eax, eax, 0x600              ; sizeof(clientInfo_t), retail SP
+//
+// Retail calls this from BOTH tag-camera sites (0x00623cca in
+// CG_ComputeUseTagCamera and the CG_OffsetFirstPersonView tail at 0x00792316)
+// and from 0x0040b4aa, so it is ported once here rather than duplicated.
+//
+// The index is cent->nextState.clientNum (the `movzx ... [eax+0x236]` above),
+// NOT cgameGlob->clientNum. The two are identical for the local player in SP,
+// but the faithful form is also correct when spectating another client.
+inline clientInfo_t *CG_GetClientInfoForPlayerEnt(int localClientNum, int entnum)
+{
+    centity_s *cent = CG_GetEntity(localClientNum, entnum);
+
+    if ( !cent || cent->nextState.eType != ET_PLAYER )
+        return 0;
+    return &CG_GetLocalClientGlobals(localClientNum)->bgs.clientinfo[cent->nextState.clientNum];
+}
+#endif
 
 
 constexpr float factor[2] = { -1.0, 1.0 };

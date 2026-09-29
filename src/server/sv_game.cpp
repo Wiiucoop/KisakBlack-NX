@@ -763,7 +763,74 @@ void __cdecl SV_SetGametype()
     char gametype[64]; // [esp+0h] [ebp-48h] BYREF
     char *s; // [esp+44h] [ebp-4h]
 
+    // HISTORICAL NOTE (SP) -- superseded by the "RESOLVED (SP)" block at the end of this
+    // comment and by the #ifdef KISAK_SP below. Kept because it records how the SP default was
+    // pinned down. Read it as history, not as a description of the current code: the opening
+    // "not changed" framing and the "Ghidra is unavailable in this session" line were both
+    // true when written and are both false now.
+    // What was established at the time:
+    //   - "dm"/"tdm" exist in no SP zone. SP's maps/gametypes/ holds exactly cmp, arc, bnk, zom,
+    //     sop (.txt for all five, .gsc for cmp only, and that cmp.gsc is empty - see
+    //     GScr_LoadGameTypeScript). MP's code_post_gfx_mp.ff does carry
+    //     maps/mp/gametypes/{dm,dom,sd,sab,tdm,koth,twar,...}.txt, so this is a clean
+    //     both-directions control, not a scanning artefact.
+    //   - Scr_IsValidGameType currently returns false for EVERYTHING on SP because the gametype
+    //     list is parsed from a rawfile whose path is itself disputed between the two audits
+    //     (see the TODO(SP) in Scr_ParseGameTypeList_FastFile, g_scr_main_mp.cpp). So this
+    //     function always takes the fallback and stomps g_gametype to "dm".
+    //   - Even with that path corrected, "cmp" would STILL fail validation: SP's shipped
+    //     maps/gametypes/_gametypes.txt payload is literally "zom\r\nsop" (8 bytes). So retail
+    //     SP's SV_SetGametype must differ structurally - different default, no validity check,
+    //     or a different list source - and no static evidence distinguishes those.
+    // Settled by: decompiling SV_SetGametype in BlackOps.exe and reading (a) the g_gametype
+    // registration default and (b) whether the Scr_IsValidGameType/"dm" fallback exists at all.
+    // Ghidra is unavailable in this session.
+    // Currently harmless: the resulting nonsense gametype only feeds GScr_LoadGameTypeScript,
+    // which is bEnforceExists=0 under KISAK_SP, and CG_LoadHudMenu's va("ui/hud_%s.txt", ...),
+    // which warns rather than fatals.
+    // RESOLVED (SP), 2026-08-09 -- the TODO above is answered; both halves now have direct
+    // binary evidence, so the "no static evidence distinguishes those" note no longer holds.
+    //   Fact 1: SP's g_* dvar registration block at 0x005715e0 opens with
+    //           _Dvar_RegisterString("g_gametype", "cmp", 0x24, "") -- same 0x24 flags as
+    //           here, default "cmp" not "tdm". (Description is "" in SP, not "Game Type".)
+    //   Fact 2: SP's own fallback literal at 0x009eaae4 reads, byte for byte,
+    //           "g_gametype %s is not a valid gametype, defaulting to cmp\n" -- so the
+    //           Scr_IsValidGameType check and its fallback DO exist in SP, and the fallback
+    //           value is "cmp" as well. (Referenced from exactly one function, 0x00549ac0 --
+    //           which the live Ghidra database now names SV_SetGametype, its plate re-deriving
+    //           this same RESOLVED block from scratch and confirming the transcription exact.)
+    // Both facts read from BlackOps.exe directly. This does NOT resolve the second half of
+    // the note above -- SP's shipped maps/gametypes/_gametypes.txt payload is still
+    // "zom\r\nsop", so "cmp" will still fail Scr_IsValidGameType and still take the fallback.
+    // The fallback now lands on "cmp" instead of "dm", which is the gametype whose script
+    // SP actually ships (maps/gametypes/cmp.gsc), so the downstream
+    // GScr_LoadGameTypeScript/CG_LoadHudMenu lookups stop asking for a nonexistent "dm".
+#ifdef KISAK_SP
+    _Dvar_RegisterString("g_gametype", "cmp", 0x24u, "");
+#else
     _Dvar_RegisterString("g_gametype", "tdm", 0x24u, "Game Type");
+#endif
+    // CORRECTION 2026-08-09: the previous note here claimed no ui_gametype seed could be
+    // found in SV_SetGametype (Ghidra 0x00549ac0). That was wrong -- the seed is plainly there,
+    // immediately after
+    // the registration above and before the select below:
+    //     pcVar2 = Dvar_GetString("ui_gametype");
+    //     if (*pcVar2 == '\0') pcVar2 = "cmp";
+    //     Dvar_SetString(sv_gametype, pcVar2);
+    // (SV_SetGametype also ends with an extra unmodelled call, FUN_008338f0(&gametype) --
+    // 0x008338f0 is still FUN_* in Ghidra as of 2026-08-26, so that call stays unidentified.)
+    // Implemented for in-process Zombies loading: SV_Map_f now selects ui_gametype="zom" before
+    // SV_SpawnServer. Without retail's seed below, this function would keep the creating dvar's
+    // "cmp" value and CCS_LoadConstantConfigStrings would ask for the nonexistent *_cmp.csv even
+    // though zombie_theater.ff contains *_zom.csv. This is a direct transcription of retail
+    // BlackOps.exe 0x00549AD9..0x00549AFC, not a map-name inference: read ui_gametype, replace an
+    // empty value with "cmp", and write the result to sv_gametype before validation.
+#ifdef KISAK_SP
+    const char *uiGameType = Dvar_GetString("ui_gametype");
+    if ( !*uiGameType )
+        uiGameType = "cmp";
+    Dvar_SetString((dvar_s *)sv_gametype, uiGameType);
+#endif
     if (com_sv_running->current.enabled && G_GetSavePersist())
         I_strncpyz(gametype, sv.gametype, 64);
     else
@@ -772,8 +839,13 @@ void __cdecl SV_SetGametype()
         *s = tolower(*s);
     if (!Scr_IsValidGameType(gametype))
     {
+#ifdef KISAK_SP
+        Com_Printf(15, "g_gametype %s is not a valid gametype, defaulting to cmp\n", gametype);
+        strcpy(gametype, "cmp");
+#else
         Com_Printf(15, "g_gametype %s is not a valid gametype, defaulting to dm\n", gametype);
         strcpy(gametype, "dm");
+#endif
     }
     Dvar_SetString((dvar_s*)sv_gametype, gametype);
 }

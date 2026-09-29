@@ -165,6 +165,9 @@ unsigned int __cdecl Com_CalculateStreamBuffer();
 void __cdecl Com_Init(char *commandLine);
 void Com_ErrorCleanup();
 void Com_AddStartupCommands();
+#if defined(OPENBLOPS_NO_STEAM_AUTH) && !defined(KISAK_DEDICATED)
+void Com_CancelStartupConnect();
+#endif
 void __cdecl Com_Init_Try_Block_Function(char *commandLine);
 void __cdecl Com_ParseCommandLine(char *commandLine);
 void __cdecl Com_Error_f();
@@ -292,6 +295,7 @@ extern const dvar_t *dedicated;
 extern const dvar_t *com_maxfps;
 extern const dvar_t *arcademode;
 extern const dvar_t *zombiemode;
+extern const dvar_t *zombiemode_path_minz_bias;
 extern const dvar_t *legacy_zombiemode;
 extern const dvar_t *zombieStopSplitScreen;
 extern const dvar_t *zombietron;
@@ -356,3 +360,7 @@ extern int com_frameTime;
 extern int com_inServerFrame;
 extern int com_fixedConsolePosition;
 extern unsigned int com_errorPrintsCount;
+#ifdef KISAK_SP
+bool Com_IsZombieMap(const char *mapname);
+void Com_SetSpMapMode(const char *mapname);
+#endif

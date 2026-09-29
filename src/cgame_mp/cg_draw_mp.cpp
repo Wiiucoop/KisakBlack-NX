@@ -30,6 +30,9 @@
 #include <bgame/bg_fire.h>
 #include <flame/flame_class_stream.h>
 #include <cgame/cg_local.h>
+#ifdef KISAK_SP
+#include <gfx_d3d/r_cinematic.h>
+#endif
 
 const char *WeaponStateNames[50] =
 {
@@ -340,6 +343,27 @@ void __cdecl CG_Draw2D(int localClientNum)
     CG_Draw2DInternal(localClientNum);
 }
 
+#ifdef KISAK_SP
+// SP-only addition (Ghidra 0x00486580), confirmed by decompiling the address directly. Called
+// unconditionally from CG_Draw2DInternal's SP body, in the ps->pm_type != 4 (non-multiplayer-hud)
+// branch, immediately after CG_DrawNightVisionOverlay -- see the call site below. Promotes a
+// ready "next" cinematic to playback, and stops playback once it has finished; does NOT read
+// connection state (an earlier, since-corrected diagnosis in docs/SP_MAIN_MENU_BOOTCHAIN.md
+// Sec.1 had proposed gating cinematic playback on a CA_UICINEMATIC connstate write -- this
+// confirms retail's real consumers, this one included, don't need it). This reconstruction's name
+// is descriptive; the retail function itself was rejected for naming on an earlier pass (its own
+// plate: re_match's SCR_DrawCinematic hypothesis was disproved -- this is NOT SCR_DrawCinematic,
+// it lacks SCR_StopCinematic's client-loop side effects and the com_movieIsPlaying dvar tracking).
+static void CG_Sp_UpdateCinematicPlayback()
+{
+    if ( R_Cinematic_IsNextReady_Internal() )
+        R_Cinematic_StartNextPlayback();
+    CG_StartDeferred3DCinematic_SP(0);
+    if ( R_Cinematic_IsFinished() )
+        R_Cinematic_StopPlayback();
+}
+#endif
+
 void __cdecl CG_Draw2DInternal(int localClientNum)
 {
     cg_s *cgameGlob; // [esp+0h] [ebp-14h]
@@ -375,7 +399,9 @@ void __cdecl CG_Draw2DInternal(int localClientNum)
                 {
                     if ( drawHud )
                     {
+#ifndef KISAK_SP
                         CG_ScanForCrosshairEntity(localClientNum);
+#endif
                         CG_UpdatePlayerNames(localClientNum);
                         if ( !chatOverScoreboard )
                             CG_DrawChatMessages(localClientNum);
@@ -387,7 +413,16 @@ void __cdecl CG_Draw2DInternal(int localClientNum)
                 else
                 {
                     CG_DrawNightVisionOverlay(localClientNum);
+#ifdef KISAK_SP
+                    // SP-only, Ghidra 0x00655B00 (CG_Draw2DInternal, retail 0x00655A50): called
+                    // unconditionally here, right after CG_DrawNightVisionOverlay in this same
+                    // (ps->pm_type != 4) branch -- confirmed by decompiling the retail function
+                    // directly. See CG_Sp_UpdateCinematicPlayback's own comment for the evidence.
+                    CG_Sp_UpdateCinematicPlayback();
+#endif
+#ifndef KISAK_SP
                     CG_ScanForCrosshairEntity(localClientNum);
+#endif
                     CG_DrawCrosshair(localClientNum);
                     if ( drawHud )
                     {
@@ -1205,6 +1240,17 @@ void __cdecl DrawIntermission(int localClientNum)
 {
     cg_s *cgameGlob; // [esp+0h] [ebp-4h]
 
+#ifdef KISAK_SP
+    // UI_SetActiveMenu translates shared commands to these stored SP values.
+    const int scoreboardMenu = UISP_SCOREBOARD;
+    const int playercardMenu = UISP_MENU_PLAYERCARD;
+    const int endOfGameMenu = UISP_ENDOFGAME;
+#else
+    const int scoreboardMenu = UIMENU_SCOREBOARD;
+    const int playercardMenu = UIMENU_GAMERCARD;
+    const int endOfGameMenu = UIMENU_ENDOFGAME;
+#endif
+
     if ( UI_GetActiveMenu(localClientNum) == UIMENU_SCRIPT_POPUP && UI_GetTopActiveMenuName(localClientNum) )
     {
         CG_DrawScoreboard(localClientNum);
@@ -1215,21 +1261,21 @@ void __cdecl DrawIntermission(int localClientNum)
         cgameGlob = CG_GetLocalClientGlobals(localClientNum);
         if ( ui_showEndOfGame->current.enabled )
         {
-            if ( UI_GetActiveMenu(localClientNum) != UIMENU_ENDOFGAME )
+            if ( UI_GetActiveMenu(localClientNum) != endOfGameMenu )
                 UI_SetActiveMenu(localClientNum, UIMENU_ENDOFGAME);
         }
         else
         {
             cgameGlob->showScores = 1;
             cgameGlob->scoreFadeTime = cgameGlob->time;
-            if ( UI_GetActiveMenu(localClientNum) != UIMENU_SCOREBOARD
-                && UI_GetActiveMenu(localClientNum) != UIMENU_GAMERCARD
+            if ( UI_GetActiveMenu(localClientNum) != scoreboardMenu
+                && UI_GetActiveMenu(localClientNum) != playercardMenu
                 && UI_GetActiveMenu(localClientNum) != UIMENU_MUTEERROR
                 && !ui_showEndOfGame->current.enabled )
             {
                 UI_SetActiveMenu(localClientNum, UIMENU_SCOREBOARD);
             }
-            if ( UI_GetActiveMenu(localClientNum) == UIMENU_SCOREBOARD )
+            if ( UI_GetActiveMenu(localClientNum) == scoreboardMenu )
                 CG_DrawScoreboard(localClientNum);
         }
         CG_DrawChatMessages(localClientNum);
@@ -1391,6 +1437,9 @@ void __cdecl CG_UpdatePlayerNamesInternal(int localClientNum)
 {
     PROF_SCOPED("CG_UpdatePlayerNames");
 
+#ifdef KISAK_SP
+    CG_DrawLookAtText_SP(localClientNum);
+#else
     if ( CG_AreAllPlayerNamesVisible() )
     {
         CG_DrawVisibleNames(localClientNum);
@@ -1401,6 +1450,7 @@ void __cdecl CG_UpdatePlayerNamesInternal(int localClientNum)
         CG_DrawFriendlyNames(localClientNum);
         CG_DrawNames(localClientNum);
     }
+#endif
 }
 
 void __cdecl DrawViewmodelInfo(int localClientNum)

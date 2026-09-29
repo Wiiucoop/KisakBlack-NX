@@ -203,6 +203,8 @@ const char *__cdecl BG_GetAttachmentDesc(eAttachment attachment)
 
 int __cdecl BG_GetAttachmentCost(eAttachment attachment)
 {
+    if ( BG_UnlockablesAllItemsFree() )
+        return 0;
     int attachmentArrayIndex; // [esp+0h] [ebp-4h]
 
     attachmentArrayIndex = BG_GetAttachmentArrayIndex(attachment);
@@ -215,6 +217,8 @@ int __cdecl BG_GetAttachmentCost(eAttachment attachment)
 
 int __cdecl BG_GetAttachmentPointCost(eAttachmentPoint attachmentPoint)
 {
+    if ( BG_UnlockablesAllItemsFree() )
+        return 0;
     if ( attachmentPoint >= ATTACHMENT_POINT_COUNT )
         return 0;
     if ( s_weaponTableAttachmentPoints[attachmentPoint].isValid )
@@ -373,6 +377,8 @@ const char *__cdecl BG_GetWeaponOptionImage(int weaponOption)
 
 int __cdecl BG_GetWeaponOptionCost(int weaponOption)
 {
+    if ( BG_UnlockablesAllItemsFree() )
+        return 0;
     int weaponOptionArrayIndex; // [esp+0h] [ebp-4h]
 
     weaponOptionArrayIndex = BG_GetWeaponOptionArrayIndex(weaponOption);

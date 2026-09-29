@@ -19,6 +19,7 @@
 // ===========================================================================
 typedef int            BOOL;
 typedef unsigned char  BYTE;
+typedef unsigned char  byte;   // rpcndr.h's, which windows.h pulls in on the PC
 typedef unsigned short WORD;
 typedef uint32_t       DWORD;
 typedef uint64_t       DWORD64;
@@ -208,6 +209,7 @@ typedef struct _SECURITY_ATTRIBUTES {
 #define ERROR_NO_MORE_FILES      18
 #define ERROR_HANDLE_EOF         38
 #define ERROR_INVALID_PARAMETER  87
+#define ERROR_BUFFER_OVERFLOW    111
 #define ERROR_INSUFFICIENT_BUFFER 122
 #define ERROR_ALREADY_EXISTS     183
 #define ERROR_IO_PENDING         997

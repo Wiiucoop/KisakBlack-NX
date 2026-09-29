@@ -98,7 +98,16 @@ void    CG_OffsetChaseCamView(int localClientNum, CameraMode camMode);
 void    CG_OffsetThirdPersonView(int localClientNum);
 void __cdecl CG_CalcVrect(int localClientNum);
 void __cdecl CG_SmoothCameraZ(cg_s *cgameGlob);
+#ifdef KISAK_SP
+// SP takes localClientNum as well: the tag-camera block appended to the end of
+// this function needs it for CG_GetEntity / Com_GetClientDObj. Retail SP's
+// CG_OffsetFirstPersonView (0x00792316-0x007923e3) reloads localClientNum from
+// [esp+0x84] three times for exactly those three calls. Guarded so the MP
+// signature -- and therefore MP's generated code -- is untouched.
+void __cdecl CG_OffsetFirstPersonView(int localClientNum, cg_s *cgameGlob);
+#else
 void __cdecl CG_OffsetFirstPersonView(cg_s *cgameGlob);
+#endif
 void __cdecl CG_CalcCubemapViewValues(cg_s *cgameGlob);
 void __cdecl CG_CalcTurretViewValues(int localClientNum);
 void __cdecl CG_UpdateKillCamEntity(KillCamEntityType killCamEntityType, int localClientNum);

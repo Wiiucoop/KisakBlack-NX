@@ -5,6 +5,7 @@
 #include <qcommon/common.h>
 #include <game/actor_animapi.h>
 #include <game/g_player_corpse.h>
+#include <bgame/bg_actor_constants.h>
 
 struct gentity_s;
 struct scr_animscript_t;
@@ -64,8 +65,25 @@ struct scr_data_t
     int createstruct;
     int findstruct;
     AnimScriptList dogAnim;
+#ifdef KISAK_SP
+    // Retail SP keeps FOUR animscript lists, contiguous at 0x01c79b64 with stride 0x4C0, and
+    // publishes their addresses into g_animScriptTable (0x01a48c30) indexed by AISpecies:
+    //   [0] human 0x01c79b64   [1] dog 0x01c7a024   [2] zombie 0x01c7a4e4   [3] zombie_dog 0x01c7a9a4
+    // dogAnim above is slot 1. The other three are SP-only; MP ships dogs and nothing else.
+    // Field ORDER here is deliberately not retail's (retail puts human first) -- dogAnim has
+    // to stay where it is so the MP layout is untouched, and nothing serialises scr_data_t.
+    AnimScriptList humanAnim;
+    AnimScriptList zombieAnim;
+    AnimScriptList zombieDogAnim;
+    // Two species-independent handles retail stores as standalone globals next to the lists.
+    // `scripted` is written by BOTH branches -- animscripts/scripted::init when zombiemode is
+    // off (0x007eef75), animscripts/zombie_scripted::init when it is on (0x007ef15a) -- so it
+    // is the mode's generic scripted-anim entry point, not a per-species one.
+    int scripted;                       // retail global 0x01c79b2c
+    int init_mode_sp;                   // retail global 0x01c7ae74, human branch only
+#endif
     corpseInfo_t playerCorpseInfo[4];
-    XAnimTree_s *actorXAnimTrees[16];
+    XAnimTree_s *actorXAnimTrees[MAX_ACTORS];
     corpseInfo_t actorCorpseInfo[8];
     //_BYTE gap97F8[96];
     int destructible_callback;
@@ -74,6 +92,15 @@ struct scr_data_t
     int updatespawnpoints;
     int pregamescript;
     int glassSmash;
+#ifdef KISAK_SP
+    // SP menu-notification callback handles. Appended to scr_data_t (NOT to
+    // scr_data_t_unnamed_type_gametype, whose sizeof=0x10BC is load-bearing and would break).
+    // Retail SP keeps them as standalone globals: CodeCallback_MenuMessage at 0x01c87514 and
+    // CodeCallback_Dec20Message at 0x01c87518, written by GScr_LoadGameTypeScript (0x006124b0)
+    // at 0x00612aea and 0x00612b48 respectively -- verified by disassembly this pass.
+    int menumessage;                    // CodeCallback_MenuMessage  -- retail global 0x01c87514
+    int dec20message;                   // CodeCallback_Dec20Message -- retail global 0x01c87518
+#endif
 };
 
 
@@ -101,6 +128,12 @@ void __cdecl GScr_LoadGameTypeScript();
 int __cdecl GScr_LoadScriptAndLabel(scriptInstance_t inst, const char *filename, const char *label, int bEnforceExists);
 void __cdecl    GScr_LoadScripts(scriptInstance_t inst);
 void __cdecl    GScr_LoadDogAnimScripts(scriptInstance_t inst);
+#ifdef KISAK_SP
+void __cdecl    GScr_LoadHumanAnimScripts(scriptInstance_t inst);
+void __cdecl    GScr_LoadZombieAnimScripts(scriptInstance_t inst);
+void __cdecl    GScr_LoadZombieDogAnimScripts(scriptInstance_t inst);
+void __cdecl    GScr_LoadScriptsAndAnimsForEntities(scriptInstance_t inst);
+#endif
 void __cdecl    GScr_LoadSingleAnimScript(scriptInstance_t inst, scr_animscript_t *pAnim, const char *name);
 void GScr_SetScriptsForPathNodes();
 void __cdecl GScr_SetScriptsForPathNode(scriptInstance_t inst, pathnode_t *loadNode);
@@ -221,6 +254,9 @@ void __cdecl ScrCmd_IsTouchingSwept(scr_entref_t entref);
 void __cdecl ScrCmd_IsTouchingVolume(scr_entref_t entref);
 void ScrCmd_SoundExists();
 void __cdecl ScrCmd_PlaySound(scr_entref_t entref);
+#ifdef KISAK_SP
+void __cdecl ScrCmd_StopSound(scr_entref_t entref);                     // SP 0x00807B30
+#endif
 void __cdecl ScrCmd_PlaySoundOnTag(scr_entref_t entref);
 void __cdecl ScrCmd_PlaySoundToTeam(scr_entref_t entref);
 void __cdecl ScrCmd_PlayBattleChatterToTeam(scr_entref_t entref);
@@ -739,6 +775,42 @@ void __cdecl GScr_SetAnim(scr_entref_t entref);
 void __cdecl GScr_SetAnimInternal(scr_entref_t entref, char flags);
 void __cdecl GScr_HandleAnimError(int error);
 double __cdecl GScr_GetOptionalFloat(unsigned int iParamIndex, float fDefault);
+#ifdef KISAK_SP
+// SP-only server anim script methods. Retail SP registers all of these in its
+// builtin method table at 0x00A54218; the MP reconstruction only ever had
+// "setanim" (SP methods_3 idx 114, handler 0x00801640 -> GScr_SetAnimInternal).
+void __cdecl GScr_ClearAnim(scr_entref_t entref);                       // SP 0x00800660
+void __cdecl GScr_SetAnimKnobInternal(scr_entref_t entref, char flags); // SP 0x00800880
+void __cdecl GScr_SetAnimKnob(scr_entref_t entref);                     // SP 0x00800CC0
+void __cdecl GScr_SetAnimKnobLimited(scr_entref_t entref);              // SP 0x00800CE0
+void __cdecl GScr_SetAnimKnobRestart(scr_entref_t entref);              // SP 0x00800D00
+void __cdecl GScr_SetAnimKnobAllInternal(scr_entref_t entref, char flags); // SP 0x00800D40
+void __cdecl GScr_SetAnimKnobAll(scr_entref_t entref);                  // SP 0x00801170
+void __cdecl GScr_SetAnimKnobAllRestart(scr_entref_t entref);           // SP 0x008011B0
+void __cdecl GScr_SetAnimLimited(scr_entref_t entref);                  // SP 0x00801660
+void __cdecl GScr_SetAnimRestart(scr_entref_t entref);                  // SP 0x00801680
+void __cdecl GScr_GetAnimTime(scr_entref_t entref);                     // SP 0x008016C0
+void __cdecl GScr_SetFlaggedAnimKnobInternal(scr_entref_t entref, char flags); // SP 0x00801870
+void __cdecl GScr_SetFlaggedAnimKnob(scr_entref_t entref);              // SP 0x00801CF0
+void __cdecl GScr_SetFlaggedAnimKnobRestart(scr_entref_t entref);       // SP 0x00801D30
+void __cdecl GScr_SetFlaggedAnimKnobLimitedRestart(scr_entref_t entref);// SP 0x00801D50
+void __cdecl GScr_SetFlaggedAnimKnobAllInternal(scr_entref_t entref, char flags, const char *pszUsageError); // SP 0x00801D70
+void __cdecl GScr_SetFlaggedAnimKnobAll(scr_entref_t entref);           // SP 0x008021C0
+void __cdecl GScr_SetFlaggedAnimKnobAllRestart(scr_entref_t entref);    // SP 0x008021F0
+void __cdecl GScr_SetFlaggedAnimInternal(scr_entref_t entref, char flags); // SP 0x00802220
+void __cdecl GScr_SetFlaggedAnim(scr_entref_t entref);                  // SP 0x008026A0
+void __cdecl GScr_SetFlaggedAnimLimited(scr_entref_t entref);           // SP 0x008026C0
+void __cdecl GScr_SetFlaggedAnimRestart(scr_entref_t entref);           // SP 0x008026E0
+void __cdecl GScr_SetAnimTime(scr_entref_t entref);                     // SP 0x008027D0
+void __cdecl GScr_StartScriptedAnim_SP(scr_entref_t entref, bool startActorThread, bool dontInterpolate);
+bool __cdecl GScr_IsScriptedAnimActive_SP(const gentity_s *ent);
+void __cdecl GScr_UpdateScriptedAnim_SP(gentity_s *ent);
+bool __cdecl GScr_RunScriptedMover_SP(gentity_s *ent);
+void __cdecl GScr_ClearScriptedAnim_SP(gentity_s *ent);
+void __cdecl GScr_ResetGroundReferenceState_SP();
+void __cdecl GScr_ResetChangeLevel_SP();
+void __cdecl GScr_UpdateChangeLevel_SP();
+#endif
 void __cdecl G_SetAnimTree(gentity_s *ent, scr_animtree_t *animtree);
 void __cdecl GScr_UseAnimTree(scr_entref_t entref);
 void (__cdecl *__cdecl Scr_GetMethod(const char **pName, int *type))(scr_entref_t);
@@ -771,6 +843,9 @@ void __cdecl Scr_PlayerDamage(
                 float *vPoint,
                 float *vDir,
                 hitLocation_t hitLoc,
+#ifdef KISAK_SP
+                int modelIndex,
+#endif
                 int timeOffset);
 void __cdecl Scr_PlayerKilled(
                 gentity_s *self,
@@ -794,6 +869,9 @@ void __cdecl Scr_ActorDamage(
                 float *vPoint,
                 float *vDir,
                 hitLocation_t hitLoc,
+#ifdef KISAK_SP
+                int modelIndex,
+#endif
                 int timeOffset);
 void __cdecl Scr_ActorKilled(
                 gentity_s *self,

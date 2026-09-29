@@ -412,10 +412,10 @@ void __cdecl UI_GV_StartAddingEvent_f()
     int GVEventCount; // eax
 
     GVEventCount = UI_GetGVEventCount();
-    UI_GV_StartEditingFeeder(0, 40, GVEventCount);
+    UI_GV_StartEditingFeeder(0, GV_FEEDER_EVENTS, GVEventCount);
 }
 
-void __cdecl UI_GV_StartEditingFeeder(int localClientNum, int feederId, int feederCount)
+void __cdecl UI_GV_StartEditingFeeder(int localClientNum, GameVariantFeeder feederId, int feederCount)
 {
     int selection; // [esp+8h] [ebp-8h]
     uiInfo_s *dc; // [esp+Ch] [ebp-4h]
@@ -428,7 +428,7 @@ void __cdecl UI_GV_StartEditingFeeder(int localClientNum, int feederId, int feed
         Menu_SetFeederSelection(localClientNum, &dc->uiDC, 0, feederId, 0, 0);
         selection = 0;
     }
-    UI_FeederSelection_GameVariants(localClientNum, dc->uiDC.contextIndex, (float)feederId, selection);
+    UI_FeederSelection_GameVariants(localClientNum, dc->uiDC.contextIndex, static_cast<float>(feederId), selection);
     s_isFeederSelectionFromPopupStart = 0;
 }
 
@@ -437,7 +437,7 @@ void __cdecl UI_GV_StartAddingAction_f()
     int GVActionCount; // eax
 
     GVActionCount = UI_GetGVActionCount();
-    UI_GV_StartEditingFeeder(0, 41, GVActionCount);
+    UI_GV_StartEditingFeeder(0, GV_FEEDER_ACTIONS, GVActionCount);
 }
 
 void __cdecl UI_GV_StartAddingParam_f()
@@ -445,7 +445,7 @@ void __cdecl UI_GV_StartAddingParam_f()
     int GVParamCount; // eax
 
     GVParamCount = UI_GetGVParamCount();
-    UI_GV_StartEditingFeeder(0, 42, GVParamCount);
+    UI_GV_StartEditingFeeder(0, GV_FEEDER_PARAMETERS, GVParamCount);
 }
 
 void __cdecl UI_GV_StartAddingTarget_f()
@@ -453,7 +453,7 @@ void __cdecl UI_GV_StartAddingTarget_f()
     int GVTargetCount; // eax
 
     GVTargetCount = UI_GetGVTargetCount();
-    UI_GV_StartEditingFeeder(0, 43, GVTargetCount);
+    UI_GV_StartEditingFeeder(0, GV_FEEDER_TARGETS, GVTargetCount);
 }
 
 void __cdecl UI_GV_StartAddingConditional_f()
@@ -463,11 +463,11 @@ void __cdecl UI_GV_StartAddingConditional_f()
     int GVCondRhsCount; // eax
 
     GVCondLhsCount = UI_GetGVCondLhsCount();
-    UI_GV_StartEditingFeeder(0, 35, GVCondLhsCount);
+    UI_GV_StartEditingFeeder(0, GV_FEEDER_CONDITION_LHS, GVCondLhsCount);
     GVCondOpCount = UI_GetGVCondOpCount();
-    UI_GV_StartEditingFeeder(0, 36, GVCondOpCount);
+    UI_GV_StartEditingFeeder(0, GV_FEEDER_CONDITION_OP, GVCondOpCount);
     GVCondRhsCount = UI_GetGVCondRhsCount();
-    UI_GV_StartEditingFeeder(0, 37, GVCondRhsCount);
+    UI_GV_StartEditingFeeder(0, GV_FEEDER_CONDITION_RHS, GVCondRhsCount);
     SetNextPopupToAddOrEditConfirm();
 }
 
@@ -520,7 +520,7 @@ GVGlob *__cdecl GetSelectedRule(int localClientNum)
     uiInfo_s *dc; // [esp+4h] [ebp-4h]
 
     dc = UI_GetInfo(localClientNum);
-    ruleSelected = Menu_GetFeederSelection(&dc->uiDC, 0, 44, "gametype_variants");
+    ruleSelected = Menu_GetFeederSelection(&dc->uiDC, 0, GV_FEEDER_RULE_SUMMARY, "gametype_variants");
     return GetRuleForFeederIndex(ruleSelected);
 }
 
@@ -811,7 +811,7 @@ void __cdecl UI_GV_AddNewRule_f()
         UI_GV_UpdateRuleFromDvars(&gvGlob.rules[ruleIndex]);
         Dvar_SetInt((dvar_s *)ui_gv_rulecount, ++gvGlob.ruleCount);
         dc = UI_GetInfo(0);
-        Menu_SetFeederSelection(0, &dc->uiDC, 0, 44, ruleIndex, 0);
+        Menu_SetFeederSelection(0, &dc->uiDC, 0, GV_FEEDER_RULE_SUMMARY, ruleIndex, 0);
     }
     else
     {
@@ -876,8 +876,9 @@ void __cdecl UI_GV_UpdateSelectedRule_f()
     uiInfo_s *dc; // [esp+Ch] [ebp-4h]
 
     dc = UI_GetInfo(0);
-    ruleSelected = Menu_GetFeederSelection(&dc->uiDC, 0, 44, "gametype_variants");
-    UI_FeederSelection_GameVariants(0, dc->uiDC.contextIndex, 44.0, ruleSelected);
+    ruleSelected = Menu_GetFeederSelection(&dc->uiDC, 0, GV_FEEDER_RULE_SUMMARY, "gametype_variants");
+    UI_FeederSelection_GameVariants(
+        0, dc->uiDC.contextIndex, static_cast<float>(GV_FEEDER_RULE_SUMMARY), ruleSelected);
 }
 
 cmd_function_s UI_GV_NavForward_f_VAR;
@@ -1106,31 +1107,31 @@ int __cdecl UI_FeederCount_GameVariants(int contextIndex, float feederID)
 {
     int result; // eax
 
-    switch ( (int)feederID )
+    switch ( static_cast<GameVariantFeeder>(static_cast<int>(feederID)) )
     {
-        case '#':
+        case GV_FEEDER_CONDITION_LHS:
             result = UI_GetGVCondLhsCount();
             break;
-        case '$':
+        case GV_FEEDER_CONDITION_OP:
             result = UI_GetGVCondOpCount();
             break;
-        case '%':
+        case GV_FEEDER_CONDITION_RHS:
             result = UI_GetGVCondRhsCount();
             break;
-        case '\'':
-        case ',':
+        case GV_FEEDER_RULES:
+        case GV_FEEDER_RULE_SUMMARY:
             result = UI_GetGVRulesCount();
             break;
-        case '(':
+        case GV_FEEDER_EVENTS:
             result = UI_GetGVEventCount();
             break;
-        case ')':
+        case GV_FEEDER_ACTIONS:
             result = UI_GetGVActionCount();
             break;
-        case '*':
+        case GV_FEEDER_PARAMETERS:
             result = UI_GetGVParamCount();
             break;
-        case '+':
+        case GV_FEEDER_TARGETS:
             result = UI_GetGVTargetCount();
             break;
         default:
@@ -1368,33 +1369,33 @@ char *__cdecl UI_FeederItemText_GameVariants(float feederID, int index, int colu
 {
     char *result; // eax
 
-    switch ( (int)feederID )
+    switch ( static_cast<GameVariantFeeder>(static_cast<int>(feederID)) )
     {
-        case '#':
+        case GV_FEEDER_CONDITION_LHS:
             result = UI_FeederItemText_GameVariantCondLhs(index, column);
             break;
-        case '$':
+        case GV_FEEDER_CONDITION_OP:
             result = UI_FeederItemText_GameVariantCondOp(index, column);
             break;
-        case '%':
+        case GV_FEEDER_CONDITION_RHS:
             result = UI_FeederItemText_GameVariantCondRhs(index, column);
             break;
-        case '\'':
+        case GV_FEEDER_RULES:
             result = UI_FeederItemText_GameVariantRules(index, column);
             break;
-        case '(':
+        case GV_FEEDER_EVENTS:
             result = UI_FeederItemText_GameVariantEvents(index, column);
             break;
-        case ')':
+        case GV_FEEDER_ACTIONS:
             result = UI_FeederItemText_GameVariantActions(index, column);
             break;
-        case '*':
+        case GV_FEEDER_PARAMETERS:
             result = UI_FeederItemText_GameVariantParams(index, column);
             break;
-        case '+':
+        case GV_FEEDER_TARGETS:
             result = UI_FeederItemText_GameVariantTargets(index, column);
             break;
-        case ',':
+        case GV_FEEDER_RULE_SUMMARY:
             result = UI_FeederItemText_GameVariantRules(index, 1);
             break;
         default:
@@ -1420,21 +1421,21 @@ void __cdecl UI_FeederSelection_GameVariantRules(int contextIndex, int index)
         s_isFeederSelectionFromPopupStart = 1;
         dc = UI_UIContext_GetInfo(contextIndex);
         FeederIndexFromEventIndex = GetFeederIndexFromEventIndex(rule->rules[0].eventID);
-        Menu_SetFeederSelection(0, &dc->uiDC, 0, 40, FeederIndexFromEventIndex, "popup_gv_select_event");
+        Menu_SetFeederSelection(0, &dc->uiDC, 0, GV_FEEDER_EVENTS, FeederIndexFromEventIndex, "popup_gv_select_event");
         FeederIndexFromActionIndex = GetFeederIndexFromActionIndex(rule->rules[0].actionID);
-        Menu_SetFeederSelection(0, &dc->uiDC, 0, 41, FeederIndexFromActionIndex, "popup_gv_select_action");
+        Menu_SetFeederSelection(0, &dc->uiDC, 0, GV_FEEDER_ACTIONS, FeederIndexFromActionIndex, "popup_gv_select_action");
         FeederIndexFromTargetId = GetFeederIndexFromTargetId(
             rule->rules[0].targetID,
             gvEvents[rule->rules[0].eventID].m_targetMask);
-        Menu_SetFeederSelection(0, &dc->uiDC, 0, 43, FeederIndexFromTargetId, "popup_gv_select_target");
+        Menu_SetFeederSelection(0, &dc->uiDC, 0, GV_FEEDER_TARGETS, FeederIndexFromTargetId, "popup_gv_select_target");
         ParamIndexForValue = GetParamIndexForValue(rule->rules[0].actionID, rule->rules[0].parameter.value);
-        Menu_SetFeederSelection(0, &dc->uiDC, 0, 42, ParamIndexForValue, "popup_gv_select_param");
+        Menu_SetFeederSelection(0, &dc->uiDC, 0, GV_FEEDER_PARAMETERS, ParamIndexForValue, "popup_gv_select_param");
         FeederIndexForCondLhsIndex = GetFeederIndexForCondLhsIndex(
             rule->rules[0].m_conditional.m_lhsIndex,
             gvEvents[rule->rules[0].eventID].m_condMask);
-        Menu_SetFeederSelection(0, &dc->uiDC, 0, 35, FeederIndexForCondLhsIndex, "popup_gv_select_cond");
-        Menu_SetFeederSelection(0, &dc->uiDC, 0, 36, rule->rules[0].m_conditional.m_operatorIndex, "popup_gv_select_cond");
-        Menu_SetFeederSelection(0, &dc->uiDC, 0, 37, rule->rules[0].m_conditional.m_rhsIndex, "popup_gv_select_cond");
+        Menu_SetFeederSelection(0, &dc->uiDC, 0, GV_FEEDER_CONDITION_LHS, FeederIndexForCondLhsIndex, "popup_gv_select_cond");
+        Menu_SetFeederSelection(0, &dc->uiDC, 0, GV_FEEDER_CONDITION_OP, rule->rules[0].m_conditional.m_operatorIndex, "popup_gv_select_cond");
+        Menu_SetFeederSelection(0, &dc->uiDC, 0, GV_FEEDER_CONDITION_RHS, rule->rules[0].m_conditional.m_rhsIndex, "popup_gv_select_cond");
         if (!rule->rules[0].m_conditional.hasConditional)
         {
             Dvar_SetStringByName("ui_gv_condlhs", (char *)"");
@@ -1558,7 +1559,7 @@ void __cdecl UI_FeederSelection_GameVariantAction(int localClientNum, int contex
     if ( !s_isFeederSelectionFromPopupStart )
     {
         dc = UI_UIContext_GetInfo(contextIndex);
-        Menu_SetFeederSelection(localClientNum, &dc->uiDC, 0, 42, 0, "popup_gv_select_param");
+        Menu_SetFeederSelection(localClientNum, &dc->uiDC, 0, GV_FEEDER_PARAMETERS, 0, "popup_gv_select_param");
         Dvar_SetStringByName("ui_gv_param", (char *)"");
         Dvar_SetIntByName("ui_gv_param_index", 0);
     }
@@ -1623,31 +1624,31 @@ void __cdecl UI_FeederSelection_GameVariantCondRhs(int contextIndex, int index)
 
 void __cdecl UI_FeederSelection_GameVariants(int localClientNum, int contextIndex, float feederID, int index)
 {
-    switch ( (int)feederID )
+    switch ( static_cast<GameVariantFeeder>(static_cast<int>(feederID)) )
     {
-        case '#':
+        case GV_FEEDER_CONDITION_LHS:
             UI_FeederSelection_GameVariantCondLhs(localClientNum, contextIndex, index);
             break;
-        case '$':
+        case GV_FEEDER_CONDITION_OP:
             UI_FeederSelection_GameVariantCondOp(contextIndex, index);
             break;
-        case '%':
+        case GV_FEEDER_CONDITION_RHS:
             UI_FeederSelection_GameVariantCondRhs(contextIndex, index);
             break;
-        case '\'':
-        case ',':
+        case GV_FEEDER_RULES:
+        case GV_FEEDER_RULE_SUMMARY:
             UI_FeederSelection_GameVariantRules(contextIndex, index);
             break;
-        case '(':
+        case GV_FEEDER_EVENTS:
             UI_FeederSelection_GameVariantEvent(contextIndex, index);
             break;
-        case ')':
+        case GV_FEEDER_ACTIONS:
             UI_FeederSelection_GameVariantAction(localClientNum, contextIndex, index);
             break;
-        case '*':
+        case GV_FEEDER_PARAMETERS:
             UI_FeederSelection_GameVariantParam(localClientNum, contextIndex, index);
             break;
-        case '+':
+        case GV_FEEDER_TARGETS:
             UI_FeederSelection_GameVariantTarget(contextIndex, index);
             break;
         default:
@@ -1694,7 +1695,7 @@ void __cdecl UI_FeederSelection_GameVariantCondLhs(int localClientNum, int conte
     if ( lhs->m_rhs.m_values == classParamValues )
         lhs->m_rhs.m_valuesSize = UI_GameVariants_GetClassParameters();
     dc = UI_UIContext_GetInfo(contextIndex);
-    Menu_SetFeederSelection(localClientNum, &dc->uiDC, 0, 37, 0, "popup_gv_select_cond");
+    Menu_SetFeederSelection(localClientNum, &dc->uiDC, 0, GV_FEEDER_CONDITION_RHS, 0, "popup_gv_select_cond");
 }
 
 void __cdecl UI_GameVariants_ArchiveRule(MemoryFile *memFile, GVRule *rule)

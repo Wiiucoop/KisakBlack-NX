@@ -1,4 +1,13 @@
 #pragma once
+
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+struct ddlState_t;
+bool LiveStats_InitServerSchema();
+bool LiveStats_BuildServerDefaults(char *normal, char *global, unsigned char *purchasedItems);
+// Checked leaf predicate shared by the controller-free default builders.
+bool LiveStats_ServerDefaultInt(char *buffer, const ddlState_t *state, unsigned int value);
+bool LiveStats_ServerDefaultElement(const ddlState_t *array, ddlState_t *result, int index);
+#endif
 #include <ddl/ddl_api.h>
 #include <universal/com_stringtable.h>
 #include <ui/ui_shared.h>
@@ -6,6 +15,39 @@
 #include <universal/dvar.h>
 #include <client/cl_milestone.h>
 #include "live_storage.h"
+
+// Stats DDL asset names. SP packages these WITHOUT the "_mp" suffix, and the MP-suffixed ones
+// are not present in any zone SP loads, so passing them to DDL_LoadAsset/DDL_FixBufferVersion
+// on an SP build is an ERR_DROP ("Could not load default asset '' for asset type 'ddl'.")
+// - the exact fatal already hit on 2026-08-05 at LiveStats_Init.
+// Evidence:
+//   - zone data: "ddl/stats.ddl" ships in zone/Common/patch.ff (exactly one occurrence across
+//     all 139 shipped zones; SP loads patch.ff - see the KISAK_SP branch in
+//     DB_LoadGraphicsAssetsForPC). "ddl/stats_archive.ddl" ships in BOTH code_post_gfx.ff (v6)
+//     and patch.ff (v7) - the legitimate override the ASSET_TYPE_DDL exemption at
+//     db_registry.cpp:2490-2495 exists for. "ddl_mp/stats.ddl"/"ddl_mp/stats_archive.ddl"
+//     appear only in code_post_gfx_mp.ff, which SP never loads.
+//   - retail BlackOps.exe contains exactly three "ddl"-prefixed literals: "ddl",
+//     "ddl/stats.ddl", "ddl/stats_archive.ddl". No "ddl_mp/" literal of any spelling exists.
+//   - SP's shipped ddl/stats.ddl is genuinely SP's own schema (version 8, 6056 bits, members
+//     cg_subtitles / gpad_* / snd_* / lastconsolesave / playerstatsbymap / zombietitles / ...),
+//     not a stripped MP one - i.e. SP is a real user of this subsystem, not a candidate for
+//     wholesale removal.
+// Defined here (rather than inline at each site) because live_stats.cpp, live_storage.cpp,
+// live_storage_win.cpp and live_combatrecord.cpp all include this header and all hardcode the
+// same two names; the 2026-08-05 fix corrected only live_stats.cpp's DDL_LoadAsset and left
+// 12 other occurrences behind. Audit finding F3 (live/stats/progression audit).
+// NOTE: those 12 sites are all currently UNREACHABLE in this build (KISAK_LIVE,
+// KISAK_LIVE_SERVICE and KISAK_LIVE_STUBS are all undefined - OpenBlops.buildscript:62 - so
+// Live_IsUserSignedInToDemonware() is always false). This is a landmine-removal change, not a
+// crash fix; it carries no behavioural risk because both SP targets are confirmed present.
+#ifdef KISAK_SP
+#define STATS_DDL_ASSET_NAME         "ddl/stats.ddl"
+#define STATS_ARCHIVE_DDL_ASSET_NAME "ddl/stats_archive.ddl"
+#else
+#define STATS_DDL_ASSET_NAME         "ddl_mp/stats.ddl"
+#define STATS_ARCHIVE_DDL_ASSET_NAME "ddl_mp/stats_archive.ddl"
+#endif
 
 enum sortedChallengeParams_t : __int32
 {                                       // XREF: ?LiveStats_GetChallengeInfoParam@@YA_NW4sortedChallengeParams_t@@IPAPBDPAHH@Z/r

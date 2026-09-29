@@ -31,6 +31,7 @@
 #include <qcommon/com_clients.h>
 #include "cg_compass.h"
 #include <gfx_d3d/r_cinematic.h>
+#include <gfx_d3d/r_dvars.h>
 #include <EffectsCore/fx_system.h>
 #include <EffectsCore/fx_dvars.h>
 #include "cg_world.h"
@@ -341,7 +342,7 @@ BuiltinFunctionDef client_functions[154] =
   { "freadln", &CScr_FReadLn, 1 },
   { "fgetarg", &CScr_FGetArg, 1 },
   { "ui3dsetwindow", &CScr_SetUI3DTextureWindow, 0 },
-  { "playbink", &CScr_StopBink, 0 },
+  { "playbink", &CScr_PlayBink, 0 },
   { "stopbink", &CScr_StopBink, 0 },
   { "getbinklength", &CScr_GetBinkLength, 0 },
   { "isbinkfinished", &CScr_IsBinkFinished, 0 },
@@ -5037,9 +5038,63 @@ void __cdecl CScr_IsSplitScreen()
     Scr_AddInt(value, SCRIPTINSTANCE_CLIENT);
 }
 
+// playbink(<name>[, <type>]) -- REAL BODY (this row used to be aliased to CScr_StopBink,
+// a no-op debug stub, which is why "playbink" GSC calls never played anything).
+//
+// EVIDENCE (Ghidra-researched and re-validated 2026-08-22): retail's handler 0x00642970
+// computes a byte and passes it to a general cinematic launcher, 0x00407d70 (playbink's
+// only caller), which DISCARDS most of that byte and synthesizes a fresh playbackFlags
+// value from scratch -- confirmed by decompiling both and tracing the actual bits that
+// reach R_Cinematic_StartPlayback_Internal, not just 0x00642970's intermediate byte:
+//   flags = r_reflectionProbeGenerate->current.enabled ? 0 : 8;   // isInMemory, see below
+//   if (callerFlags & 2) flags |= 2;                    // loop bit, set for type 2 and 3
+//   if ((signed char)callerFlags < 0) flags |= 0x20;    // set for type 3 only
+//   R_Cinematic_StartPlayback_Internal(name, flags, 0);
+// Only bits 0x02/0x20 of 0x00642970's byte survive the trip through 0x00407d70; its other
+// bits (0x01/0x04/0x40/etc, including the 0x40 "useCustomSkipLogic" bit start3dcinematic
+// sets) are never forwarded. Folded by <type>: 0/1/omitted -> flags=0x08; 2 -> 0x0A
+// (+loop); 3 -> 0x2A (+loop, +bit 0x20 -- no confirmed consumer found in this
+// reconstruction's R_Cinematic_Advance, ported for fidelity anyway since retail sets it
+// deliberately).
+//
+// Gate flag RESOLVED (was unresolved in the first pass): DAT_03b35038+0x18 is the current
+// bool value of r_reflectionProbeGenerate (write site 0x006cec20:
+// `_Dvar_RegisterBool("r_reflectionProbeGenerate", false, ...)`) -- a reflection-probe
+// cubemap-bake tool flag, off in all ordinary gameplay. With it off (the normal case),
+// retail ALWAYS sets the isInMemory bit (0x08) for playbink movies, which
+// R_Cinematic_BinkOpen/BinkOpenPath's `flags & 8` check routes to the fastfile-relative
+// "bik/<name>.bik" RawFile-DB path, not the filesystem-relative "main/video/<name>.bik"
+// path -- the opposite of the first pass's (now-corrected) assumption.
+//
+// DEVIATION (intentional, documented): retail's Scr_GetInt(1) for <type> has no numParam
+// guard and, on the 1-argument call form playbink("name"), raises a genuine VM script
+// error ("parameter 2 does not exist") instead of defaulting -- confirmed by decompiling
+// Scr_GetInt (0x004c1bb0) and its out-of-range error path. This port guards on numParam
+// instead so that the common 1-argument call form succeeds (type defaults to "unspecified"
+// -> flags=0x08) rather than aborting the calling script thread; a real GSC caller that
+// truly relies on retail's error for malformed calls would behave differently here, but
+// silently failing to play a movie was judged worse than the fidelity gap.
+static void __cdecl CScr_PlayBink()
+{
+    unsigned int flags;
+    const char *name;
+    int type;
+
+    name = Scr_GetString(0, SCRIPTINSTANCE_CLIENT);
+    type = (Scr_GetNumParam(SCRIPTINSTANCE_CLIENT) >= 2) ? Scr_GetInt(1, SCRIPTINSTANCE_CLIENT) : 0;
+    flags = r_reflectionProbeGenerate->current.enabled ? 0u : 8u; // isInMemory
+    if ( type == 2 )
+        flags |= 2u; // loop
+    else if ( type == 3 )
+        flags |= 0x22u; // loop + bit 0x20 (see note above)
+    Dvar_SetBool((dvar_s *)cg_cinematicFullscreen, false);
+    R_Cinematic_StartPlayback_Internal(name, flags, 0);
+}
+
 void __cdecl CScr_StopBink()
 {
-    Com_Printf(13, "DEBUG: Cinematic disabled\n");
+    R_Cinematic_StopPlayback();
+    Dvar_SetBool((dvar_s *)cg_cinematicFullscreen, true);
 }
 
 void __cdecl CScr_GetBinkLength()
@@ -6041,7 +6096,12 @@ void(__cdecl *__cdecl CScr_GetFunction(const char **pName, int *type))()
 {
     unsigned int i; // [esp+18h] [ebp-4h]
 
-    for (i = 0; i < 0x9A; ++i)
+    // Was a hardcoded 0x9A (== the 154 rows client_functions[] has today). That is a
+    // decompiler artefact of the retail constant-folded bound, and it silently makes any
+    // row appended to client_functions[] unreachable. ARRAY_COUNT is equivalent for the
+    // current table (0x9A == ARRAY_COUNT(client_functions), so MP behaviour is unchanged)
+    // and does not rot. See CScr_GetMethod below, which already did it this way.
+    for (i = 0; i < ARRAY_COUNT(client_functions); ++i)
     {
         if (!strcmp(*pName, client_functions[i].actionString))
         {

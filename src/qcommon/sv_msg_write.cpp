@@ -2,6 +2,7 @@
 #include <demo/demo_version.h>
 #include <server_mp/sv_main_mp.h>
 #include "msg.h"
+#include "msg_origin_quantization.h"
 #include <server_mp/sv_snapshot_profile_mp.h>
 #include <server_mp/sv_init_mp.h>
 #include <cgame/cg_draw_debug.h>
@@ -178,8 +179,8 @@ void __cdecl MSG_WriteOriginFloat(
     {
         __debugbreak();
     }
-    roundedValue = (int)(value + 9.313225746154785e-10);
-    roundedOldValue = (int)(oldValue + 9.313225746154785e-10);
+    roundedValue = MSG_QuantizeOrigin(value);
+    roundedOldValue = MSG_QuantizeOrigin(oldValue);
     if ( (unsigned int)(roundedValue - roundedOldValue + 64) >= 0x80 )
     {
         MSG_WriteBit1(msg);
@@ -212,7 +213,7 @@ void __cdecl MSG_WriteOriginFloat(
         {
             __debugbreak();
         }
-        roundedCenter = (int)(svsHeader.mapCenter[index] + 9.313225746154785e-10);
+        roundedCenter = MSG_QuantizeOrigin(svsHeader.mapCenter[index]);
         MSG_WriteBits(msg, (roundedOldValue + 0x8000 - roundedCenter) ^ (roundedValue - roundedCenter + 0x8000), 0x10u);
     }
     else
@@ -297,8 +298,8 @@ void __cdecl MSG_WriteOriginZFloat(
     {
         __debugbreak();
     }
-    roundedValue = (int)(value + 9.313225746154785e-10);
-    roundedOldValue = (int)(oldValue + 9.313225746154785e-10);
+    roundedValue = MSG_QuantizeOrigin(value);
+    roundedOldValue = MSG_QuantizeOrigin(oldValue);
     if ( (unsigned int)(roundedValue - roundedOldValue + 64) >= 0x80 )
     {
         MSG_WriteBit1(msg);
@@ -312,7 +313,7 @@ void __cdecl MSG_WriteOriginZFloat(
         {
             __debugbreak();
         }
-        roundedCenter = (int)(svsHeader.mapCenter[2] + 9.313225746154785e-10);
+        roundedCenter = MSG_QuantizeOrigin(svsHeader.mapCenter[2]);
         MSG_WriteBits(msg, (roundedOldValue + 0x10000 - roundedCenter) ^ (roundedValue - roundedCenter + 0x10000), 0x11u);
     }
     else
@@ -468,13 +469,15 @@ bool __cdecl MSG_ValuesAreEqual(int clientNum, int bits, int size, const int *fr
         case -103:
         case -102:
         case -101:
+            result = (int)(*(float *)fromF + 9.313225746154785e-10) == (int)(*(float *)toF + 9.313225746154785e-10);
+            break;
         case -92:
         case -91:
         case -90:
         case -66:
         case -65:
         case -64:
-            result = (int)(*(float *)fromF + 9.313225746154785e-10) == (int)(*(float *)toF + 9.313225746154785e-10);
+            result = MSG_QuantizeOrigin(*(const float *)fromF) == MSG_QuantizeOrigin(*(const float *)toF);
             break;
         case -100:
         case -87:

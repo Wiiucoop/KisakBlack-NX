@@ -144,7 +144,11 @@ void __cdecl CG_ScoresUp_f()
     if ( CG_GetLocalClientGlobals(0)->nextSnap )
     {
         CG_ScoresUp(0);
+#ifdef KISAK_SP
+        if ( static_cast<int>(UI_GetActiveMenu(0)) == UISP_SCOREBOARD )
+#else
         if ( UI_GetActiveMenu(0) == UIMENU_SCOREBOARD )
+#endif
             UI_SetActiveMenu(0, UIMENU_NONE);
     }
 }
@@ -154,7 +158,11 @@ void __cdecl CG_ScoresDown_f()
     if ( CG_GetLocalClientGlobals(0)->nextSnap )
     {
         CG_ScoresDown(0);
+#ifdef KISAK_SP
+        if ( static_cast<int>(UI_GetActiveMenu(0)) != UISP_SCOREBOARD )
+#else
         if ( UI_GetActiveMenu(0) != UIMENU_SCOREBOARD )
+#endif
             UI_SetActiveMenu(0, UIMENU_SCOREBOARD);
     }
 }

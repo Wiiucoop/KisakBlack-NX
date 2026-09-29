@@ -39,6 +39,7 @@
 #include <client_mp/cl_input_mp.h>
 #include "cg_scr_main_mp.h"
 #include <xanim/xanim_clientnotify.h>
+#include <xanim/dobj_utils.h>
 #include <cgame/cg_event.h>
 #include <cgame/cg_scr_main.h>
 #include <clientscript/cscr_vm.h>
@@ -51,6 +52,9 @@
 #include <gfx_d3d/r_scene.h>
 #include <gfx_d3d/r_workercmds_common.h>
 #include <gfx_d3d/r_rendercmds.h>
+#ifdef KISAK_SP
+#include "cg_animscripted_mp.h"
+#endif
 
 ClientViewParams clientViewParamsArray[1][1][1] = { { { { 0.0, 0.0, 1.0, 1.0, VIEWPORT_LARGE } } } };
 
@@ -2193,9 +2197,18 @@ void __cdecl CG_CalcViewValues(int localClientNum)
             case CAM_MISSILE:
                 CG_CalcMissileViewValues(localClientNum);
                 break;
+#ifdef KISAK_SP
+            case CAM_EQUIPMENT:
+                CG_CalcExtraCamViewValues(localClientNum);
+                break;
+            case CAM_EXTRACAM:
+                CG_CalcScriptExtraCamViewValues(localClientNum);
+                break;
+#else
             case CAM_EXTRACAM:
                 CG_CalcExtraCamViewValues(localClientNum);
                 break;
+#endif
             }
             if (camMode != CAM_VEHICLE && camMode != CAM_VEHICLE_THIRDPERSON && cg_errorDecay->current.value > 0.0)
             {
@@ -2237,7 +2250,11 @@ void __cdecl CG_CalcViewValues(int localClientNum)
                     }
                     else if (cgameGlob->renderingThirdPerson != TP_FOR_MODEL)
                     {
+#ifdef KISAK_SP
+                        CG_OffsetFirstPersonView(localClientNum, cgameGlob);
+#else
                         CG_OffsetFirstPersonView(cgameGlob);
+#endif
                     }
                 }
                 break;
@@ -2284,6 +2301,50 @@ void __cdecl CG_CalcViewValues(int localClientNum)
                 CG_DevSaveCamera(angles, cgameGlob->refdef.vieworg);
             }
             CG_ExtraCamDebug_SaveView(localClientNum);
+#ifdef KISAK_SP
+            {
+                static int s_lastSPViewProbeTime[MAX_LOCAL_CLIENTS] = {};
+                if ( cgameGlob->time < s_lastSPViewProbeTime[localClientNum]
+                    || cgameGlob->time - s_lastSPViewProbeTime[localClientNum] >= 1000 )
+                {
+                    clientInfo_t *ci = CG_GetClientInfoForPlayerEnt(localClientNum, cgameGlob->clientNum);
+                    const int linkParent = ci ? ci->attachedVehEntNum : 1023;
+                    const centity_s *parent = linkParent >= 0 && linkParent < 1024
+                                            ? CG_GetEntity(localClientNum, linkParent)
+                                            : NULL;
+                    const DObj *parentObj = parent && parent->nextValid
+                                          ? Com_GetClientDObj(linkParent, localClientNum)
+                                          : NULL;
+                    const XModel *parentModel = parentObj ? DObjGetModel(parentObj, 0) : NULL;
+                    Com_Printf(
+                        15,
+                        "SP view probe: time %d psOrigin (%.2f %.2f %.2f) psAngles (%.2f %.2f %.2f) refOrigin (%.2f %.2f %.2f) refAngles (%.2f %.2f %.2f) pmType %d pmFlags 0x%x viewlock %d/%d tagCamera %d linkParent %d parentValid %d parentType %d parentModel %s parentPose (%.2f %.2f %.2f) parentNetLink %d/%u/0x%x parentClientLink %d/%d\n",
+                        cgameGlob->time,
+                        ps->origin[0], ps->origin[1], ps->origin[2],
+                        ps->viewangles[0], ps->viewangles[1], ps->viewangles[2],
+                        cgameGlob->refdef.vieworg[0], cgameGlob->refdef.vieworg[1], cgameGlob->refdef.vieworg[2],
+                        cgameGlob->refdefViewAngles[0], cgameGlob->refdefViewAngles[1], cgameGlob->refdefViewAngles[2],
+                        ps->pm_type,
+                        ps->pm_flags,
+                        ps->viewlocked,
+                        ps->viewlocked_entNum,
+                        cgameGlob->cameraData.useTagCamera,
+                        linkParent,
+                        parent ? parent->nextValid : 0,
+                        parent ? parent->nextState.eType : -1,
+                        parentModel && parentModel->name ? parentModel->name : "<none>",
+                        parent ? parent->pose.origin[0] : 0.0f,
+                        parent ? parent->pose.origin[1] : 0.0f,
+                        parent ? parent->pose.origin[2] : 0.0f,
+                        parent ? parent->nextState.clientLinkInfo.parentEnt : 0,
+                        parent ? parent->nextState.clientLinkInfo.tagIndex : 0,
+                        parent ? parent->nextState.clientLinkInfo.flags : 0,
+                        parent && parent->linkInfo ? parent->linkInfo->linkEnt : -1,
+                        parent && parent->linkInfo ? parent->linkInfo->linkTag : 0);
+                    s_lastSPViewProbeTime[localClientNum] = cgameGlob->time;
+                }
+            }
+#endif
         }
     }
 }
@@ -2827,7 +2888,11 @@ void __cdecl CG_SmoothCameraZ(cg_s *cgameGlob)
     }
 }
 
+#ifdef KISAK_SP
+void __cdecl CG_OffsetFirstPersonView(int localClientNum, cg_s *cgameGlob)
+#else
 void __cdecl CG_OffsetFirstPersonView(cg_s *cgameGlob)
+#endif
 {
     int v1; // [esp+10h] [ebp-5Ch]
     float deltaa; // [esp+20h] [ebp-4Ch]
@@ -2904,6 +2969,72 @@ void __cdecl CG_OffsetFirstPersonView(cg_s *cgameGlob)
             20.0);
         if ( (float)(cgameGlob->predictedPlayerState.origin[2] + 8.0) > cgameGlob->refdef.vieworg[2] )
             cgameGlob->refdef.vieworg[2] = cgameGlob->predictedPlayerState.origin[2] + 8.0;
+#ifdef KISAK_SP
+        // ---------------------------------------------------------------
+        // SP tag-camera override. Retail SP 0x00792316-0x007923e3, the tail
+        // of CG_OffsetFirstPersonView (0x00792010-0x007923ea).
+        //
+        // When the local player is linked to a parent entity that carries a
+        // "tag_camera" bone, the view is driven by that bone instead of by
+        // the player's own eye position. This is what puts the frontend
+        // menu camera in the interrogation chair.
+        //
+        // Placement: retail reaches this block ONLY by falling through the
+        // view-bob body above -- the function's early-outs (eFlags & 0x300
+        // at 0x0079202b, pm_type == 3 / == 2 at 0x00792065 / 0x0079206e)
+        // all jump straight into the epilogue at 0x007923e3-0x007923e5 and
+        // skip it. The single inbound branch to 0x00792316 is the ground
+        // clamp's own `jbe` at 0x0079230c. So it belongs inside this `if`,
+        // as the last statement -- not at function scope.
+        //
+        // Retail resolves the parent entnum as clientInfo_t+0x56C via the
+        // helper at 0x0063dcd0, which is CG_GetEntity plus an
+        // `eType == ET_PLAYER` test (`cmp word [eax+0x222], 1`) before
+        // indexing the clientInfo array by cent->nextState.clientNum. That
+        // helper is ported once as CG_GetClientInfoForPlayerEnt
+        // (cgame_mp/cg_local_mp.h) and used by both tag-camera call sites.
+        //
+        // Retail CG_SetNextSnap writes clientState_s::attachedVehEntNum to
+        // clientInfo_t+0x56C, so this is the existing vehicle attachment field,
+        // not a separate generic link-parent value.
+        if ( cgameGlob->cameraData.useTagCamera )
+        {
+            clientInfo_t *ci = CG_GetClientInfoForPlayerEnt(localClientNum, cgameGlob->clientNum);
+            int linkEnt = ci ? ci->attachedVehEntNum : 1023;
+            if ( ci && linkEnt != 1023 )
+            {
+                centity_s *parent = CG_GetEntity(localClientNum, linkEnt);
+                if ( parent && parent->nextValid )
+                {
+                    DObj *obj = Com_GetClientDObj(linkEnt, localClientNum);
+                    // 3x3, matching both CG_DObjGetWorldTagMatrix's
+                    // `float (*tagMat)[3]` parameter and retail's own 36-byte
+                    // stack slot (axis at esp+0x50, origin at esp+0x74).
+                    float tagAxis[3][3];
+                    float tagOrigin[3];
+                    if ( obj
+                        && CG_DObjGetWorldTagMatrix(
+                                     &parent->pose,
+                                     obj,
+                                     scr_const.tag_camera,
+                                     tagAxis,
+                                     tagOrigin) )
+                    {
+                        // 0x007923ab: the angle override is conditional on
+                        // ps.pm_flags bit 26 (0x4000000) -- the bit
+                        // GScr_PlayerLinkToAbsolute_SP sets. This block is
+                        // that bit's reader.
+                        if ( (cgameGlob->predictedPlayerState.pm_flags & 0x4000000) != 0 )
+                            AxisToAngles(tagAxis, cgameGlob->refdefViewAngles);
+                        // 0x007923c2: the origin override is UNCONDITIONAL.
+                        cgameGlob->refdef.vieworg[0] = tagOrigin[0];
+                        cgameGlob->refdef.vieworg[1] = tagOrigin[1];
+                        cgameGlob->refdef.vieworg[2] = tagOrigin[2];
+                    }
+                }
+            }
+        }
+#endif
     }
 }
 
@@ -3757,6 +3888,10 @@ bool __cdecl CG_ShouldRenderThirdPerson(CameraMode camMode)
             return 0;
         case CAM_VEHICLE_GUNNER:
             return 0;
+#ifdef KISAK_SP
+        case CAM_EQUIPMENT:
+            return 0;
+#endif
         case CAM_EXTRACAM:
             return 0;
         case CAM_MISSILE:
@@ -4267,6 +4402,11 @@ int CG_DrawActiveFrame(
     CG_UpdateEnemyScramblerAlpha(localClientNum);
     CG_ProcessDestructibleEvents();
     //BLOPS_NULLSUB();
+#ifdef KISAK_SP
+    // Retail consumes the current/next snapshot animation command lists at
+    // this point, immediately before packet entities are submitted.
+    CG_ApplyPendingAnimCommands_SP(localClientNum);
+#endif
     delayedEnt = CG_AddPacketEntities(localClientNum);
     AimTarget_UpdateClientTargets(localClientNum);
     if (!cgameGlob->predictedPlayerState.locationSelectionInfo
@@ -4885,6 +5025,29 @@ void __cdecl DrawShellshockBlend(int localClientNum)
         && cgameGlob->cameraMode != 1
         && !CG_KillCamEntityEnabled(localClientNum) )
     {
+#ifdef KISAK_SP
+        // Retail 0x00792FC0 draws only modes 0/1. NONE/default preserves the
+        // saved-screen state and leaves the other shellshock effects running.
+        switch (cgameGlob->shellshock.parms->screenBlend.type)
+        {
+        case SHELLSHOCK_VIEWTYPE_BLURRED:
+            CG_DrawShellShockSavedScreenBlendBlurred(
+                localClientNum,
+                cgameGlob->shellshock.parms,
+                cgameGlob->shellshock.startTime,
+                cgameGlob->shellshock.duration);
+            break;
+        case SHELLSHOCK_VIEWTYPE_FLASHED:
+            CG_DrawShellShockSavedScreenBlendFlashed(
+                localClientNum,
+                cgameGlob->shellshock.parms,
+                cgameGlob->shellshock.startTime,
+                cgameGlob->shellshock.duration);
+            break;
+        default:
+            break;
+        }
+#else
         if ( cgameGlob->shellshock.parms->screenBlend.type )
         {
             if ( cgameGlob->shellshock.parms->screenBlend.type != SHELLSHOCK_VIEWTYPE_FLASHED
@@ -4911,6 +5074,7 @@ void __cdecl DrawShellshockBlend(int localClientNum)
                 cgameGlob->shellshock.startTime,
                 cgameGlob->shellshock.duration);
         }
+#endif
     }
 }
 
@@ -5535,11 +5699,26 @@ void __cdecl CG_CalcViewValues_ExtraCam(int localClientNum)
             {
                 CG_CalcMissileViewValues(localClientNum);
             }
+#ifdef KISAK_SP
+            else if ( camMode == CAM_EQUIPMENT )
+            {
+                CG_CalcExtraCamViewValues(localClientNum);
+            }
+            else if ( camMode == CAM_EXTRACAM )
+            {
+                CG_CalcScriptExtraCamViewValues(localClientNum);
+            }
+#else
             else if ( camMode == CAM_EXTRACAM )
             {
                 CG_CalcExtraCamViewValues(localClientNum);
             }
+#endif
+#ifdef KISAK_SP
+            if ( camMode != CAM_EQUIPMENT && camMode != CAM_EXTRACAM && camMode != CAM_MISSILE )
+#else
             if ( camMode != CAM_EXTRACAM && camMode != CAM_MISSILE )
+#endif
                 cgameGlob->refdef.vieworg[2] = cgameGlob->refdef.vieworg[2] + cgameGlob->predictedPlayerState.viewHeightCurrent;
             CG_CalcFov_ExtraCam(localClientNum);
             if ( camMode == CAM_MISSILE )

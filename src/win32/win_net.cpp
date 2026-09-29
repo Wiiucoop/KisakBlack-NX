@@ -599,48 +599,174 @@ NET_GetLocalAddress
 */
 
 #ifndef _XBOX
+// Adapter enumeration ported from OpenWarfare win_net.cpp; keep wildcard socket binding.
+typedef struct _NET_IP_ADDR_STRING {
+    struct _NET_IP_ADDR_STRING* Next;
+    char IpAddress[16];
+    char IpMask[16];
+    DWORD Context;
+} NET_IP_ADDR_STRING;
+
+typedef struct _NET_IP_ADAPTER_INFO {
+    struct _NET_IP_ADAPTER_INFO* Next;
+    DWORD ComboIndex;
+    char AdapterName[260];
+    char Description[132];
+    UINT AddressLength;
+    BYTE Address[8];
+    DWORD Index;
+    UINT Type;
+    UINT DhcpEnabled;
+    NET_IP_ADDR_STRING* CurrentIpAddress;
+    NET_IP_ADDR_STRING IpAddressList;
+    NET_IP_ADDR_STRING GatewayList;
+    NET_IP_ADDR_STRING DhcpServer;
+    BOOL HaveWins;
+    NET_IP_ADDR_STRING PrimaryWinsServer;
+    NET_IP_ADDR_STRING SecondaryWinsServer;
+    ULONG LeaseObtained;
+    ULONG LeaseExpires;
+} NET_IP_ADAPTER_INFO;
+
+typedef DWORD (WINAPI *PFN_GetAdaptersInfo)(NET_IP_ADAPTER_INFO* pAdapterInfo, PULONG pOutBufLen);
+
 int NET_GetLocalAddress()
 {
-    int result; // eax
-    u_long v1; // [esp+0h] [ebp-114h]
-    char hostname[256]; // [esp+4h] [ebp-110h] BYREF
-    hostent *hostInfo; // [esp+108h] [ebp-Ch]
-    int n; // [esp+10Ch] [ebp-8h]
-    char *p; // [esp+110h] [ebp-4h]
-
-    if (gethostname(hostname, 256) == -1)
-        return WSAGetLastError();
-    hostInfo = gethostbyname(hostname);
-    if (!hostInfo)
-        return WSAGetLastError();
-    Com_Printf(16, "Hostname: %s\n", hostInfo->h_name);
-    n = 0;
-    while (1)
+    char hostname[256];
+    if (gethostname(hostname, sizeof(hostname)) == -1)
     {
-        p = hostInfo->h_aliases[n++];
-        if (!p)
-            break;
-        Com_Printf(16, "Alias: %s\n", p);
+        Com_PrintWarning(16, "WARNING: NET_GetLocalAddress: gethostname failed (%d)\n", WSAGetLastError());
+        I_strncpyz(hostname, "localhost", sizeof(hostname));
     }
-    result = hostInfo->h_addrtype;
-    if (result == 2)
+    else
     {
-        for (numIP = 0; ; ++numIP)
+        Com_Printf(16, "Hostname: %s\n", hostname);
+    }
+
+    numIP = 0;
+
+    // 1. Try GetAdaptersInfo via iphlpapi.dll to find active network adapter IPv4 addresses
+    HMODULE hIpHlpApi = LoadLibraryA("iphlpapi.dll");
+    if (hIpHlpApi)
+    {
+        PFN_GetAdaptersInfo pfnGetAdaptersInfo = (PFN_GetAdaptersInfo)GetProcAddress(hIpHlpApi, "GetAdaptersInfo");
+        if (pfnGetAdaptersInfo)
         {
-            result = numIP;
-            p = hostInfo->h_addr_list[numIP];
-            if (!p || numIP >= 16)
-                break;
-            v1 = ntohl(*(_DWORD *)p);
-            localIP[numIP][0] = *p;
-            localIP[numIP][1] = p[1];
-            localIP[numIP][2] = p[2];
-            localIP[numIP][3] = p[3];
-            Com_Printf(16, "IP: %i.%i.%i.%i\n", HIBYTE(v1), BYTE2(v1), BYTE1(v1), (unsigned __int8)v1);
+            ULONG outBufLen = sizeof(NET_IP_ADAPTER_INFO) * 16;
+            NET_IP_ADAPTER_INFO* pAdapterInfo = (NET_IP_ADAPTER_INFO*)HeapAlloc(GetProcessHeap(), 0, outBufLen);
+            if (pAdapterInfo)
+            {
+                DWORD dwRet = pfnGetAdaptersInfo(pAdapterInfo, &outBufLen);
+                if (dwRet == ERROR_BUFFER_OVERFLOW)
+                {
+                    HeapFree(GetProcessHeap(), 0, pAdapterInfo);
+                    pAdapterInfo = (NET_IP_ADAPTER_INFO*)HeapAlloc(GetProcessHeap(), 0, outBufLen);
+                    if (pAdapterInfo)
+                    {
+                        dwRet = pfnGetAdaptersInfo(pAdapterInfo, &outBufLen);
+                    }
+                }
+
+                if (dwRet == NO_ERROR && pAdapterInfo)
+                {
+                    for (NET_IP_ADAPTER_INFO* pAdapter = pAdapterInfo; pAdapter && numIP < _countof(localIP); pAdapter = pAdapter->Next)
+                    {
+                        // Skip loopback (type 24)
+                        if (pAdapter->Type == 24)
+                            continue;
+
+                        for (NET_IP_ADDR_STRING* pIp = &pAdapter->IpAddressList; pIp && numIP < _countof(localIP); pIp = pIp->Next)
+                        {
+                            if (pIp->IpAddress[0] && I_stricmp(pIp->IpAddress, "0.0.0.0") && I_stricmp(pIp->IpAddress, "127.0.0.1"))
+                            {
+                                int b0 = 0, b1 = 0, b2 = 0, b3 = 0;
+                                if (sscanf(pIp->IpAddress, "%d.%d.%d.%d", &b0, &b1, &b2, &b3) == 4)
+                                {
+                                    bool isDup = false;
+                                    for (int k = 0; k < numIP; ++k)
+                                    {
+                                        if (localIP[k][0] == (byte)b0 && localIP[k][1] == (byte)b1 &&
+                                            localIP[k][2] == (byte)b2 && localIP[k][3] == (byte)b3)
+                                        {
+                                            isDup = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!isDup)
+                                    {
+                                        localIP[numIP][0] = (byte)b0;
+                                        localIP[numIP][1] = (byte)b1;
+                                        localIP[numIP][2] = (byte)b2;
+                                        localIP[numIP][3] = (byte)b3;
+                                        numIP++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (pAdapterInfo)
+                {
+                    HeapFree(GetProcessHeap(), 0, pAdapterInfo);
+                }
+            }
+        }
+        FreeLibrary(hIpHlpApi);
+    }
+
+    // 2. Fallback to gethostbyname if GetAdaptersInfo found no active network IPs
+    if (numIP == 0 && hostname[0])
+    {
+        hostent* hostInfo = gethostbyname(hostname);
+        if (hostInfo && hostInfo->h_addrtype == AF_INET)
+        {
+            for (int n = 0; hostInfo->h_addr_list[n] && numIP < _countof(localIP); ++n)
+            {
+                unsigned char* p = (unsigned char*)hostInfo->h_addr_list[n];
+                if (p)
+                {
+                    bool isDup = false;
+                    for (int k = 0; k < numIP; ++k)
+                    {
+                        if (localIP[k][0] == p[0] && localIP[k][1] == p[1] &&
+                            localIP[k][2] == p[2] && localIP[k][3] == p[3])
+                        {
+                            isDup = true;
+                            break;
+                        }
+                    }
+                    if (!isDup)
+                    {
+                        localIP[numIP][0] = p[0];
+                        localIP[numIP][1] = p[1];
+                        localIP[numIP][2] = p[2];
+                        localIP[numIP][3] = p[3];
+                        numIP++;
+                    }
+                }
+            }
         }
     }
-    return result;
+
+    // 3. Fallback to loopback
+    if (numIP == 0)
+    {
+        localIP[0][0] = 127;
+        localIP[0][1] = 0;
+        localIP[0][2] = 0;
+        localIP[0][3] = 1;
+        numIP = 1;
+    }
+
+    // Print all detected local IP addresses cleanly
+    for (int i = 0; i < numIP; i++)
+    {
+        Com_Printf(16, "IP: %i.%i.%i.%i\n", localIP[i][0], localIP[i][1], localIP[i][2], localIP[i][3]);
+    }
+
+    return 0;
 }
+
 #endif
 
 void __cdecl NET_OpenIP()

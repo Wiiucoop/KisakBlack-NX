@@ -936,6 +936,20 @@ struct scr_const_t // sizeof=0x40C
                                                                                 // Scr_GameVariants_AddConditional(GVRule &)+156/r
         unsigned __int16 freeze;                        // XREF: .text:0069F64E/w
         unsigned __int16 up;                                // XREF: .text:0069F661/w
+#ifdef KISAK_SP
+        // SP-only species names. MP ships a single AI species (dog) so `dog` above is the
+        // whole of g_AISpeciesNames there; SP has four. Appended at the END of the struct so
+        // no existing member moves -- the MP path must compile byte-identically, and every
+        // member here is assigned individually by name in Scr_LoadConsts, so order carries no
+        // meaning of its own. Spellings are the ones ActorScr_SetSpecies already reports in
+        // its Scr_Error text and the ones aitype/*.gsc assign to self.type (verified against
+        // aitype/hudson_int_silhoutte.gsc, which sets self.type = "human").
+        unsigned __int16 human;
+        unsigned __int16 zombie;
+        unsigned __int16 zombie_dog;
+        // SP-only arrival notify sent by Actor_MoveAlongPathWithTeam (retail 0x023A586C).
+        unsigned __int16 corner_approach;
+#endif
 };
 
 struct cscr_const_t // sizeof=0xD8

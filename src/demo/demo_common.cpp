@@ -751,7 +751,7 @@ void __cdecl Demo_StartRecord_f()
         if ( Demo_InitWrite() )
         {
             Demo_PopulateStaticInfoData(&demo.info);
-            demo.header.version = 1;
+            demo.header.version = OPENBLOPS_DEMO_VERSION;
             demo.header.maxClients = com_maxclients->current.integer;
             demo.header.settings.onlinegame = Dvar_GetBool("onlinegame");
             demo.header.settings.xblive_privatematch = Dvar_GetBool("xblive_privatematch");

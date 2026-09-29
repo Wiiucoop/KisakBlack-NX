@@ -1,5 +1,6 @@
 #include "bg_pmove.h"
 #include "bg_public.h"
+#include "bg_local.h"
 
 #include <cgame_mp/cg_predict_mp.h>
 #include <game/actor_physics.h>
@@ -11,6 +12,7 @@
 #include "bg_dtp.h"
 #include <win32/win_shared.h>
 #include "bg_jump.h"
+#include "bg_perks.h"
 #include <client/splitscreen.h>
 #include <game_mp/g_main_mp.h>
 
@@ -32,6 +34,16 @@ const float pm_flyaccelerate = 8.0;
 const float pm_waterfriction = 1.0;
 const float pm_ladderfriction = 16.0;
 const float pm_spectatorfriction = 5.0;
+
+static bool PM_HasUnlimitedSprintPerk(const playerState_s *ps)
+{
+#ifdef KISAK_SP
+    // Retail SP stores specialty_unlimitedsprint in two-bit perk slot 1.
+    return BG_HasSPPerk(ps->perks, 1);
+#else
+    return (ps->perks[1] & 0x80000) != 0;
+#endif
+}
 
 const scriptAnimMoveTypes_t moveAnimTable[6][3][2] =
 {
@@ -438,7 +450,7 @@ int __cdecl PM_GetSprintLeft(const playerState_s *ps, int gametime)
     {
         sprintLeft = maxSprintTime;
     }
-    else if ( (ps->perks[1] & 0x80000) != 0 )
+    else if ( PM_HasUnlimitedSprintPerk(ps) )
     {
         sprintLeft = maxSprintTime;
     }
@@ -497,7 +509,7 @@ int __cdecl PM_GetSprintLeftLastTime(const playerState_s *ps)
     maxSprintTime = BG_GetMaxSprintTime(ps);
     if ( player_sprintUnlimited->current.enabled )
         return maxSprintTime;
-    if ( (ps->perks[1] & 0x80000) != 0 )
+    if ( PM_HasUnlimitedSprintPerk(ps) )
         return maxSprintTime;
     if ( ps->sprintState.sprintStartMaxLength - (ps->sprintState.lastSprintEnd - ps->sprintState.lastSprintStart) < 0 )
         v3 = 0;
@@ -964,7 +976,17 @@ LABEL_31:
         oldViewYaw = ps->viewangles[1];
         PM_UpdateViewAngles_Clamp(ps, cmd, handler);
         PM_UpdateViewLockedEnt(ps, cmd, handler);
+#ifdef KISAK_SP
+        // Retail SP PM_UpdateViewAngles 0x005a2883-0x005a28aa:
+        //   linked = (pm_type == PM_NORMAL_LINKED) && !(pm_flags & 0x4000000);
+        //   if ((eFlags & 0x4300) || linked) -> RangeLimited
+        // playerlinktoabsolute sets bit 26 (0x007f306b); playerlinktodelta clears
+        // it (0x007f2ed9), so only a *delta* link opens this arm.
+        bool linkedDelta = ps->pm_type == 1 && (ps->pm_flags & 0x4000000) == 0;
+        if ( (ps->eFlags & 0x4300) != 0 || linkedDelta )
+#else
         if ( (ps->eFlags & 0x4300) != 0 )
+#endif
         {
             if ( (ps->eFlags & 0x4000) != 0 && ps->vehiclePos >= 1 && ps->vehiclePos <= 4 )
                 PM_UpdateLean(ps, msec, cmd, pmoveHandlers[handler].trace);
@@ -2213,7 +2235,7 @@ void __cdecl PM_UpdateSprint(pmove_t *pm, const pml_t *pml)
         if ( (ps->pm_flags & 0x8000) != 0 )
         {
             unlimited_sprint = player_sprintUnlimited->current.enabled;
-            if ( (ps->perks[1] & 0x80000) != 0 )
+            if ( PM_HasUnlimitedSprintPerk(ps) )
                 unlimited_sprint = 1;
             if ( unlimited_sprint
                 || pm->cmd.serverTime - ps->sprintState.lastSprintStart < ps->sprintState.sprintStartMaxLength )
@@ -2287,6 +2309,10 @@ void __cdecl PM_EndSprint(playerState_s *ps, pmove_t *pm)
 
 bool __cdecl PM_SprintStartInterferingButtons(const playerState_s *ps, int forwardSpeed, bitarray<51> *button_bits)
 {
+#ifdef KISAK_SP
+    if (ps->pm_flags & SP_PMF_NO_STAND)
+        return true;
+#endif
     if ( (ps->pm_flags & 8) != 0 )
         return 1;
     if ( ps->waterlevel >= 2 )
@@ -2339,6 +2365,10 @@ bool __cdecl PM_SprintStartInterferingButtons(const playerState_s *ps, int forwa
 
 bool __cdecl PM_SprintEndingButtons(const pmove_t *pm)
 {
+#ifdef KISAK_SP
+    if (pm->ps->pm_flags & SP_PMF_NO_STAND)
+        return true;
+#endif
     if ( pm->ps->waterlevel >= 2 )
         return 1;
     if ( (pm->ps->pm_flags & 0x10018) != 0 )
@@ -3805,6 +3835,43 @@ bool __cdecl PM_IsPlayerFrozenByWeapon(const playerState_s *ps)
             && BG_GetWeaponDef(ps->weapon)->freezeMovementWhenFiring;
 }
 
+#ifdef KISAK_SP
+static void PM_ApplyStancePermissions_SP(pmove_t *pm)
+{
+    // Local adapter for AllowStand/Crouch/Prone. The retained MP flag layout
+    // differs from retail SP; these permissions travel in SP's 32-bit pm_flags
+    // snapshot so server movement and client prediction make the same choice.
+    // Keep collision checks and the actual stance/animation transition below.
+    const unsigned int denied = static_cast<unsigned int>(pm->ps->pm_flags);
+    const unsigned int masks[] = { SP_PMF_NO_STAND, SP_PMF_NO_CROUCH, SP_PMF_NO_PRONE };
+    int stance = pm->cmd.button_bits.testBit(8u) ? 2 : pm->cmd.button_bits.testBit(9u) ? 1 : 0;
+    if (!(denied & masks[stance]))
+        return;
+
+    const int current = (pm->ps->pm_flags & 1) ? 2 : (pm->ps->pm_flags & 2) ? 1 : 0;
+    stance = current;
+    if (denied & masks[current])
+    {
+        // The Zombies fake-death script permits only prone. For other scripts,
+        // prefer the current permitted stance, then the highest allowed stance.
+        for (int candidate = 0; candidate != 3; ++candidate)
+        {
+            if (!(denied & masks[candidate]))
+            {
+                stance = candidate;
+                break;
+            }
+        }
+    }
+    pm->cmd.button_bits.resetBit(8u);
+    pm->cmd.button_bits.resetBit(9u);
+    if (stance == 2)
+        pm->cmd.button_bits.setBit(8u);
+    else if (stance == 1)
+        pm->cmd.button_bits.setBit(9u);
+}
+#endif
+
 void __cdecl PM_CheckDuck(pmove_t *pm, pml_t *pml)
 {
     double v2; // st7
@@ -3849,6 +3916,9 @@ void __cdecl PM_CheckDuck(pmove_t *pm, pml_t *pml)
         ps->viewHeightCurrent = 0.0f;
         return;
     }
+#ifdef KISAK_SP
+    PM_ApplyStancePermissions_SP(pm);
+#endif
     bWasProne = (ps->pm_flags & 1) != 0;
     bWasStanding = (ps->pm_flags & 3) == 0;
     pm->mins[0] = playerMins[0];

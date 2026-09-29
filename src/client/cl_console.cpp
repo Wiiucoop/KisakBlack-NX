@@ -4112,16 +4112,43 @@ void __cdecl Con_Restricted_InitLists()
     const StringTable *table; // [esp+4h] [ebp-4h] BYREF
 
     Con_Restricted_ShutDown();
+#ifdef KISAK_SP
+    // SP retail divergence (Ghidra 0x005284a0, confirmed via decompile AND a live string
+    // cross-reference -- "devconsole_restrict_access_sp.csv" exists in the SP binary at
+    // 0x009ff108, referenced from exactly this function, found while diagnosing a real SP boot
+    // crash on 2026-08-05: an init-time fatal "could not load default asset
+    // mp/defaultStringTable.csv" while this function's MP-derived lookup was failing). Two
+    // confirmed differences from MP:
+    //   1. SP has no dedicated/ranked-server concept, so there is a single fixed filename with
+    //      no SV_GetLicenseType/SV_IsServerRanked branching and no "mp/" prefix.
+    //   2. SP gates the WHOLE lookup behind useFastFile->current.enabled -- MP's call above is
+    //      unconditional. This is almost certainly the actual crash cause: with useFastFile off,
+    //      SP correctly skips this lookup entirely, while the previous unconditional MP-derived
+    //      code attempted it regardless and fell through to a missing default asset.
+    table = nullptr;
+    if (useFastFile->current.enabled)
+        StringTable_GetAsset("devconsole_restrict_access_sp.csv", (XAssetHeader *)&table);
+#else
     LicenseType = SV_GetLicenseType();
     if ( SV_IsServerRanked(LicenseType) )
         StringTable_GetAsset("mp/devconsole_restrict_access_dedicated_ranked_mp.csv", (XAssetHeader *)&table);
     else
         StringTable_GetAsset("mp/devconsole_restrict_access_dedicated_mp.csv", (XAssetHeader *)&table);
+#endif
     if ( table )
     {
         Con_Restricted_LoadTable(table);
+#ifdef KISAK_SP
+        // TODO(SP): unconfirmed, see Ghidra 0x005284a0. MP re-derives g_restricted_ranked here
+        // via SV_GetLicenseType/SV_IsServerRanked; SP's decompile calls several still-unnamed
+        // FUN_* (0x005119b0, 0x005a5180, 0x00501080-thunk, 0x0079e690, 0x0079e630) instead, whose
+        // exact roles were not resolved as part of this fix. ranked/dedicated has no SP meaning,
+        // so g_restricted_ranked is left at its Con_Restricted_ShutDown()-reset value rather than
+        // guessed at.
+#else
         v1 = SV_GetLicenseType();
         g_restricted_ranked = SV_IsServerRanked(v1);
+#endif
         Con_Restricted_SetState(RESTRICTED_PROTECTED);
     }
     else if ( Dvar_GetBool("con_restricted_access") )

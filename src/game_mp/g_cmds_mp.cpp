@@ -20,6 +20,9 @@
 #include "g_misc_mp.h"
 #include <clientscript/cscr_vm.h>
 #include <game/actor_fields.h>
+#ifdef KISAK_SP
+#include "g_scr_main_mp.h"               // g_scr_data.menumessage, for Cmd_MenuLevelMessage_f
+#endif
 
 int __cdecl CheatsOk(gentity_s *ent)
 {
@@ -1232,6 +1235,68 @@ void __cdecl Cmd_MenuResponse_f(gentity_s *pEnt)
     Scr_Notify(pEnt, scr_const.menuresponse, 2u);
 }
 
+#ifdef KISAK_SP
+// SP-only. Retail FUN_0054bbb0, 22 instructions, transcribed from disassembly this pass; every
+// operand read back with read_memory.
+//
+//   0054bbbc  CMP ECX,0x3 / JZ  -- the argc test is equality with 3, so the guard is "!= 3".
+//   0054bbc2  PUSH 0x9bbc24 ("Wrong number of args. Found %i expecting: 3\n") / PUSH 0xF
+//             -> Com_Printf(0xF, fmt, argc), then RET.
+//   0054bbd9  MOV EAX,[table+0x8]  = argv[2], pushed into Scr_AddString FIRST (0054bbdf)
+//   0054bbfd  MOV EAX,[table+0x4]  = argv[1], pushed into Scr_AddString SECOND (0054bc0a)
+//   0054bc0f  MOV EDX,[0x01c87514] = the CodeCallback_MenuMessage handle
+//   0054bc1a  Scr_ExecThread(SCRIPTINSTANCE_SERVER, handle, 2)
+//   0054bc25  Scr_FreeThread(threadId, SCRIPTINSTANCE_SERVER)
+//
+// The push order is load-bearing and is NOT a typo: Scr_AddString pushes onto the VM param stack,
+// so the LAST Scr_AddString supplies GSC param 1. GSC's handler is menu_message(state, item), so
+// argv[1] (the state word) must be added last. This is the same convention Cmd_MenuResponse_f
+// above already uses.
+//
+// Retail also re-checks argc > 1 before touching argv[1] (0054bbec); that is SV_Cmd_Argv's own
+// inlined bounds check and is dead here because argc != 3 already returned. Using
+// SV_Cmd_ArgvBuffer, as Cmd_MenuResponse_f does, carries the same bound.
+void __cdecl Cmd_MenuLevelMessage_f()
+{
+    char szState[1024];                 // argv[1] -> GSC param 1
+    char szItem[1024];                  // argv[2] -> GSC param 2
+    unsigned __int16 t;
+
+    if ( SV_Cmd_Argc() != 3 )
+    {
+        Com_Printf(15, "Wrong number of args. Found %i expecting: 3\n", SV_Cmd_Argc());
+        return;
+    }
+    SV_Cmd_ArgvBuffer(1, szState, 1024);
+    SV_Cmd_ArgvBuffer(2, szItem, 1024);
+    Com_Printf(15, "SP menu level message: state '%s' item '%s'\n", szState, szItem);
+    Scr_AddString(szItem, SCRIPTINSTANCE_SERVER);
+    Scr_AddString(szState, SCRIPTINSTANCE_SERVER);
+    t = Scr_ExecThread(SCRIPTINSTANCE_SERVER, g_scr_data.menumessage, 2);
+    Scr_FreeThread(t, SCRIPTINSTANCE_SERVER);
+}
+
+// Retail SP ClientCommand arm: `sl <entityNum> <lengthMs>`.
+// The client sends this after sound playback supplies its real duration.
+void __cdecl Cmd_SoundLength_f()
+{
+    if ( SV_Cmd_Argc() != 3 )
+    {
+        Com_Printf(15, "Wrong number of args. Found %i expecting: 3\n", SV_Cmd_Argc());
+        return;
+    }
+
+    const int entNum = atoi(SV_Cmd_Argv(1));
+    const int lengthMs = atoi(SV_Cmd_Argv(2));
+    if ( static_cast<unsigned int>(entNum) >= 1024u )
+    {
+        Com_PrintWarning(15, "SP sound notify rejected entity %d\n", entNum);
+        return;
+    }
+    G_SPSetSoundLength(entNum, lengthMs);
+}
+#endif
+
 void __cdecl ClientCommand(int clientNum)
 {
     char errMsg[68]; // [esp+4h] [ebp-450h] BYREF
@@ -1248,6 +1313,22 @@ void __cdecl ClientCommand(int clientNum)
             {
                 if ( ent->client->ps.pm_type != 5 )
                 {
+#ifdef KISAK_SP
+                    // Retail places "mlvl" immediately after "mr", inside this same pm_type != 5
+                    // gate. This tree inverts the if/else nesting relative to retail, so a
+                    // minimal-diff early-out here is the equivalent: it sits in the same gate,
+                    // ahead of the "mr" test, and cannot alter any existing arm.
+                    if ( !I_stricmp(cmd, "mlvl") )
+                    {
+                        Cmd_MenuLevelMessage_f();
+                        return;
+                    }
+                    if ( !I_stricmp(cmd, "sl") )
+                    {
+                        Cmd_SoundLength_f();
+                        return;
+                    }
+#endif
                     if ( I_stricmp(cmd, "mr") )
                     {
                         if ( I_stricmp(cmd, "give") )

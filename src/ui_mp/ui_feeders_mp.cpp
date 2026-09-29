@@ -100,15 +100,15 @@ int __cdecl UI_Project_FeederCount(int localClientNum, int contextIndex, float f
         case 34:
             result = 0;
             break;
-        case 35:
-        case 36:
-        case 37:
-        case 39:
-        case 40:
-        case 41:
-        case 42:
-        case 43:
-        case 44:
+        case GV_FEEDER_CONDITION_LHS:
+        case GV_FEEDER_CONDITION_OP:
+        case GV_FEEDER_CONDITION_RHS:
+        case GV_FEEDER_RULES:
+        case GV_FEEDER_EVENTS:
+        case GV_FEEDER_ACTIONS:
+        case GV_FEEDER_PARAMETERS:
+        case GV_FEEDER_TARGETS:
+        case GV_FEEDER_RULE_SUMMARY:
             result = UI_FeederCount_GameVariants(contextIndex, feederID);
             break;
         case 38:
@@ -137,7 +137,7 @@ int __cdecl UI_Project_FeederCount(int localClientNum, int contextIndex, float f
                 __debugbreak();
             }
             sharedUiInfo.itemIndex = BG_UnlockablesGetItemIndexInSlot(listPtr->cursorPos[contextIndex]);
-            sharedUiInfo.itemIndex = listPtr->cursorPos[contextIndex];
+            sharedUiInfo.itemNum = listPtr->cursorPos[contextIndex];
             result = sharedUiInfo.numAttachments;
             break;
         case 55:
@@ -148,13 +148,13 @@ int __cdecl UI_Project_FeederCount(int localClientNum, int contextIndex, float f
         case 57:
             if ( sharedUiInfo.itemIndex == -1 )
                 goto LABEL_55;
-            sharedUiInfo.attachmentNum = BG_UnlockablesGetNumItemAttachmentsWithAttachPoint(
+            sharedUiInfo.numAttachments = BG_UnlockablesGetNumItemAttachmentsWithAttachPoint(
                                                                          sharedUiInfo.itemIndex,
                                                                          attachmentFilter->current.integer);
-            if ( sharedUiInfo.attachmentNum == 1 )
+            if ( sharedUiInfo.numAttachments == 1 )
                 result = 1;
             else
-                result = sharedUiInfo.attachmentNum - 1;
+                result = sharedUiInfo.numAttachments - 1;
             break;
         case 59:
         case 65:
@@ -266,7 +266,7 @@ int __cdecl UI_GetBasicTrainingGameTypeCount()
     count = 0;
     for ( index = 0; index < sharedUiInfo.numCustomMatchGameTypes; ++index )
     {
-        if ( sharedUiInfo.gameTypeMapCount[29 * index - 901] )
+        if ( sharedUiInfo.customMatchGameTypes[index].basictraining )
             ++count;
     }
     return count;
@@ -360,7 +360,7 @@ char *__cdecl UI_FeederItemText_CustomGametypes(int index)
     if ( index < 0 || index >= sharedUiInfo.numCustomMatchGameTypes )
         return (char *)"";
     else
-        return UI_SafeTranslateString((const char *)&sharedUiInfo.gameTypeMapCount[29 * index - 926]);
+        return UI_SafeTranslateString(sharedUiInfo.customMatchGameTypes[index].gameTypeName);
 }
 
 const char *__cdecl UI_FeederItemText_GametypesBase(
@@ -390,7 +390,7 @@ const char *__cdecl UI_FeederItemText_GametypesBase(
             {
                 indexa = UI_GetBasicTrainingGametypeIdForNum(index);
                 if ( indexa >= 0 && indexa < sharedUiInfo.numCustomMatchGameTypes )
-                    result = UI_SafeTranslateString((const char *)&sharedUiInfo.gameTypeMapCount[29 * indexa - 926]);
+                    result = UI_SafeTranslateString(sharedUiInfo.customMatchGameTypes[indexa].gameTypeName);
                 else
                     result = "";
             }
@@ -408,7 +408,7 @@ const char *__cdecl UI_FeederItemText_GametypesBase(
                         return UI_SafeTranslateString("CUSTOM_CUSTOM_GAME_MODE_CAPS");
                     realIndex = index - 1;
                 }
-                result = UI_SafeTranslateString((const char *)&sharedUiInfo.gameTypeMapCount[29 * realIndex - 926]);
+                result = UI_SafeTranslateString(sharedUiInfo.customMatchGameTypes[realIndex].gameTypeName);
             }
             break;
         case 2:
@@ -421,7 +421,8 @@ const char *__cdecl UI_FeederItemText_GametypesBase(
         case 3:
             if ( Com_GameMode_IsGameMode(GAMEMODE_FIRST_PRIVATE_ONLINE_GAMEMODE) )
                 realIndex = index - 1;
-            if ( !I_strcmp(&sharedUiInfo.customGameTypes[32].gameType[116 * realIndex], ui_gametype->current.string)
+            if ( realIndex >= 0 && realIndex < sharedUiInfo.numCustomMatchGameTypes
+                && !I_strcmp(sharedUiInfo.customMatchGameTypes[realIndex].gameType, ui_gametype->current.string)
                 && customGameMode->current.integer )
             {
                 *handle = Material_RegisterHandle("ui_host", 3);
@@ -443,7 +444,7 @@ int __cdecl UI_GetBasicTrainingGametypeIdForNum(int num)
     count = 0;
     for ( index = 0; index < sharedUiInfo.numCustomMatchGameTypes; ++index )
     {
-        if ( sharedUiInfo.gameTypeMapCount[29 * index - 901] )
+        if ( sharedUiInfo.customMatchGameTypes[index].basictraining )
         {
             if ( count == num )
                 return index;
@@ -472,7 +473,7 @@ char *__cdecl UI_FeederItemText_GametypesInGame(
         if ( column )
         {
             if ( column == 1 )
-                return UI_SafeTranslateString((const char *)&sharedUiInfo.gameTypeMapCount[29 * index - 926]);
+                return UI_SafeTranslateString(sharedUiInfo.customMatchGameTypes[index].gameTypeName);
             else
                 return (char *)"";
         }
@@ -487,7 +488,7 @@ char *__cdecl UI_FeederItemText_GametypesInGame(
     if ( column )
     {
         if ( column == 1 )
-            return UI_SafeTranslateString((const char *)&sharedUiInfo.gameTypeMapCount[29 * index - 926]);
+            return UI_SafeTranslateString(sharedUiInfo.customMatchGameTypes[index].gameTypeName);
     }
     else
     {
@@ -689,11 +690,13 @@ char *__cdecl UI_FeederItemText_Attachments(
     bool isSelectedItem; // [esp+53h] [ebp-1h]
 
     listPtr = Item_GetListBoxDef(item);
-    if ( listPtr->cursorPos[contextIndex] >= sharedUiInfo.attachmentNum && sharedUiInfo.attachmentNum )
+    // Retail MP reads the count at 0x037b0eac and writes the selection at
+    // 0x037b0ea8. Drawing a selected row must not change the list's bounds.
+    if ( listPtr->cursorPos[contextIndex] >= sharedUiInfo.numAttachments && sharedUiInfo.numAttachments )
     {
         listPtr->startPos[contextIndex] = 0;
-        listPtr->cursorPos[contextIndex] = sharedUiInfo.attachmentNum - 1;
-        v13 = sharedUiInfo.attachmentNum - 1;
+        listPtr->cursorPos[contextIndex] = sharedUiInfo.numAttachments - 1;
+        v13 = sharedUiInfo.numAttachments - 1;
         LocalClientNum = Com_ControllerIndex_GetLocalClientNum(controllerIndex);
         UI_FeederSelection(LocalClientNum, contextIndex, feederID, v13);
     }
@@ -703,7 +706,7 @@ char *__cdecl UI_FeederItemText_Attachments(
     isSelectedItem = 0;
     isItemGreyedOut = 0;
     itemIndex = sharedUiInfo.itemIndex;
-    if ( sharedUiInfo.attachmentNum == 1 )
+    if ( sharedUiInfo.numAttachments == 1 )
         attachmentNum = BG_UnlockablesGetItemAttachmentNumWithAttachPoint(
                                             sharedUiInfo.itemIndex,
                                             index,
@@ -871,15 +874,15 @@ _CustomClassDescription *__cdecl UI_Project_FeederItemText(
     {
         case '"':
             return (_CustomClassDescription *)UI_FeederItemText_SystemLinkLobbyMembers(localClientNum);
-        case '#':
-        case '$':
-        case '%':
-        case '\'':
-        case '(':
-        case ')':
-        case '*':
-        case '+':
-        case ',':
+        case GV_FEEDER_CONDITION_LHS:
+        case GV_FEEDER_CONDITION_OP:
+        case GV_FEEDER_CONDITION_RHS:
+        case GV_FEEDER_RULES:
+        case GV_FEEDER_EVENTS:
+        case GV_FEEDER_ACTIONS:
+        case GV_FEEDER_PARAMETERS:
+        case GV_FEEDER_TARGETS:
+        case GV_FEEDER_RULE_SUMMARY:
             return (_CustomClassDescription *)UI_FeederItemText_GameVariants(feederID, index, column);
         case '0':
             return (_CustomClassDescription *)UI_FeederItemText_GametypesBase(
@@ -1369,7 +1372,7 @@ char *__cdecl UI_FeederItemText_ItemInSlot(
     if ( listPtr->cursorPos[contextIndex] == index && !item->animInfo->animating )
     {
         sharedUiInfo.itemIndex = itemIndex;
-        sharedUiInfo.itemIndex = index;
+        sharedUiInfo.itemNum = index;
         isSelectedItem = Window_HasFocus(contextIndex, &item->window);
     }
     cost = BG_UnlockablesGetItemCost(itemIndex);
@@ -1420,7 +1423,7 @@ char *__cdecl UI_FeederItemText_CustomPerksInSlot(
     if ( Item_GetListBoxDef(item)->cursorPos[contextIndex] == index )
     {
         sharedUiInfo.itemIndex = itemIndex;
-        sharedUiInfo.itemIndex = index;
+        sharedUiInfo.itemNum = index;
         isSelectedItem = Window_HasFocus(contextIndex, &item->window);
     }
     isTweakable = UI_Gametype_Custom_IsPerkTweakable(itemIndex);
@@ -2343,7 +2346,7 @@ char __cdecl UI_Project_FeederItemColor(
             if ( column && column != 2 )
                 Vec4Copy(colorWhite, color);
             else
-                Vec4Copy((const float *)&sharedUiInfo.itemNum, color);
+                Vec4Copy(sharedUiInfo.itemColor, color);
             result = 1;
             break;
         case 58:
@@ -2358,7 +2361,7 @@ char __cdecl UI_Project_FeederItemColor(
         case 66:
         case 67:
             if ( !column || column == 2 || column == 4 )
-                Vec4Copy((const float *)&sharedUiInfo.itemNum, color);
+                Vec4Copy(sharedUiInfo.itemColor, color);
             result = 1;
             break;
         case 68:
@@ -2408,7 +2411,7 @@ char __cdecl UI_Project_FeederItemColor(
             if ( column && column != 2 )
                 Vec4Copy(colorWhite, color);
             else
-                Vec4Copy((const float *)&sharedUiInfo.itemNum, color);
+                Vec4Copy(sharedUiInfo.itemColor, color);
             result = 1;
             break;
         case 92:
@@ -3340,7 +3343,7 @@ char *__cdecl UI_GetMapLoadNameForCurrentIndex(int index)
     Com_Printf(
         16,
         "Warning: Invalid Map load name Index found. Setting it to the first map of the current selected map pack type\n");
-    return &sharedUiInfo.mapList[0].mapName[28];
+    return sharedUiInfo.mapCount > 0 ? sharedUiInfo.mapList[0].mapLoadName : (char *)"";
 }
 
 void __cdecl UI_OverrideCursorPos_Maps(int contextIndex, listBoxDef_s *listPtr)
@@ -3384,9 +3387,9 @@ void __cdecl UI_OverrideCursorPos_CustomGametypes(int contextIndex, listBoxDef_s
     int typeCount; // [esp+4h] [ebp-8h]
     int typeCursorPos; // [esp+8h] [ebp-4h]
 
-    typeCount = sharedUiInfo.gameTypes[31].basictraining + sharedUiInfo.numCustomMatchGameTypes;
+    typeCount = sharedUiInfo.numCustomMatchGameTypes;
     typeCursorPos = listPtr->cursorPos[contextIndex];
-    if ( typeCursorPos >= sharedUiInfo.gameTypes[31].basictraining + sharedUiInfo.numCustomMatchGameTypes )
+    if ( typeCursorPos >= typeCount )
     {
         if ( xblive_basictraining->current.enabled )
             listPtr->cursorPos[contextIndex] = typeCursorPos;
@@ -3421,7 +3424,7 @@ int __cdecl UI_GetBasicTrainingGametypeNumFromId(int id)
     count = 0;
     for ( index = 0; index < sharedUiInfo.numCustomMatchGameTypes; ++index )
     {
-        if ( sharedUiInfo.gameTypeMapCount[29 * index - 901] )
+        if ( sharedUiInfo.customMatchGameTypes[index].basictraining )
         {
             if ( index == id )
                 return count;
@@ -3447,7 +3450,7 @@ bool __cdecl UI_CustomGametypes_IsInvalidCursorPos(int cursorPos)
 {
     return cursorPos < 0
             || cursorPos >= sharedUiInfo.numCustomMatchGameTypes
-            || I_strcmp(ui_gametype->current.string, &sharedUiInfo.customGameTypes[32].gameType[116 * cursorPos]) != 0;
+            || I_strcmp(ui_gametype->current.string, sharedUiInfo.customMatchGameTypes[cursorPos].gameType) != 0;
 }
 
 void __cdecl UI_OverrideCursorPos_Gametypes(
@@ -3479,15 +3482,15 @@ bool __cdecl UI_Project_OverrideCursorPos(int localClientNum, int contextIndex, 
     listPtr = Item_GetListBoxDef(item);
     switch ( (int)listPtr->special )
     {
-        case '#':
-        case '$':
-        case '%':
-        case '\'':
-        case '(':
-        case ')':
-        case '*':
-        case '+':
-        case ',':
+        case GV_FEEDER_CONDITION_LHS:
+        case GV_FEEDER_CONDITION_OP:
+        case GV_FEEDER_CONDITION_RHS:
+        case GV_FEEDER_RULES:
+        case GV_FEEDER_EVENTS:
+        case GV_FEEDER_ACTIONS:
+        case GV_FEEDER_PARAMETERS:
+        case GV_FEEDER_TARGETS:
+        case GV_FEEDER_RULE_SUMMARY:
             UI_OverrideCursorPos_GameVariants(localClientNum, contextIndex, listPtr, (int)listPtr->special);
             result = 1;
             break;
@@ -3648,7 +3651,7 @@ void __cdecl UI_FeederSelection_Maps(int contextIndex, float feederID, int index
 void __cdecl UI_FeederSelection_CustomGametypes(int contextIndex, float feederID, int index)
 {
     if ( index >= 0 && index < sharedUiInfo.numCustomMatchGameTypes )
-        Dvar_SetStringByName("ui_gametype", &sharedUiInfo.customGameTypes[32].gameType[116 * index]);
+        Dvar_SetStringByName("ui_gametype", sharedUiInfo.customMatchGameTypes[index].gameType);
 }
 
 void __cdecl UI_FeederSelection_GametypesBase(int localClientNum, int contextIndex, float feederID, int index)
@@ -3663,8 +3666,8 @@ void __cdecl UI_FeederSelection_GametypesBase(int localClientNum, int contextInd
             v4 = index - 1;
         else
             v4 = index;
-        if ( v4 >= 0 )
-            Dvar_SetStringByName("ui_preview", &sharedUiInfo.customGameTypes[32].gameType[116 * v4]);
+        if ( v4 >= 0 && v4 < sharedUiInfo.numCustomMatchGameTypes )
+            Dvar_SetStringByName("ui_preview", sharedUiInfo.customMatchGameTypes[v4].gameType);
     }
 }
 
@@ -3673,9 +3676,11 @@ void __cdecl UI_FeederSelection_GametypesInGame(int localClientNum, int contextI
     if ( index >= 0 && index < UI_FeederCount(localClientNum, contextIndex, feederID, 0) )
     {
         if ( xblive_basictraining->current.enabled )
-            index = UI_GetBasicTrainingGametypeIdForNum(index) + 1;
+            index = UI_GetBasicTrainingGametypeIdForNum(index);
+        if ( index < 0 || index >= sharedUiInfo.numCustomMatchGameTypes )
+            return;
         Dvar_SetIntByName("ui_preview_gt_idx", 1);
-        Dvar_SetStringByName("ui_preview_gt", &sharedUiInfo.customGameTypes[32].gameType[116 * index]);
+        Dvar_SetStringByName("ui_preview_gt", sharedUiInfo.customMatchGameTypes[index].gameType);
     }
 }
 
@@ -3687,15 +3692,15 @@ void __cdecl UI_Project_FeederSelection(int localClientNum, int contextIndex, fl
 
     switch ( (int)feederID )
     {
-        case '#':
-        case '$':
-        case '%':
-        case '\'':
-        case '(':
-        case ')':
-        case '*':
-        case '+':
-        case ',':
+        case GV_FEEDER_CONDITION_LHS:
+        case GV_FEEDER_CONDITION_OP:
+        case GV_FEEDER_CONDITION_RHS:
+        case GV_FEEDER_RULES:
+        case GV_FEEDER_EVENTS:
+        case GV_FEEDER_ACTIONS:
+        case GV_FEEDER_PARAMETERS:
+        case GV_FEEDER_TARGETS:
+        case GV_FEEDER_RULE_SUMMARY:
             UI_FeederSelection_GameVariants(localClientNum, contextIndex, feederID, index);
             break;
         case '0':
@@ -3709,7 +3714,7 @@ void __cdecl UI_Project_FeederSelection(int localClientNum, int contextIndex, fl
         case 'a':
         case 'd':
             sharedUiInfo.itemIndex = BG_UnlockablesGetItemIndexInSlot(index);
-            sharedUiInfo.itemIndex = index;
+            sharedUiInfo.itemNum = index;
             break;
         case '9':
             sharedUiInfo.attachmentNum = BG_UnlockablesGetItemAttachmentNumWithAttachPoint(

@@ -2,6 +2,9 @@
 #include "cscr_variable.h"
 #include <universal/assertive.h>
 #include <cstring>
+#if defined(KISAK_MP) || defined(KISAK_SP)
+#include <string>
+#endif
 #include "cscr_compiler.h"
 #include <win32/win_net.h>
 #include <universal/com_memory.h>
@@ -1095,6 +1098,286 @@ SourceBufferInfo *__cdecl Scr_GetNewSourceBuffer(scriptInstance_t inst)
     return &gScrParserPub[inst].sourceBufferLookup[gScrParserPub[inst].sourceBufferLookupLen++];
 }
 
+#ifdef KISAK_MP
+static char *Scr_AdjustCustomMatchBots(scriptInstance_t inst, const char *filename, char *source, int *length)
+{
+    if (inst != SCRIPTINSTANCE_SERVER || !Dvar_GetBool("xblive_privatematch")
+        || I_stricmp(filename, "maps/mp/gametypes/_bot.gsc"))
+        return source;
+
+    // Retail's managed spawner balances two bot teams even in FFA, where
+    // auto-assignment picks the underlying team randomly. Preserve that split
+    // when the total is right, rather than repeatedly kicking/replacing bots.
+    static const char anchor[] = "differenceAxis = axis_num - countAxis;";
+    static const char adjustment[] =
+        "if ( level.teambased )\n"
+        "{\n"
+        "    host = GetHostPlayer();\n"
+        "    if ( !IsDefined( host ) || !IsDefined( host.pers[\"team\"] ) )\n"
+        "        continue;\n"
+        "    if ( host.pers[\"team\"] != \"axis\" && host.pers[\"team\"] != \"allies\" )\n"
+        "        continue;\n"
+        "    friendlyBots = GetDvarInt( #\"scr_num_bots_friendly\" );\n"
+        "    enemyBots = GetDvarInt( #\"scr_num_bots_enemy\" );\n"
+        "    if ( friendlyBots < 0 ) friendlyBots = 0;\n"
+        "    if ( friendlyBots > 8 ) friendlyBots = 8;\n"
+        "    if ( enemyBots < 0 ) enemyBots = 0;\n"
+        "    if ( enemyBots > 9 ) enemyBots = 9;\n"
+        "    if ( host.pers[\"team\"] == \"axis\" )\n"
+        "    {\n"
+        "        axis_num = friendlyBots;\n"
+        "        allies_num = enemyBots;\n"
+        "    }\n"
+        "    else\n"
+        "    {\n"
+        "        allies_num = friendlyBots;\n"
+        "        axis_num = enemyBots;\n"
+        "    }\n"
+        "}\n"
+        "else\n"
+        "{\n"
+        "    desiredBots = GetDvarInt( #\"scr_num_bots\" );\n"
+        "    if ( desiredBots < 0 ) desiredBots = 0;\n"
+        "    if ( desiredBots > 17 ) desiredBots = 17;\n"
+        "    allies_num = countAllies;\n"
+        "    if ( allies_num > desiredBots )\n"
+        "        allies_num = desiredBots;\n"
+        "    axis_num = desiredBots - allies_num;\n"
+        "}\n\t\t";
+    const char *position = strstr(source, anchor);
+    if (!position || strstr(position + sizeof(anchor) - 1, anchor))
+    {
+        // Mods can supply their own manager. Do not rewrite an unknown body.
+        Com_PrintWarning(16, "Custom bots: unrecognized _bot.gsc; leaving its manager unchanged.\n");
+        return source;
+    }
+    std::string script(source, *length);
+    script.insert(position - source, adjustment);
+    // Some retail equipment/grenade branches read the training preference
+    // directly. Custom matches must use the selected custom difficulty there
+    // too, without overwriting the user's Combat Training preference.
+    static const char trainingDifficulty[] = "#\"bot_difficulty\"";
+    static const char customDifficulty[] = "#\"scr_bot_difficulty\"";
+    for (size_t offset = 0; (offset = script.find(trainingDifficulty, offset)) != std::string::npos;)
+    {
+        script.replace(offset, sizeof(trainingDifficulty) - 1, customDifficulty);
+        offset += sizeof(customDifficulty) - 1;
+    }
+    *length = script.size();
+    char *adjusted = (char *)Hunk_AllocateTempMemoryHigh(*length + 1, "CustomMatchBots");
+    memcpy(adjusted, script.data(), *length);
+    adjusted[*length] = 0;
+    return adjusted;
+}
+#endif
+
+#ifdef KISAK_SP
+static size_t Scr_CountSourceOccurrences(const std::string &source, const char *anchor)
+{
+    size_t count = 0;
+    for (size_t offset = 0; (offset = source.find(anchor, offset)) != std::string::npos;)
+    {
+        ++count;
+        offset += strlen(anchor);
+    }
+    return count;
+}
+
+static bool Scr_ReplaceSourceOnce(std::string &source, const char *anchor, const char *replacement)
+{
+    if (Scr_CountSourceOccurrences(source, anchor) != 1)
+        return false;
+
+    source.replace(source.find(anchor), strlen(anchor), replacement);
+    return true;
+}
+
+static char *Scr_CopyAdjustedSPSource(const std::string &script, int *length)
+{
+    *length = static_cast<int>(script.size());
+    char *adjusted = (char *)Hunk_AllocateTempMemoryHigh(*length + 1, "SPZombieLateJoin");
+    memcpy(adjusted, script.data(), *length);
+    adjusted[*length] = 0;
+    return adjusted;
+}
+
+// The retail Zombies scripts already own the correct spectator lifecycle:
+// spawnSpectator() keeps a client out of play and spectators_respawn() releases
+// spectators between rounds through spectator_respawn().  Retail's lobby kept
+// the initial cohort closed, while OpenBLOPS dedicated direct-connect permits a
+// new client after the one-shot all_players_connected barrier.  Patch only that
+// missing policy/slot seam; keep the retail lifecycle itself intact.
+static char *Scr_AdjustSPZombieLateJoin(
+    scriptInstance_t inst,
+    const char *filename,
+    char *source,
+    int *length)
+{
+    if (inst != SCRIPTINSTANCE_SERVER)
+        return source;
+
+    // Script compilation begins before the read-only zombiemode dvar is a
+    // reliable discriminator.  The map name is already final at this point;
+    // this is the same SP map-family rule used by the level-load path.
+    const char *mapName = Dvar_GetString("mapname");
+    if (!mapName
+        || (I_strnicmp(mapName, "zombie_", 7) && I_stricmp(mapName, "zombietron")))
+        return source;
+
+    std::string script(source, *length);
+
+    if (!I_stricmp(filename, "maps/_callbackglobal.gsc"))
+    {
+        static const char spawnDecision[] =
+            "\tif( level.otherPlayersSpectate )\r\n"
+            "\t{\r\n"
+            "\t\tself thread\t[[level.spawnSpectator]](); \r\n"
+            "\t}\r\n"
+            "\telse\r\n"
+            "\t{\r\n"
+            "\t\tself thread\t[[level.spawnPlayer]](); \r\n"
+            "\t}";
+        static const char lateJoinDecision[] =
+            "\t// OpenBLOPS dedicated direct-connect can add a client after the retail\r\n"
+            "\t// lobby cohort has received its one-time co-op spawn slots.  Wait for\r\n"
+            "\t// that assignment so the decision cannot race all_players_connected.\r\n"
+            "\t// This must yield real server time: waittillframeend resumes within the\r\n"
+            "\t// same frame, so polling with it never lets all_players_connected advance\r\n"
+            "\t// and the VM kills the thread as an infinite loop (client never spawns).\r\n"
+            "\twhile( !IsDefined( level.openblops_initial_spawn_placement_complete ) )\r\n"
+            "\t{\r\n"
+            "\t\twait( 0.05 );\r\n"
+            "\t}\r\n"
+            "\r\n"
+            "\tself.openblops_late_join = true;\r\n"
+            "\tif( IsDefined( self.openblops_initial_spawn_client ) && self.openblops_initial_spawn_client )\r\n"
+            "\t{\r\n"
+            "\t\tself.openblops_late_join = false;\r\n"
+            "\t}\r\n"
+            "\telse\r\n"
+            "\t{\r\n"
+            "\t\tinitial_spawns = getstructarray( \"initial_spawn_points\", \"targetname\" );\r\n"
+            "\t\tif( initial_spawns.size > 0 )\r\n"
+            "\t\t{\r\n"
+            "\t\t\tspawn_slot = self GetEntityNumber() % initial_spawns.size;\r\n"
+            "\t\t\tself.spectator_respawn = initial_spawns[spawn_slot];\r\n"
+            "\t\t}\r\n"
+            "\t}\r\n"
+            "\r\n"
+            "\t// _zombiemode::onPlayerConnect freezes every connecting client and relies\r\n"
+            "\t// on the one-shot intro fade_in() to release the initial cohort.  That\r\n"
+            "\t// has already run for a late joiner, so release the spectator here.\r\n"
+            "\tif( self.openblops_late_join )\r\n"
+            "\t{\r\n"
+            "\t\tself freezecontrols( false );\r\n"
+            "\t}\r\n"
+            "\r\n"
+            "\tif( level.otherPlayersSpectate || self.openblops_late_join )\r\n"
+            "\t{\r\n"
+            "\t\tself thread\t[[level.spawnSpectator]](); \r\n"
+            "\t}\r\n"
+            "\telse\r\n"
+            "\t{\r\n"
+            "\t\tself thread\t[[level.spawnPlayer]](); \r\n"
+            "\t}";
+
+        if (!Scr_ReplaceSourceOnce(script, spawnDecision, lateJoinDecision))
+        {
+            Com_PrintWarning(16, "SP late join: unrecognized maps/_callbackglobal.gsc; leaving it unchanged.\n");
+            return source;
+        }
+
+        Com_Printf(16, "SP late join: patched retail spawnClient spectator policy.\n");
+        return Scr_CopyAdjustedSPSource(script, length);
+    }
+
+    if (!I_stricmp(filename, "maps/_zombiemode.gsc"))
+    {
+        static const char respawnStart[] =
+            "\tprintln( \"*************************Respawn Spectator***\" );\r\n"
+            "\tassert( IsDefined( self.spectator_respawn ) );\r\n"
+            "\r\n"
+            "\torigin = self.spectator_respawn.origin;\r\n"
+            "\tangles = self.spectator_respawn.angles;";
+        static const char safeRespawnStart[] =
+            "\tprintln( \"*************************Respawn Spectator***\" );\r\n"
+            "\r\n"
+            "\t// Reconstruct the stable retail co-op slot if a map or reconnect path\r\n"
+            "\t// reached this point without coop_player_spawn_placement assigning it.\r\n"
+            "\tif( !IsDefined( self.spectator_respawn ) )\r\n"
+            "\t{\r\n"
+            "\t\tinitial_spawns = getstructarray( \"initial_spawn_points\", \"targetname\" );\r\n"
+            "\t\tif( initial_spawns.size > 0 )\r\n"
+            "\t\t{\r\n"
+            "\t\t\tspawn_slot = self GetEntityNumber() % initial_spawns.size;\r\n"
+            "\t\t\tself.spectator_respawn = initial_spawns[spawn_slot];\r\n"
+            "\t\t}\r\n"
+            "\t}\r\n"
+            "\r\n"
+            "\torigin = self.origin;\r\n"
+            "\tangles = self.angles;\r\n"
+            "\tif( IsDefined( self.spectator_respawn ) )\r\n"
+            "\t{\r\n"
+            "\t\torigin = self.spectator_respawn.origin;\r\n"
+            "\t\tangles = self.spectator_respawn.angles;\r\n"
+            "\t}";
+        static const char badSpawnPointIndex[] =
+            "\t\t\t\tif( isdefined(spawn_points[i].script_int) )\r\n"
+            "\t\t\t\t\tideal_distance = spawn_points[i].script_int;";
+        static const char correctedSpawnPointIndex[] =
+            "\t\t\t\tif( isdefined(spawn_points[j].script_int) )\r\n"
+            "\t\t\t\t\tideal_distance = spawn_points[j].script_int;";
+        static const char initialPlacementTail[] =
+            "\tfor( i = 0; i < players.size; i++ )\r\n"
+            "\t{\r\n"
+            "\t\tplayers[i] setorigin( structs[i].origin ); \r\n"
+            "\t\tplayers[i] setplayerangles( structs[i].angles ); \r\n"
+            "\t\tplayers[i].spectator_respawn = structs[i];\r\n"
+            "\t}\r\n"
+            "}";
+        static const char guardedInitialPlacementTail[] =
+            "\tfor( i = 0; i < players.size; i++ )\r\n"
+            "\t{\r\n"
+            "\t\tplayers[i] setorigin( structs[i].origin ); \r\n"
+            "\t\tplayers[i] setplayerangles( structs[i].angles ); \r\n"
+            "\t\tplayers[i].spectator_respawn = structs[i];\r\n"
+            "\t\tplayers[i].openblops_initial_spawn_client = true;\r\n"
+            "\t}\r\n"
+            "\r\n"
+            "\t// Publish only after every member of the initial cohort has its slot.\r\n"
+            "\tlevel.openblops_initial_spawn_placement_complete = true;\r\n"
+            "}";
+        // onPlayerSpawned re-freezes a client on its first spawn and expects the
+        // intro black screen to release it.  Retail never spawns anyone after the
+        // intro (SV_DirectConnect 0x00458e40 refuses non-party connects with
+        // EXE_ERR_CANNOTJOININPROGRESS unless party_joinInProgressAllowed), so a
+        // late joiner's first spawn would stay frozen forever.
+        static const char firstSpawnFreeze[] =
+            "self freezecontrols( true ); // first spawn only, intro_black_screen will pull them out of it";
+        static const char guardedFirstSpawnFreeze[] =
+            "if( !is_true( self.openblops_late_join ) ) { self freezecontrols( true ); } // first spawn only, intro_black_screen will pull them out of it";
+
+        if (Scr_CountSourceOccurrences(script, respawnStart) != 1
+            || Scr_CountSourceOccurrences(script, firstSpawnFreeze) != 1
+            || Scr_CountSourceOccurrences(script, badSpawnPointIndex) != 1
+            || Scr_CountSourceOccurrences(script, initialPlacementTail) != 1)
+        {
+            Com_PrintWarning(16, "SP late join: unrecognized maps/_zombiemode.gsc; leaving it unchanged.\n");
+            return source;
+        }
+
+        Scr_ReplaceSourceOnce(script, respawnStart, safeRespawnStart);
+        Scr_ReplaceSourceOnce(script, badSpawnPointIndex, correctedSpawnPointIndex);
+        Scr_ReplaceSourceOnce(script, initialPlacementTail, guardedInitialPlacementTail);
+        Scr_ReplaceSourceOnce(script, firstSpawnFreeze, guardedFirstSpawnFreeze);
+        Com_Printf(16, "SP late join: patched retail spectator fallback and spawn-point selection.\n");
+        return Scr_CopyAdjustedSPSource(script, length);
+    }
+
+    return source;
+}
+#endif
+
 char *__cdecl Scr_ReadFile_LoadObj(
     scriptInstance_t inst,
     const char *filename,
@@ -1115,6 +1398,12 @@ char *__cdecl Scr_ReadFile_LoadObj(
         FS_Read((unsigned __int8 *)sourceBuf, len, f);
         sourceBuf[len] = 0;
         FS_FCloseFile(f);
+#ifdef KISAK_MP
+        sourceBuf = Scr_AdjustCustomMatchBots(inst, extFilename, sourceBuf, &len);
+#endif
+#ifdef KISAK_SP
+        sourceBuf = Scr_AdjustSPZombieLateJoin(inst, extFilename, sourceBuf, &len);
+#endif
         Scr_AddSourceBufferInternal(inst, extFilename, codePos, sourceBuf, len, 1, archive);
         return sourceBuf;
     }
@@ -1197,6 +1486,12 @@ char *__cdecl Scr_ReadFile_FastFile(
                 __debugbreak();
             }
         }
+#ifdef KISAK_MP
+        sourceBuf = Scr_AdjustCustomMatchBots(inst, extFilename, sourceBuf, &len);
+#endif
+#ifdef KISAK_SP
+        sourceBuf = Scr_AdjustSPZombieLateJoin(inst, extFilename, sourceBuf, &len);
+#endif
         Scr_AddSourceBufferInternal(inst, extFilename, codePos, sourceBuf, len, 1, archive);
         return sourceBuf;
     }

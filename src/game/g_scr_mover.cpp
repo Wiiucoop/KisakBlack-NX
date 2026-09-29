@@ -215,7 +215,11 @@ void __cdecl SP_script_brushmodel(gentity_s *self, SpawnVar *v)
         if ( (self->spawnflags & 1) != 0 )
             self->flags |= (FL_DYNAMICPATH | FL_AUTO_BLOCKPATHS);
 
+#ifdef KISAK_SP
+        static_assert(0x300u == (FL_DYNAMICPATH | FL_AUTO_BLOCKPATHS));
+#else
         static_assert(0x40000800u == (FL_DYNAMICPATH | FL_AUTO_BLOCKPATHS));
+#endif
     }
     else
     {
@@ -251,7 +255,11 @@ void __cdecl SP_script_model(gentity_s *pSelf, SpawnVar *v)
     if ( (pSelf->spawnflags & 1) != 0 )
         pSelf->flags |= (FL_DYNAMICPATH | FL_AUTO_BLOCKPATHS);
 
+#ifdef KISAK_SP
+    static_assert(0x300u == (FL_DYNAMICPATH | FL_AUTO_BLOCKPATHS));
+#else
     static_assert(0x40000800u == (FL_DYNAMICPATH | FL_AUTO_BLOCKPATHS));
+#endif
 }
 
 void __cdecl SP_script_origin(gentity_s *pSelf, SpawnVar *v)

@@ -243,9 +243,9 @@ void __cdecl LiveStorage_ResetStats(unsigned __int8 *buffer)
             16,
             "LiveStorage_ResetStats: resetstats called - writing statversion %i to buffer\n",
             stat_version->current.integer);
-        memset(buffer, 0, 0x9CE8u);
-        DDL_AssociateBuffer((char *)buffer, 40168, g_statsDDL);
-        LiveStats_WriteChecksumToBuffer(buffer, 40168);
+        memset(buffer, 0, STATS_BUFFER_SIZE);
+        DDL_AssociateBuffer((char *)buffer, STATS_BUFFER_SIZE, g_statsDDL);
+        LiveStats_WriteChecksumToBuffer(buffer, STATS_BUFFER_SIZE);
         LiveStats_SetPlayerStatByKey(
             "PlayerStatsList",
             MP_PLAYERSTATSKEY_STATS_VERSION,
@@ -570,6 +570,10 @@ bool __cdecl SV_GetIntClientStatByGameMode(
 
 void __cdecl SV_DWInitStats()
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
     int v0; // eax
     int j; // [esp+0h] [ebp-8h]
     int i; // [esp+4h] [ebp-4h]
@@ -582,6 +586,7 @@ void __cdecl SV_DWInitStats()
         for (j = 0; j < 19; ++j)
             g_playerStats[i].values[j] = 0;
     }
+#endif
 }
 
 bool __cdecl SV_MakeClientLBRow(
@@ -1131,6 +1136,10 @@ bool __cdecl SV_MakeClientGlobalLBRow(
 
 void SV_CommitClientLeaderboards()
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
 #ifdef KISAK_LIVE_STUBS
     const bdReference<bdCommonAddr> *v1; // eax
     char *v2; // [esp+0h] [ebp-15F8Ch]
@@ -1320,6 +1329,7 @@ void SV_CommitClientLeaderboards()
         }
     }
 #endif
+#endif
 }
 
 void __cdecl SV_SetClientStatsForRow(int clientNum, const char *gameModePrefix, bool delta)
@@ -1385,6 +1395,10 @@ void __cdecl SV_SetClientStatsForRow(int clientNum, const char *gameModePrefix, 
 
 void __cdecl SV_ReadClientFileSuccess(TaskRecord *task)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
 #ifdef KISAK_LIVE_STUBS
     client_t *ClientFromFileInfo; // eax
     dwFileOperationInfo *fileTask; // [esp+0h] [ebp-14h]
@@ -1438,10 +1452,15 @@ void __cdecl SV_ReadClientFileSuccess(TaskRecord *task)
             fileInfo->fileOperationSucessFunction(0, task->payload);
     }
 #endif
+#endif
 }
 
 void __cdecl SV_WriteClientFileFailure(TaskRecord *task)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
     dwFileOperationInfo *fileInfo; // [esp+0h] [ebp-4h]
 
     if ( task->payload )
@@ -1450,10 +1469,15 @@ void __cdecl SV_WriteClientFileFailure(TaskRecord *task)
         if ( fileInfo->fileNotFoundFunction )
             fileInfo->fileNotFoundFunction(0, task->payload);
     }
+#endif
 }
 
 void __cdecl SV_WriteClientFileSuccess(TaskRecord *task)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
     dwFileOperationInfo *fileInfo; // [esp+0h] [ebp-4h]
 
     if ( task->payload )
@@ -1462,10 +1486,15 @@ void __cdecl SV_WriteClientFileSuccess(TaskRecord *task)
         if ( fileInfo->fileOperationSucessFunction )
             fileInfo->fileOperationSucessFunction(0, task->payload);
     }
+#endif
 }
 
 void __cdecl SV_ReadDWFileDeferred(dwFileOperationInfo *fileInfo)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
 #ifdef KISAK_LIVE_STUBS
     bdReference<bdCommonAddr> v1; // [esp+24h] [ebp-14h] BYREF
     bdReference<bdCommonAddr> v2; // [esp+28h] [ebp-10h] BYREF
@@ -1510,10 +1539,15 @@ void __cdecl SV_ReadDWFileDeferred(dwFileOperationInfo *fileInfo)
         }
     }
 #endif
+#endif
 }
 
 void __cdecl SV_WriteClientFileDeferred(client_t *client, dwFileOperationInfo *fileInfo)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
 #ifdef KISAK_LIVE_STUBS
     bdReference<bdCommonAddr> v2; // [esp+10h] [ebp-20h] BYREF
     unsigned __int8 (*tempCompressedFileBuffer)[65536]; // [esp+14h] [ebp-1Ch]
@@ -1584,10 +1618,15 @@ void __cdecl SV_WriteClientFileDeferred(client_t *client, dwFileOperationInfo *f
         }
     }
 #endif
+#endif
 }
 
 void __cdecl SV_DWReadClientStats(client_t *client)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
     dwFileOperationInfo *fileInfo; // [esp+4h] [ebp-4h]
 
     if ( client && client->dw_userID )
@@ -1606,7 +1645,7 @@ void __cdecl SV_DWReadClientStats(client_t *client)
                 fileInfo->isCompressedFile = 1;
                 fileInfo->fileTask.m_filename = (char*)"globalstatsCompressed";
                 fileInfo->fileBuffer = client->globalStats;
-                fileInfo->bufferSize = 40168;
+                fileInfo->bufferSize = STATS_BUFFER_SIZE;
                 fileInfo->fileOperationSucessFunction = (void (__cdecl *)(const int, void *))SV_DWReadClientGlobalStatsSuccess;
                 fileInfo->fileNotFoundFunction = (taskCompleteResults (__cdecl *)(const int, void *))SV_DWReadClientGlobalStatsFailure;
                 fileInfo->ownerID = client->dw_userID;
@@ -1618,10 +1657,15 @@ void __cdecl SV_DWReadClientStats(client_t *client)
             }
         }
     }
+#endif
 }
 
 void __cdecl SV_DWReadClientGlobalStatsSuccess(const int controllerIndex, _QWORD *data)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
     unsigned __int8 *purchasedItems; // eax
     client_t *v3; // eax
     int outInt; // [esp+9CFCh] [ebp-Ch] BYREF
@@ -1654,7 +1698,7 @@ void __cdecl SV_DWReadClientGlobalStatsSuccess(const int controllerIndex, _QWORD
                 BG_UnlockablesSetPurchasedBits(ClientFromFileInfo->stats, ClientFromFileInfo->purchasedItems);
                 v3 = ClientFromFileInfo;
                 LODWORD(ClientFromFileInfo->statPacketsReceived) = -1;
-                HIDWORD(v3->statPacketsReceived) = 7;
+                HIDWORD(v3->statPacketsReceived) = STATS_PACKET_MASK_HIGH;
                 NET_OutOfBandPrint(NS_SERVER, ClientFromFileInfo->header.netchan.remoteAddress, "statsOK\n");
             }
             clientnum = SV_GetClientNumForBdOnlineUserID(ClientFromFileInfo->dw_userID);
@@ -1672,20 +1716,21 @@ void __cdecl SV_DWReadClientGlobalStatsSuccess(const int controllerIndex, _QWORD
         Com_PrintWarning(15, "Got successful globalstats for user %llu, but no matching user on server found!\n", data[34]);
     }
     SV_ResetFileOp((dwFileOperationInfo*)data);
+#endif
 }
 
 char __cdecl SV_IsStatsBlobOK(char *data)
 {
-    char backupBuffer[40172]; // [esp+0h] [ebp-9CF8h] BYREF
+    char backupBuffer[STATS_RECORD_SIZE]; // [esp+0h] [ebp-9CF8h] BYREF
     char *buffer; // [esp+9CF0h] [ebp-8h]
     char v4; // [esp+9CF7h] [ebp-1h]
 
     v4 = 0;
     buffer = data;
-    if ( DDL_AssociateBuffer(data, 40168, g_statsDDL) )
+    if ( DDL_AssociateBuffer(data, STATS_BUFFER_SIZE, g_statsDDL) )
         return 1;
-    if ( DDL_FixBufferVersion(buffer, g_statsDDL, "ddl_mp/stats.ddl", backupBuffer, 40168)
-        || DDL_FixBufferVersion(buffer, g_statsDDL, "ddl_mp/stats_archive.ddl", backupBuffer, 40168) )
+    if ( DDL_FixBufferVersion(buffer, g_statsDDL, STATS_DDL_ASSET_NAME, backupBuffer, STATS_BUFFER_SIZE)
+        || DDL_FixBufferVersion(buffer, g_statsDDL, STATS_ARCHIVE_DDL_ASSET_NAME, backupBuffer, STATS_BUFFER_SIZE) )
     {
         DDL_NoCheckPrintWarning("DDL: Stats buffer updated to version %d\n", g_statsDDL->version);
         return 1;
@@ -1695,6 +1740,10 @@ char __cdecl SV_IsStatsBlobOK(char *data)
 
 int __cdecl SV_DWReadClientGlobalStatsFailure(int controllerIndex, _QWORD *data)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return 0;
+#else
     client_t *client; // [esp+4h] [ebp-4h]
 
     client = SV_GetClientFromFileInfo(data);
@@ -1718,16 +1767,21 @@ int __cdecl SV_DWReadClientGlobalStatsFailure(int controllerIndex, _QWORD *data)
             *(unsigned int *)&client->purchasedItems[28] = 0;
             BG_UnlockablesSetPurchasedBits(client->stats, client->purchasedItems);
             LODWORD(client->statPacketsReceived) = -1;
-            HIDWORD(client->statPacketsReceived) = 7;
+            HIDWORD(client->statPacketsReceived) = STATS_PACKET_MASK_HIGH;
             NET_OutOfBandPrint(NS_SERVER, client->header.netchan.remoteAddress, "statsOK\n");
         }
     }
     SV_ResetFileOp((dwFileOperationInfo*)data);
     return 1;
+#endif
 }
 
 void __cdecl SV_DWReadClientCAC(client_t *client)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
     const char *v1; // [esp+0h] [ebp-Ch]
     dwFileOperationInfo *fileInfo; // [esp+8h] [ebp-4h]
 
@@ -1745,7 +1799,7 @@ void __cdecl SV_DWReadClientCAC(client_t *client)
                 v1 = "mpstatsCompressed";
             fileInfo->fileTask.m_filename = (char *)v1;
             fileInfo->fileBuffer = client->stats;
-            fileInfo->bufferSize = 40168;
+            fileInfo->bufferSize = STATS_BUFFER_SIZE;
             fileInfo->fileOperationSucessFunction = (void (__cdecl *)(const int, void *))SV_DWReadClientCACSuccess;
             fileInfo->fileNotFoundFunction = (taskCompleteResults (__cdecl *)(const int, void *))SV_DWReadClientCACFailure;
             fileInfo->ownerID = client->dw_userID;
@@ -1756,10 +1810,15 @@ void __cdecl SV_DWReadClientCAC(client_t *client)
             Com_DPrintf(15, "Warning: ran out of client fileops. This is bad. Ask Ewan.\n");
         }
     }
+#endif
 }
 
 void __cdecl SV_DWReadClientCACSuccess(const int controllerIndex, _QWORD *data)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
     client_t *ClientFromFileInfo; // [esp+9CF8h] [ebp-4h]
 
     ClientFromFileInfo = SV_GetClientFromFileInfo(data);
@@ -1781,7 +1840,7 @@ void __cdecl SV_DWReadClientCACSuccess(const int controllerIndex, _QWORD *data)
                 *(unsigned int *)&ClientFromFileInfo->purchasedItems[28] = 0;
                 BG_UnlockablesSetPurchasedBits(ClientFromFileInfo->stats, ClientFromFileInfo->purchasedItems);
                 LODWORD(ClientFromFileInfo->statPacketsReceived) = -1;
-                HIDWORD(ClientFromFileInfo->statPacketsReceived) = 7;
+                HIDWORD(ClientFromFileInfo->statPacketsReceived) = STATS_PACKET_MASK_HIGH;
                 NET_OutOfBandPrint(NS_SERVER, ClientFromFileInfo->header.netchan.remoteAddress, "statsOK\n");
             }
         }
@@ -1791,10 +1850,15 @@ void __cdecl SV_DWReadClientCACSuccess(const int controllerIndex, _QWORD *data)
         }
     }
     SV_ResetFileOp((dwFileOperationInfo*)data);
+#endif
 }
 
 int __cdecl SV_DWReadClientCACFailure(int controllerIndex, _QWORD *data)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return 0;
+#else
     char *v2; // eax
     const char *v3; // eax
     client_t *client; // [esp+4h] [ebp-4h]
@@ -1821,16 +1885,21 @@ int __cdecl SV_DWReadClientCACFailure(int controllerIndex, _QWORD *data)
             *(unsigned int *)&client->purchasedItems[28] = 0;
             BG_UnlockablesSetPurchasedBits(client->stats, client->purchasedItems);
             LODWORD(client->statPacketsReceived) = -1;
-            HIDWORD(client->statPacketsReceived) = 7;
+            HIDWORD(client->statPacketsReceived) = STATS_PACKET_MASK_HIGH;
             NET_OutOfBandPrint(NS_SERVER, client->header.netchan.remoteAddress, "statsOK\n");
         }
     }
     SV_ResetFileOp((dwFileOperationInfo*)data);
     return 1;
+#endif
 }
 
 void __cdecl SV_DWWriteClientStats(client_t *client)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
     void *v1; // ecx
     char *v2; // eax
     const char *v3; // eax
@@ -1845,7 +1914,7 @@ void __cdecl SV_DWWriteClientStats(client_t *client)
     {
         if ( client && client->dw_userID && !xblive_basictraining->current.enabled )
         {
-            if ( LODWORD(client->statPacketsReceived) == -1 && HIDWORD(client->statPacketsReceived) == 7 )
+            if ( LODWORD(client->statPacketsReceived) == -1 && HIDWORD(client->statPacketsReceived) == STATS_PACKET_MASK_HIGH )
             {
                 Com_DPrintf(15, "Attempting to write stats for client %s\n", client->name);
                 fileInfo = SV_GetFreeFileOp();
@@ -1855,7 +1924,7 @@ void __cdecl SV_DWWriteClientStats(client_t *client)
                     fileInfo->isCompressedFile = 1;
                     fileInfo->fileTask.m_filename = (char*)"globalstatsCompressed";
                     fileInfo->fileBuffer = client->globalStats;
-                    fileInfo->bufferSize = 40168;
+                    fileInfo->bufferSize = STATS_BUFFER_SIZE;
                     fileInfo->fileOperationSucessFunction = (void (__cdecl *)(const int, void *))SV_DWWriteClientGlobalStatsSuccess;
                     fileInfo->ownerID = client->dw_userID;
                     checksum = (int *)client->globalStats;
@@ -1914,10 +1983,15 @@ void __cdecl SV_DWWriteClientStats(client_t *client)
 #else
     Com_DPrintf(15, "[KISAK] Lol this got triggered.");
 #endif
+#endif
 }
 
 void __cdecl SV_DWWriteClientGlobalStatsSuccess(int controllerIndex, unsigned __int8 **data)
 {
+#if defined(KISAK_DEDICATED) && defined(OPENBLOPS_NO_STEAM_AUTH)
+    // Dedicated offline profiles have no service/file-operation ownership.
+    return;
+#else
     client_t *client; // [esp+0h] [ebp-10h]
     unsigned __int64 uid; // [esp+8h] [ebp-8h]
 
@@ -1932,8 +2006,9 @@ void __cdecl SV_DWWriteClientGlobalStatsSuccess(int controllerIndex, unsigned __
     {
         uid = SV_GetBdUidFromFileInfo((uint64*)data);
     }
-    LiveStorage_SendStatsBufferToClient(uid, data[62], 40168, BLOB_TYPE_GLOBAL, 0);
+    LiveStorage_SendStatsBufferToClient(uid, data[62], STATS_BUFFER_SIZE, BLOB_TYPE_GLOBAL, 0);
     SV_ResetFileOp((dwFileOperationInfo*)data);
+#endif
 }
 
 void __cdecl LiveStorage_SendStatsBufferToClient(
@@ -1947,10 +2022,10 @@ void __cdecl LiveStorage_SendStatsBufferToClient(
     char *v5; // eax
     const char *v6; // eax
     int v7; // [esp+14h] [ebp-9D04h]
-    _WORD payload[20092]; // [esp+18h] [ebp-9D00h] BYREF
+    _WORD payload[(STATS_BUFFER_SIZE + 16) / 2]; // [esp+18h] [ebp-9D00h] BYREF
     unsigned __int8 *to; // [esp+9D14h] [ebp-4h]
 
-    memset(payload, 0, 40178);
+    memset(payload, 0, STATS_BUFFER_SIZE + 10);
     to = (unsigned __int8 *)&payload[5];
     if ( blobtype )
     {
@@ -1971,7 +2046,7 @@ void __cdecl LiveStorage_SendStatsBufferToClient(
         LOBYTE(payload[0]) = 8;
     }
     HIBYTE(payload[0]) = sendOK ? 5 : 0;
-    v7 = MSG_CompressWithZLib(buffer, 0x9CE8u, to, 0x9CE8u);
+    v7 = MSG_CompressWithZLib(buffer, STATS_BUFFER_SIZE, to, STATS_BUFFER_SIZE);
     if ( v7 <= 0 )
     {
         Com_DPrintf(15, "Couldn't compress stats! :(\n");
@@ -2451,7 +2526,7 @@ void __cdecl SV_CACValidate_EvaluateStatsBlobs(
                 int oldcacsize,
                 int globalsize)
 {
-    unsigned __int8 dst[40172]; // [esp+0h] [ebp-9CF0h] BYREF
+    unsigned __int8 dst[STATS_RECORD_SIZE]; // [esp+0h] [ebp-9CF0h] BYREF
 
     if ( (!globalok || !oldcacok)
         && !Assert_MyHandler(
@@ -2467,15 +2542,15 @@ void __cdecl SV_CACValidate_EvaluateStatsBlobs(
     *oldcacok = 0;
     if ( globalsize > 0 )
     {
-        if ( DDL_AssociateBuffer(globalblob, 40168, g_statsDDL) )
+        if ( DDL_AssociateBuffer(globalblob, STATS_BUFFER_SIZE, g_statsDDL) )
         {
             *globalok = 1;
         }
         else
         {
-            memset(dst, 0, 0x9CE8u);
-            if ( DDL_FixBufferVersion(globalblob, g_statsDDL, "ddl_mp/stats.ddl", (char *)dst, 40168)
-                || DDL_FixBufferVersion(globalblob, g_statsDDL, "ddl_mp/stats_archive.ddl", (char *)dst, 40168) )
+            memset(dst, 0, STATS_BUFFER_SIZE);
+            if ( DDL_FixBufferVersion(globalblob, g_statsDDL, STATS_DDL_ASSET_NAME, (char *)dst, STATS_BUFFER_SIZE)
+                || DDL_FixBufferVersion(globalblob, g_statsDDL, STATS_ARCHIVE_DDL_ASSET_NAME, (char *)dst, STATS_BUFFER_SIZE) )
             {
                 DDL_NoCheckPrintWarning("CACValidate: Globalbuffer updated to version %d\n", g_statsDDL->version);
                 *globalok = 1;
@@ -2484,15 +2559,15 @@ void __cdecl SV_CACValidate_EvaluateStatsBlobs(
     }
     if ( oldcacsize > 0 )
     {
-        if ( DDL_AssociateBuffer(oldcacblob, 40168, g_statsDDL) )
+        if ( DDL_AssociateBuffer(oldcacblob, STATS_BUFFER_SIZE, g_statsDDL) )
         {
             *oldcacok = 1;
         }
         else
         {
-            memset(dst, 0, 0x9CE8u);
-            if ( DDL_FixBufferVersion(oldcacblob, g_statsDDL, "ddl_mp/stats.ddl", (char *)dst, 40168)
-                || DDL_FixBufferVersion(oldcacblob, g_statsDDL, "ddl_mp/stats_archive.ddl", (char *)dst, 40168) )
+            memset(dst, 0, STATS_BUFFER_SIZE);
+            if ( DDL_FixBufferVersion(oldcacblob, g_statsDDL, STATS_DDL_ASSET_NAME, (char *)dst, STATS_BUFFER_SIZE)
+                || DDL_FixBufferVersion(oldcacblob, g_statsDDL, STATS_ARCHIVE_DDL_ASSET_NAME, (char *)dst, STATS_BUFFER_SIZE) )
             {
                 DDL_NoCheckPrintWarning("CACValidate: Oldcacbuffer updated to version %d\n", g_statsDDL->version);
                 *oldcacok = 1;
@@ -2564,7 +2639,7 @@ void __cdecl SV_CACValidateWriteCACSuccess(int controllerIndex, void *data)
     LiveStorage_SendStatsBufferToClient(
         *((_QWORD *)data + 34),
         *((unsigned __int8 **)data + 62),
-        40168,
+        STATS_BUFFER_SIZE,
         BLOB_TYPE_CAC,
         g_cacvalidateState == CAC_IDLE);
     SV_ResetFileOp(data);
@@ -2591,7 +2666,7 @@ void __cdecl SV_CACValidateWriteGlobal(unsigned __int64 client, unsigned __int8 
         if ( !globalsize )
         {
             LiveStorage_ResetStats(globalblob);
-            globalsize = 40168;
+            globalsize = STATS_BUFFER_SIZE;
         }
         if ( (int)g_newCACBlobSize <= 0
             && !Assert_MyHandler(
@@ -2632,7 +2707,7 @@ void __cdecl SV_CACValidateWriteGlobalSuccess(int controllerIndex, void *data)
     LiveStorage_SendStatsBufferToClient(
         *((_QWORD *)data + 34),
         *((unsigned __int8 **)data + 62),
-        40168,
+        STATS_BUFFER_SIZE,
         BLOB_TYPE_GLOBAL,
         g_cacvalidateState == CAC_IDLE);
     SV_ResetFileOp(data);
@@ -2922,7 +2997,7 @@ void __cdecl SV_CACValidateHandleRequest(
             lastrequest = Sys_Milliseconds();
             g_globalBlobSize = 0;
             g_oldCACBlobSize = 0;
-            g_newCACBlobSize = MSG_DecompressWithZLib(compressedcac, cacsize, g_newCacBlob, 0x9CE8u);
+            g_newCACBlobSize = MSG_DecompressWithZLib(compressedcac, cacsize, g_newCacBlob, STATS_BUFFER_SIZE);
             if ( (int)g_newCACBlobSize <= 0 )
             {
                 Com_PrintWarning(0, "CACValidate: Couldn't decompress stats blob from %llu\n", clientID);
@@ -2930,8 +3005,8 @@ void __cdecl SV_CACValidateHandleRequest(
             else
             {
                 Com_DPrintf(15, "CACValidate: stats decompressed to %i bytes\n", g_newCACBlobSize);
-                if ( SV_CACValidateReadCAC(clientID, g_oldCACBlob, 0x9CE8u)
-                    && SV_CACValidateReadGlobal(clientID, g_cac_globalBlob, 0x9CE8u) )
+                if ( SV_CACValidateReadCAC(clientID, g_oldCACBlob, STATS_BUFFER_SIZE)
+                    && SV_CACValidateReadGlobal(clientID, g_cac_globalBlob, STATS_BUFFER_SIZE) )
                 {
                     operator++(&g_cacvalidateState);
                     ok = 1;
@@ -2959,16 +3034,16 @@ void __cdecl Live_OnNewStatsFromServer(unsigned __int8 *compressedblob, unsigned
     persistentStats *v7; // [esp-4h] [ebp-9D00h]
     persistentStats *StatsBuffer; // [esp+4h] [ebp-9CF8h]
     persistentStats *v9; // [esp+8h] [ebp-9CF4h]
-    unsigned __int8 to[40172]; // [esp+Ch] [ebp-9CF0h] BYREF
+    unsigned __int8 to[STATS_RECORD_SIZE]; // [esp+Ch] [ebp-9CF0h] BYREF
 
-    memset(to, 0, 40168);
+    memset(to, 0, STATS_BUFFER_SIZE);
     if ( blobtype )
     {
         if ( blobtype == BLOB_TYPE_GLOBAL )
         {
             StatsBuffer = LiveStorage_GetStatsBuffer(0, STATS_LOCATION_GLOBAL, 1);
-            MSG_DecompressWithZLib(compressedblob, blobsize, to, 0x9CE8u);
-            memcpy(StatsBuffer->statsBuffer, to, 0x9CE8u);
+            MSG_DecompressWithZLib(compressedblob, blobsize, to, STATS_BUFFER_SIZE);
+            memcpy(StatsBuffer->statsBuffer, to, STATS_BUFFER_SIZE);
             LiveStats_ValidateGlobalWithDDL(0);
             LiveStorage_SetStatsWriteNeeded(0, 0, STATS_LOCATION_GLOBAL);
             v7 = LiveStorage_GetStatsBuffer(0, STATS_LOCATION_GLOBAL, 1);
@@ -2991,8 +3066,8 @@ void __cdecl Live_OnNewStatsFromServer(unsigned __int8 *compressedblob, unsigned
     else
     {
         v9 = LiveStorage_GetStatsBuffer(0, STATS_LOCATION_FORCE_NORMAL, 1);
-        MSG_DecompressWithZLib(compressedblob, blobsize, to, 0x9CE8u);
-        memcpy(v9->statsBuffer, to, 0x9CE8u);
+        MSG_DecompressWithZLib(compressedblob, blobsize, to, STATS_BUFFER_SIZE);
+        memcpy(v9->statsBuffer, to, STATS_BUFFER_SIZE);
         LiveStorage_SetStatsWriteNeeded(0, 0, STATS_LOCATION_NORMAL);
         v6 = LiveStorage_GetStatsBuffer(0, STATS_LOCATION_GLOBAL, 1);
         v3 = LiveStorage_GetStatsBuffer(0, STATS_LOCATION_FORCE_NORMAL, 1);
@@ -3008,11 +3083,11 @@ char __cdecl Live_CACValidate_DispatchMessage(
     int v4; // [esp+0h] [ebp-13A38h]
     unsigned int v5; // [esp+4h] [ebp-13A34h]
     blobtype_t blobtype; // [esp+Ch] [ebp-13A2Ch]
-    unsigned __int8 compressedblob[40168]; // [esp+10h] [ebp-13A28h] BYREF
+    unsigned __int8 compressedblob[STATS_BUFFER_SIZE]; // [esp+10h] [ebp-13A28h] BYREF
     int v8; // [esp+9CF8h] [ebp-9D40h]
     _BYTE v9[5]; // [esp+9CFFh] [ebp-9D39h] BYREF
     int v10; // [esp+9D04h] [ebp-9D34h] BYREF
-    unsigned __int8 compressedcac[40172]; // [esp+9D08h] [ebp-9D30h] BYREF
+    unsigned __int8 compressedcac[STATS_RECORD_SIZE]; // [esp+9D08h] [ebp-9D30h] BYREF
     int v12; // [esp+139F8h] [ebp-40h]
     int len; // [esp+139FCh] [ebp-3Ch] BYREF
     int v14; // [esp+13A00h] [ebp-38h] BYREF
@@ -3031,13 +3106,13 @@ char __cdecl Live_CACValidate_DispatchMessage(
             MSG_ReadByte(&buf);
             v14 = 0;
             MSG_ReadData(&buf, (unsigned __int8 *)&len, 4);
-            if ( (unsigned int)len >= 0x9CE8 )
+            if ( (unsigned int)len >= STATS_BUFFER_SIZE )
             {
                 Com_PrintWarning(15, "MAX_CAC_SIZE exceeded!\n");
                 return v16;
             }
             MSG_ReadData(&buf, (unsigned __int8 *)&v14, 4);
-            memset(compressedcac, 0, 40168);
+            memset(compressedcac, 0, STATS_BUFFER_SIZE);
             MSG_ReadData(&buf, compressedcac, len);
             v12 = Com_BlockChecksumKey32(compressedcac, len, 0);
             if ( v12 == v14 )
@@ -3071,7 +3146,7 @@ char __cdecl Live_CACValidate_DispatchMessage(
                 //Com_PrintError(0, "blobsize %u exceeds message size %u!\n, blobsize, messagesize", v4, v5);
                 return 1;
             }
-            if ( *(unsigned int *)&v9[1] >= 0x9CE8u )
+            if ( *(unsigned int *)&v9[1] >= STATS_BUFFER_SIZE )
             {
                 Com_PrintError(15, "MAX_CAC_SIZE exceeded!\n");
             }
@@ -3166,7 +3241,7 @@ TaskRecord *__cdecl LiveStorage_ReadPlayerGlobalBlob()
         fileInfo->isCompressedFile = 1;
         fileInfo->fileTask.m_filename = "globalstatsCompressed";
         fileInfo->fileBuffer = s_tempGlobalStatsBuffer;
-        fileInfo->bufferSize = 40168;
+        fileInfo->bufferSize = STATS_BUFFER_SIZE;
         fileInfo->fileTask.m_optional = 1;
         fileInfo->fileOperationSucessFunction = (void (__cdecl *)(const int, void *))LiveStorage_GetGlobalBlobSuccess;
         fileInfo->fileNotFoundFunction = (taskCompleteResults (__cdecl *)(const int, void *))LiveStorage_GetGlobalBlobFileNotFound;

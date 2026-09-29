@@ -1,4 +1,5 @@
 #include "bg_emblems.h"
+#include <qcommon/com_gamemodes.h>
 #include <live/live_stats.h>
 #include <live/live_storage.h>
 #include <ddl/ddl_api.h>
@@ -43,7 +44,7 @@ int __cdecl BG_EmblemsGetUnlockedLayerCount(int controllerIndex)
 
     rank = LiveStats_GetRank(controllerIndex);
     prestige = LiveStats_GetPrestige(controllerIndex);
-    if ( allEmblemsUnlocked && allEmblemsUnlocked->current.enabled )
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) || (allEmblemsUnlocked && allEmblemsUnlocked->current.enabled) )
         return s_emblemSet->layerCount;
     if ( prestige > 0 )
         return s_emblemSet->layerCount;
@@ -74,7 +75,7 @@ int __cdecl BG_EmblemsGetPurchasedLayerCount(int controllerIndex)
     persistentStats *buffer; // [esp+4h] [ebp-14h]
     ddlState_t searchState; // [esp+8h] [ebp-10h] BYREF
 
-    if ( allEmblemsPurchased && allEmblemsPurchased->current.enabled )
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) || (allEmblemsPurchased && allEmblemsPurchased->current.enabled) )
         return BG_EmblemsGetUnlockedLayerCount(controllerIndex);
     RootDDLState = LiveStats_GetRootDDLState();
     if ( DDL_MoveTo(RootDDLState, &searchState, 2, "emblemStats", "layersPurchased") )
@@ -440,7 +441,7 @@ bool __cdecl BG_EmblemsIsIconLocked(int controllerIndex, __int16 id)
     int unlockPLevel; // [esp+8h] [ebp-8h]
     int unlockLevel; // [esp+Ch] [ebp-4h]
 
-    if ( allEmblemsUnlocked && allEmblemsUnlocked->current.enabled )
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) || (allEmblemsUnlocked && allEmblemsUnlocked->current.enabled) )
         return 0;
     unlockLevel = BG_EmblemsGetIconUnlockLevel(id);
     unlockPLevel = BG_EmblemsGetIconUnlockPLevel(id);
@@ -457,7 +458,7 @@ bool __cdecl BG_EmblemsIsIconClassified(int controllerIndex, __int16 id)
     int unclassifyAt; // [esp+4h] [ebp-8h]
     int unlockPLevel; // [esp+8h] [ebp-4h]
 
-    if ( allEmblemsUnlocked && allEmblemsUnlocked->current.enabled )
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) || (allEmblemsUnlocked && allEmblemsUnlocked->current.enabled) )
         return 0;
     unlockPLevel = BG_EmblemsGetIconUnlockPLevel(id);
     if ( unlockPLevel && unlockPLevel > LiveStats_GetPrestige(controllerIndex) )
@@ -473,7 +474,7 @@ bool __cdecl BG_EmblemsIsIconPurchased(int controllerIndex, __int16 id)
     persistentStats *buffer; // [esp+4h] [ebp-14h]
     ddlState_t searchState; // [esp+8h] [ebp-10h] BYREF
 
-    if ( allEmblemsPurchased && allEmblemsPurchased->current.enabled )
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) || (allEmblemsPurchased && allEmblemsPurchased->current.enabled) )
         return 1;
     if ( BG_EmblemsIsIconLocked(controllerIndex, id) )
         return 0;
@@ -799,7 +800,7 @@ char __cdecl BG_EmblemsIsBackgroundLocked(int controllerIndex, __int16 id)
     int unlockPLevel; // [esp+8h] [ebp-8h]
     int unlockLevel; // [esp+Ch] [ebp-4h]
 
-    if ( allEmblemsUnlocked && allEmblemsUnlocked->current.enabled )
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) || (allEmblemsUnlocked && allEmblemsUnlocked->current.enabled) )
         return 0;
     if ( BG_EmblemsIsBackgroundClassified(controllerIndex, id) )
         return 1;
@@ -818,7 +819,7 @@ bool __cdecl BG_EmblemsIsBackgroundClassified(int controllerIndex, __int16 id)
     int unclassifyAt; // [esp+4h] [ebp-8h]
     int unlockPLevel; // [esp+8h] [ebp-4h]
 
-    if ( allEmblemsUnlocked && allEmblemsUnlocked->current.enabled )
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) || (allEmblemsUnlocked && allEmblemsUnlocked->current.enabled) )
         return 0;
     unlockPLevel = BG_EmblemsGetBackgroundUnlockPLevel(id);
     if ( unlockPLevel && unlockPLevel > LiveStats_GetPrestige(controllerIndex) )
@@ -834,7 +835,7 @@ bool __cdecl BG_EmblemsIsBackgroundPurchased(int controllerIndex, __int16 id)
     persistentStats *buffer; // [esp+4h] [ebp-14h]
     ddlState_t searchState; // [esp+8h] [ebp-10h] BYREF
 
-    if ( allEmblemsPurchased && allEmblemsPurchased->current.enabled )
+    if ( Com_GameMode_IsGameMode(GAMEMODE_PRIVATE_MATCH) || (allEmblemsPurchased && allEmblemsPurchased->current.enabled) )
         return 1;
     if ( !BG_EmblemsGetBackgroundCost(id) )
         return 1;

@@ -696,9 +696,17 @@ void __cdecl UI_Gametype_CopyDvarsToCustom()
     for ( i = 0; i < 6; ++i )
     {
         v0 = va("scr_%s_%s", gametype, GAMEMODE_SPECIFIC_DVARS[i]);
+#ifdef KISAK_MP
+        String = (char *)Dvar_GetVariantString(v0);
+#else
         String = (char *)Dvar_GetString(v0);
+#endif
         v1 = va("custom_%s", GAMEMODE_SPECIFIC_DVARS[i]);
+#ifdef KISAK_MP
+        Dvar_SetFromStringByName(v1, String);
+#else
         Dvar_SetStringByName(v1, String);
+#endif
     }
     for ( j = 0; j < 94; ++j )
     {
@@ -723,15 +731,30 @@ void __cdecl UI_Gametype_CopyCustomToDvars()
     for ( i = 0; i < 6; ++i )
     {
         v0 = va("custom_%s", GAMEMODE_SPECIFIC_DVARS[i]);
+#ifdef KISAK_MP
+        String = (char *)Dvar_GetVariantString(v0);
+#else
         String = (char *)Dvar_GetString(v0);
+#endif
         v1 = va("scr_%s_%s", gametype, GAMEMODE_SPECIFIC_DVARS[i]);
+#ifdef KISAK_MP
+        Dvar_SetFromStringByName(v1, String);
+#else
         Dvar_SetStringByName(v1, String);
+#endif
     }
     for ( j = 0; j < 94; ++j )
     {
+#ifdef KISAK_MP
+        v2 = va("custom_%s", GAMEMODE_DVARS[j]);
+        VariantString = (char *)Dvar_GetVariantString(v2);
+        // Custom values are text, but registered gameplay dvars can be numeric.
+        Dvar_SetFromStringByName(GAMEMODE_DVARS[j], VariantString);
+#else
         VariantString = (char *)Dvar_GetVariantString(GAMEMODE_DVARS[j]);
         v2 = va("custom_%s", GAMEMODE_DVARS[j]);
         Dvar_SetStringByName(v2, VariantString);
+#endif
     }
 }
 

@@ -686,7 +686,15 @@ void __cdecl UI_GetGameTypesList()
     else
         UI_GetGameTypesList_LoadObj();
     if (!sharedUiInfo.numGameTypes)
+        // SP retail divergence, already confirmed and reviewed in an earlier campaign slice (see
+        // UI_GetGameTypesList_FastFile's own plate, Ghidra 0x0084ce40, "Campaign 3 slice 1"):
+        // SP omits the "mp/" path component MP uses here. Found chasing a real SP boot failure on
+        // 2026-08-05 (fatal "No game type scripts found in maps/mp/gametypes folder").
+#ifdef KISAK_SP
+        Com_Error(ERR_FATAL, "No game type scripts found in %sgametypes folder", "maps/");
+#else
         Com_Error(ERR_FATAL, "No game type scripts found in %sgametypes folder", "maps/mp/");
+#endif
 }
 
 void UI_GetGameTypesList_LoadObj()
@@ -701,6 +709,26 @@ void UI_GetGameTypesList_LoadObj()
     char *MenuBuffer; // [esp+1028h] [ebp-8h]
     int FileList; // [esp+102Ch] [ebp-4h]
 
+    // SP retail divergence applied BY SYMMETRY with this function's fastfile sibling
+    // (UI_GetGameTypesList_FastFile, Ghidra 0x0084ce40, confirmed "maps/mp/" -> "maps/" in an
+    // earlier campaign slice) -- MODERATE confidence only, not full: this non-fastfile path has no
+    // independent SP-binary confirmation of its own. Real SP retail almost certainly always ran
+    // with useFastFile on, so this code path may have no ground truth in the shipped binary to
+    // check against at all (DB_FindXAssetHeader-backed FastFile path is the one that was actually
+    // exercised and fixed against a real boot failure on 2026-08-05). Applied anyway for
+    // consistency with its sibling and because leaving the MP-hardcoded "mp/" path active here
+    // would reproduce the exact same "No game type scripts found" class of failure if this path is
+    // ever reached under KISAK_SP.
+    // *** REVERTED 2026-08-07 (audit2) -- the KISAK_SP substitution above was WRONG. ***
+    // The comment block above worried this path "may have no ground truth in the shipped
+    // binary to check against at all". It does, and it says the opposite: retail SP KEEPS
+    // MP's spelling here. "maps/mp/gametypes" (Ghidra 0x00a465cc) has exactly ONE xref in
+    // the entire binary -- 0x0084cc8e, inside UI_GetGameTypesList_LoadObj, i.e. this very
+    // function. This function's own Ghidra plate already recorded "No divergence from MP
+    // noted." The substitution was made by symmetry with its FastFile sibling, against
+    // evidence that was already sitting on the function.
+    // Leave UI_GetGameTypesList_FastFile (below) alone -- that one IS binary-confirmed to
+    // use the bare "maps/" form. SP diverges in one of the pair and not the other.
     FileList = FS_GetFileList("maps/mp/gametypes", (char*)"gsc", FS_LIST_PURE_ONLY, listbuf, 4096);
     src = listbuf;
     for (i = 0; i < FileList; ++i)
@@ -724,6 +752,10 @@ void UI_GetGameTypesList_LoadObj()
                 sharedUiInfo.joinGameTypes[sharedUiInfo.numJoinGameTypes].gameType,
                 sharedUiInfo.gameTypes[sharedUiInfo.numGameTypes].gameType,
                 12);
+            // *** REVERTED 2026-08-07 (audit2), same reason as the FS_GetFileList call above. ***
+            // Binary: UI_GetGameTypesList_LoadObj builds va("%s%s%s.txt", "maps/mp/",
+            // "gametypes/", src). "maps/mp/" (0x009c5c24) is xrefed only from this function
+            // and FS_GetMapBaseName -- both live in SP.
             v1 = va("%s%s%s.txt", "maps/mp/", "gametypes/", src);
             MenuBuffer = UI_GetMenuBuffer(v1);
             data_p = MenuBuffer;
@@ -761,7 +793,15 @@ void UI_GetGameTypesList_FastFile()
     char *pBuff; // [esp+14h] [ebp-8h]
     const char *gametypesBuf; // [esp+18h] [ebp-4h] BYREF
 
+    // SP retail divergence, already confirmed and reviewed in an earlier campaign slice (Ghidra
+    // 0x0084ce40, plate: "SP retail omits the 'mp/' path component present in source's
+    // 'maps/mp/' -- a genuine SP/MP divergence", confidence 0.92, warning-free). Both format
+    // calls in this function carry the same substitution (see the second one below).
+#ifdef KISAK_SP
+    v1 = va("%sgametypes/_gametypes.txt", "maps/");
+#else
     v1 = va("%sgametypes/_gametypes.txt", "maps/mp/");
+#endif
     gametypesFile = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, v1, 1, -1).rawfile;
     if (gametypesFile)
     {
@@ -781,7 +821,11 @@ void UI_GetGameTypesList_FastFile()
                 sharedUiInfo.joinGameTypes[sharedUiInfo.numJoinGameTypes].gameType,
                 sharedUiInfo.gameTypes[sharedUiInfo.numGameTypes].gameType,
                 12);
+#ifdef KISAK_SP
+            v2 = va("%sgametypes/%s.txt", "maps/", pszFileName->token);
+#else
             v2 = va("%sgametypes/%s.txt", "maps/mp/", pszFileName->token);
+#endif
             pBuff = UI_GetMenuBuffer(v2);
             pBuffParse = pBuff;
             if (pBuff)

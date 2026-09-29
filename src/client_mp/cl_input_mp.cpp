@@ -103,7 +103,18 @@ int __cdecl CL_MouseEvent(int x, int y, int dx, int dy)
         LocalClientGlobals = CL_GetLocalClientGlobals(0);
         if ( LocalClientGlobals )
         {
+#ifdef KISAK_SP
+            // retail SP 0x0041EE50: mask 0x50 = KEYCATCH_UI | controller-cursor catcher.
+            // The third term (0x0069AA20) keeps mouse deltas on the view whenever the
+            // focused menu is a UI3D menu, which is how the SP 3D frontend gets a camera.
+            // Paired with the UI_Refresh gate in ui_main.cpp -- uiDC.isCursorVisible is a
+            // latched int written only inside UI_MouseEvent, so once this branch stops
+            // calling UI_MouseEvent the flag keeps its last value and the draw-time gate
+            // is the only thing that stops a frozen cursor being blitted forever.
+            if ( (clUI->keyCatchers & 0x50) == 0 || UI_KeysBypassMenu(0) || UI_MenuIsUI3D(0) )
+#else
             if ( (clUI->keyCatchers & 0x10) == 0 || UI_KeysBypassMenu(0) )
+#endif
             {
                 CL_ShowSystemCursor(0);
                 LocalClientGlobals->mouseDx[LocalClientGlobals->mouseIndex] += dx;

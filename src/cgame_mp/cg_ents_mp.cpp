@@ -1,6 +1,10 @@
 #include "cg_ents_mp.h"
 #include "cg_main_mp.h"
 #include <xanim/dobj_utils.h>
+#ifdef KISAK_SP
+#include <clientscript/cscr_animtree.h>
+#include <cstddef>
+#endif
 #include <clientscript/scr_const.h>
 #include <sound/snd_bank.h>
 #include <cgame/cg_sound.h>
@@ -1859,6 +1863,38 @@ void __cdecl CG_ScriptMover(int localClientNum, centity_s *cent)
     float lightingOrigin[3]; // [esp+38h] [ebp-Ch] BYREF
 
     s1 = &cent->nextState;
+#ifdef KISAK_SP
+    // Temporary companion probe for the frontend camera/hands script movers.
+    // The server DObj is known to advance; this records the independent DObj
+    // and tree that the client actually submits to the renderer.
+    if ( s1->number >= 100 && s1->number <= 120 )
+    {
+        static int s_lastScriptMoverProbeTime[1024] = {};
+        const int probeTime = CG_GetLocalClientGlobals(localClientNum)->time;
+        if ( probeTime < s_lastScriptMoverProbeTime[s1->number]
+            || probeTime - s_lastScriptMoverProbeTime[s1->number] >= 1000 )
+        {
+            const DObj *probeObj = Com_GetClientDObj(s1->number, localClientNum);
+            const XAnimTree_s *probeTree = probeObj ? DObjGetTree(probeObj) : NULL;
+            Com_Printf(
+                15,
+                "SP client mover probe: time %d ent %d model %d obj %p tree %p animField %d pose (%.2f %.2f %.2f) snap (%.2f %.2f %.2f)\n",
+                probeTime,
+                s1->number,
+                s1->index.brushmodel,
+                probeObj,
+                probeTree,
+                s1->lerp.u.scriptMover.animScriptedAnim,
+                cent->pose.origin[0],
+                cent->pose.origin[1],
+                cent->pose.origin[2],
+                s1->lerp.pos.trBase[0],
+                s1->lerp.pos.trBase[1],
+                s1->lerp.pos.trBase[2]);
+            s_lastScriptMoverProbeTime[s1->number] = probeTime;
+        }
+    }
+#endif
     if ( (cent->nextState.lerp.eFlags & 0x20) != 0 )
     {
         if (cent->nextState.solid != 0xFFFFFF && (cent->nextState.clientLinkInfo.flags & 1) != 0)
@@ -2835,6 +2871,10 @@ LABEL_28:
                 cent->pose.angles[2] = 0.0f;
                 cia->lerpLean = cent->nextState.lerp.u.turret.gunAngles[0];
             }
+            // Interpolation writes pose.origin as well as angles. Finish it before
+            // applying mover motion so ragdoll capture receives the corrected origin.
+            // Retail SP preserves this order at 005dd6dc / 005dd715.
+            CG_InterpolateEntityPosition(cgameGlob, cent, localClientNum);
             if ( cent != &cgameGlob->predictedPlayerEntity && (!cent->linkInfo || !cent->linkInfo->linkEnt) )
                 CG_AdjustPositionForMover(
                     localClientNum,
@@ -2844,7 +2884,6 @@ LABEL_28:
                     cgameGlob->time,
                     cent->pose.origin,
                     0);
-            CG_InterpolateEntityPosition(cgameGlob, cent, localClientNum);
             if ( CG_IsRagdollTrajectory(&cent->currentState.pos) )
                 CG_CalcEntityRagdollPositions(localClientNum, cent);
         }
@@ -3303,6 +3342,9 @@ DObj *__cdecl CG_PreProcess_GetDObj(int localClientNum, int entIndex, int entTyp
     bool dobjExisted; // [esp+3Bh] [ebp-105h]
     XAnim_s *anims; // [esp+3Ch] [ebp-104h]
     DObjModel_s dobjModels[32]; // [esp+40h] [ebp-100h] BYREF
+#ifdef KISAK_SP
+    bool createdAnimTree_SP = false;
+#endif
 
     animTree = 0;
     obj = Com_GetClientDObj(entIndex, localClientNum);
@@ -3310,6 +3352,15 @@ DObj *__cdecl CG_PreProcess_GetDObj(int localClientNum, int entIndex, int entTyp
     dobjExisted = obj != 0;
     if ( obj && (!model || !CG_CheckDObjInfoMatches(localClientNum, entIndex, entType, model)) )
     {
+#ifdef KISAK_SP
+        // Retail 0x0051E8D0/0x006008B0 retains a tree across model-only
+        // changes, but releases it when the published animation index changes.
+        if (model && cent->tree && CG_CheckDObjAnimTreeMatches_SP(localClientNum, entIndex))
+        {
+            animTree = cent->tree;
+            cent->tree = NULL;
+        }
+#endif
         if ( cent->pose.physObjId != -1 && cent->pose.physObjId )
         {
             number = cent->nextState.number;
@@ -3379,6 +3430,10 @@ DObj *__cdecl CG_PreProcess_GetDObj(int localClientNum, int entIndex, int entTyp
         {
             __debugbreak();
         }
+#ifdef KISAK_SP
+        if (animTree)
+            cent->tree = animTree;
+#endif
         if ( !cent->tree )
         {
             anims = CG_GetAnimations(localClientNum, entIndex, entType);
@@ -3388,7 +3443,14 @@ DObj *__cdecl CG_PreProcess_GetDObj(int localClientNum, int entIndex, int entTyp
                 Tree = 0;
             animTree = Tree;
             cent->tree = Tree;
+#ifdef KISAK_SP
+            createdAnimTree_SP = Tree != NULL;
+#endif
         }
+#ifdef KISAK_SP
+        // Includes independently owned client-script and retained trees.
+        animTree = cent->tree;
+#endif
         dobjModels[0].model = model;
         dobjModels[0].boneName = 0;
         dobjModels[0].ignoreCollision = 0;
@@ -3405,6 +3467,12 @@ DObj *__cdecl CG_PreProcess_GetDObj(int localClientNum, int entIndex, int entTyp
         v7 = CG_DestructibleUpdate(cent, dobjModels, v6, localClientNum);
         numModelsa = CG_AddClientScriptAttachedModel(cent, dobjModels, v7, localClientNum);
         obj = Com_ClientDObjCreate(dobjModels, numModelsa, animTree, entIndex, localClientNum);
+#ifdef KISAK_SP
+        if ( createdAnimTree_SP
+            && entIndex < 1024
+            && CG_GetLocalClientGlobals(localClientNum)->nextSnap )
+            CG_ApplyPendingAnimCommandsForDObj_SP(localClientNum, entIndex, obj);
+#endif
         DObjSetHidePartBits(obj, cent->nextState.partBits);
         if ( entIndex < 1536 )
             CG_SetDObjInfo(localClientNum, entIndex, entType, model);
@@ -3471,6 +3539,20 @@ XAnim_s *__cdecl CG_GetAnimations(int localClientNum, int entIndex, int entType)
 {
     centity_s *cent; // [esp+Ch] [ebp-4h]
 
+#ifdef KISAK_SP
+    // Fake entities own their client-script tree directly; they never resolve
+    // an animation index published by a server entity (retail CScr_UseAnimTree).
+    if (entIndex >= 1024)
+        return NULL;
+    if (!com_sv_running->current.enabled)
+        return CG_GetRemoteAnimations_SP(localClientNum, entIndex);
+    // Retail reads a dedicated animation byte, separate from loopSoundFade.
+    if (entType == ET_SCRIPTMOVER || entType == ET_MG42 || entType == ET_PLANE)
+    {
+        cent = CG_GetEntity(localClientNum, entIndex);
+        return CG_ResolvePublishedAnims_SP(cent->nextState.animTreeIndex, true);
+    }
+#endif
     if ( entType == 11 )
     {
         cent = CG_GetEntity(localClientNum, entIndex);
@@ -3478,7 +3560,18 @@ XAnim_s *__cdecl CG_GetAnimations(int localClientNum, int entIndex, int entType)
     }
     else if ( entType == 17 || entType == 19 )
     {
+#ifdef KISAK_SP
+        // SP actors are not dogs. MP ships one AI species so this hardcoded the 60-entry
+        // DOG_ANIMS table; SP animscripts index against the "generic_human" tree instead, and
+        // feeding a dog tree to one tripped "animIndex < anims->size" (xanim.cpp) the moment an
+        // actor played its first animation. "DOG_ANIMS" and "generic_dog" have ZERO hits in the
+        // SP binary; SP dogs get animtrees/dog.atr instead, installed per-entity by
+        // animscripts/dog_init.gsc's `self useAnimTree( #animtree )`, which goes through
+        // G_SetAnimTree and replaces ent->pAnimTree -- not through this shared pointer.
+        return BG_GetActorAnims();
+#else
         return Dog_GetAnims();
+#endif
     }
     else
     {
@@ -4741,4 +4834,3 @@ char *__cdecl CG_AllocAnimTree(int size)
 {
     return MT_Alloc(size, 5, SCRIPTINSTANCE_SERVER);
 }
-

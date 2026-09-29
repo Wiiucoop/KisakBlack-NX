@@ -1,4 +1,7 @@
 #pragma once
+#ifdef KISAK_SP
+bool Scr_IsClientNameField(unsigned int offset);
+#endif
 #include <game_mp/g_main_mp.h>
 
 struct client_fields_s // sizeof=0x1C
@@ -20,6 +23,12 @@ void __cdecl ClientScr_GetFFATeam(gclient_s *pSelf, const client_fields_s *__for
 void __cdecl ClientScr_GetName(gclient_s *pSelf, const client_fields_s *__formal);
 void __cdecl ClientScr_GetGroundType(gclient_s *pSelf, const client_fields_s *__formal);
 void __cdecl ClientScr_GetSessionTeam(gclient_s *pSelf, const client_fields_s *__formal);
+#ifdef KISAK_SP
+void __cdecl ClientScr_SetDowns_SP(gclient_s *pSelf, const client_fields_s *__formal);
+void __cdecl ClientScr_GetDowns_SP(gclient_s *pSelf, const client_fields_s *__formal);
+void __cdecl ClientScr_SetRevives_SP(gclient_s *pSelf, const client_fields_s *__formal);
+void __cdecl ClientScr_GetRevives_SP(gclient_s *pSelf, const client_fields_s *__formal);
+#endif
 int __cdecl CScr_GetColumnTypeByName(const char *typeName);
 const char *__cdecl CScr_GetColumnNameByType(scoreboardColumnType_t columnType);
 void __cdecl ClientScr_SetSessionState(gclient_s *pSelf, const client_fields_s *__formal);

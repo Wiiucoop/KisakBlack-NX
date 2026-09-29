@@ -152,7 +152,27 @@ void colgeom_visitor_t::intersect_box(float *mn, float *mx, int mask)
     }
 
     if (ll.overflowed)
+    {
+#ifdef KISAK_SP
+        // The retail walk bounds-checks the 2048-entry array, so an overflow
+        // here is truncation rather than a write past leaflist. Preserve the
+        // warning and capture the exact query that preceded the SP crash.
+        Com_Printf(
+            0,
+            "colgeom_visitor_t::intersect_box: leafList overflow (max %d) count=%d mask=0x%08X mn=(%.3f %.3f %.3f) mx=(%.3f %.3f %.3f)\n",
+            ll.maxcount,
+            ll.count,
+            mask,
+            mn[0],
+            mn[1],
+            mn[2],
+            mx[0],
+            mx[1],
+            mx[2]);
+#else
         Com_Printf(0, "colgeom_visitor_t::intersect_box: leafList overflow (max %d)\n", 2048);
+#endif
+    }
 
     TraceThreadInfo threadInfo;
     this->m_threadInfo = &threadInfo;

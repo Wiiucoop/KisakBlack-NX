@@ -20,6 +20,37 @@
 #include <game/g_debug.h>
 #include <game/g_bsp.h>
 
+#ifdef KISAK_MP
+void SV_ApplyCustomMatchBots()
+{
+    static bool ownsManagedSettings;
+    const bool privateMatch = Dvar_GetBool("xblive_privatematch")
+        && !Dvar_GetBool("xblive_wagermatch") && !Dvar_GetBool("xblive_rankedmatch")
+        && !Dvar_GetBool("xblive_basictraining");
+    if (!privateMatch && !ownsManagedSettings)
+        return;
+    int count = privateMatch ? Dvar_GetInt("scr_num_bots") : 0;
+    if (count < 0)
+        count = 0;
+    if (count > 17)
+        count = 17;
+    // Apply before script initialization on every map load, including console
+    // launches. Clear our managed settings when leaving custom games, without
+    // touching a dedicated server's independently configured bot manager.
+    Dvar_SetIntByName("scr_bots_managed_all", count);
+    Dvar_SetIntByName("scr_bots_managed_axis", 0);
+    Dvar_SetIntByName("scr_bots_managed_allies", 0);
+    const bool teamBots = privateMatch && (Dvar_GetInt("scr_num_bots_friendly") > 0
+        || Dvar_GetInt("scr_num_bots_enemy") > 0);
+    // The script selects total versus team counts after level.teambased and
+    // the host's chosen team are known.
+    Dvar_SetIntByName("scr_bots_managed_spawn", count != 0 || teamBots);
+    if (privateMatch && !Dvar_GetString("scr_bot_difficulty")[0])
+        Dvar_SetStringByName("scr_bot_difficulty", "normal");
+    ownsManagedSettings = privateMatch;
+}
+#endif
+
 const char *botNames[47] =
 {
   "DVonderhaar",
@@ -2952,12 +2983,12 @@ void __cdecl Bot_Clear(bot_info_t *botInfo)
 
 void __cdecl SV_BotRegisterDvars()
 {
-    sv_botsAllowMovement = _Dvar_RegisterBool("sv_botsAllowMovement", 0, 0, "Allow testclients to pathfind and move");
+    sv_botsAllowMovement = _Dvar_RegisterBool("sv_botsAllowMovement", 1, 0, "Allow testclients to pathfind and move");
     sv_botsForceStand = _Dvar_RegisterBool("sv_botsForceStand", 0, 0, "Make testclients always stand");
     sv_botsForceCrouch = _Dvar_RegisterBool("sv_botsForceCrouch", 0, 0, "Make testclients always crouch");
     sv_botsForceProne = _Dvar_RegisterBool("sv_botsForceProne", 0, 0, "Make testclients always prone");
-    sv_botsPressAttackBtn = _Dvar_RegisterBool("sv_botsPressAttackBtn", 0, 0, "Allow testclients to press attack button");
-    sv_botsPressMeleeBtn = _Dvar_RegisterBool("sv_botsPressMeleeBtn", 0, 0, "Allow testclients to press melee button");
+    sv_botsPressAttackBtn = _Dvar_RegisterBool("sv_botsPressAttackBtn", 1, 0, "Allow testclients to press attack button");
+    sv_botsPressMeleeBtn = _Dvar_RegisterBool("sv_botsPressMeleeBtn", 1, 0, "Allow testclients to press melee button");
     sv_botsForceFragOnly = _Dvar_RegisterBool("sv_botsForceFragOnly", 0, 0, "Force testclients to Frag grenades only");
     sv_botsForceSpecialOnly = _Dvar_RegisterBool(
                                                             "sv_botsForceSpecialOnly",

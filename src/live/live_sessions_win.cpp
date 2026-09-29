@@ -59,7 +59,7 @@ void __cdecl Session_QoSListenStart(SessionData_s *session)
     Session_BuildQoSPayload();
     qosProbe = dwGetQoSProbe();
     if ( qosProbe
-        && (v2 = XAnimTreeSize(),
+        && (v2 = 8, // nx-port: the decompiler named this XAnimTreeSize(), a function that also returned 8
                 QosPayloadBuffer = Session_GetQosPayloadBuffer(),
                 bdQoSProbe::listen(qosProbe, &session->sessionInfo.sessionID, QosPayloadBuffer, v2)) )
     {

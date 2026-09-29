@@ -1333,6 +1333,7 @@ static uintptr_t nx_text_base(void)
 }
 
 static size_t nxVmemTotal(int *count);
+extern "C" void nx_sbrk_last(ptrdiff_t *incr, void **result, unsigned *calls);
 
 // One line of heap state: free heap, the malloc arena's view, and what the
 // VirtualAlloc regions hold. Called periodically (Com_Frame) and on failure.
@@ -1384,6 +1385,14 @@ LPVOID VirtualAlloc(LPVOID address, SIZE_T size, DWORD type, DWORD)
         void *p = memalign(NX_PAGE, rounded);
         if (!p) {
             nx_mem_report("VirtualAlloc failed", rounded);
+            ptrdiff_t lastIncr;
+            void *lastResult;
+            unsigned calls;
+            nx_sbrk_last(&lastIncr, &lastResult, &calls);
+            void *plain = malloc(rounded);
+            printf("[nx-mem] last sbrk %td bytes -> %p (%u calls); errno %d; plain malloc of the same size -> %p\n",
+                   lastIncr, lastResult, calls, errno, plain);
+            free(plain);
             SetLastError(ERROR_NOT_ENOUGH_MEMORY);
             return NULL;
         }
@@ -1507,9 +1516,23 @@ static void nxSbrkLog(const char *fmt, ...)
         write(fileno(stdout), buf, n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1);
 }
 
+static ptrdiff_t s_lastSbrkIncr;
+static void *s_lastSbrkResult;
+static unsigned s_sbrkCalls;
+
+extern "C" void nx_sbrk_last(ptrdiff_t *incr, void **result, unsigned *calls)
+{
+    *incr = s_lastSbrkIncr;
+    *result = s_lastSbrkResult;
+    *calls = s_sbrkCalls;
+}
+
 extern "C" void *__wrap__sbrk_r(struct _reent *r, ptrdiff_t incr)
 {
     void *p = __real__sbrk_r(r, incr);
+    s_lastSbrkIncr = incr;
+    s_lastSbrkResult = p;
+    ++s_sbrkCalls;
     if (p == (void *)-1) {
         char *brk = (char *)__real__sbrk_r(r, 0);
         nxSbrkLog("[nx-mem] sbrk refused %td KB: break at heap+%zu MB, %zu MB left to heap end\n",

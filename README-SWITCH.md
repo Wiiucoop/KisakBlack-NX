@@ -422,6 +422,11 @@ are silent and need reading:
   `GfxModelRigidSurface`). Every surface after the first pointed into the
   middle of the previous one. The backend also read `gfxEntIndex` at its x86
   offset (`surfsBuffer[v + 14]`). Now `sizeof(T) / 4` and the field.
+- **Size functions returning x86 sizes**: `XAnimTreeSize()` returned 8, so
+  every anim tree was allocated and cleared at half its size; `children` was
+  whatever followed. Now `sizeof(XAnimTree_s)`. The decompiler also reused
+  that function wherever a constant 8 was needed (the QoS payload size),
+  which keeps its literal.
 - **Int arrays handled as `void *`**: `importance_merge_sort` sorted the
   `int` image-index list as `void **`, walking twice the array. Typed as
   `int *`. The other hand-written merge sorts hold real pointers.

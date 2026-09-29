@@ -21,7 +21,8 @@ XAnimServerNotifyList *g_currList;
 
 int __cdecl XAnimTreeSize()
 {
-    return 8;
+    // nx-port: was 8, the x86 size; the tree holds a pointer.
+    return sizeof(XAnimTree_s);
 }
 
 bool __cdecl XAnimTreeHasInfo(const XAnimTree_s *tree)

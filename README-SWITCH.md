@@ -437,6 +437,13 @@ are silent and need reading:
   then compare each literal with the native size by compiling a probe
   (`template <size_t N, int X> struct Show; Show<sizeof(T), X> s;` with
   `-fsyntax-only` and the project's flags; the error prints both).
+- **Unions copied through their `int` member**: menu expression operands
+  hold an int, float or string in `operandInternalDataUnion`, which has an
+  `operator int()`. The comma operator copied each argument as
+  `v.intVal = (int)op.internals`, so every string argument to a multi-argument
+  menu function kept only its low 32 bits (crash selecting a team). Copy the
+  union whole; its constructors now clear all 8 bytes and the conversion
+  operators are `explicit`. Search: `grep -rn "(int)[^;]*\.internals;"`.
 - **Pool indices from x86 entry sizes**: freeing an FX element computed its
   slot as `offset / 48`; the pool entry is 64 bytes here (`FxElem` holds a
   pointer), so the wrong slot went on the free list and the next alloc read

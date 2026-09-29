@@ -45,16 +45,20 @@ union operandInternalDataUnion // sizeof=0x4
     float floatVal;
     const char *string;
 
+    // nx-port: string makes the union 8 bytes; clear all of it so an int or
+    // float never leaves stale high bits behind.
     operandInternalDataUnion()
     {
-        intVal = 0;
+        string = nullptr;
     }
     operandInternalDataUnion(int i)
     {
+        string = nullptr;
         intVal = i;
     }
     operandInternalDataUnion(float f)
     {
+        string = nullptr;
         floatVal = f;
     }
     operandInternalDataUnion(const char *str)
@@ -62,11 +66,11 @@ union operandInternalDataUnion // sizeof=0x4
         string = str;
     }
 
-    operator int()
+    explicit operator int()
     {
         return intVal;
     }
-    operator float()
+    explicit operator float()
     {
         return floatVal;
     }

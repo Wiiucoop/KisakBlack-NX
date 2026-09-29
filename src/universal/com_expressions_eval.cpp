@@ -12436,7 +12436,7 @@ void __cdecl GetCACItemIndex(int localClientNum, itemDef_s *item, OperandStack *
         {
             v3 = va(
                          "custom_killstreak_%c",
-                         *(char *)(strlen(list.operands[1].internals.string) + list.operands[1].internals.intVal - 1));
+                         list.operands[1].internals.string[strlen(list.operands[1].internals.string) - 1]);   // nx-port: was pointer arithmetic through intVal
             Var = Dvar_FindVar(v3);
             result.internals.intVal = atoi(Var->current.string);
             AddOperandToStack(dataStack, &result);
@@ -13917,7 +13917,7 @@ void __cdecl RPN_OP_COMMA(int localClientNum, itemDef_s *item, OperandStack *dat
             operand = 0;
             for ( list1Operand = 0; list1Operand < list1.operandCount; ++list1Operand )
             {
-                v3.intVal = (int)list1.operands[list1Operand].internals;
+                v3 = list1.operands[list1Operand].internals;   // nx-port: was (int)...: the whole union, or string operands lose their top half
                 v4 = operand;
                 v5 = finalList;
                 finalList[operand].dataType = list1.operands[list1Operand].dataType;
@@ -13937,7 +13937,7 @@ void __cdecl RPN_OP_COMMA(int localClientNum, itemDef_s *item, OperandStack *dat
             }
             for ( list2Operand = 0; list2Operand < list2.operandCount; ++list2Operand )
             {
-                v6.intVal = (int)list2.operands[list2Operand].internals;
+                v6 = list2.operands[list2Operand].internals;   // nx-port: was (int)...: the whole union, or string operands lose their top half
                 v7 = operand;
                 v8 = finalList;
                 finalList[operand].dataType = list2.operands[list2Operand].dataType;

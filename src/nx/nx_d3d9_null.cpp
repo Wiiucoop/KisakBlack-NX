@@ -1718,6 +1718,9 @@ static uint64_t s_bufferBytesWhole, s_bufferBytesPartial;
 static void nxBufferRangeLock() { mutexLock(&s_bufferRangeMutex); }
 static void nxBufferRangeUnlock() { mutexUnlock(&s_bufferRangeMutex); }
 
+// Per-vertex geometry statistics in the present report (see nxFrameAccumulate).
+#define NX_GL_GEOMETRY_STATS 0
+
 // ----- Frame profile -----
 // Time on the GL thread by kind of work, reported with the present report as
 // ms per present, to find what a slow frame is spending its time on.
@@ -3255,7 +3258,9 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
             cb = nullptr;
         }
     }
-    if (ib->bits && vb->bits)
+    // Reads back and transforms every index of every draw on the CPU: about
+    // 460 ms a frame in game. Only for debugging geometry.
+    if (NX_GL_GEOMETRY_STATS && ib->bits && vb->bits)
         nxFrameAccumulate(ib, idxSize, startIndex, count, baseVertexIndex,
                           &s_vsConst[s_vsConstBase][0],
                           vb, stride, attrOffset, fmt.size, fmt.type == GL_FLOAT,

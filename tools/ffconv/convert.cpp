@@ -4038,6 +4038,16 @@ static void tGfxCellRefs(Reader &r, Prelink &z, Prelink::Loc c, const uint8_t *c
         tBytesOrOffset(r, z, trees.at(i), L_GfxAabbTree__smodelIndexes,
                        rdX(tx, X_GfxAabbTree__smodelIndexes),
                        2u * rdX16(tx, X_GfxAabbTree__smodelIndexCount), 1, 2);
+        // childrenOffset is a byte distance to the first child within this
+        // array, counted in x86 records; rescale to the native stride.
+        int32_t off;
+        memcpy(&off, tx + X_GfxAabbTree__childrenOffset, 4);
+        if (off % (int32_t)X_sizeof_GfxAabbTree) {
+            fprintf(stderr, "GfxAabbTree childrenOffset %d is not a whole number of records\n", off);
+            exit(1);
+        }
+        off = off / (int32_t)X_sizeof_GfxAabbTree * (int32_t)L_sizeof_GfxAabbTree;
+        memcpy(z.at(trees.at(i)) + L_GfxAabbTree__childrenOffset, &off, 4);
     }
     tGfxPortals(r, z, c, cx);
     tBytes(r, z, c, L_GfxCell__cullGroups, rdX(cx, X_GfxCell__cullGroups),

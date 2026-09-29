@@ -410,6 +410,12 @@ are silent and need reading:
   `scene.glassBrush[i].bmodel` as `*(GfxBrushModel **)&scene.glassBrushVisData[40 * i - 40932]`,
   the x86 distance back from the next member. Wrong once the element grows.
   Find with `grep -rnE "[[0-9]+ * w+ - [0-9]{3,}]" src`.
+- **Byte offsets between records in zone data**: `GfxAabbTree::childrenOffset`
+  is the distance in bytes from a node to its first child, counted in 40-byte
+  x86 nodes. The native node is 48 bytes, so the offset landed inside the
+  wrong node and the tree walk recursed until the stack ran out. The converter
+  rescales it (`tGfxCellRefs`). Other `*Offset` fields in zone structs are
+  either same-size strides (`mnode_t`, `DObjSkelMat`) or not links.
 - **Pointers written through the wrong union member**: the decompiler picks
   any member at the right x86 offset, so `pose.fx.triggerTime = (int)&ci->control`
   is `pose.player.control`, `ent_update.handle = (int)playback` is

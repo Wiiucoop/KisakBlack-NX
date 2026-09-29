@@ -429,6 +429,11 @@ are silent and need reading:
   blocks of 256 KB or more (malloc and VirtualAlloc) end against a no-access
   page, so an overrun faults at the writer (`nx_wincompat.cpp`,
   `--wrap=malloc`). Candidates: `grep -rnE "Alloc[A-Za-z]*\((0x[0-9A-F]{3,}|[0-9]{4,})"`.
+- **Pool indices from x86 entry sizes**: freeing an FX element computed its
+  slot as `offset / 48`; the pool entry is 64 bytes here (`FxElem` holds a
+  pointer), so the wrong slot went on the free list and the next alloc read
+  garbage. Now `sizeof`. The effect handle helpers also disagreed with
+  `FX_EffectFromHandle` (48 vs the container's 52 per index, an x86 bug too).
 - **Size functions returning x86 sizes**: `XAnimTreeSize()` returned 8, so
   every anim tree was allocated and cleared at half its size; `children` was
   whatever followed. Now `sizeof(XAnimTree_s)`. The decompiler also reused

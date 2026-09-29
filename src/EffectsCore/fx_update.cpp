@@ -3127,7 +3127,7 @@ unsigned int __cdecl FX_IndexFromEffectHandle(unsigned __int16 handle)
 {
     unsigned int index; // [esp+0h] [ebp-4h]
 
-    if ( handle % 0x30u
+    if ( handle % (sizeof(FxEffectContainer) / 4)
         && !Assert_MyHandler(
                     "c:\\projects_pc\\cod\\codsrc\\src\\effectscore\\fx_system.h",
                     439,
@@ -3137,7 +3137,7 @@ unsigned int __cdecl FX_IndexFromEffectHandle(unsigned __int16 handle)
     {
         __debugbreak();
     }
-    index = handle / 0x30u;
+    index = handle / (sizeof(FxEffectContainer) / 4);
     if ( index >= 0x400
         && !Assert_MyHandler(
                     "c:\\projects_pc\\cod\\codsrc\\src\\effectscore\\fx_system.h",
@@ -3149,7 +3149,7 @@ unsigned int __cdecl FX_IndexFromEffectHandle(unsigned __int16 handle)
     {
         __debugbreak();
     }
-    return handle / 0x30u;
+    return handle / (sizeof(FxEffectContainer) / 4);
 }
 
 void __cdecl FX_RewindTo_Finish(int localClientNum)
@@ -3223,7 +3223,7 @@ unsigned int __cdecl FX_EffectHandleFromIndex(unsigned int index)
     {
         __debugbreak();
     }
-    return 48 * index;
+    return (sizeof(FxEffectContainer) / 4) * index;   // nx-port: was 48 * index, which does not match FX_EffectFromHandle
 }
 
 bool bRestart = true;

@@ -3423,7 +3423,7 @@ void __cdecl FX_FreePool_Generic_FxElem_FxElemContainer_(
     unsigned __int32 nextFree; // [esp+8Ch] [ebp-8h]
     unsigned __int32 freedIndex; // [esp+90h] [ebp-4h]
 
-    freedIndex = ((char *)item_slim - (char *)pool) / 48;
+    freedIndex = ((char *)item_slim - (char *)pool) / sizeof(FxPool<FxElem, FxElemContainer>);   // nx-port: was / 48, the x86 size
     if (freedIndex >= 0x800
         && !Assert_MyHandler(
             "C:\\projects_pc\\cod\\codsrc\\src\\EffectsCore\\fx_system.cpp",

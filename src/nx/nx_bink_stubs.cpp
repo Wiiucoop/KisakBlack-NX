@@ -7,7 +7,10 @@
 
 RADDEFFUNC char PTR4 *RADEXPLINK BinkGetError(void)
 {
-    static char err[] = "Bink unavailable on Switch";
+    // No error: the engine checks this before every Bink call and asserts on
+    // anything non-empty (R_Cinematic_CheckBinkError). BinkOpen returning NULL
+    // is what tells it there is no video; SP opens a load cinematic per map.
+    static char err[] = "";
     return err;
 }
 

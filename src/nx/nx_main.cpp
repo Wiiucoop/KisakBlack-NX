@@ -246,6 +246,7 @@ int main(int argc, char **argv)
     // file; "nodump" skips the minidump handler.
     static char cmdline[2048] = "allowdupe nodump";
     nxAppendCmdlineFile(cmdline, sizeof(cmdline));
+    printf("command line: %s\n", cmdline);
     nx_set_command_line(cmdline);
 
     // WinMain runs the engine and never returns (infinite Com_Frame loop).

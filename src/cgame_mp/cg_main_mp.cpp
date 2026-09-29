@@ -1891,7 +1891,7 @@ int __cdecl CG_AllocateClientMemory_SizeRequired(int maxLocalClients)
     // original total), plus 128 for cgArray's alignment.
     size = (int)((sizeof(cg_s) + 2 * sizeof(cgs_t) + 512 * sizeof(fake_centity_s) + sizeof(ViewModelInfo)) * maxLocalClients + 128);
     for ( localClientNum = 0; localClientNum < maxLocalClients; ++localClientNum )
-        size += (int)(2048 * sizeof(weaponInfo_s) + 1024 * sizeof(centity_s) + 18432 + 144 * sizeof(Destructible) + 117760);
+        size += (int)(2048 * sizeof(weaponInfo_s) + 1024 * sizeof(centity_s) + 18432 + 144 * sizeof(Destructible) + 32 * sizeof(IKState));
     return size;
 }
 
@@ -1909,8 +1909,8 @@ void __cdecl CG_AllocateClientMemory(HunkUser *hunk, int maxLocalClients)
         cg_entitiesArray[localClientNum] = (centity_s *)Hunk_UserAlloc(hunk, 1024 * sizeof(centity_s), 8, "cg_entitiesArray");
         cg_entityOriginArray[localClientNum] = (float (*)[3])Hunk_UserAlloc(hunk, 18432, 4, "cg_entityOriginArray");
         cg_destructibles[localClientNum] = (Destructible *)Hunk_UserAlloc(hunk, 144 * sizeof(Destructible), 8, "cg_destructibles");
-        cg_ikBuf[localClientNum] = (unsigned __int8 *)Hunk_UserAlloc(hunk, 117760, 16, "ikStatesArray");
-        memset(cg_ikBuf[localClientNum], 0, 0x1CC00u);
+        cg_ikBuf[localClientNum] = (unsigned __int8 *)Hunk_UserAlloc(hunk, 32 * sizeof(IKState), 16, "ikStatesArray");   // nx-port: was 117760, 32 x86 IKStates
+        memset(cg_ikBuf[localClientNum], 0, 32 * sizeof(IKState));
         IK_AllocateLocalClientMemory(cg_ikBuf[localClientNum], localClientNum);
     }
 }

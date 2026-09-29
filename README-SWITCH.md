@@ -45,7 +45,7 @@ repository and none ever should be.
   the crash further down that path; the fixes are LP64 ones (section 4).
 - **The match runs.** The client connects, the world renders with the
   engine's shaders, the HUD and the team select menu show and the pre-match
-  countdown runs. It is slow — about 250 ms a frame, most of it spent in the
+  countdown runs, and class select leads to the first spawn. It is slow — most of the frame is spent in the
   Direct3D-over-GL layer per draw (section 2, "The report"), which is being
   profiled down.
 
@@ -230,7 +230,10 @@ Performance findings so far, all in this layer:
   transformed every index of every draw on the CPU: ~460 ms of a 566 ms frame.
   Off unless `NX_GL_GEOMETRY_STATS` is set; the geometry report's per-vertex
   numbers read zero without it.
-- Still open: ~100 µs per draw that the timed parts do not cover yet.
+- **`glGetError` on every draw.** Two per draw (to catch a failed draw) made
+  the driver wait for its queue each time: ~630 ms of a 690 ms frame. Only
+  the frame the report describes checks now. Keep `glGetError`, `glFinish`
+  and any read-back off the per-draw path.
 
 ### The `src/nx/` layer
 
@@ -485,6 +488,13 @@ are silent and need reading:
   then compare each literal with the native size by compiling a probe
   (`template <size_t N, int X> struct Show; Show<sizeof(T), X> s;` with
   `-fsyntax-only` and the project's flags; the error prints both).
+- **Allocators doing pointer arithmetic in `int`**: the physics transient
+  allocator aligned, bumped and returned its pointers as `int`
+  (`~(align - 1) & (int)&cur[align - 1]`), so every allocation came back cut
+  to 32 bits — the first player spawn crashed in the GJK query that player
+  movement runs. Physics being off does not keep `src/physics/` off the
+  map path: `Pmove` collides through it. Pointers used only as hash keys
+  (`bpei_database_id`, `get_ent_info((unsigned int)ent)`) are left at 32 bits.
 - **Pointers passed to varargs as ints**: `DDL_MoveTo(&s, &s, 2,
   op0.internals.intVal, op1.internals.intVal)` handed the low halves of two
   string pointers to a function that reads them with `va_arg(args, const
@@ -577,7 +587,7 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
 - **Renderer gaps** (section 2): no depth, stencil or culling yet; no
   `DrawPrimitive` / `DrawPrimitiveUP`; one render target of an MRT set; no
   sRGB.
-- **In game it runs at about 4 frames a second** (section 2, "The report").
+- **In game it is slow** (section 2, "The report"); being profiled down.
 - **Physics is off** (`nx_physics 0`): the solver is still at x86 offsets.
 - **`r_water_sim.cpp` is not LP64-clean** (dozens of pointer/int casts); maps
   with dynamic water will break. `mp_nuked` has none.

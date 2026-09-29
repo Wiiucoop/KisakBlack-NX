@@ -1732,11 +1732,16 @@ enum NxProf {
     NXP_CONSTANTS,     // glUseProgram and the uniform uploads
     NXP_TEX_UPLOAD,    // glTexImage / glCompressedTexImage
     NXP_SWAP,          // eglSwapBuffers
+    NXP_PIPELINE,      // nxGlEnsurePipeline
+    NXP_PROGRAM,       // nxGlProgram: finding or linking the pair
+    NXP_TARGET,        // nxGlBindTarget and the scissor
+    NXP_STATE,         // blend, depth and stencil
+    NXP_GETERROR,      // the two glGetError calls around the draw
     NXP_COUNT
 };
 static const char *const s_profNames[NXP_COUNT] = {
     "draw total", "  glDrawElements", "  buffer whole", "  buffer partial", "  constants",
-    "texture upload", "swap",
+    "texture upload", "swap", "  pipeline", "  program", "  target", "  state", "  glGetError",
 };
 static u64 s_profTicks[NXP_COUNT];
 static unsigned s_profCalls[NXP_COUNT];
@@ -3062,7 +3067,10 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
 {
     NxProfScope prof(NXP_DRAW);
     if (!nxGlAcquire())        { ++s_nSkipNoGl;      return; }
-    if (!nxGlEnsurePipeline()) { ++s_nSkipNoProgram; return; }
+    {
+        NxProfScope p(NXP_PIPELINE);
+        if (!nxGlEnsurePipeline()) { ++s_nSkipNoProgram; return; }
+    }
     if (!s_vdecl)              { ++s_nSkipNoDecl;    return; }
 
     // Position, colour and the first texcoord set. Normals, tangents and
@@ -3087,8 +3095,11 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
 
     // The target first: building its framebuffer can bind textures, and
     // everything after this binds its own.
-    if (!nxGlBindTarget()) { ++s_frame.drawsNoTarget; return; }
-    nxGlApplyScissor();
+    {
+        NxProfScope p(NXP_TARGET);
+        if (!nxGlBindTarget()) { ++s_frame.drawsNoTarget; return; }
+        nxGlApplyScissor();
+    }
 
     if (!nxGlSyncBuffer(ib, GL_ELEMENT_ARRAY_BUFFER)) { ++s_nSkipNoBuffer; return; }
 
@@ -3105,7 +3116,11 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     // The engine's own shaders when both bound ones have a working
     // translation (see "Translated shaders"), the built-in program otherwise.
     const D3DVERTEXELEMENT9 *col = nxFindUsage(s_vdecl, D3DDECLUSAGE_COLOR, 0);
-    const NxProgram *prog = nxGlProgram();
+    const NxProgram *prog;
+    {
+        NxProfScope p(NXP_PROGRAM);
+        prog = nxGlProgram();
+    }
     if (prog) {
         nxGlSetupTranslated(prog);
         ++s_frame.drawsTranslated;
@@ -3209,20 +3224,24 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     if (!nxGlBindAttrib(NX_ATTR_POS, pos)) { ++s_nSkipNoBuffer; return; }
     }   // built-in program
 
-    nxGlApplyBlend();
-    nxGlApplyDepthStencil();
+    {
+        NxProfScope p(NXP_STATE);
+        nxGlApplyBlend();
+        nxGlApplyDepthStencil();
+    }
 
     UINT stride = s_streamStride[pos->Stream];
     UINT attrOffset = s_streamOffset[pos->Stream] + pos->Offset;
 
-    glGetError();   // clear anything stale, so the reading below is this draw's
+    { NxProfScope p(NXP_GETERROR); glGetError(); }   // clear anything stale
     {
     NxProfScope prof(NXP_DRAW_CALL);
     glDrawElementsBaseVertex(mode, count, idxType,
                              (const void *)(uintptr_t)(startIndex * idxSize),
                              baseVertexIndex);
     }
-    GLenum err = glGetError();
+    GLenum err;
+    { NxProfScope p(NXP_GETERROR); err = glGetError(); }
     if (err != GL_NO_ERROR) {
         s_lastGlDrawError = err;
         ++s_nGlDrawFailed;

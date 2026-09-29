@@ -12452,8 +12452,8 @@ void __cdecl GetCACItemIndex(int localClientNum, itemDef_s *item, OperandStack *
                          &searchState,
                          &searchState,
                          2,
-                         list.operands[0].internals.intVal,
-                         list.operands[1].internals.intVal) )
+                         list.operands[0].internals.string,
+                         list.operands[1].internals.string) )
             {
                 if ( !searchState.member
                     && !Assert_MyHandler(

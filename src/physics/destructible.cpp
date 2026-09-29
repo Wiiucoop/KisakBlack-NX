@@ -2376,15 +2376,16 @@ void __cdecl CG_DestructibleRadiusDamage(
         else
         {
             de = &g_destructible_events[g_destructible_events_count++];
+            // nx-port: was written through the ed and ehe members at their x86
+            // offsets (self as an int, the point as pointers); erd by name.
             de->type = 1;
-            de->ehe.localClientNum = (int)self;
-            p_attacker = &de->ed.attacker;
-            de->erd.point[0] = *(float *)point;
-            p_attacker[1] = point[1];
-            p_attacker[2] = point[2];
-            de->ed.dir[2] = damgeInner;
-            de->ed.point[0] = damgeOuter;
-            de->ed.point[1] = radius;
+            de->erd.self = self;
+            de->erd.point[0] = ((const float *)point)[0];
+            de->erd.point[1] = ((const float *)point)[1];
+            de->erd.point[2] = ((const float *)point)[2];
+            de->erd.damgeInner = damgeInner;
+            de->erd.damgeOuter = damgeOuter;
+            de->erd.radius = radius;
             de->erd.mod = mod;
         }
     }
@@ -2922,11 +2923,11 @@ void __cdecl CG_ProcessDestructibleEvents()
             if ( type == 1 )
             {
                 CG_DestructibleRadiusDamage(
-                    de->ed.self,
-                    &de->ed.attacker,
-                    de->ed.dir[2],
-                    de->ed.point[0],
-                    de->ed.point[1],
+                    de->erd.self,
+                    (const centity_s **)de->erd.point,   // the parameter is really a vec3
+                    de->erd.damgeInner,
+                    de->erd.damgeOuter,
+                    de->erd.radius,
                     de->erd.mod,
                     0);
             }
@@ -2982,8 +2983,8 @@ void __cdecl CG_DestructibleDamage(
         {
             de = &g_destructible_events[g_destructible_events_count++];
             de->type = 0;
-            de->ehe.localClientNum = (int)self;
-            de->ehe.event = (int)attacker;
+            de->ed.self = self;           // nx-port: was stored as ints through ehe
+            de->ed.attacker = attacker;
             de->ed.dir[0] = *dir;
             de->ed.dir[1] = dir[1];
             de->ed.dir[2] = dir[2];

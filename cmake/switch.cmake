@@ -214,6 +214,31 @@ target_include_directories(${BIN_NAME} PUBLIC "${NX_PORTLIBS}/include")
 # The archive list still comes from the config's own variables rather than
 # being retyped here. Only the group membership changes. If a future Mesa does
 # reach nv_cubin, the link fails loudly on elf_* rather than silently.
+# NX_MESA20_DIR: build against Mesa 20.1 (switch-mesa 20.1.0 + libdrm_nouveau,
+# the driver most devkitPro GL ports use) instead of the Mesa 26 set above.
+# Point it at the package's portlibs/switch; devkitPro stays untouched:
+#   cmake -DNX_MESA20_DIR=C:/Users/.../mesa20-switch-package/portlibs/switch
+# 20.1 exports GL through libGLESv2 + libglapi and has no libGL, so the three
+# desktop-only calls the renderer makes come from eglGetProcAddress
+# (src/nx/nx_gl_mesa20.cpp).
+set(NX_MESA20_DIR "" CACHE PATH "Mesa 20.1 portlibs/switch to build against (empty: Mesa 26 from devkitPro)")
+if(NX_MESA20_DIR)
+    set(NX_MESA20 "${NX_MESA20_DIR}")
+    if(NOT IS_ABSOLUTE "${NX_MESA20}")
+        string(REGEX REPLACE "^([A-Za-z]):[\\/]" "/\\1/" NX_MESA20 "${NX_MESA20}")
+    endif()
+    # Ahead of the portlibs include added above, so its GL/EGL headers win.
+    target_include_directories(${BIN_NAME} BEFORE PUBLIC "${NX_MESA20}/include")
+    target_compile_definitions(${BIN_NAME} PRIVATE NX_MESA20=1)
+    # The RESCAN link group comes from Mesa 26's OpenGLConfig.cmake, which is
+    # not loaded here; define it for the circular EGL/glapi/drm_nouveau set.
+    set(CMAKE_CXX_LINK_GROUP_USING_RESCAN "LINKER:--start-group" "LINKER:--end-group")
+    set(CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED TRUE)
+    target_link_libraries(${BIN_NAME} PRIVATE
+        "$<LINK_GROUP:RESCAN,${NX_MESA20}/lib/libEGL.a,${NX_MESA20}/lib/libGLESv2.a,${NX_MESA20}/lib/libglapi.a,${NX_MESA20}/lib/libdrm_nouveau.a>"
+        nx)
+    message(STATUS "GL: Mesa 20.1 from ${NX_MESA20}")
+else()
 set(OPENGL_SWITCH_VULKAN_LIBRARY "")
 find_package(OpenGL REQUIRED CONFIG
     PATHS "${NX_PORTLIBS}/lib/cmake/OpenGL" NO_DEFAULT_PATH)
@@ -224,6 +249,8 @@ find_library(NX_VULKAN_LIBRARY vulkan
 target_link_libraries(${BIN_NAME} PRIVATE
     "$<LINK_GROUP:RESCAN,${OPENGL_gl_LIBRARY},${OPENGL_egl_LIBRARY},${NX_VULKAN_LIBRARY},${_OPENGL_SWITCH_LIBRARIES}>"
     nx)
+
+endif()
 
 # ----- NRO packaging -----
 nx_create_nro(${BIN_NAME}

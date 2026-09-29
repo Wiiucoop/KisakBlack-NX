@@ -52,6 +52,14 @@ repository and none ever should be.
 Hardware and driver, as the log reports them: Mesa 26.2.1, OpenGL 4.3 core,
 renderer `NV12B` — Mesa's native nvc0 driver on the Tegra X1, not Zink.
 
+**Mesa 20.1 build.** `-DNX_MESA20_DIR=<package>/portlibs/switch` builds
+against switch-mesa 20.1 (EGL + glapi + GLESv2 + libdrm_nouveau) instead,
+leaving devkitPro alone; use a separate build directory (`build-nx-mesa20`).
+20.1 has no libGL: GL comes from libGLESv2 through glapi, and the three
+desktop-only calls (`glClearDepth`, `glDrawBuffer`, `glPolygonMode`) are
+fetched with `eglGetProcAddress` (`src/nx/nx_gl_mesa20.cpp`). The NRO is
+14 MB against 32 MB.
+
 ### Controls
 
 Face buttons are mapped by **position**, not label (`src/nx/nx_xinput.cpp`):
@@ -564,6 +572,9 @@ are silent and need reading:
   any member at the right x86 offset, so `pose.fx.triggerTime = (int)&ci->control`
   is `pose.player.control`, `ent_update.handle = (int)playback` is
   `playback_free.playback`. Rewrite with the member that has the pointer type.
+  The destructible event queue (`destructible_event_t`) wrote its damage
+  event's `self`/`attacker` as `ehe.localClientNum`/`ehe.event` ints and its
+  radius event through `ed` at `erd`'s x86 offsets: crash shooting a car.
 - **Pointers kept inside byte streams or int fields**: a chat icon's
   `Material *` inside the text (now a 4-byte slot, `R_TextIconHandle`), a map
   level shot in `int timeToBeat[31]` (side table).

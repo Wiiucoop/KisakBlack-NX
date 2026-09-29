@@ -234,6 +234,11 @@ Performance findings so far, all in this layer:
   the driver wait for its queue each time: ~630 ms of a 690 ms frame. Only
   the frame the report describes checks now. Keep `glGetError`, `glFinish`
   and any read-back off the per-draw path.
+- **Constants re-sent every draw.** `vsc[]`/`psc[]` went up with every draw
+  (~100 ms a frame after the above). Uniforms are per program, so each
+  program now remembers the constant-file version it last received and skips
+  the upload when nothing was written since. The program lookup keeps the
+  last pair.
 
 ### The `src/nx/` layer
 
@@ -493,7 +498,12 @@ are silent and need reading:
   (`~(align - 1) & (int)&cur[align - 1]`), so every allocation came back cut
   to 32 bits — the first player spawn crashed in the GJK query that player
   movement runs. Physics being off does not keep `src/physics/` off the
-  map path: `Pmove` collides through it. Pointers used only as hash keys
+  map path: `Pmove` collides through it. The slot pool under it
+  (`phys_mem_new.cpp`) reserved the x86 8 bytes for each slot's owner record
+  (16 here, so it overlapped the caller's data), compared owners with 32-bit
+  compare-and-swaps and packed a 32-bit pointer and a tag into one 64-bit
+  free-list head; it now sizes the record by `sizeof`, uses full-width
+  atomics and keeps the free list under a spinlock. Pointers used only as hash keys
   (`bpei_database_id`, `get_ent_info((unsigned int)ent)`) are left at 32 bits.
 - **Pointers passed to varargs as ints**: `DDL_MoveTo(&s, &s, 2,
   op0.internals.intVal, op1.internals.intVal)` handed the low halves of two

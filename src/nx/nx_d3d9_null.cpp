@@ -1195,6 +1195,8 @@ static float s_vsConst[NX_VS_CONST_ROWS][4];
 // 256 keeps the two files the same shape.
 enum { NX_PS_CONST_ROWS = 256 };
 static float s_psConst[NX_PS_CONST_ROWS][4];
+// Bumped by every Set*ShaderConstantF; see NxProgram::vsVersion.
+static unsigned s_vsConstVersion = 1, s_psConstVersion = 1;
 static bool s_vsConstWritten[NX_VS_CONST_ROWS];
 static unsigned s_vsConstBase;   // the register quad used as the transform
 
@@ -2667,8 +2669,15 @@ struct NxProgram {
     GLint vsc, psc;    // uniform array locations, -1 when unused
     GLint vscCount, pscCount;
     GLint alphaFunc, alphaRef, halfPixel;
+    // The constant file versions this program's uniforms last received:
+    // uniforms are per program, so an unchanged file needs no upload.
+    mutable unsigned vsVersion, psVersion;
 };
 static std::map<std::pair<const NxShader *, const NxShader *>, NxProgram> s_programs;
+// The last pair looked up: consecutive draws mostly share one. Map entries do
+// not move; nxForgetPrograms clears this before it erases any.
+static const NxShader *s_lastVs, *s_lastPs;
+static NxProgram *s_lastProg;
 
 static void nxGlShaderLog(GLuint obj, bool program, const char *what, const char *src)
 {
@@ -2716,8 +2725,17 @@ static const NxProgram *nxGlProgram(void)
     if (!s_vs || !s_ps) { ++s_frame.fallbackNoShader; return nullptr; }
     if (!s_vs->glsl || !s_ps->glsl) { ++s_frame.fallbackUntranslated; return nullptr; }
 
+    if (s_lastProg && s_lastVs == s_vs && s_lastPs == s_ps) {
+        if (!s_lastProg->name) { ++s_frame.fallbackLink; return nullptr; }
+        return s_lastProg;
+    }
     auto key = std::make_pair((const NxShader *)s_vs, (const NxShader *)s_ps);
     auto it = s_programs.find(key);
+    if (it != s_programs.end()) {
+        s_lastVs = s_vs;
+        s_lastPs = s_ps;
+        s_lastProg = &it->second;
+    }
     if (it != s_programs.end()) {
         if (!it->second.name) { ++s_frame.fallbackLink; return nullptr; }
         return &it->second;
@@ -2788,6 +2806,8 @@ static const NxProgram *nxGlProgram(void)
 
 static void nxForgetPrograms(const NxShader *s)
 {
+    s_lastProg = nullptr;
+    s_lastVs = s_lastPs = nullptr;
     for (auto it = s_programs.begin(); it != s_programs.end();) {
         if (it->first.first == s || it->first.second == s) {
             if (it->second.name && s_glReady && nxGlAcquire())
@@ -2825,10 +2845,14 @@ static void nxGlSetupTranslated(const NxProgram *p)
 {
     NxProfScope prof(NXP_CONSTANTS);
     glUseProgram(p->name);
-    if (p->vsc >= 0 && p->vscCount > 0)
+    if (p->vsc >= 0 && p->vscCount > 0 && p->vsVersion != s_vsConstVersion) {
         glUniform4fv(p->vsc, p->vscCount, &s_vsConst[0][0]);
-    if (p->psc >= 0 && p->pscCount > 0)
+        p->vsVersion = s_vsConstVersion;
+    }
+    if (p->psc >= 0 && p->pscCount > 0 && p->psVersion != s_psConstVersion) {
         glUniform4fv(p->psc, p->pscCount, &s_psConst[0][0]);
+        p->psVersion = s_psConstVersion;
+    }
     if (p->alphaFunc >= 0)
         glUniform1i(p->alphaFunc, s_rs[D3DRS_ALPHATESTENABLE] ? (GLint)s_rs[D3DRS_ALPHAFUNC] : 0);
     if (p->alphaRef >= 0)
@@ -4507,6 +4531,7 @@ HRESULT IDirect3DDevice9::SetVertexShaderConstantF(UINT startRegister, const flo
         memcpy(s_vsConst[startRegister + i], data + i * 4, 4 * sizeof(float));
         s_vsConstWritten[startRegister + i] = true;
     }
+    ++s_vsConstVersion;
 
     // Four rows in one call is a matrix; one row is a plain code constant.
     if (count >= 4 && startRegister + 4 <= NX_VS_CONST_ROWS) {
@@ -4541,6 +4566,7 @@ HRESULT IDirect3DDevice9::SetPixelShaderConstantF(UINT startRegister, const floa
         return D3D_OK;
     for (UINT i = 0; i < count && startRegister + i < NX_PS_CONST_ROWS; ++i)
         memcpy(s_psConst[startRegister + i], data + i * 4, 4 * sizeof(float));
+    ++s_psConstVersion;
     return D3D_OK;
 }
 HRESULT IDirect3DDevice9::SetStreamSource(UINT streamNumber, IDirect3DVertexBuffer9 *vb,

@@ -5,6 +5,17 @@
 #include <universal/q_shared.h>
 #include <stdint.h>
 
+// nx-port: a slot ends with its extra_info (two pointers, 16 bytes here, 8 on
+// x86). NX_SLOT_ALLOCATED marks an allocated slot; a free one holds its pool.
+#define NX_SLOT_ALLOCATED ((void *)(uintptr_t)0xFEDCBA98u)
+static int s_nxSlotLock;   // guards every pool's free list: two pointer moves
+static inline void nx_slot_lock() { while (__atomic_exchange_n(&s_nxSlotLock, 1, __ATOMIC_ACQUIRE)) {} }
+static inline void nx_slot_unlock() { __atomic_store_n(&s_nxSlotLock, 0, __ATOMIC_RELEASE); }
+static inline phys_slot_pool::extra_info *nx_slot_extra_info(const phys_slot_pool *pool, char *slot)
+{
+    return (phys_slot_pool::extra_info *)(slot + (unsigned __int16)pool->m_map_key - sizeof(phys_slot_pool::extra_info));
+}
+
 void *g_phys_memory_buffer;
 int g_phys_memory_buffer_size;
 phys_memory_manager *g_phys_memory_manager;
@@ -125,9 +136,14 @@ phys_slot_pool *__thiscall phys_memory_manager::get_slot_pool(
     {
         __debugbreak();
     }
-    slot_sizea = slot_size + 8;
-    //v5 = phys_slot_pool::encode_size_alignment(slot_size + 8, slot_alignment);
-    v5 = phys_slot_pool::encode_size_alignment(slot_size + 8, slot_alignment);
+    // nx-port: was slot_size + 8, the x86 extra_info, which here overlapped the
+    // last 8 bytes of the caller's data. The extra_info also needs pointer
+    // alignment for its compare-and-swap.
+    if ( slot_alignment < alignof(phys_slot_pool::extra_info) )
+        slot_alignment = alignof(phys_slot_pool::extra_info);
+    slot_size = (slot_size + slot_alignment - 1) & ~(slot_alignment - 1);
+    slot_sizea = slot_size + sizeof(phys_slot_pool::extra_info);
+    v5 = phys_slot_pool::encode_size_alignment(slot_sizea, slot_alignment);
     p_m_slot_pool_map_mutex = &this->m_slot_pool_map_mutex;
     //minspec_read_write_mutex::ReadLock(&this->m_slot_pool_map_mutex);
     this->m_slot_pool_map_mutex.ReadLock();
@@ -288,7 +304,7 @@ void phys_slot_pool::extra_info_init(char *slot)
     {
         ei = (phys_slot_pool::extra_info *)&slot[(unsigned __int16)this->m_map_key - sizeof(phys_slot_pool::extra_info)];
         ei->m_slot_pool_owner = this;
-        ei->m_allocation_owner = (void *)0xFEDCBA98;
+        ei->m_allocation_owner = NX_SLOT_ALLOCATED;
 
         _InterlockedExchangeAdd(&this->m_total_slot_count, 1u);
         _InterlockedExchangeAdd(&this->m_allocated_slot_count, 1u);
@@ -353,36 +369,23 @@ void __thiscall phys_slot_pool::extra_info_allocate(char *slot)
     slot = 0;
     InterlockedExchange((volatile unsigned int *)&slot, 0);
 #else // aislop 
+    // nx-port: 64-bit compare-and-swap on the owner pointer (was 32-bit).
     if (!slot && _tlAssert("source/phys_mem_new.cpp", 306, "slot", ""))
         __debugbreak();
-
-    phys_slot_pool::extra_info *ei = (phys_slot_pool::extra_info *)&slot[(unsigned __int16)this->m_map_key - sizeof(phys_slot_pool::extra_info)];
-
+    phys_slot_pool::extra_info *ei = nx_slot_extra_info(this, slot);
     if (ei->m_slot_pool_owner != this
         && _tlAssert("source/phys_mem_new.cpp", 309, "GetStuff32(&ei->m_slot_pool_owner) == this_", "internal error."))
     {
         __debugbreak();
     }
-
-    if ((phys_slot_pool *)_InterlockedCompareExchange(
-        (volatile unsigned __int32 *)&ei->m_allocation_owner,
-        0xFEDCBA98,
-        (signed __int32)this) != this
+    void *expected = this;
+    if (!__atomic_compare_exchange_n(&ei->m_allocation_owner, &expected, NX_SLOT_ALLOCATED,
+                                     false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
         && _tlAssert("source/phys_mem_new.cpp", 312, "retv", "internal error."))
     {
         __debugbreak();
     }
-
-    _InterlockedExchangeAdd((volatile long *)&this->m_allocated_slot_count, 1u);
-    if (this->m_allocated_slot_count > this->m_total_slot_count
-        && _tlAssert(
-            "source/phys_mem_new.cpp",
-            314,
-            "GetStuff32(&m_allocated_slot_count) <= GetStuff32(&m_total_slot_count)",
-            "internal error."))
-    {
-        __debugbreak();
-    }
+    __atomic_add_fetch(&this->m_allocated_slot_count, 1u, __ATOMIC_SEQ_CST);
 #endif
 }
 
@@ -441,11 +444,8 @@ void __thiscall phys_slot_pool::extra_info_free(unsigned __int8 *slot)
 #else
     if (!slot && _tlAssert("source/phys_mem_new.cpp", 323, "slot", ""))
         __debugbreak();
-
-    phys_slot_pool::extra_info *ei = (phys_slot_pool::extra_info *)&slot[(unsigned __int16)this->m_map_key - sizeof(phys_slot_pool::extra_info)];
-
-    memset(slot, 0xFFu, (unsigned __int16)this->m_map_key - sizeof(phys_slot_pool::extra_info));
-
+    phys_slot_pool::extra_info *ei = nx_slot_extra_info(this, (char *)slot);
+    memset(slot, 0xFFu, (char *)ei - (char *)slot);
     if (ei->m_slot_pool_owner != this
         && _tlAssert(
             "source/phys_mem_new.cpp",
@@ -455,11 +455,9 @@ void __thiscall phys_slot_pool::extra_info_free(unsigned __int8 *slot)
     {
         __debugbreak();
     }
-
-    if ((phys_slot_pool *)_InterlockedCompareExchange(
-        (volatile unsigned __int32 *)&ei->m_allocation_owner,
-        (signed __int32)this,
-        0xFEDCBA98) != (phys_slot_pool *)0xFEDCBA98
+    void *expected = NX_SLOT_ALLOCATED;
+    if (!__atomic_compare_exchange_n(&ei->m_allocation_owner, &expected, (void *)this,
+                                     false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
         && _tlAssert(
             "source/phys_mem_new.cpp",
             332,
@@ -468,23 +466,7 @@ void __thiscall phys_slot_pool::extra_info_free(unsigned __int8 *slot)
     {
         __debugbreak();
     }
-
-    _InterlockedExchangeAdd((volatile long *)&this->m_allocated_slot_count, (unsigned long)-1);
-
-    if (this->m_allocated_slot_count > this->m_total_slot_count
-        && _tlAssert(
-            "source/phys_mem_new.cpp",
-            334,
-            "GetStuff32(&m_allocated_slot_count) <= GetStuff32(&m_total_slot_count)",
-            "internal error."))
-    {
-        __debugbreak();
-    }
-    if ((int)this->m_allocated_slot_count < 0
-        && _tlAssert("source/phys_mem_new.cpp", 335, "GetStuff32(&m_allocated_slot_count) >= 0", "internal error."))
-    {
-        __debugbreak();
-    }
+    __atomic_sub_fetch(&this->m_allocated_slot_count, 1u, __ATOMIC_SEQ_CST);
 #endif
 }
 
@@ -518,8 +500,7 @@ void __thiscall phys_slot_pool::validate_slot(char *slot)
         }
     }
 #else // aislop
-    phys_slot_pool::extra_info *ei = (phys_slot_pool::extra_info *)&slot[(unsigned __int16)this->m_map_key - sizeof(phys_slot_pool::extra_info)];
-
+    phys_slot_pool::extra_info *ei = nx_slot_extra_info(this, slot);
     if (ei->m_slot_pool_owner != this
         && _tlAssert(
             "source/phys_mem_new.cpp",
@@ -529,7 +510,7 @@ void __thiscall phys_slot_pool::validate_slot(char *slot)
     {
         __debugbreak();
     }
-    if ((unsigned int)ei->m_allocation_owner != 0xFEDCBA98
+    if (ei->m_allocation_owner != NX_SLOT_ALLOCATED
         && _tlAssert(
             "source/phys_mem_new.cpp",
             347,
@@ -581,25 +562,16 @@ void phys_slot_pool::free_slot(unsigned __int8 *slot)
         }
     }
 #else
-    signed __int64 cur, next;
-
+    // nx-port: the lock-free list packed a 32-bit slot pointer and a 32-bit
+    // tag into one 64-bit compare-and-swap. A 64-bit pointer does not fit, so
+    // the free list is a plain linked list under a lock (full-width links).
     if (!slot && _tlAssert("source/phys_mem_new.cpp", 445, "slot", "no support for freeing NULL slots."))
         __debugbreak();
-
     this->extra_info_free(slot);
-
-    while (1)
-    {
-        cur = *(volatile signed __int64 *)&this->m_first_free_slot;
-        *(unsigned int *)slot = LODWORD(cur); // link slot->next = current head
-        next = __SPAIR64__(HIDWORD(cur) + 1, (unsigned int)slot);
-        if (_InterlockedCompareExchange64(
-            (volatile signed __int64 *)&this->m_first_free_slot,
-            next,
-            cur) == cur)
-            break;
-        // CAS failed, retry
-    }
+    nx_slot_lock();
+    *(void **)slot = this->m_first_free_slot.m_ptr;
+    this->m_first_free_slot.m_ptr = slot;
+    nx_slot_unlock();
 #endif
 }
 
@@ -642,29 +614,18 @@ char * phys_slot_pool::allocate_slot()
     phys_slot_pool::extra_info_init((phys_slot_pool *)m_ptr, v5);
     return v5;
 #else // aislop
-    signed __int64 cur, next;
-    char *v3;
-
-    while (1)
+    nx_slot_lock();
+    char *v3 = (char *)this->m_first_free_slot.m_ptr;
+    if (v3)
+        this->m_first_free_slot.m_ptr = *(void **)v3;
+    nx_slot_unlock();
+    if (v3)
     {
-        cur = *(volatile signed __int64 *)&this->m_first_free_slot;
-        v3 = (char *)LODWORD(cur);
-        if (!v3)
-            break; // free list empty, fall through to fresh alloc
-
-        next = __SPAIR64__(HIDWORD(cur) + 1, *(unsigned int *)v3);
-        if (_InterlockedCompareExchange64(
-            (volatile signed __int64 *)&this->m_first_free_slot,
-            next,
-            cur) == cur)
-        {
-            this->extra_info_allocate(v3);
-            return v3;
-        }
-        // CAS failed, retry
+        this->extra_info_allocate(v3);
+        return v3;
     }
 
-    // No free slots � allocate fresh from memory manager
+    // No free slots: allocate fresh from the memory manager
     char *v5 = (char *)g_phys_memory_manager->allocate(
         (unsigned __int16)this->m_map_key,
         (unsigned int)this->m_map_key >> 16);

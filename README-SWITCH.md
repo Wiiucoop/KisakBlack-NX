@@ -406,6 +406,10 @@ are silent and need reading:
   x86 literal (`r_dpvs_staticWorkerCmd = { ..., 12u, ...}`), so a command
   holding a pointer was queued with half of it. `sizeof` of the command the
   builder passes (r_workercmds.cpp, r_stream, r_foliage, r_water, fx_marks).
+- **Fields reached through a neighbouring array**: the decompiler writes
+  `scene.glassBrush[i].bmodel` as `*(GfxBrushModel **)&scene.glassBrushVisData[40 * i - 40932]`,
+  the x86 distance back from the next member. Wrong once the element grows.
+  Find with `grep -rnE "[[0-9]+ * w+ - [0-9]{3,}]" src`.
 - **Pointers written through the wrong union member**: the decompiler picks
   any member at the right x86 offset, so `pose.fx.triggerTime = (int)&ci->control`
   is `pose.player.control`, `ent_update.handle = (int)playback` is

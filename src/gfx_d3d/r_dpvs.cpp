@@ -4183,8 +4183,8 @@ void __cdecl R_CullDynamicPointLightsInCameraView()
     {
         if ( scene.addedLight[lightIndex].type != 2 || lightIndex )
             scene.isAddedLightCulled[lightIndex] = R_CullPointAndRadius(
-                                                                                             (const float *)&scene.isAddedLightCulled[368 * lightIndex - 11748],
-                                                                                             *(float *)&scene.isAddedLightCulled[368 * lightIndex - 11736],
+                                                                                             scene.addedLight[lightIndex].origin,   // nx-port: were read through isAddedLightCulled at x86 offsets
+                                                                                             scene.addedLight[lightIndex].radius,
                                                                                              planes,
                                                                                              planeCount);
     }

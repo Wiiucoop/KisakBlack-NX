@@ -1923,11 +1923,12 @@ void __cdecl R_StreamUpdateDynamicModels(
             R_StreamUpdateForBModel(
                 viewPos,
                 frame,
-                *(unsigned __int16 *)&scene.glassBrushVisData[40 * entIndexd - 40924],
-                *(const GfxBrushModel **)&scene.glassBrushVisData[40 * entIndexd - 40932],
-                (const float *)&scene.glassBrushVisData[40 * entIndexd - 40944],
+                // nx-port: these were read through glassBrushVisData at x86 offsets
+                scene.glassBrush[entIndexd].info.surfId,
+                scene.glassBrush[entIndexd].bmodel,
+                scene.glassBrush[entIndexd].placement.origin,
                 maxDistSq,
-                *(Material **)&scene.glassBrushVisData[40 * entIndexd - 40928],
+                scene.glassBrush[entIndexd].altStreamingMaterial,
                 1,
                 distanceScale);
     }
@@ -2191,6 +2192,7 @@ void __cdecl MultiplePointDistSqFromBounds(
     float4 v6; // [esp-20h] [ebp-120h]
     float4 v7; // [esp-10h] [ebp-110h]
 
+#ifndef KISAK_NX // nx-port: SSE alignment checks; the loads below are plain on AArch64
     if ( ((unsigned int)&s_viewPos & 0xF) != 0
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_stream.cpp",
@@ -2221,6 +2223,7 @@ void __cdecl MultiplePointDistSqFromBounds(
     {
         __debugbreak();
     }
+#endif
     *(_QWORD *)v7.v = *(_QWORD *)mip0maxs;
     *(_QWORD *)&v7.unitVec[2].packed = *((_QWORD *)mip0maxs + 1);
     *(_QWORD *)v6.v = *(_QWORD *)mip0mins;

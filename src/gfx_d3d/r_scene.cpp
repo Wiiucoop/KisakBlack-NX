@@ -1778,7 +1778,7 @@ void __cdecl R_AddDObjSurfacesCamera(
                     if ( skinnedCachedOffset == -2 )
                     {
                         surfType = SF_BEGIN_XMODEL;
-                        surfSize = 56;
+                        surfSize = sizeof(GfxModelRigidSurface);   // nx-port: was 56 (x86)
                     }
                     else
                     {
@@ -1788,7 +1788,7 @@ void __cdecl R_AddDObjSurfacesCamera(
                             goto LABEL_34;
                         }
                         surfType = SF_XMODEL_SKINNED;
-                        surfSize = 24;
+                        surfSize = sizeof(GfxModelSkinnedSurface);   // nx-port: was 24 (x86)
                     }
                     if ( !*material
                         && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_scene.cpp", 1547, 0, "%s", "*material") )
@@ -1981,7 +1981,7 @@ LABEL_25:
             if ( skinnedCachedOffset == -2 )
             {
                 surfType = SF_BEGIN_XMODEL;
-                surfSize = 56;
+                surfSize = sizeof(GfxModelRigidSurface);   // nx-port: was 56 (x86)
             }
             else
             {
@@ -1995,7 +1995,7 @@ LABEL_24:
                     goto LABEL_25;
                 }
                 surfType = SF_XMODEL_SKINNED;
-                surfSize = 24;
+                surfSize = sizeof(GfxModelSkinnedSurface);   // nx-port: was 24 (x86)
             }
             if ( !*material
                 && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\gfx_d3d\\r_scene.cpp", 1749, 0, "%s", "*material") )

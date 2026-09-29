@@ -625,6 +625,7 @@ struct NxBuffer {
     UINT dirtyLo, dirtyHi;
     UINT lockLo, lockHi;
     bool discard;      // a D3DLOCK_DISCARD since the last upload: orphan it
+    bool synced;       // a lock without D3DLOCK_NOOVERWRITE since the last upload
     bool glAllocated;  // glBufferData has given the GL buffer its storage
 };
 
@@ -1821,9 +1822,11 @@ static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
         nxBufferRangeLock();
         UINT lo = b->dirtyLo, hi = b->dirtyHi;
         bool discard = b->discard;
+        bool synced = b->synced;
         bool whole = !b->glAllocated || discard || (lo == 0 && hi >= b->length);
         b->glDirty = false;
         b->discard = false;
+        b->synced = false;
         b->dirtyLo = b->length;
         b->dirtyHi = 0;
         nxBufferRangeUnlock();
@@ -1836,6 +1839,20 @@ static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
             s_bufferBytesWhole += b->length;
         } else if (hi > lo) {
             NxProfScope prof(NXP_BUF_PARTIAL);
+            // A dynamic buffer is appended to under D3DLOCK_NOOVERWRITE: the
+            // engine promises not to touch what a pending draw reads, and
+            // wraps with D3DLOCK_DISCARD (orphaned above). Map the range
+            // unsynchronized so the driver neither waits for the GPU nor
+            // stages the copy; glBufferSubData did one or the other each time.
+            void *dst = nullptr;
+            if ((b->usage & D3DUSAGE_DYNAMIC) && !synced)
+                dst = glMapBufferRange(target, (GLintptr)lo, (GLsizeiptr)(hi - lo),
+                                       GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT |
+                                       GL_MAP_INVALIDATE_RANGE_BIT);
+            if (dst) {
+                memcpy(dst, (const BYTE *)b->bits + lo, hi - lo);
+                glUnmapBuffer(target);
+            } else
             glBufferSubData(target, (GLintptr)lo, (GLsizeiptr)(hi - lo), (const BYTE *)b->bits + lo);
             s_bufferBytesPartial += hi - lo;
         }
@@ -2664,6 +2681,8 @@ static unsigned s_nShTranslated, s_nShUntranslatable, s_nShSuspect, s_nShNot3;
 static unsigned s_nShCompiled, s_nShCompileFailed;
 static unsigned s_nProgLinked, s_nProgLinkFailed;
 
+enum { NX_CONST_RUNS = 16 };
+
 struct NxProgram {
     GLuint name;       // 0 when the link failed; kept so it is not retried
     GLint vsc, psc;    // uniform array locations, -1 when unused
@@ -2672,6 +2691,11 @@ struct NxProgram {
     // The constant file versions this program's uniforms last received:
     // uniforms are per program, so an unchanged file needs no upload.
     mutable unsigned vsVersion, psVersion;
+    // The registers each stage reads, as contiguous runs (small gaps merged),
+    // with the uniform location of each run's first element: only these go up.
+    struct ConstRun { GLint loc; unsigned short start, count; };
+    ConstRun vsRuns[NX_CONST_RUNS], psRuns[NX_CONST_RUNS];
+    int vsRunCount, psRunCount;
 };
 static std::map<std::pair<const NxShader *, const NxShader *>, NxProgram> s_programs;
 // The last pair looked up: consecutive draws mostly share one. Map entries do
@@ -2720,6 +2744,40 @@ static GLuint nxGlShaderObject(NxShader *s)
 
 // The linked program for the bound pair, or null to use the built-in one, with
 // the reason counted. GL thread only.
+// Splits the registers a stage reads into at most NX_CONST_RUNS runs, merging
+// gaps of up to 8 registers, and finds each run's uniform location. Returns 0
+// when the array is not active; the caller then uploads nothing.
+static int nxConstRuns(GLuint prog, const char *arr, const uint32_t mask[8], GLint count,
+                       NxProgram::ConstRun *runs)
+{
+    if (count <= 0)
+        return 0;
+    auto used = [&](int r) { return r < count && (mask[r >> 5] >> (r & 31)) & 1; };
+    int n = 0;
+    for (int gap = 8; ; gap *= 2) {
+        n = 0;
+        int r = 0;
+        while (r < count && n <= NX_CONST_RUNS) {
+            while (r < count && !used(r)) ++r;
+            if (r >= count) break;
+            int start = r, last = r;
+            for (int k = r + 1; k < count && k - last <= gap; ++k)
+                if (used(k)) last = k;
+            if (n < NX_CONST_RUNS) { runs[n].start = (unsigned short)start; runs[n].count = (unsigned short)(last - start + 1); }
+            ++n;
+            r = last + 1;
+        }
+        if (n <= NX_CONST_RUNS)
+            break;
+    }
+    for (int i = 0; i < n; ++i) {
+        char name[16];
+        snprintf(name, sizeof(name), "%s[%u]", arr, (unsigned)runs[i].start);
+        runs[i].loc = glGetUniformLocation(prog, name);
+    }
+    return n;
+}
+
 static const NxProgram *nxGlProgram(void)
 {
     if (!s_vs || !s_ps) { ++s_frame.fallbackNoShader; return nullptr; }
@@ -2786,6 +2844,8 @@ static const NxProgram *nxGlProgram(void)
     }
     if (p.vscCount > NX_VS_CONST_ROWS) p.vscCount = NX_VS_CONST_ROWS;
     if (p.pscCount > NX_PS_CONST_ROWS) p.pscCount = NX_PS_CONST_ROWS;
+    p.vsRunCount = nxConstRuns(prog, "vsc", s_vs->info.constMask, p.vscCount, p.vsRuns);
+    p.psRunCount = nxConstRuns(prog, "psc", s_ps->info.constMask, p.pscCount, p.psRuns);
     // Sampler sN reads texture unit N and svN unit 16 + N, for good.
     glUseProgram(prog);
     for (int i = 0; i < NX_MAX_SAMPLERS; ++i) {
@@ -2845,12 +2905,17 @@ static void nxGlSetupTranslated(const NxProgram *p)
 {
     NxProfScope prof(NXP_CONSTANTS);
     glUseProgram(p->name);
-    if (p->vsc >= 0 && p->vscCount > 0 && p->vsVersion != s_vsConstVersion) {
-        glUniform4fv(p->vsc, p->vscCount, &s_vsConst[0][0]);
+    // Only the registers each shader reads, as the runs found at link.
+    if (p->vsVersion != s_vsConstVersion) {
+        for (int i = 0; i < p->vsRunCount; ++i)
+            if (p->vsRuns[i].loc >= 0)
+                glUniform4fv(p->vsRuns[i].loc, p->vsRuns[i].count, &s_vsConst[p->vsRuns[i].start][0]);
         p->vsVersion = s_vsConstVersion;
     }
-    if (p->psc >= 0 && p->pscCount > 0 && p->psVersion != s_psConstVersion) {
-        glUniform4fv(p->psc, p->pscCount, &s_psConst[0][0]);
+    if (p->psVersion != s_psConstVersion) {
+        for (int i = 0; i < p->psRunCount; ++i)
+            if (p->psRuns[i].loc >= 0)
+                glUniform4fv(p->psRuns[i].loc, p->psRuns[i].count, &s_psConst[p->psRuns[i].start][0]);
         p->psVersion = s_psConstVersion;
     }
     if (p->alphaFunc >= 0)
@@ -4870,6 +4935,8 @@ static void nxBufferLockRange(NxBuffer *b, UINT offset, UINT size, DWORD flags)
     b->lockHi = end;
     if (flags & D3DLOCK_DISCARD)
         b->discard = true;
+    if (!(flags & D3DLOCK_NOOVERWRITE))
+        b->synced = true;
     nxBufferRangeUnlock();
 }
 

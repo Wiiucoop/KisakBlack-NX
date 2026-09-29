@@ -13,6 +13,7 @@
 #pragma once
 
 #include <d3d9.h>
+#include <stdint.h>
 
 // What the device needs to know about a translated shader besides its text.
 struct NxShaderInfo {
@@ -22,6 +23,7 @@ struct NxShaderInfo {
     unsigned char samplerDim[16]; // per sampler: 2 = 2D, 3 = cube, 4 = volume (D3DSTT_*)
     unsigned unknownOps;        // opcodes the translator skipped; nonzero = output is suspect
     unsigned firstUnknownOp;    // the first of them, for the report
+    uint32_t constMask[8];      // bit N: the shader reads constant register N
 };
 
 // Returns a malloc'd, NUL-terminated GLSL translation unit (free() it), or NULL

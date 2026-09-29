@@ -238,7 +238,16 @@ Performance findings so far, all in this layer:
   (~100 ms a frame after the above). Uniforms are per program, so each
   program now remembers the constant-file version it last received and skips
   the upload when nothing was written since. The program lookup keeps the
-  last pair.
+  last pair. The engine changes some constant before nearly every draw, so
+  the bigger saving is size: the whole array up to the highest register a
+  shader reads went up each time. The translator now records which registers
+  each shader reads (`NxShaderInfo::constMask`) and only those go up, as up
+  to 16 contiguous runs per stage.
+- **Partial buffer uploads waited on the GPU.** `glBufferSubData` into a
+  buffer a pending draw reads makes the driver wait or stage a copy (~60 µs
+  each). A dynamic buffer whose locks since the last upload all carried
+  `D3DLOCK_NOOVERWRITE` now goes up through an unsynchronized
+  `glMapBufferRange` — the promise D3D9 makes, which GL can express.
 
 ### The `src/nx/` layer
 

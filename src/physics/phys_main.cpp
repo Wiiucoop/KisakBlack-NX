@@ -877,6 +877,12 @@ PhysObjUserData * Phys_CreateUserBody(float *position, int id, PhysicsGeomType g
     //
     //*(float *)v40 = a1;
     //v40[1] = (_UNKNOWN *)geomTypea;
+#ifdef KISAK_NX
+    // nx-port: players get a collision body for pushing physics objects; with
+    // physics off there are none to push. Callers treat NULL as no body.
+    if (!nx_physicsEnabled)
+        return NULL;
+#endif
     Phys_Vec3ToNitrousVec(position, &pos);
     
     dictator.x.x = 1.0f;
@@ -3067,14 +3073,12 @@ void __cdecl Phys_BodyGrabSnapshotNitrous(PhysObjUserData *userData, float delta
 //void __cdecl Nitrous_ForEachBody<void(__cdecl *)(PhysObjUserData &, float)>(void(__cdecl *func)(PhysObjUserData *, float), float t)
 void __cdecl Nitrous_ForEachBody(void(__cdecl *func)(PhysObjUserData *, float), float t)
 {
-    PhysGlob *i; // [esp+Ch] [ebp-4h]
-
-    for (i = (PhysGlob *)physGlob.objects.m_dummy_head.m_next_T_internal;
-        &physGlob != i;
-        i = (PhysGlob *)i->objects.m_dummy_head.m_next_T_internal)
-    {
-        ((void(__cdecl *)(PhysObjUserData **, _DWORD))func)(i->objects.m_ptr_list, LODWORD(t));
-    }
+    // nx-port: the decompile walked the list as if each node were physGlob
+    // and passed a field at the wrong offset as the object.
+    using List = phys_free_list<PhysObjUserData>;
+    List::T_internal_base *end = &physGlob.objects.m_dummy_head;
+    for (List::T_internal_base *node = end->m_next_T_internal; node != end; node = node->m_next_T_internal)
+        func(&static_cast<List::T_internal *>(node)->m_data, t);
 }
 
 int num_destructible_hits;

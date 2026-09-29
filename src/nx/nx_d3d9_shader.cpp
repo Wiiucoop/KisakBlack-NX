@@ -115,6 +115,7 @@ struct Ctx {
     bool usedSink  = false;   // a destination with no GLSL name: write nxSink
     bool usedDepth = false;   // oDepth: nxDepth.x goes to gl_FragDepth
     int  maxConst  = -1;      // highest runtime-constant register referenced (sizes vsc[]/psc[])
+    uint32_t constMask[8] = {};   // bit N: the shader reads register N (all of them under relative addressing)
     unsigned unknownOps = 0, firstUnknownOp = 0;
 };
 
@@ -142,12 +143,14 @@ std::string regName(Ctx &c, const Operand &o, bool isDest) {
                 // c[a0.<comp> + N]: the runtime index can reach any register, so the
                 // array must span all 256 (clamped -- OOB indexing is UB in GLSL).
                 c.usedConst = true; c.usedA0 = true; c.maxConst = 255;
+                for (uint32_t &m : c.constMask) m = ~0u;
                 std::ostringstream s;
                 s << c.cArr() << "[clamp(a0." << kComp[o.relComp] << " + " << o.reg << ", 0, 255)]";
                 return s.str();
             }
             if (c.defs.count(o.reg)) { std::ostringstream s; s << "c" << o.reg << "_def"; return s.str(); }
             c.usedConst = true; if (o.reg > c.maxConst) c.maxConst = o.reg;
+            if (o.reg >= 0 && o.reg < 256) c.constMask[o.reg >> 5] |= 1u << (o.reg & 31);
             { std::ostringstream s; s << c.cArr() << "[" << o.reg << "]"; return s.str(); }
         case RT_INPUT:
             if (c.isPixel) { auto it = c.inputs.find(o.reg);
@@ -522,6 +525,7 @@ char *NX_TranslateD3D9Shader(const DWORD *tok, NxShaderInfo *info)
         }
         info->unknownOps = c.unknownOps;
         info->firstUnknownOp = c.firstUnknownOp;
+        memcpy(info->constMask, c.constMask, sizeof(info->constMask));
     }
     std::string out = o.str();
     char *ret = (char *)malloc(out.size() + 1);

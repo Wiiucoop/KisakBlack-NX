@@ -516,19 +516,20 @@ private:
 // each list entry into an SL id and each slot's index into that id; this does
 // both. Runs before registration: some slots sit inside asset headers
 // (PhysConstraints) that DB_AddXAsset copies into the pool.
-static void remapScriptStrings(const char *path, const uint8_t *p, const uint8_t *end,
-                               uint8_t **block, const uint32_t *blockSize, uint32_t nblk)
+// Returns the end of the section (the next one starts there), NULL if cut short.
+static const uint8_t *remapScriptStrings(const char *path, const uint8_t *p, const uint8_t *end,
+                                         uint8_t **block, const uint32_t *blockSize, uint32_t nblk)
 {
     uint32_t count;
-    if (p + 4 > end) return;
+    if (p + 4 > end) return nullptr;
     memcpy(&count, p, 4); p += 4;
     std::vector<uint16_t> ids(count, 0);
     char buf[1024];
     for (uint32_t i = 0; i < count; ++i) {
         uint16_t len;
-        if (p + 2 > end) return;
+        if (p + 2 > end) return nullptr;
         memcpy(&len, p, 2); p += 2;
-        if (p + len > end) return;
+        if (p + len > end) return nullptr;
         if (len) {
             uint32_t n = len < sizeof(buf) - 1 ? len : (uint32_t)sizeof(buf) - 1;
             memcpy(buf, p, n);
@@ -538,7 +539,7 @@ static void remapScriptStrings(const char *path, const uint8_t *p, const uint8_t
         p += len;
     }
     uint32_t slots, bad = 0;
-    if (p + 4 > end) return;
+    if (p + 4 > end) return nullptr;
     memcpy(&slots, p, 4); p += 4;
     for (uint32_t i = 0; i < slots && p + 5 <= end; ++i) {
         uint8_t b = *p++; uint32_t off; memcpy(&off, p, 4); p += 4;
@@ -550,6 +551,31 @@ static void remapScriptStrings(const char *path, const uint8_t *p, const uint8_t
     }
     Com_Printf(16, "NX_KBZ: '%s' %u script strings, %u slots remapped (%u out of range)\n",
                path, count, slots, bad);
+    return p;
+}
+
+// Effect references by name (version 3): pointer slots holding an effect's
+// name, which Load_FxEffectDefFromName would have swapped for the FxEffectDef.
+// Runs after the zone's assets are registered, so effects defined in this zone
+// are found; the slots live in element arrays the pooled headers still point at.
+static void resolveFxRefs(const char *path, const uint8_t *p, const uint8_t *end,
+                          uint8_t **block, const uint32_t *blockSize, uint32_t nblk)
+{
+    uint32_t count, bad = 0, resolved = 0;
+    if (!p || p + 4 > end) return;
+    memcpy(&count, p, 4); p += 4;
+    for (uint32_t i = 0; i < count && p + 5 <= end; ++i) {
+        uint8_t b = *p++; uint32_t off; memcpy(&off, p, 4); p += 4;
+        if (b >= nblk || !block[b] || off + sizeof(void *) > blockSize[b]) { ++bad; continue; }
+        const char *name;
+        memcpy(&name, block[b] + off, sizeof(name));
+        if (!name)
+            continue;
+        XAssetHeader h = DB_FindXAssetHeader(ASSET_TYPE_FX, (char *)name, 1, -1);
+        memcpy(block[b] + off, &h.data, sizeof(void *));
+        ++resolved;
+    }
+    Com_Printf(16, "NX_KBZ: '%s' %u effect refs resolved (%u slots, %u bad)\n", path, resolved, count, bad);
 }
 
 // Parse + relocate + register a KBZ1 image already read into `file`.
@@ -629,8 +655,11 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
 
     // 2b. script strings (version 2 on), before anything reads them.
     const uint8_t *assetTable = p;
+    const uint8_t *fxRefSection = nullptr;
     if (hdr.version >= 2 && assetTable + (size_t)assetCount * 9 <= end)
-        remapScriptStrings(path, assetTable + (size_t)assetCount * 9, end, block, blockSize, nblk);
+        fxRefSection = remapScriptStrings(path, assetTable + (size_t)assetCount * 9, end, block, blockSize, nblk);
+    if (hdr.version < 3)
+        fxRefSection = nullptr;
 
     // 3. register each asset. The header struct is already native LP64 layout,
     // so we hand DB_AddXAsset a direct pointer into the relocated block.
@@ -675,6 +704,9 @@ static int loadKbzImage(const char *path, uint8_t *file, long fileSize)
                        " (%u assets moved, %u referenced by nothing)\n",
                    path, slots.moved(), slots.slotCount(),
                    slots.assetsMoved(), slots.assetsUnreferenced());
+
+    // 3b. effect references by name, now that this zone's effects are registered.
+    resolveFxRefs(path, fxRefSection, end, block, blockSize, nblk);
 
     // 4. build the runtime objects db_load.cpp would have built. This runs
     // after registration so a builder may look assets up by name if it needs to.

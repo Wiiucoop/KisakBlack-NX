@@ -156,6 +156,13 @@ static void markScrStr(Prelink &z, Prelink::Loc obj, uint32_t field,
         z.scriptStrings.push_back({(uint8_t)obj.blk, obj.off + field + i * stride});
 }
 
+// FxEffectDefRef slots hold an effect's name; Load_FxEffectDefFromName swaps it
+// for the FxEffectDef at load time. The converter records every such slot and
+// the device loader resolves them after registering the zone (nx_kbz.cpp).
+static void markFxRef(Prelink &z, Prelink::Loc obj, uint32_t field) {
+    if (obj.valid()) z.fxRefs.push_back({(uint8_t)obj.blk, obj.off + field});
+}
+
 // ---- per-asset transcoders --------------------------------------------------
 // Load_RawFile: x86 {char* name; int len; char* buffer} (12) -> LP64 (24).
 static void tRawFile(Reader &r, Prelink &z, Prelink::Loc obj) {
@@ -2382,6 +2389,9 @@ static void tFxElemVisuals(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t fie
         tXModelHandle(r, z, obj, field, tag, x86slot);
         break;
     case 0xC:                                        // FxEffectDefRef, by name
+        putXStringFromTag(r, z, obj, field, tag);
+        markFxRef(z, obj, field);
+        break;
     case 0xA:                                        // soundName
         putXStringFromTag(r, z, obj, field, tag);
         break;
@@ -2523,10 +2533,10 @@ static void tFxElemDefRefs(Reader &r, Prelink &z, Prelink::Loc ed, const FxElemT
     tFxElemDefVisuals(r, z, ed, 208, t.elemType, t.visualCount, t.visuals,
                       edX86 ? edX86 + 196 : 0);   // FxElemDef.visuals
 
-    putXStringFromTag(r, z, ed, 240, t.onImpact);
-    putXStringFromTag(r, z, ed, 248, t.onDeath);
-    putXStringFromTag(r, z, ed, 256, t.emitted);
-    putXStringFromTag(r, z, ed, 280, t.attached);
+    putXStringFromTag(r, z, ed, 240, t.onImpact);   markFxRef(z, ed, 240);
+    putXStringFromTag(r, z, ed, 248, t.onDeath);    markFxRef(z, ed, 248);
+    putXStringFromTag(r, z, ed, 256, t.emitted);    markFxRef(z, ed, 256);
+    putXStringFromTag(r, z, ed, 280, t.attached);   markFxRef(z, ed, 280);
 
     if (t.trailDef != TAG_NULL) tFxTrailDef(r, z, ed, 288);
     else                        z.putPtr(ed, 288, Prelink::none());
@@ -4850,7 +4860,7 @@ void Prelink::write(const char *path) {
     uint32_t blkSize[NBLOCK];
     for (int i = 0; i < NBLOCK; ++i) blkSize[i] = (uint32_t)block[i].size();
     char magic[4] = {'K','B','Z','1'};
-    uint32_t ver = 2, nblk = NBLOCK;   // 2: script-string section after the assets
+    uint32_t ver = 3, nblk = NBLOCK;   // 2: script-string section after the assets; 3: effect refs
     uint32_t rc = (uint32_t)relocs.size(), ac = (uint32_t)assets.size();
     fwrite(magic, 1, 4, f); fwrite(&ver, 4, 1, f); fwrite(&nblk, 4, 1, f);
     fwrite(blkSize, 4, NBLOCK, f);
@@ -4865,5 +4875,10 @@ void Prelink::write(const char *path) {
     for (auto &s : g_zoneStrings) { uint16_t l = (uint16_t)s.size(); fwrite(&l, 2, 1, f); fwrite(s.data(), 1, l, f); }
     fwrite(&fc, 4, 1, f);
     for (auto &ss : scriptStrings) { fwrite(&ss.first, 1, 1, f); fwrite(&ss.second, 4, 1, f); }
+    // Effect refs by name: {u32 count; count x (u8 blk, u32 off)} -- pointer slots
+    // holding an effect's name, to resolve to the FxEffectDef.
+    uint32_t xc = (uint32_t)fxRefs.size();
+    fwrite(&xc, 4, 1, f);
+    for (auto &fr : fxRefs) { fwrite(&fr.first, 1, 1, f); fwrite(&fr.second, 4, 1, f); }
     fclose(f);
 }

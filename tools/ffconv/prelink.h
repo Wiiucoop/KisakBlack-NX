@@ -67,6 +67,7 @@ struct Prelink {
     struct AssetRef { uint32_t type; uint8_t blk; uint32_t off; };
     std::vector<AssetRef> assets;
     std::vector<std::pair<uint8_t,uint32_t>> scriptStrings; // (blk,off) per script string
+    std::vector<std::pair<uint8_t,uint32_t>> fxRefs;        // (blk,off) per FxEffectDefRef by name
 
     // A location in the output zone.
     struct Loc { int blk; uint32_t off; bool valid() const { return blk >= 0; } };

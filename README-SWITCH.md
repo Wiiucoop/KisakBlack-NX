@@ -107,6 +107,14 @@ The answer is to transcode offline:
   loader remaps them before registration. Before this every such field named
   an arbitrary string (a pathnode asked for `animscripts/traverse/ground`).
   A new `Load_ScriptString` site in a transcoder needs a `markScrStr` too.
+- **Effect references by name (KBZ version 3).** `FxEffectDefRef` (an
+  element's `effectOnImpact`/`OnDeath`/`Emitted`/`Attached`, and effect-type
+  visuals) is loaded as the effect's name and `Load_FxEffectDefFromName`
+  swaps it for the `FxEffectDef`. The KBZ path skipped that swap, so the first
+  impact effect followed a string as an effect (crash when firing). The
+  converter records those slots (`markFxRef`) and the loader resolves them
+  after registering the zone (`resolveFxRefs`). The stock loader resolves
+  nothing else by name.
 
 The `.ff` files must still be on the SD card: the zone loader opens the file
 before the KBZ path takes over, and a zone with no `.kbz` is skipped

@@ -487,6 +487,8 @@ are silent and need reading:
   `GfxModelRigidSurface`). Every surface after the first pointed into the
   middle of the previous one. The backend also read `gfxEntIndex` at its x86
   offset (`surfsBuffer[v + 14]`). Now `sizeof(T) / 4` and the field.
+  The skinned walkers in `r_scene.cpp` had it as `surfSize = 56` / `24`
+  (rigid / skinned): the first spawned player drew from garbage.
 - **Heap overruns from literal allocation sizes**: `debug_brush_info` was
   allocated at the x86 490012 bytes and cleared with `sizeof`, 40 KB past the
   block, which broke malloc's bookkeeping. malloc then refused small requests

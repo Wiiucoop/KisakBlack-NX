@@ -617,7 +617,15 @@ struct NxBuffer {
     DWORD fvf;
     void *bits;
     GLuint glName;     // 0 until the first upload on the GL thread
-    bool glDirty;      // bits changed since the last glBufferData
+    bool glDirty;      // bits changed since the last upload
+    // The bytes changed since the last upload, [dirtyLo, dirtyHi). The engine
+    // appends to its multi-MB dynamic buffers thousands of times a frame, a
+    // few KB each; re-sending the whole buffer every time took seconds per
+    // frame. lockLo/lockHi hold the range of the lock in progress.
+    UINT dirtyLo, dirtyHi;
+    UINT lockLo, lockHi;
+    bool discard;      // a D3DLOCK_DISCARD since the last upload: orphan it
+    bool glAllocated;  // glBufferData has given the GL buffer its storage
 };
 
 struct NxQuery {
@@ -1703,6 +1711,13 @@ static bool nxGlEnsurePipeline(void)
 // Both halves need the context, so this only works on the GL thread: Unlock
 // calls it when it happens to be there, and the draw path -- which always is --
 // picks up whatever is still dirty.
+// Guards the dirty ranges: the engine locks buffers on its own threads while
+// the GL thread uploads them.
+static Mutex s_bufferRangeMutex;
+static uint64_t s_bufferBytesWhole, s_bufferBytesPartial;
+static void nxBufferRangeLock() { mutexLock(&s_bufferRangeMutex); }
+static void nxBufferRangeUnlock() { mutexUnlock(&s_bufferRangeMutex); }
+
 static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
 {
     if (!b || !b->bits || !b->length)
@@ -1715,9 +1730,23 @@ static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
     }
     glBindBuffer(target, b->glName);
     if (b->glDirty) {
-        glBufferData(target, (GLsizeiptr)b->length, b->bits,
-                     (b->usage & D3DUSAGE_DYNAMIC) ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
+        nxBufferRangeLock();
+        UINT lo = b->dirtyLo, hi = b->dirtyHi;
+        bool whole = !b->glAllocated || b->discard || (lo == 0 && hi >= b->length);
         b->glDirty = false;
+        b->discard = false;
+        b->dirtyLo = b->length;
+        b->dirtyHi = 0;
+        nxBufferRangeUnlock();
+        if (whole) {
+            glBufferData(target, (GLsizeiptr)b->length, b->bits,
+                         (b->usage & D3DUSAGE_DYNAMIC) ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
+            b->glAllocated = true;
+            s_bufferBytesWhole += b->length;
+        } else if (hi > lo) {
+            glBufferSubData(target, (GLintptr)lo, (GLsizeiptr)(hi - lo), (const BYTE *)b->bits + lo);
+            s_bufferBytesPartial += hi - lo;
+        }
     }
     return true;
 }
@@ -1727,7 +1756,18 @@ static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
 // it runs on the right thread and syncs it then.
 static void nxGlBufferDirty(NxBuffer *b, GLenum target)
 {
+    nxBufferRangeLock();
+    if (!b->glDirty) {
+        b->dirtyLo = b->lockLo;
+        b->dirtyHi = b->lockHi;
+    } else {
+        if (b->lockLo < b->dirtyLo)
+            b->dirtyLo = b->lockLo;
+        if (b->lockHi > b->dirtyHi)
+            b->dirtyHi = b->lockHi;
+    }
     b->glDirty = true;
+    nxBufferRangeUnlock();
     if (nxGlAcquire())
         nxGlSyncBuffer(b, target);
 }
@@ -4498,6 +4538,21 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
                (s_lastClearFlags & D3DCLEAR_TARGET)  ? " TARGET"  : "",
                (s_lastClearFlags & D3DCLEAR_ZBUFFER) ? " ZBUFFER" : "",
                (s_lastClearFlags & D3DCLEAR_STENCIL) ? " STENCIL" : "");
+        // Frame time and buffer traffic since the last report.
+        static u64 s_lastReportTick;
+        static unsigned s_lastReportPresent;
+        static uint64_t s_lastWhole, s_lastPartial;
+        u64 now = armGetSystemTick();
+        unsigned frames = s_nSwapPresent - s_lastReportPresent;
+        if (s_lastReportTick && frames)
+            printf("        %.1f ms per present over %u | buffer uploads: %.1f MB whole, %.1f MB partial\n",
+                   armTicksToNs(now - s_lastReportTick) / 1e6 / frames, frames,
+                   (s_bufferBytesWhole - s_lastWhole) / 1048576.0,
+                   (s_bufferBytesPartial - s_lastPartial) / 1048576.0);
+        s_lastReportTick = now;
+        s_lastReportPresent = s_nSwapPresent;
+        s_lastWhole = s_bufferBytesWhole;
+        s_lastPartial = s_bufferBytesPartial;
         fflush(stdout);
     }
     return D3D_OK;
@@ -4658,9 +4713,24 @@ HRESULT IDirect3DVolumeTexture9::GetLevelDesc(UINT level, D3DVOLUME_DESC *desc)
 // ===========================================================================
 // buffers
 // ===========================================================================
-HRESULT IDirect3DVertexBuffer9::Lock(UINT offset, UINT, void **data, DWORD)
+// Size 0 locks the rest of the buffer, as in D3D.
+static void nxBufferLockRange(NxBuffer *b, UINT offset, UINT size, DWORD flags)
+{
+    if (offset > b->length)
+        offset = b->length;
+    UINT end = (size == 0 || size > b->length - offset) ? b->length : offset + size;
+    nxBufferRangeLock();
+    b->lockLo = offset;
+    b->lockHi = end;
+    if (flags & D3DLOCK_DISCARD)
+        b->discard = true;
+    nxBufferRangeUnlock();
+}
+
+HRESULT IDirect3DVertexBuffer9::Lock(UINT offset, UINT size, void **data, DWORD flags)
 {
     NxBuffer *b = (NxBuffer *)this;
+    nxBufferLockRange(b, offset, size, flags);
     *data = (BYTE *)b->bits + offset;
     return D3D_OK;
 }
@@ -4681,9 +4751,10 @@ HRESULT IDirect3DVertexBuffer9::GetDesc(D3DVERTEXBUFFER_DESC *desc)
     return D3D_OK;
 }
 
-HRESULT IDirect3DIndexBuffer9::Lock(UINT offset, UINT, void **data, DWORD)
+HRESULT IDirect3DIndexBuffer9::Lock(UINT offset, UINT size, void **data, DWORD flags)
 {
     NxBuffer *b = (NxBuffer *)this;
+    nxBufferLockRange(b, offset, size, flags);
     *data = (BYTE *)b->bits + offset;
     return D3D_OK;
 }

@@ -122,7 +122,7 @@ unsigned int __cdecl R_DrawXModelSurfLitInternal(
             break;
         v5 = 4 * LOWORD(drawSurf.packed);
         modelSurf = (const GfxModelRigidSurface *)&data->surfsBuffer[v5];
-        if (*(unsigned __int16 *)&data->surfsBuffer[v5 + 14] != baseGfxEntIndex)
+        if (modelSurf->surf.info.gfxEntIndex != baseGfxEntIndex)
         {
             if (R_DrawXModelSurfCheckBreak(
                 modelSurf->surf.info.gfxEntIndex,
@@ -332,7 +332,7 @@ unsigned int __cdecl R_DrawXModelSurfCameraInternal(
             break;
         v4 = 4 * LOWORD(drawSurf.packed);
         modelSurf = (const GfxModelRigidSurface *)&data->surfsBuffer[v4];
-        if (*(unsigned __int16 *)&data->surfsBuffer[v4 + 14] != baseGfxEntIndex)
+        if (modelSurf->surf.info.gfxEntIndex != baseGfxEntIndex)
         {
             if (R_DrawXModelSurfCheckBreak(
                 modelSurf->surf.info.gfxEntIndex,

@@ -1979,7 +1979,7 @@ void __cdecl R_StreamUpdateForBModel(
         ++count;
         ++surfIndex;
         ++modelSurf;
-        surfId += 5;
+        surfId += sizeof(BModelSurface) / 4;
     }
 }
 

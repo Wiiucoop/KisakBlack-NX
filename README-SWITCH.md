@@ -416,6 +416,12 @@ are silent and need reading:
   wrong node and the tree walk recursed until the stack ran out. The converter
   rescales it (`tGfxCellRefs`). Other `*Offset` fields in zone structs are
   either same-size strides (`mnode_t`, `DObjSkelMat`) or not links.
+- **Surface ids stepped by x86 record sizes**: a draw surf names its record
+  in `surfsBuffer` as a count of 4-byte units, and the builders advanced it by
+  the x86 size (`surfId += 5` for `BModelSurface`, `+= 14` for
+  `GfxModelRigidSurface`). Every surface after the first pointed into the
+  middle of the previous one. The backend also read `gfxEntIndex` at its x86
+  offset (`surfsBuffer[v + 14]`). Now `sizeof(T) / 4` and the field.
 - **Int arrays handled as `void *`**: `importance_merge_sort` sorted the
   `int` image-index list as `void **`, walking twice the array. Typed as
   `int *`. The other hand-written merge sorts hold real pointers.

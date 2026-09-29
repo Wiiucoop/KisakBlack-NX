@@ -1190,7 +1190,7 @@ void __cdecl R_AddBModelSurfacesCamera(
         ++count;
         ++surfIndex;
         ++modelSurf;
-        surfId += 5;
+        surfId += sizeof(BModelSurface) / 4;
     }
 }
 
@@ -1253,7 +1253,7 @@ GfxDrawSurf *__cdecl R_AddBModelSurfaces(
         ++count;
         ++surfIndex;
         ++modelSurf;
-        surfId += 5;
+        surfId += sizeof(BModelSurface) / 4;
     }
     return drawSurf;
 }
@@ -1396,7 +1396,7 @@ void R_AddXModelSurfacesCamera(
             region = (*material)->cameraRegion;
             if (region == 3)
             {
-                surfId += 14;
+                surfId += sizeof(GfxModelRigidSurface) / 4;
                 ++modelSurf;
             }
             else
@@ -1482,7 +1482,7 @@ void R_AddXModelSurfacesCamera(
                     XSurface = R_GetXSurface((unsigned int *)modelSurf, surfType);
                     totalVertCount += XSurfaceGetNumVerts(XSurface);
                 }
-                surfId += 14;
+                surfId += sizeof(GfxModelRigidSurface) / 4;
                 ++modelSurf;
             }
         }
@@ -1621,12 +1621,12 @@ GfxDrawSurf *__cdecl R_AddXModelSurfaces(
                 LODWORD(newDrawSurf) = (unsigned __int16)surfId | *(unsigned int *)&(*material)->info.drawSurf.fields & 0xFFFF0000;
                 drawSurf->packed = newDrawSurf;
                 ++drawSurf;
-                surfId += 14;
+                surfId += sizeof(GfxModelRigidSurface) / 4;
                 ++modelSurf;
             }
             else
             {
-                surfId += 14;
+                surfId += sizeof(GfxModelRigidSurface) / 4;
                 ++modelSurf;
             }
         }

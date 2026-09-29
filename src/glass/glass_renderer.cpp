@@ -77,10 +77,10 @@ GlassRenderer::GlassRenderer(const Glasses *glasses)
     this->smallAllocator.memory = 0;
     smallAllocatorBlocks = glasses->smallAllocatorBlocks;
     v2 = GlassesClient::Allocate(
-                 16 * smallAllocatorBlocks,
+                 GLASS_SMALL_BLOCK_SIZE * smallAllocatorBlocks,
                  "C:\\projects_pc\\cod\\codsrc\\src\\glass\\glass_renderer.cpp",
                  70);
-    this->smallAllocator.Init(v2, 0x10u, smallAllocatorBlocks);
+    this->smallAllocator.Init(v2, GLASS_SMALL_BLOCK_SIZE, smallAllocatorBlocks);   // nx-port: was 16
 
 
     //v23 = GlassesClient::Allocate(28, "C:\\projects_pc\\cod\\codsrc\\src\\glass\\glass_renderer.cpp", 72);

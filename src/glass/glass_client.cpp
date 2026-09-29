@@ -62,7 +62,7 @@ GlassesClient::GlassesClient(const Glasses *glss)
 
     this->numGlasses = glss->numGlasses;
     this->glasses = (GlassClient *)GlassesClient::Allocate(
-                                                                     12 * this->numGlasses,
+                                                                     sizeof(GlassClient) * this->numGlasses,   // nx-port: was 12 *
                                                                      "C:\\projects_pc\\cod\\codsrc\\src\\glass\\glass_client.cpp",
                                                                      80);
 

@@ -3,6 +3,10 @@
 #include <list>
 #include "glass_client.h"
 
+// nx-port: blocks hold std::list nodes (prev, next, value): 16 bytes on x86,
+// 24 on LP64. Was a literal 16.
+#define GLASS_SMALL_BLOCK_SIZE (4 * sizeof(void *))
+
 struct SmallAllocator // sizeof=0x18
 {                                       // XREF: GlassRenderer/r
     void *memory;
@@ -147,3 +151,6 @@ struct Allocator // sizeof=0x14
     int __thiscall GetFree();
     int __thiscall GetLargestFree();
 };
+
+// nx-port: an allocation starts at its header's prevFree (x86 16, LP64 32).
+#define GLASS_MEM_DATA_OFFSET offsetof(Allocator::Memory, prevFree)

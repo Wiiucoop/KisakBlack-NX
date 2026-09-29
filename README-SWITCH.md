@@ -422,6 +422,13 @@ are silent and need reading:
   `GfxModelRigidSurface`). Every surface after the first pointed into the
   middle of the previous one. The backend also read `gfxEntIndex` at its x86
   offset (`surfsBuffer[v + 14]`). Now `sizeof(T) / 4` and the field.
+- **Heap overruns from literal allocation sizes**: `debug_brush_info` was
+  allocated at the x86 490012 bytes and cleared with `sizeof`, 40 KB past the
+  block, which broke malloc's bookkeeping. malloc then refused small requests
+  with 1.7 GB free and `free()` faulted inside Mesa. Found with guard pages:
+  blocks of 256 KB or more (malloc and VirtualAlloc) end against a no-access
+  page, so an overrun faults at the writer (`nx_wincompat.cpp`,
+  `--wrap=malloc`). Candidates: `grep -rnE "Alloc[A-Za-z]*\((0x[0-9A-F]{3,}|[0-9]{4,})"`.
 - **Size functions returning x86 sizes**: `XAnimTreeSize()` returned 8, so
   every anim tree was allocated and cleared at half its size; `children` was
   whatever followed. Now `sizeof(XAnimTree_s)`. The decompiler also reused

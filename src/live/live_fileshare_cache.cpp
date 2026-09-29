@@ -29,9 +29,9 @@ bool __cdecl Live_FileShare_CacheInit()
     {
         __debugbreak();
     }
-    s_fshCache = (fshCacheFileDetails_t *)Hunk_Alloc(0x9AB00u, "fileShareCache", 36);
+    s_fshCache = (fshCacheFileDetails_t *)Hunk_Alloc(300 * sizeof(fshCacheFileDetails_t), "fileShareCache", 36);
     s_fshCacheFileCount = 0;
-    s_fshRatingCache = (fshCacheRatingDetails_t *)Hunk_Alloc(0xFD20u, "fileShareCache", 36);
+    s_fshRatingCache = (fshCacheRatingDetails_t *)Hunk_Alloc(300 * sizeof(fshCacheRatingDetails_t), "fileShareCache", 36);
     s_fshCacheRatingCount = 0;
     return s_fshCache && s_fshRatingCache;
 }

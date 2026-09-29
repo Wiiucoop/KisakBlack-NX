@@ -765,7 +765,7 @@ void __cdecl R_UpdateVisHistory(const GfxLightGrid *lightGrid, const unsigned in
 void AllocAllMemoryNeeded()
 {
     if (!LightGridHashtable)
-        LightGridHashtable = (htab **)Z_VirtualAlloc(0x40001C, "initLightGridPoints", 0);
+        LightGridHashtable = (htab **)Z_VirtualAlloc(sizeof(htab *) * 0x100007, "initLightGridPoints", 0);
     if (!LightGridMemory)
         LightGridMemory = (htab *)Z_VirtualAlloc(0x1000000, "initLightGridMemory", 0);
 }

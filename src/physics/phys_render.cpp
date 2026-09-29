@@ -111,7 +111,7 @@ void __cdecl clear_debug_brushes_and_patches()
     debugCollisionAabbTreeCount = 0;
     if ( !debug_brush_info )
     {
-        R_DebugAlloc((void **)&debug_brush_info, 490012, "(debug_brush_info)");
+        R_DebugAlloc((void **)&debug_brush_info, sizeof(debug_brush_info_t), "(debug_brush_info)");
         if ( !debug_brush_info )
         {
             Com_Printf(0, "Could not allocate memory for debug_brush_info\n");
@@ -124,7 +124,7 @@ void __cdecl clear_debug_brushes_and_patches()
     debug_brush_info->num_indices = 0;
     if ( !debug_patch_info )
     {
-        R_DebugAlloc((void **)&debug_patch_info, 460008, "(debug_patch_info)");
+        R_DebugAlloc((void **)&debug_patch_info, sizeof(debug_patch_info_t), "(debug_patch_info)");
         if ( !debug_patch_info )
         {
             Com_Printf(0, "Could not allocate memory for debug_patch_info\n");

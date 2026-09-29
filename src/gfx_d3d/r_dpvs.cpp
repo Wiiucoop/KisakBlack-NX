@@ -2675,9 +2675,10 @@ void __cdecl R_AddCellDynBrushSurfacesInFrustumCmd(DpvsPlane **data)
 {
     unsigned int oldViewIndex; // [esp+0h] [ebp-8h]
 
-    oldViewIndex = R_SetVisData(*((unsigned __int16 *)data + 4));
+    const DpvsDynamicCellCmd *cmd = (const DpvsDynamicCellCmd *)data;   // nx-port: was read at x86 offsets
+    oldViewIndex = R_SetVisData(cmd->viewIndex);
     if ( r_drawDynEnts->current.enabled )
-        R_CullDynBrushInCell((unsigned int)data[1], *data, *((unsigned __int8 *)data + 10));
+        R_CullDynBrushInCell(cmd->cellIndex, (DpvsPlane *)cmd->planes, cmd->planeCount);
     R_SetVisData(oldViewIndex);
 }
 

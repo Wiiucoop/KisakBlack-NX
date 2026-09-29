@@ -18,7 +18,7 @@ jqModule r_waterModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = (int(__cdecl *)(jqBatch *))r_waterCallback,
 };
-jqWorkerCmd r_waterWorkerCmd = { &r_waterModule, 4u, 0, 0, &r_waterLimit, NULL, 0u };
+jqWorkerCmd r_waterWorkerCmd = { &r_waterModule, sizeof(water_t *),   /* nx-port: was an x86 literal */ 0, 0, &r_waterLimit, NULL, 0u };
 
 void __cdecl R_UploadWaterTextureInternal(water_t **data)
 {

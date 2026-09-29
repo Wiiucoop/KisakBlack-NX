@@ -33,7 +33,7 @@ jqModule dyn_smodel_drawstateModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = (int(__cdecl *)(jqBatch *))dyn_smodel_drawstateCallback
 };
-jqWorkerCmd dyn_smodel_drawstateWorkerCmd = { &dyn_smodel_drawstateModule, 36u, 0, 0, &dyn_smodel_drawstateLimit, NULL, 0u };
+jqWorkerCmd dyn_smodel_drawstateWorkerCmd = { &dyn_smodel_drawstateModule, sizeof(DynSModelDrawStateCmd),   /* nx-port: was an x86 literal */ 0, 0, &dyn_smodel_drawstateLimit, NULL, 0u };
 
 DrawStateWorkerSharedBuffer g_drawStateWorkerSharedBuffer;
 

@@ -34,7 +34,7 @@ jqModule r_stream_sortModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = (int(__cdecl *)(jqBatch *))r_stream_sortCallback,
 };
-jqWorkerCmd r_stream_sortWorkerCmd = { &r_stream_sortModule, 8u, 0, 0, &r_stream_sortLimit, NULL, 0u };
+jqWorkerCmd r_stream_sortWorkerCmd = { &r_stream_sortModule, sizeof(StreamSortCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_stream_sortLimit, NULL, 0u };
 
 
 volatile unsigned int r_stream_updateLimit = 1;
@@ -44,7 +44,7 @@ jqModule r_stream_updateModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = (int(__cdecl *)(jqBatch *))r_stream_updateCallback,
 };
-jqWorkerCmd r_stream_updateWorkerCmd = { &r_stream_updateModule, 28u, 0, 0, &r_stream_updateLimit, NULL, 0u };
+jqWorkerCmd r_stream_updateWorkerCmd = { &r_stream_updateModule, sizeof(StreamUpdateCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_stream_updateLimit, NULL, 0u };
 
 
 volatile unsigned int r_stream_combineLimit = 1;
@@ -54,7 +54,7 @@ jqModule r_stream_combineModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = (int(__cdecl *)(jqBatch *))r_stream_combineCallback,
 };
-jqWorkerCmd r_stream_combineWorkerCmd = { &r_stream_combineModule, 4u, 0, 0, &r_stream_combineLimit, NULL, 0u };
+jqWorkerCmd r_stream_combineWorkerCmd = { &r_stream_combineModule, sizeof(StreamCombineCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_stream_combineLimit, NULL, 0u };
 
 
 volatile unsigned int r_stream_update_staticmodelsLimit = 1;
@@ -88,7 +88,7 @@ jqModule r_stream_update_staticsurfacesModule =
 jqWorkerCmd r_stream_update_staticsurfacesWorkerCmd =
 {
   &r_stream_update_staticsurfacesModule,
-  28u,
+  sizeof(StreamUpdateCmd),   /* nx-port: was an x86 literal */
   0,
   0,
   &r_stream_update_staticsurfacesLimit,

@@ -398,6 +398,10 @@ are silent and need reading:
 - **Constants decompiled as addresses**: `(int)&objBuf[1758][2]` is
   `FL_OBSTACLE` (0x4000000) -- the value happened to fall inside objBuf in the
   PC binary. Wrong on every build; breaks outright once the array resizes.
+- **Job queue command sizes**: every `jqWorkerCmd` carried its data size as an
+  x86 literal (`r_dpvs_staticWorkerCmd = { ..., 12u, ...}`), so a command
+  holding a pointer was queued with half of it. `sizeof` of the command the
+  builder passes (r_workercmds.cpp, r_stream, r_foliage, r_water, fx_marks).
 - **Pointers written through the wrong union member**: the decompiler picks
   any member at the right x86 offset, so `pose.fx.triggerTime = (int)&ci->control`
   is `pose.player.control`, `ent_update.handle = (int)playback` is
@@ -504,7 +508,7 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    hunk page arithmetic, the script compiler and VM, weapon model arrays,
    the unlockables table overrun, the script field tables and entity links,
    script strings in the KBZ (the map's traverse scripts), the hunk's
-   `fileData_s` headers, the game entity and client sizes, DObj creation and storage, IK state buffers, struct-sized allocations (the client now reaches `CG_Init`), physics handles (physics off), the glass allocators. `CL_InitCGame` now completes; the main loop runs, parses snapshots and draws the first HUD. Then the 3D renderer meets its first world frame.
+   `fileData_s` headers, the game entity and client sizes, DObj creation and storage, IK state buffers, struct-sized allocations (the client now reaches `CG_Init`), physics handles (physics off), the glass allocators. `CL_InitCGame` now completes; the main loop runs, parses snapshots, draws the first HUD and starts the first 3D frame. Then the 3D renderer meets its first world frame.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

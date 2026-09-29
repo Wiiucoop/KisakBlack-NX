@@ -35,7 +35,7 @@ jqModule Demo_SaveModule =
     .Code = Demo_SaveCallback,
     //.Group = 0
 };
-jqWorkerCmd Demo_SaveWorkerCmd = { &Demo_SaveModule, 12u, 0, 0, &Demo_SaveLimit, NULL, 0u };
+jqWorkerCmd Demo_SaveWorkerCmd = { &Demo_SaveModule, sizeof(demoSaveCmd),   /* nx-port: was an x86 literal */ 0, 0, &Demo_SaveLimit, NULL, 0u };
 
 int g_democlientindex;
 

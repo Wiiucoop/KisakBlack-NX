@@ -326,7 +326,7 @@ void RB_Resource_Update_Internal()
                                             (_D3DFORMAT)(action->p2));
                 goto LABEL_2;
             case ACTION_RELEASE:
-                (*(void (__thiscall **)(void *, void *))(*(unsigned int *)action->resource + 8))(action->resource, action->resource);
+                ((IDirect3DResource9 *)action->resource)->Release();   // nx-port: was a call through the x86 vtable slot +8
                 goto LABEL_2;
             case ACTION_LOADTEXTURE:
                 Image_LoadFromData(

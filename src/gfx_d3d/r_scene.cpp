@@ -441,7 +441,7 @@ void __cdecl R_AddDObjToScene(
                 sceneModel->entnum = entnum;
                 scene.dpvs.sceneXModelIndex[entnum] = sceneEntIndex;
                 //sceneModel->cachedLightingHandle = (unsigned __int16 *)Ragdoll_HandleBody((int)pose);
-                sceneModel->cachedLightingHandle = (unsigned __int16 *)((int)pose);
+                sceneModel->cachedLightingHandle = (unsigned __int16 *)&pose->lightingHandle;   // nx-port: was (u16 *)(int)pose
                 sceneModel->lightingOriginToleranceSq = lightingOriginToleranceSq;
                 radius = XModelGetRadius(model);
                 CG_GetPoseOrigin(pose, sceneModel->placement.base.origin);
@@ -1523,7 +1523,7 @@ const XSurface *__cdecl R_GetXSurface(unsigned int *modelSurf, surfaceType_t sur
     {
         __debugbreak();
     }
-    return (const XSurface *)modelSurf[1];
+    return ((const GfxModelSkinnedSurface *)modelSurf)->xsurf;   // nx-port: was modelSurf[1], the x86 offset
 }
 
 GfxDrawSurf *__cdecl R_AddXModelSurfaces(

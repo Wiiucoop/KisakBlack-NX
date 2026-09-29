@@ -28,7 +28,7 @@ jqModule fx_update_spotModule =
   .Type = JQ_WORKER_GENERIC,
   .Code = fx_update_spotCallback,
 };
-jqWorkerCmd fx_update_spotWorkerCmd = { &fx_update_spotModule, 52u, 0, 0, &fx_update_spotLimit, NULL, 0u };
+jqWorkerCmd fx_update_spotWorkerCmd = { &fx_update_spotModule, sizeof(FxCmd),   /* nx-port: was an x86 literal */ 0, 0, &fx_update_spotLimit, NULL, 0u };
 
 
 volatile unsigned int fx_updateLimit = 1;
@@ -38,7 +38,7 @@ jqModule fx_updateModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = fx_updateCallback,
 };
-jqWorkerCmd fx_updateWorkerCmd = { &fx_updateModule, 52u, 0, 0, &fx_updateLimit, NULL, 0u };
+jqWorkerCmd fx_updateWorkerCmd = { &fx_updateModule, sizeof(FxCmd),   /* nx-port: was an x86 literal */ 0, 0, &fx_updateLimit, NULL, 0u };
 
 
 volatile unsigned int fx_update_remainingLimit = 1;
@@ -48,7 +48,7 @@ jqModule fx_update_remainingModule =
     .Type = JQ_WORKER_GENERIC, 
     .Code = fx_update_remainingCallback, 
 };
-jqWorkerCmd fx_update_remainingWorkerCmd = { &fx_update_remainingModule, 52u, 0, 0, &fx_update_remainingLimit, NULL, 0u };
+jqWorkerCmd fx_update_remainingWorkerCmd = { &fx_update_remainingModule, sizeof(FxCmd),   /* nx-port: was an x86 literal */ 0, 0, &fx_update_remainingLimit, NULL, 0u };
 
 
 volatile unsigned int r_dpvs_staticLimit = 1;
@@ -58,7 +58,7 @@ jqModule r_dpvs_staticModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = r_dpvs_staticCallback,
 };
-jqWorkerCmd r_dpvs_staticWorkerCmd = { &r_dpvs_staticModule, 12u, 0, 0, &r_dpvs_staticLimit, NULL, 0u };
+jqWorkerCmd r_dpvs_staticWorkerCmd = { &r_dpvs_staticModule, sizeof(DpvsStaticCellCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_dpvs_staticLimit, NULL, 0u };
 
 
 volatile unsigned int r_dpvs_sceneentLimit = 1;
@@ -68,7 +68,7 @@ jqModule r_dpvs_sceneentModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = r_dpvs_sceneentCallback,
 };
-jqWorkerCmd r_dpvs_sceneentWorkerCmd = { &r_dpvs_sceneentModule, 12u, 0, 0, &r_dpvs_sceneentLimit, NULL, 0u };
+jqWorkerCmd r_dpvs_sceneentWorkerCmd = { &r_dpvs_sceneentModule, sizeof(DpvsDynamicCellCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_dpvs_sceneentLimit, NULL, 0u };
 
 
 volatile unsigned int r_dpvs_dynmodelLimit = 1;
@@ -78,7 +78,7 @@ jqModule r_dpvs_dynmodelModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = r_dpvs_dynmodelCallback,
 };
-jqWorkerCmd r_dpvs_dynmodelWorkerCmd = { &r_dpvs_dynmodelModule, 12u, 0, 0, &r_dpvs_dynmodelLimit, NULL, 0u };
+jqWorkerCmd r_dpvs_dynmodelWorkerCmd = { &r_dpvs_dynmodelModule, sizeof(DpvsDynamicCellCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_dpvs_dynmodelLimit, NULL, 0u };
 
 
 
@@ -89,7 +89,7 @@ jqModule r_dpvs_dynbrushModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = r_dpvs_dynbrushCallback,
 };
-jqWorkerCmd r_dpvs_dynbrushWorkerCmd = { &r_dpvs_dynbrushModule, 12u, 0, 0, &r_dpvs_dynbrushLimit, NULL, 0u };
+jqWorkerCmd r_dpvs_dynbrushWorkerCmd = { &r_dpvs_dynbrushModule, sizeof(DpvsDynamicCellCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_dpvs_dynbrushLimit, NULL, 0u };
 
 
 
@@ -100,7 +100,7 @@ jqModule r_dpvs_entityModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = r_dpvs_entityCallback,
 };
-jqWorkerCmd r_dpvs_entityWorkerCmd = { &r_dpvs_entityModule, 16u, 0, 0, &r_dpvs_entityLimit, NULL, 0u };
+jqWorkerCmd r_dpvs_entityWorkerCmd = { &r_dpvs_entityModule, sizeof(DpvsEntityCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_dpvs_entityLimit, NULL, 0u };
 
 
 volatile unsigned int r_add_sceneentLimit = 1;
@@ -110,7 +110,7 @@ jqModule r_add_sceneentModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = r_add_sceneentCallback,
 };
-jqWorkerCmd r_add_sceneentWorkerCmd = { &r_add_sceneentModule, 4u, 0, 0, &r_add_sceneentLimit, NULL, 0u };
+jqWorkerCmd r_add_sceneentWorkerCmd = { &r_add_sceneentModule, sizeof(SceneEntCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_add_sceneentLimit, NULL, 0u };
 
 
 volatile unsigned int r_spot_shadow_entLimit = 1;
@@ -120,7 +120,7 @@ jqModule r_spot_shadow_entModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = r_spot_shadow_entCallback,
 };
-jqWorkerCmd r_spot_shadow_entWorkerCmd = { &r_spot_shadow_entModule, 8u, 0, 0, &r_spot_shadow_entLimit, NULL, 0u };
+jqWorkerCmd r_spot_shadow_entWorkerCmd = { &r_spot_shadow_entModule, sizeof(GfxSpotShadowEntCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_spot_shadow_entLimit, NULL, 0u };
 
 volatile unsigned int dobj_skelLimit = 1;
 jqModule dobj_skelModule =
@@ -130,7 +130,7 @@ jqModule dobj_skelModule =
     .Code = dobj_skelCallback,
     //.Group = 0;
 };
-jqWorkerCmd dobj_skelWorkerCmd = { &dobj_skelModule, 4u, 0, 0, &dobj_skelLimit, NULL, 0u };
+jqWorkerCmd dobj_skelWorkerCmd = { &dobj_skelModule, sizeof(GfxSceneEntity *),   /* nx-port: was an x86 literal */ 0, 0, &dobj_skelLimit, NULL, 0u };
 
 
 volatile unsigned int dobj_skinLimit = 1;
@@ -141,7 +141,7 @@ jqModule dobj_skinModule =
     .Code = dobj_skinCallback,
     //.Group = 0,
 };
-jqWorkerCmd dobj_skinWorkerCmd = { &dobj_skinModule, 4u, 0, 0, &dobj_skinLimit, NULL, 0u };
+jqWorkerCmd dobj_skinWorkerCmd = { &dobj_skinModule, sizeof(GfxSceneEntity *),   /* nx-port: was an x86 literal */ 0, 0, &dobj_skinLimit, NULL, 0u };
 
 volatile unsigned int fx_drawLimit = 1;
 jqModule fx_drawModule =
@@ -159,7 +159,7 @@ jqModule fx_marks_drawModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = fx_marks_drawCallback
 };
-jqWorkerCmd fx_marks_drawWorkerCmd = { &fx_marks_drawModule, 52u, 0, 0, &fx_marks_drawLimit, NULL, 0u };
+jqWorkerCmd fx_marks_drawWorkerCmd = { &fx_marks_drawModule, sizeof(FxCmd),   /* nx-port: was an x86 literal */ 0, 0, &fx_marks_drawLimit, NULL, 0u };
 
 
 volatile unsigned int r_model_skinLimit;
@@ -169,7 +169,7 @@ jqModule r_model_skinModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = r_model_skinCallback,
 };
-jqWorkerCmd r_model_skinWorkerCmd = { &r_model_skinModule, 48u, 0, 0, &r_model_skinLimit, NULL, 0u };
+jqWorkerCmd r_model_skinWorkerCmd = { &r_model_skinModule, sizeof(SkinXModelCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_model_skinLimit, NULL, 0u };
 
 volatile unsigned int r_skin_cached_staticmodelLimit = 1;
 jqModule r_skin_cached_staticmodelModule =
@@ -181,7 +181,7 @@ jqModule r_skin_cached_staticmodelModule =
 jqWorkerCmd r_skin_cached_staticmodelWorkerCmd =
 {
   &r_skin_cached_staticmodelModule,
-  4u,
+  sizeof(SkinCachedStaticModelCmd),   /* nx-port: was an x86 literal */
   0,
   0,
   &r_skin_cached_staticmodelLimit,
@@ -196,7 +196,7 @@ jqModule r_water_simModule =
     .Type = JQ_WORKER_GENERIC,
     .Code = r_water_simCallback,
 };
-jqWorkerCmd r_water_simWorkerCmd = { &r_water_simModule, 84u, 0, 0, &r_water_simLimit, NULL, 0u };
+jqWorkerCmd r_water_simWorkerCmd = { &r_water_simModule, sizeof(WaterSimulationCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_water_simLimit, NULL, 0u };
 
 
 volatile unsigned int fx_update_remaining_ppuLimit = 1;
@@ -209,7 +209,7 @@ jqModule fx_update_remaining_ppuModule =
 jqWorkerCmd fx_update_remaining_ppuWorkerCmd =
 {
   &fx_update_remaining_ppuModule,
-  52u,
+  sizeof(FxCmd),   /* nx-port: was an x86 literal */
   0,
   0,
   &fx_update_remaining_ppuLimit,
@@ -225,7 +225,7 @@ jqModule r_model_lightingModule =
     .Code = r_model_lightingCallback,
 };
 jqWorkerCmd r_model_lightingWorkerCmd =
-{ &r_model_lightingModule, 44u, 0, 0, &r_model_lightingLimit, NULL, 0u };
+{ &r_model_lightingModule, sizeof(CalcLightingCmd),   /* nx-port: was an x86 literal */ 0, 0, &r_model_lightingLimit, NULL, 0u };
 
 
 int __cdecl r_dpvs_entityCallback(jqBatch *batch)

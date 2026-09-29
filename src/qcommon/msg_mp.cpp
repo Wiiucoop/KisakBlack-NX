@@ -2166,8 +2166,8 @@ const NetField playerStateFields[179] =
   { "perks[1]", 1260, 4, 32, 0u, "PERK1_BITS", "0" },
   { "visionSetLerpRatio", 1384, 4, -80, 0u, "MSG_FIELD_0TO1_P3", "0" },
   { "poisoned", 1388, 4, 1, 2u, "1", "ALWAYS_CHANGES" },
-  { "killCamEntity", 2940, 4, 10, 0u, "GENTITYNUM_BITS", "0" },
-  { "killCamTargetEntity", 2944, 4, 10, 0u, "GENTITYNUM_BITS", "0" },
+  { "killCamEntity", (int)offsetof(playerState_s, killCamEntity), 4, 10, 0u, "GENTITYNUM_BITS", "0" },
+  { "killCamTargetEntity", (int)offsetof(playerState_s, killCamTargetEntity), 4, 10, 0u, "GENTITYNUM_BITS", "0" },
   { "throwBackGrenadeOwner", 84, 4, 10, 0u, "GENTITYNUM_BITS", "0" },
   { "actionSlotType[2]", 1272, 4, 2, 0u, "MAX_BITS_ACTIONSLOTTYPE", "0" },
   { "delta_angles[0]", 132, 4, -100, 0u, "MSG_FIELD_ANGLE2SHORT", "0" },
@@ -2236,7 +2236,7 @@ const NetField playerStateFields[179] =
   { "foliageSoundTime", 116, 4, -97, 0u, "MSG_FIELD_TIME", "0" },
   { "vLadderVec[0]", 152, 4, 0, 0u, "MSG_FIELD_FLOAT", "0" },
   { "viewlocked", 1084, 4, 2, 0u, "MAX_BITS_PLAYERVIEWLOCK", "0" },
-  { "deltaTime", 2936, 4, 32, 0u, "32", "0" },
+  { "deltaTime", (int)offsetof(playerState_s, deltaTime), 4, 32, 0u, "32", "0" },
   { "linkAngles[1]", 1112, 4, -100, 0u, "MSG_FIELD_ANGLE2SHORT", "0" },
   { "viewAngleClampRange[1]", 428, 4, 0, 0u, "MSG_FIELD_FLOAT", "0" },
   { "viewAngleClampRange[0]", 424, 4, 0, 0u, "MSG_FIELD_FLOAT", "0" },
@@ -4803,7 +4803,7 @@ void __cdecl MSG_ReadDeltaPlayerstate(
     int lc; // [esp+54h] [ebp-26CCh]
     NetField *array; // [esp+58h] [ebp-26C8h]
     float *v47; // [esp+5Ch] [ebp-26C4h]
-    unsigned __int8 dst[9896]; // [esp+60h] [ebp-26C0h] BYREF
+    alignas(playerState_s) unsigned __int8 dst[sizeof(playerState_s)];   // nx-port: was [9896], the x86 size; memset(sizeof) ran 256 bytes past it // [esp+60h] [ebp-26C0h] BYREF
     int Bits; // [esp+2708h] [ebp-18h]
     float *v50; // [esp+270Ch] [ebp-14h]
     BOOL v51; // [esp+2710h] [ebp-10h]

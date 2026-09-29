@@ -398,6 +398,11 @@ are silent and need reading:
 - **Constants decompiled as addresses**: `(int)&objBuf[1758][2]` is
   `FL_OBSTACLE` (0x4000000) -- the value happened to fall inside objBuf in the
   PC binary. Wrong on every build; breaks outright once the array resizes.
+- **Stack buffers sized for x86 structs**: `unsigned __int8 dst[9896]` then
+  `memset(dst, 0, sizeof(playerState_s))` wrote 256 bytes past the array into
+  the frame (first snapshot: the reader read garbage). `playerState_s` grew
+  because `objective_t` holds a pointer. Candidates: a byte array cast to a
+  struct or cleared with `sizeof(Struct)`.
 - **Absolute x86 addresses**: `*(_BYTE *)(strlen(info6) + 67341897) = 0` is an
   inlined strcat into `info6`; `*(unsigned int *)(v * 16 + 172779900) = hi` is
   the high half of the element `LODWORD(...)` set on the line before. Find them
@@ -492,7 +497,7 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    hunk page arithmetic, the script compiler and VM, weapon model arrays,
    the unlockables table overrun, the script field tables and entity links,
    script strings in the KBZ (the map's traverse scripts), the hunk's
-   `fileData_s` headers, the game entity and client sizes, DObj creation and storage, struct-sized allocations (the client now reaches `CG_Init`), physics handles (physics off), the glass allocators. `CL_InitCGame` now completes. Then the 3D renderer meets its first world frame.
+   `fileData_s` headers, the game entity and client sizes, DObj creation and storage, struct-sized allocations (the client now reaches `CG_Init`), physics handles (physics off), the glass allocators. `CL_InitCGame` now completes; the main loop runs and parses snapshots. Then the 3D renderer meets its first world frame.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

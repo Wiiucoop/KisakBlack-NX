@@ -136,12 +136,34 @@ static const char *nxExceptionName(u32 desc)
     }
 }
 
+static void nxCrashReport(ThreadExceptionDump *ctx);
+
+// Every thread's exception runs on the one __nx_exception_stack, with its dump
+// at the top. When a second thread faults while the first is reporting, its
+// entry overwrites that dump and the report's frames, and the log stopped
+// right after the header. So the first entry copies the dump out and reports
+// from below a pad the second entry's small frame never reaches; the second
+// waits for the report to finish before ending the process.
+static ThreadExceptionDump s_crashDump;
+
 extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
 {
     static int s_entered;
     if (__atomic_fetch_add(&s_entered, 1, __ATOMIC_SEQ_CST))
+    {
+        svcSleepThread(3000000000ull);
         svcExitProcess();
+    }
+    s_crashDump = *ctx;
+    volatile u8 pad[0x4000];
+    pad[0] = 0;
+    nxCrashReport(&s_crashDump);
+    pad[1] = 0;
+    svcExitProcess();
+}
 
+static __attribute__((noinline)) void nxCrashReport(ThreadExceptionDump *ctx)
+{
     MemoryInfo text = {};
     u32 pageInfo;
     svcQueryMemory(&text, &pageInfo, (u64)&__libnx_exception_handler);

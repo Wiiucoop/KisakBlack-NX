@@ -43,6 +43,11 @@ repository and none ever should be.
   screen, spawns the server, compiles the gametype scripts and runs
   `G_InitGame` into the level scripts. Each device run so far has moved
   the crash further down that path; the fixes are LP64 ones (section 4).
+- **The match runs.** The client connects, the world renders with the
+  engine's shaders, the HUD and the team select menu show and the pre-match
+  countdown runs. It is slow — about 250 ms a frame, most of it spent in the
+  Direct3D-over-GL layer per draw (section 2, "The report"), which is being
+  profiled down.
 
 Hardware and driver, as the log reports them: Mesa 26.2.1, OpenGL 4.3 core,
 renderer `NV12B` — Mesa's native nvc0 driver on the Tegra X1, not Zink.
@@ -167,7 +172,7 @@ translate anything itself; homebrew cannot use NVN, so Mesa it is.
 | `SetRenderTarget`, `SetDepthStencilSurface`, `StretchRect`, `ColorFill`, `GetRenderTargetData` | real (framebuffer binds, `glBlitFramebuffer`, scissored clears, `glReadPixels`) |
 | `SetViewport`, `SetScissorRect`, scissor state | applied per draw |
 | `Clear` | honours the viewport, its rectangles and the scissor, as D3D9 does |
-| vertex / index buffers | `Lock`/`Unlock` write into real memory; the draw path uploads what changed |
+| vertex / index buffers | `Lock`/`Unlock` write into real memory and record the locked range; the draw path sends only the changed range (`glBufferSubData`), the whole buffer on first use or after `D3DLOCK_DISCARD` |
 | `CreateVertexShader` / `CreatePixelShader` | translated to GLSL ES 3.00 (below), compiled on first use, linked per pair |
 | `Set{Vertex,Pixel}ShaderConstantF` | uploaded as the `vsc[]` / `psc[]` uniform arrays |
 | `SetTexture` / `SetSamplerState` | textures on the unit of the same number, sampler state on one GL sampler object per slot; vertex texture slots (257+) on units 16+ |
@@ -207,6 +212,25 @@ each frame sampled), `targets` (framebuffers, where the frame's draws went,
 the current target, viewport and scissor) and `shaders` (translated,
 compiled, linked, and how many draws ran the engine's shaders versus the
 built-in program and why). Read it first.
+
+The present block ends with the **frame profile**: ms per present over the
+last 60, MB of buffer data sent whole and partial, then ms and calls per
+present for each part of the GL work (draw total, `glDrawElements`, buffer
+uploads, constants, texture uploads, pipeline, program lookup, target, blend
+and depth state, `glGetError`, swap), and the buffers most often re-sent
+whole with the reason. Time not in "draw total" or "swap" is the engine.
+
+Performance findings so far, all in this layer:
+
+- **Whole-buffer re-uploads.** Every `Unlock` used to mark the whole buffer
+  dirty and the next draw re-sent it with `glBufferData`. The engine appends
+  to multi-MB dynamic buffers thousands of times a frame: ~2.5 s per frame in
+  game. Fixed by tracking the locked range.
+- **Diagnostics on every draw.** The geometry statistics (`nxFrameAccumulate`)
+  transformed every index of every draw on the CPU: ~460 ms of a 566 ms frame.
+  Off unless `NX_GL_GEOMETRY_STATS` is set; the geometry report's per-vertex
+  numbers read zero without it.
+- Still open: ~100 µs per draw that the timed parts do not cover yet.
 
 ### The `src/nx/` layer
 
@@ -301,6 +325,30 @@ ELF addresses already.
 
 A trap with an `ASSERTBEGIN` block right before it is an engine assert, not a
 fault: `__debugbreak` is `__builtin_trap`, so read the assert first.
+
+A fault address that looks like a real one with its top bits missing
+(`0x34034790` when the zones load at `0xa3…`) is a pointer that passed
+through 32 bits somewhere: look for an int in its path (section 4).
+
+### Memory
+
+`[nx-mem]` lines in the log (`src/nx/nx_wincompat.cpp`):
+
+- **every 5 s** (`Com_Frame`): free heap, malloc's arena and in-use bytes,
+  its top chunk, what the `VirtualAlloc` regions hold, and the heap break
+  against the heap's size. A steady rise is a leak; a step is one allocation.
+- **every heap growth of 8 MB or more** and **every refused one**
+  (`--wrap=_sbrk_r`), with the caller.
+- **every `VirtualAlloc` of 16 MB or more**, and a report when one fails.
+
+**Guard pages.** `malloc`/`calloc`/`realloc`/`free` are wrapped: blocks of
+256 KB or more, and every `VirtualAlloc` region, end against a page with no
+access (`svcSetMemoryPermission`). An overrun then faults at the writing
+instruction, with the fault address exactly on a page boundary just past the
+block, instead of corrupting malloc's bookkeeping and failing later somewhere
+unrelated (malloc refusing small requests with gigabytes free, `free()`
+faulting inside Mesa). At most 1500 guards live at once — each splits the
+kernel's memory map. Smaller blocks are not guarded.
 
 ### Workflow
 
@@ -437,6 +485,12 @@ are silent and need reading:
   then compare each literal with the native size by compiling a probe
   (`template <size_t N, int X> struct Show; Show<sizeof(T), X> s;` with
   `-fsyntax-only` and the project's flags; the error prints both).
+- **Pointers passed to varargs as ints**: `DDL_MoveTo(&s, &s, 2,
+  op0.internals.intVal, op1.internals.intVal)` handed the low halves of two
+  string pointers to a function that reads them with `va_arg(args, const
+  char *)`. Varargs take anything, so the compiler says nothing. Look at
+  every `.intVal` (or other int) in a call to a variadic function whose
+  receiver expects a pointer.
 - **Unions copied through their `int` member**: menu expression operands
   hold an int, float or string in `operandInternalDataUnion`, which has an
   `operator int()`. The comma operator copied each argument as
@@ -523,6 +577,10 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
 - **Renderer gaps** (section 2): no depth, stencil or culling yet; no
   `DrawPrimitive` / `DrawPrimitiveUP`; one render target of an MRT set; no
   sRGB.
+- **In game it runs at about 4 frames a second** (section 2, "The report").
+- **Physics is off** (`nx_physics 0`): the solver is still at x86 offsets.
+- **`r_water_sim.cpp` is not LP64-clean** (dozens of pointer/int casts); maps
+  with dynamic water will break. `mp_nuked` has none.
 - **`ui_viewer_mp` cannot be converted**: it contains a `ComWorld` (asset type
   13), map data the converter does not handle yet. The engine carries on
   without it.
@@ -564,6 +622,12 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    the unlockables table overrun, the script field tables and entity links,
    script strings in the KBZ (the map's traverse scripts), the hunk's
    `fileData_s` headers, the game entity and client sizes, DObj creation and storage, IK state buffers, struct-sized allocations (the client now reaches `CG_Init`), physics handles (physics off), the glass allocators. `CL_InitCGame` now completes; the main loop runs, parses snapshots, draws the first HUD and starts the first 3D frame. Then the 3D renderer meets its first world frame.
+   Since then: the AABB tree child offsets (converter), surface ids and
+   record strides in the scene buffer, anim tree size, the FX element pool,
+   the scene clears, the client state hunk, the IK DObj reads, a heap overrun
+   by the physics debug buffers (found with guard pages), and the menu
+   expression operands. **The match now runs** to the team select and
+   countdown; next is frame time, then whatever the match itself hits.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

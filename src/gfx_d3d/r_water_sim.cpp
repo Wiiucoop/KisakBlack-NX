@@ -1354,25 +1354,26 @@ void __cdecl R_RenderWaterModel(unsigned int viewIndex)
             {
                 mesh0 = &tile->meshes.data[tile->meshes.head];
                 mesh1 = &tile->meshes.data[((unsigned __int8)tile->meshes.head + 1) & 3];
-                modelSurf = R_SurfaceAlloc(0x2Cu);
+                modelSurf = R_SurfaceAlloc(sizeof(GfxModelWaterSurface));   // nx-port: was 0x2C and x86 offsets below
                 if ( !modelSurf )
                     return;
+                GfxModelWaterSurface *waterSurf = (GfxModelWaterSurface *)modelSurf;
                 interpolate = (double)(data.frame - mesh1->lastSkinTime) / 16.0;
-                *((float *)modelSurf + 5) = interpolate;
-                *((unsigned int *)modelSurf + 1) = (unsigned int)data.vertexBuffer;
-                *((unsigned int *)modelSurf + 2) = (unsigned int)data.vertexBuffer;
-                *((unsigned int *)modelSurf + 3) = mesh0->baseVertex;
-                *((unsigned int *)modelSurf + 4) = mesh1->baseVertex;
+                waterSurf->interpolate = interpolate;
+                waterSurf->vb0 = data.vertexBuffer;
+                waterSurf->vb1 = data.vertexBuffer;
+                waterSurf->baseVertex0 = mesh0->baseVertex;
+                waterSurf->baseVertex1 = mesh1->baseVertex;
                 v1 = (float)tile->worldY * config.gridScale;
                 v2 = (float)tile->worldZ * config.gridScale;
-                *((float *)modelSurf + 8) = (float)tile->worldX * config.gridScale;
-                *((float *)modelSurf + 9) = v1;
-                *((float *)modelSurf + 10) = v2;
-                dist = Vec3DistanceSq((const float *)modelSurf + 8, lodOrigin);
+                waterSurf->origin[0] = (float)tile->worldX * config.gridScale;
+                waterSurf->origin[1] = v1;
+                waterSurf->origin[2] = v2;
+                dist = Vec3DistanceSq(waterSurf->origin, lodOrigin);
                 lod = dist >= 2250000.0;
-                *(unsigned int *)modelSurf = (unsigned int)data.indexBuffer[lod];
-                *((unsigned int *)modelSurf + 6) = 289;
-                *((unsigned int *)modelSurf + 7) = data.tileTriCount[lod];
+                waterSurf->ib = data.indexBuffer[lod];
+                waterSurf->vertCount = 289;
+                waterSurf->triCount = data.tileTriCount[lod];
                 surfId = modelSurf - (char *)frontEndDataOut;
                 if ( (((_BYTE)modelSurf - (_BYTE)frontEndDataOut) & 3) != 0
                     && !Assert_MyHandler(

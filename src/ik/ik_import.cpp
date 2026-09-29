@@ -486,7 +486,7 @@ void __cdecl IKImport_GetBoneMatrixArrayLocalBones(IKState *ikState)
     obj = ikState->model;
     if ( !obj && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ik\\ik_import.cpp", 672, 0, "%s", "obj") )
         __debugbreak();
-    matArray = (DObjAnimMat *)*((unsigned int *)obj + 21);
+    matArray = ((const DObj *)obj)->skel.mat;
     if ( !matArray && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ik\\ik_import.cpp", 675, 0, "%s", "matArray") )
         __debugbreak();
     ikState->rootOffset[0] = matArray->trans[0];
@@ -504,9 +504,9 @@ void __cdecl IKImport_GetBoneMatrixArrayLocalBones(IKState *ikState)
     matArray->quat[2] = 0.0f;
     matArray->quat[3] = 1.0f;
     thisMat = matArray;
-    for ( objBoneIndex = 0; objBoneIndex < *(unsigned __int8 *)(**((unsigned int **)obj + 30) + 4); ++objBoneIndex )
+    for ( objBoneIndex = 0; objBoneIndex < ((const DObj *)obj)->models[0]->numBones; ++objBoneIndex )
     {
-        if ( (*(unsigned int *)&obj[4 * (objBoneIndex >> 5) + 20] & (0x80000000 >> (objBoneIndex & 0x1F))) != 0 )
+        if ( (((const DObj *)obj)->skel.partBits.anim.array[objBoneIndex >> 5] & (0x80000000 >> (objBoneIndex & 0x1F))) != 0 )
         {
             v1 = Vec4LengthSq(thisMat->quat);
             if ( v1 == 0.0 )
@@ -557,9 +557,9 @@ void __cdecl IKImport_GetBoneMatrixArrayLocalBones(IKState *ikState)
             memcpy(&localMat, thisMata, sizeof(localMat));
             IKImport_AccumulateParentObjBones(
                 ikState,
-                *(const unsigned __int8 **)(**((unsigned int **)obj + 30) + 12),
-                *(unsigned __int8 *)(**((unsigned int **)obj + 30) + 5),
-                *(float **)(**((unsigned int **)obj + 30) + 20),
+                ((const DObj *)obj)->models[0]->parentList,
+                ((const DObj *)obj)->models[0]->numRootBones,
+                ((const DObj *)obj)->models[0]->trans,
                 objBoneIndexa,
                 matArray,
                 &localMat);
@@ -720,7 +720,7 @@ bool __cdecl IKImport_IsIKEntity_Internal(unsigned __int8 *model)
 
     if ( !model && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ik\\ik_import.cpp", 1105, 0, "%s", "obj") )
         __debugbreak();
-    entityNum = *((unsigned __int16 *)model + 3) - 1;
+    entityNum = ((const DObj *)model)->entnum - 1;
     if ( entityNum > 1023 )
         return 0;
     ikState = 0;
@@ -743,7 +743,7 @@ bool __cdecl IKImport_IsIKEntity_Internal(unsigned __int8 *model)
         return 0;
     if ( ikState && !ikState->isIKModel )
         return 0;
-    if ( !*((unsigned int *)model + 30) || !model[9] || !**((unsigned int **)model + 30) )
+    if ( !((const DObj *)model)->models || !((const DObj *)model)->numModels || !((const DObj *)model)->models[0] )
         return 0;
     if ( entityNum < 0 )
         return 0;
@@ -820,7 +820,7 @@ bool __cdecl IKImport_BypassTerrainMapping(IKState *ikState)
     obj = ikState->model;
     if ( !obj && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ik\\ik_import.cpp", 1300, 0, "%s", "obj") )
         __debugbreak();
-    entityNum = *((unsigned __int16 *)obj + 3) - 1;
+    entityNum = ((const DObj *)obj)->entnum - 1;
     if ( (unsigned int)entityNum >= 0x400 )
         return 1;
     if ( entityNum < 32 )
@@ -847,7 +847,7 @@ bool __cdecl IKImport_ApplyTerrainMapping(IKState *ikState)
     obj = ikState->model;
     if ( !obj && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ik\\ik_import.cpp", 1336, 0, "%s", "obj") )
         __debugbreak();
-    entityNum = *((unsigned __int16 *)obj + 3) - 1;
+    entityNum = ((const DObj *)obj)->entnum - 1;
     if ( entityNum >= 0x400 )
         return 0;
     if ( ikState->isServer )
@@ -907,12 +907,12 @@ bool __cdecl IKImport_ApplyLeftHandIK(IKState *ikState)
     obj = ikState->model;
     if ( !obj && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ik\\ik_import.cpp", 1433, 0, "%s", "obj") )
         __debugbreak();
-    entityNum = *((unsigned __int16 *)obj + 3) - 1;
+    entityNum = ((const DObj *)obj)->entnum - 1;
     if ( (unsigned int)entityNum >= 0x400 )
         return 0;
     if ( ikState->isServer )
         return 0;
-    if ( (char)obj[112] == -1
+    if ( ((const DObj *)obj)->localClientIndex == -1
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\ik\\ik_import.cpp",
                     1443,
@@ -922,7 +922,7 @@ bool __cdecl IKImport_ApplyLeftHandIK(IKState *ikState)
     {
         __debugbreak();
     }
-    cent = CG_GetEntity((char)obj[112], entityNum);
+    cent = CG_GetEntity(((const DObj *)obj)->localClientIndex, entityNum);
     if ( ((cent->clientFlags >> 1) & 1) == 0 )
         return 0;
     if ( IKImport_GetVar_IK_Left_Hand_Lerp_Test() )
@@ -2463,7 +2463,7 @@ int __cdecl IKImport_GetActorNum(unsigned __int8 *model)
 
     if ( !model && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ik\\ik_import.cpp", 3030, 0, "%s", "obj") )
         __debugbreak();
-    entityNum = *((unsigned __int16 *)model + 3) - 1;
+    entityNum = ((const DObj *)model)->entnum - 1;
     if ( DObjIsServer((const DObj *)model) )
     {
         if ( g_entities[entityNum].s.eType != 17
@@ -2517,7 +2517,7 @@ bool __cdecl IKImport_IsValidEntityType(const unsigned __int8 *model)
 
     if ( !model && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\ik\\ik_import.cpp", 3076, 0, "%s", "obj") )
         __debugbreak();
-    entityNum = *((unsigned __int16 *)model + 3) - 1;
+    entityNum = ((const DObj *)model)->entnum - 1;
     if ( DObjIsServer((const DObj *)model) )
         return g_entities[entityNum].s.eType == 1;
     LocalClientIndex = DObjGetLocalClientIndex((const DObj *)model);

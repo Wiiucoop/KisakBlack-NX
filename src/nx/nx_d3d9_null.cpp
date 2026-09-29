@@ -1718,6 +1718,84 @@ static uint64_t s_bufferBytesWhole, s_bufferBytesPartial;
 static void nxBufferRangeLock() { mutexLock(&s_bufferRangeMutex); }
 static void nxBufferRangeUnlock() { mutexUnlock(&s_bufferRangeMutex); }
 
+// ----- Frame profile -----
+// Time on the GL thread by kind of work, reported with the present report as
+// ms per present, to find what a slow frame is spending its time on.
+enum NxProf {
+    NXP_DRAW,          // nxGlDrawIndexed, everything
+    NXP_DRAW_CALL,     // glDrawElementsBaseVertex alone
+    NXP_BUF_WHOLE,     // glBufferData
+    NXP_BUF_PARTIAL,   // glBufferSubData
+    NXP_CONSTANTS,     // glUseProgram and the uniform uploads
+    NXP_TEX_UPLOAD,    // glTexImage / glCompressedTexImage
+    NXP_SWAP,          // eglSwapBuffers
+    NXP_COUNT
+};
+static const char *const s_profNames[NXP_COUNT] = {
+    "draw total", "  glDrawElements", "  buffer whole", "  buffer partial", "  constants",
+    "texture upload", "swap",
+};
+static u64 s_profTicks[NXP_COUNT];
+static unsigned s_profCalls[NXP_COUNT];
+struct NxProfScope {
+    NxProf which;
+    u64 start;
+    explicit NxProfScope(NxProf w) : which(w), start(armGetSystemTick()) {}
+    ~NxProfScope() { s_profTicks[which] += armGetSystemTick() - start; ++s_profCalls[which]; }
+};
+
+// The buffers uploaded whole since the last report, and why: the first
+// upload, a D3DLOCK_DISCARD, or a lock that covered the whole buffer.
+struct NxWholeUpload {
+    const NxBuffer *b;
+    unsigned count, first, discard, full;
+    uint64_t bytes;
+};
+static NxWholeUpload s_wholeUploads[32];
+
+static void nxNoteWholeUpload(const NxBuffer *b, bool first, bool discard)
+{
+    for (NxWholeUpload &w : s_wholeUploads) {
+        if (w.b && w.b != b)
+            continue;
+        w.b = b;
+        ++w.count;
+        w.first += first;
+        w.discard += !first && discard;
+        w.full += !first && !discard;
+        w.bytes += b->length;
+        return;
+    }
+}
+
+static void nxProfReport(unsigned frames)
+{
+    if (!frames)
+        return;
+    printf("        profile, ms per present:");
+    for (int i = 0; i < NXP_COUNT; ++i)
+        printf("%s %s %.2f (%u)", i ? "," : "", s_profNames[i],
+               armTicksToNs(s_profTicks[i]) / 1e6 / frames, s_profCalls[i] / frames);
+    printf("\n");
+    // Largest whole uploads first.
+    for (int n = 0; n < 5; ++n) {
+        NxWholeUpload *best = nullptr;
+        for (NxWholeUpload &w : s_wholeUploads)
+            if (w.b && w.count && (!best || w.bytes > best->bytes))
+                best = &w;
+        if (!best)
+            break;
+        printf("        whole upload: %s %u KB, usage 0x%x: %u per present (first %u, discard %u, full lock %u)\n",
+               best->b->obj.type == D3DRTYPE_INDEXBUFFER ? "index" : "vertex",
+               best->b->length >> 10, (unsigned)best->b->usage, best->count / frames,
+               best->first, best->discard, best->full);
+        best->count = 0;
+    }
+    memset(s_profTicks, 0, sizeof(s_profTicks));
+    memset(s_profCalls, 0, sizeof(s_profCalls));
+    memset(s_wholeUploads, 0, sizeof(s_wholeUploads));
+}
+
 static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
 {
     if (!b || !b->bits || !b->length)
@@ -1732,18 +1810,22 @@ static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
     if (b->glDirty) {
         nxBufferRangeLock();
         UINT lo = b->dirtyLo, hi = b->dirtyHi;
-        bool whole = !b->glAllocated || b->discard || (lo == 0 && hi >= b->length);
+        bool discard = b->discard;
+        bool whole = !b->glAllocated || discard || (lo == 0 && hi >= b->length);
         b->glDirty = false;
         b->discard = false;
         b->dirtyLo = b->length;
         b->dirtyHi = 0;
         nxBufferRangeUnlock();
         if (whole) {
+            nxNoteWholeUpload(b, !b->glAllocated, discard);
+            NxProfScope prof(NXP_BUF_WHOLE);
             glBufferData(target, (GLsizeiptr)b->length, b->bits,
                          (b->usage & D3DUSAGE_DYNAMIC) ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
             b->glAllocated = true;
             s_bufferBytesWhole += b->length;
         } else if (hi > lo) {
+            NxProfScope prof(NXP_BUF_PARTIAL);
             glBufferSubData(target, (GLintptr)lo, (GLsizeiptr)(hi - lo), (const BYTE *)b->bits + lo);
             s_bufferBytesPartial += hi - lo;
         }
@@ -1793,6 +1875,7 @@ static GLenum nxTexTarget(const NxTexture *t)
 static void nxGlUploadLevel(const NxTexture *t, const NxTexFormat *f,
                             GLenum faceTarget, UINT face, UINT level)
 {
+    NxProfScope prof(NXP_TEX_UPLOAD);
     UINT w = nxMipDim(t->width, level);
     UINT h = nxMipDim(t->height, level);
     UINT d = nxMipDim(t->depth, level);
@@ -2732,6 +2815,7 @@ static void nxGlBindShaderSampler(GLuint unit, NxTexture *t, unsigned char dim, 
 // Everything a translated pair needs before the draw call.
 static void nxGlSetupTranslated(const NxProgram *p)
 {
+    NxProfScope prof(NXP_CONSTANTS);
     glUseProgram(p->name);
     if (p->vsc >= 0 && p->vscCount > 0)
         glUniform4fv(p->vsc, p->vscCount, &s_vsConst[0][0]);
@@ -2973,6 +3057,7 @@ static void nxGlApplyDepthStencil(void)
 static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
                             UINT startIndex, UINT primCount)
 {
+    NxProfScope prof(NXP_DRAW);
     if (!nxGlAcquire())        { ++s_nSkipNoGl;      return; }
     if (!nxGlEnsurePipeline()) { ++s_nSkipNoProgram; return; }
     if (!s_vdecl)              { ++s_nSkipNoDecl;    return; }
@@ -3128,9 +3213,12 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     UINT attrOffset = s_streamOffset[pos->Stream] + pos->Offset;
 
     glGetError();   // clear anything stale, so the reading below is this draw's
+    {
+    NxProfScope prof(NXP_DRAW_CALL);
     glDrawElementsBaseVertex(mode, count, idxType,
                              (const void *)(uintptr_t)(startIndex * idxSize),
                              baseVertexIndex);
+    }
     GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
         s_lastGlDrawError = err;
@@ -4509,7 +4597,11 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         s_boundFbo = ~0u;
     }
 
-    EGLBoolean swapped = eglSwapBuffers(s_display, s_surface);
+    EGLBoolean swapped;
+    {
+        NxProfScope prof(NXP_SWAP);
+        swapped = eglSwapBuffers(s_display, s_surface);
+    }
     EGLint eglErr = eglGetError();
     GLenum errAfterSwap = glGetError();
 
@@ -4549,6 +4641,7 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
                    armTicksToNs(now - s_lastReportTick) / 1e6 / frames, frames,
                    (s_bufferBytesWhole - s_lastWhole) / 1048576.0,
                    (s_bufferBytesPartial - s_lastPartial) / 1048576.0);
+        nxProfReport(frames);
         s_lastReportTick = now;
         s_lastReportPresent = s_nSwapPresent;
         s_lastWhole = s_bufferBytesWhole;

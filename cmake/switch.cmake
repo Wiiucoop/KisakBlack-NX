@@ -166,6 +166,11 @@ target_link_options(${BIN_NAME} PRIVATE
     -Wl,--wrap=rename
     # heap growth logging (nx_wincompat.cpp, __wrap__sbrk_r)
     -Wl,--wrap=_sbrk_r
+    # guard pages after large blocks (nx_wincompat.cpp, __wrap_malloc)
+    -Wl,--wrap=malloc
+    -Wl,--wrap=free
+    -Wl,--wrap=calloc
+    -Wl,--wrap=realloc
 )
 
 # ----- Mesa EGL / OpenGL -----

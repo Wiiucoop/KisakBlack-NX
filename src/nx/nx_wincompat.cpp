@@ -1351,7 +1351,7 @@ extern "C" void nx_mem_report(const char *why, size_t request)
            (size_t)mi.uordblks >> 20, (size_t)mi.keepcost >> 10, vtotal >> 20, regions,
            (size_t)(brk - fake_heap_start) >> 20, (size_t)(fake_heap_end - fake_heap_start) >> 20);
 }
-struct NxVMemRegion { uintptr_t base; size_t size; };
+struct NxVMemRegion { uintptr_t base; size_t size; void *guard; };
 static NxVMemRegion s_vmem[NX_MAX_VMEM];
 static Mutex s_vmemLock;
 static bool s_vmemLockInit;
@@ -1374,6 +1374,139 @@ static size_t nxVmemTotal(int *count)
     return sum;
 }
 
+// ----- Guard pages -----
+// The heap was being corrupted by some out-of-bounds write (malloc later
+// refused small requests and free() faulted inside Mesa). Large blocks --
+// VirtualAlloc regions and mallocs of NX_GUARD_MIN or more -- end against a
+// page with no access, so an overflow faults at the writing instruction
+// (the crash log's far is then just past the block). The kernel splits its
+// memory map at each guard, so the number live at once is capped.
+#define NX_GUARD_MIN (256u << 10)
+#define NX_GUARD_MAX_LIVE 1500
+static int s_guardsLive;
+static bool s_guardFailedOnce;
+
+static bool nxGuardProtect(void *page)
+{
+    if (__atomic_add_fetch(&s_guardsLive, 1, __ATOMIC_RELAXED) > NX_GUARD_MAX_LIVE) {
+        __atomic_sub_fetch(&s_guardsLive, 1, __ATOMIC_RELAXED);
+        return false;
+    }
+    Result rc = svcSetMemoryPermission(page, NX_PAGE, Perm_None);
+    if (R_FAILED(rc)) {
+        __atomic_sub_fetch(&s_guardsLive, 1, __ATOMIC_RELAXED);
+        if (!s_guardFailedOnce) {
+            s_guardFailedOnce = true;
+            printf("[nx-mem] guard page at %p refused: 0x%x (%d live)\n", page, rc, s_guardsLive);
+        }
+        return false;
+    }
+    return true;
+}
+
+static void nxGuardRelease(void *page)
+{
+    svcSetMemoryPermission(page, NX_PAGE, Perm_Rw);
+    __atomic_sub_fetch(&s_guardsLive, 1, __ATOMIC_RELAXED);
+}
+
+extern "C" void *__real_malloc(size_t size);
+extern "C" void __real_free(void *p);
+extern "C" void *__real_calloc(size_t n, size_t size);
+extern "C" void *__real_realloc(void *p, size_t size);
+
+struct NxGuardHdr
+{
+    uint64_t magic;
+    char *base;
+    size_t size;    // what the caller asked for
+    char *guard;    // NULL when the page could not be protected
+};
+static const uint64_t NX_GUARD_MAGIC = 0x4B424755415244ull; // "KBGUARD"
+
+static NxGuardHdr *nxGuardHdr(void *p)
+{
+    char *c = (char *)p;
+    if (!c || ((uintptr_t)c & 15) || c - sizeof(NxGuardHdr) < fake_heap_start || c >= fake_heap_end)
+        return NULL;
+    NxGuardHdr *h = (NxGuardHdr *)(c - sizeof(NxGuardHdr));
+    return h->magic == NX_GUARD_MAGIC && h->base < c ? h : NULL;
+}
+
+static void *nxGuardedMalloc(size_t size)
+{
+    size_t body = (size + 15) & ~(size_t)15;
+    size_t total = ((body + sizeof(NxGuardHdr) + NX_PAGE - 1) & ~(size_t)(NX_PAGE - 1)) + NX_PAGE;
+    char *base = (char *)memalign(NX_PAGE, total);
+    if (!base)
+        return NULL;
+    char *guard = base + total - NX_PAGE;
+    char *user = guard - body;
+    NxGuardHdr *h = (NxGuardHdr *)(user - sizeof(NxGuardHdr));
+    h->magic = NX_GUARD_MAGIC;
+    h->base = base;
+    h->size = size;
+    h->guard = nxGuardProtect(guard) ? guard : NULL;
+    return user;
+}
+
+static void nxGuardedFree(NxGuardHdr *h)
+{
+    if (h->guard)
+        nxGuardRelease(h->guard);
+    h->magic = 0;
+    __real_free(h->base);
+}
+
+extern "C" void *__wrap_malloc(size_t size)
+{
+    if (size >= NX_GUARD_MIN) {
+        void *p = nxGuardedMalloc(size);
+        if (p)
+            return p;
+    }
+    return __real_malloc(size);
+}
+
+extern "C" void __wrap_free(void *p)
+{
+    if (NxGuardHdr *h = nxGuardHdr(p))
+        nxGuardedFree(h);
+    else
+        __real_free(p);
+}
+
+extern "C" void *__wrap_calloc(size_t n, size_t size)
+{
+    if (size && n > (size_t)-1 / size)
+        return NULL;
+    size_t bytes = n * size;
+    if (bytes >= NX_GUARD_MIN) {
+        void *p = nxGuardedMalloc(bytes);
+        if (p) {
+            memset(p, 0, bytes);
+            return p;
+        }
+    }
+    return __real_calloc(n, size);
+}
+
+extern "C" void *__wrap_realloc(void *p, size_t size)
+{
+    NxGuardHdr *h = nxGuardHdr(p);
+    if (!h && size < NX_GUARD_MIN)
+        return __real_realloc(p, size);
+    if (!p)
+        return __wrap_malloc(size);
+    size_t oldSize = h ? h->size : malloc_usable_size(p);
+    void *n = __wrap_malloc(size ? size : 1);
+    if (!n)
+        return NULL;
+    memcpy(n, p, oldSize < size ? oldSize : size);
+    __wrap_free(p);
+    return n;
+}
+
 LPVOID VirtualAlloc(LPVOID address, SIZE_T size, DWORD type, DWORD)
 {
     // Committing inside a prior reservation: memory is already backed.
@@ -1382,7 +1515,7 @@ LPVOID VirtualAlloc(LPVOID address, SIZE_T size, DWORD type, DWORD)
     if (type & (MEM_RESERVE | MEM_COMMIT)) {
         size_t rounded = (size + (NX_PAGE - 1)) & ~(size_t)(NX_PAGE - 1);
         if (rounded == 0) rounded = NX_PAGE;
-        void *p = memalign(NX_PAGE, rounded);
+        void *p = memalign(NX_PAGE, rounded + NX_PAGE);
         if (!p) {
             nx_mem_report("VirtualAlloc failed", rounded);
             ptrdiff_t lastIncr;
@@ -1400,6 +1533,7 @@ LPVOID VirtualAlloc(LPVOID address, SIZE_T size, DWORD type, DWORD)
             printf("[nx-mem] VirtualAlloc %zu KB at %p (caller elf+0x%llx)\n", rounded >> 10, p,
                    (unsigned long long)((uintptr_t)__builtin_return_address(0) - nx_text_base()));
         memset(p, 0, rounded);
+        void *guard = nxGuardProtect((char *)p + rounded) ? (char *)p + rounded : NULL;
         nxVmemLock();
         int slot = 0;
         while (slot < NX_MAX_VMEM && s_vmem[slot].base)
@@ -1407,6 +1541,7 @@ LPVOID VirtualAlloc(LPVOID address, SIZE_T size, DWORD type, DWORD)
         if (slot < NX_MAX_VMEM) {
             s_vmem[slot].base = (uintptr_t)p;
             s_vmem[slot].size = rounded;
+            s_vmem[slot].guard = guard;
         }
         mutexUnlock(&s_vmemLock);
         if (slot == NX_MAX_VMEM)
@@ -1419,12 +1554,21 @@ LPVOID VirtualAlloc(LPVOID address, SIZE_T size, DWORD type, DWORD)
 BOOL VirtualFree(LPVOID address, SIZE_T, DWORD type)
 {
     if (type & MEM_RELEASE) {
+        void *guard = NULL;
         nxVmemLock();
         for (int i = 0; i < NX_MAX_VMEM; ++i) {
-            if (s_vmem[i].base == (uintptr_t)address) { s_vmem[i].base = 0; s_vmem[i].size = 0; break; }
+            if (s_vmem[i].base == (uintptr_t)address) {
+                guard = s_vmem[i].guard;
+                s_vmem[i].base = 0;
+                s_vmem[i].size = 0;
+                s_vmem[i].guard = NULL;
+                break;
+            }
         }
         mutexUnlock(&s_vmemLock);
-        free(address);
+        if (guard)
+            nxGuardRelease(guard);
+        __real_free(address);
     }
     // MEM_DECOMMIT keeps the mapping (our reserve already committed real
     // memory), so it is a no-op.

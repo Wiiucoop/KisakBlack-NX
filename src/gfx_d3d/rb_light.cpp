@@ -588,7 +588,7 @@ unsigned __int8 __cdecl R_LightGridLookup(
             honorSuppression = 1;
             bestPrimaryLightWeight = cornerWeight[cornerIndex];
             primaryLightIndex = entry->primaryLightIndex;
-            memset((unsigned __int8 *)cornerEntry, 0, 4 * cornerIndex);
+            memset((unsigned __int8 *)cornerEntry, 0, sizeof(*cornerEntry) * cornerIndex);   // nx-port: was 4 * n for an array of pointers
             goto LABEL_10;
         }
         v10 = entry->primaryLightIndex;

@@ -1548,8 +1548,10 @@ const char **__cdecl FS_ListFilteredFiles(
     FS_ReturnPath(sanitizedPath, zpath, &pathDepth);
     if ( sanitizedPath[0] )
         ++pathDepth;
-    user = Hunk_UserCreate(0x20000, HU_SCHEME_DEFAULT, 0, 0, "FS_ListFilteredFiles", 3);
-    list = (const char **)Hunk_UserAlloc(user, 65540, 4, 0);
+    // nx-port: was 0x20000 and 65540 (a header and 16384 four-byte pointers);
+    // the list doubles on LP64 and the names share the same hunk.
+    user = Hunk_UserCreate(0x40000, HU_SCHEME_DEFAULT, 0, 0, "FS_ListFilteredFiles", 3);
+    list = (const char **)Hunk_UserAlloc(user, sizeof(const char *) * (16384 + 1), 8, 0);
     *list++ = (const char *)user;
     for ( search = searchPath; search; search = search->next )
     {
@@ -1891,21 +1893,22 @@ void __cdecl FS_SortFileList(const char **filelist, int numfiles)
     int k; // [esp+8h] [ebp-10h]
     int numsortedfiles; // [esp+Ch] [ebp-Ch]
     int i; // [esp+10h] [ebp-8h]
-    unsigned int *sortedlist; // [esp+14h] [ebp-4h]
+    const char **sortedlist; // [esp+14h] [ebp-4h]
 
-    sortedlist = Z_Malloc(4 * numfiles + 4, "FS_SortFileList", 3);
+    // nx-port: was unsigned int[] holding the pointers, copied back as 4 * n
+    sortedlist = (const char **)Z_Malloc(sizeof(*sortedlist) * (numfiles + 1), "FS_SortFileList", 3);
     *sortedlist = 0;
     numsortedfiles = 0;
     for ( i = 0; i < numfiles; ++i )
     {
-        for ( j = 0; j < numsortedfiles && FS_PathCmp(filelist[i], (const char *)sortedlist[j]) >= 0; ++j )
+        for ( j = 0; j < numsortedfiles && FS_PathCmp(filelist[i], sortedlist[j]) >= 0; ++j )
             ;
         for ( k = numsortedfiles; k > j; --k )
             sortedlist[k] = sortedlist[k - 1];
-        sortedlist[j] = (unsigned int)filelist[i];
+        sortedlist[j] = filelist[i];
         ++numsortedfiles;
     }
-    Com_Memcpy(filelist, sortedlist, 4 * numfiles);
+    Com_Memcpy(filelist, sortedlist, sizeof(*sortedlist) * numfiles);
     Z_Free((char *)sortedlist, 3);
 }
 

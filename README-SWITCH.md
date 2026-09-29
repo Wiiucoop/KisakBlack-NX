@@ -398,6 +398,10 @@ are silent and need reading:
 - **Constants decompiled as addresses**: `(int)&objBuf[1758][2]` is
   `FL_OBSTACLE` (0x4000000) -- the value happened to fall inside objBuf in the
   PC binary. Wrong on every build; breaks outright once the array resizes.
+- **Pointer arrays sized as `4 * n`**: `memset(cornerEntry, 0, 4 * n)` cleared
+  half of each light-grid entry pointer (crash on `0xd00000000`), the file list
+  was `unsigned int[]` copied back as `4 * n`, and `FS_ListFilteredFiles`
+  allocated 16384 four-byte pointers. The compiler cannot see these.
 - **Job queue command sizes**: every `jqWorkerCmd` carried its data size as an
   x86 literal (`r_dpvs_staticWorkerCmd = { ..., 12u, ...}`), so a command
   holding a pointer was queued with half of it. `sizeof` of the command the

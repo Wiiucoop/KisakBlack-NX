@@ -301,7 +301,7 @@ int __cdecl SND_GetSoundOverlay(snd_overlay_info *info, int start, int count)
     {
         __debugbreak();
     }
-    memset((unsigned __int8 *)info, 0, 240 * count);
+    memset((unsigned __int8 *)info, 0, sizeof(*info) * count);
     for (i = 0; i < count; ++i)
     {
         voice = &g_snd.voice[start + i];

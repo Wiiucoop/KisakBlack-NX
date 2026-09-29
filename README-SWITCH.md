@@ -429,6 +429,14 @@ are silent and need reading:
   blocks of 256 KB or more (malloc and VirtualAlloc) end against a no-access
   page, so an overrun faults at the writer (`nx_wincompat.cpp`,
   `--wrap=malloc`). Candidates: `grep -rnE "Alloc[A-Za-z]*\((0x[0-9A-F]{3,}|[0-9]{4,})"`.
+- **`N * count` with an x86 element size**: `R_ClearScene` cleared the scene
+  model/DObj/brush/glass arrays with 76/132/44/40 per element, so stale `obj`
+  pointers survived into the next frame. The same form sized the client state
+  hunk (`clientActive_t`, `clientConnection_t`), the script parser lookups and
+  collmap geoms. Sweep: `grep -rnE "mem(set|cpy|move)\([^;]*, [0-9]{2,} \* "`,
+  then compare each literal with the native size by compiling a probe
+  (`template <size_t N, int X> struct Show; Show<sizeof(T), X> s;` with
+  `-fsyntax-only` and the project's flags; the error prints both).
 - **Pool indices from x86 entry sizes**: freeing an FX element computed its
   slot as `offset / 48`; the pool entry is 64 bytes here (`FxElem` holds a
   pointer), so the wrong slot went on the free list and the next alloc read

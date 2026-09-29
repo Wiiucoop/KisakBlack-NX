@@ -62,10 +62,10 @@ void __cdecl Scr_InitOpcodeLookup(scriptInstance_t inst)
         gScrParserGlob[inst].opcodeLookupLen = 0;
         gScrParserGlob[inst].opcodeLookup = (OpcodeLookup *)Hunk_UserAlloc(
             g_DebugHunkUser,
-            12 * gScrParserGlob[inst].opcodeLookupMaxLen,
+            sizeof(OpcodeLookup) * gScrParserGlob[inst].opcodeLookupMaxLen,
             4,
             "Scr_InitOpcodeLookup");
-        memset((unsigned __int8 *)gScrParserGlob[inst].opcodeLookup, 0, 12 * gScrParserGlob[inst].opcodeLookupMaxLen);
+        memset((unsigned __int8 *)gScrParserGlob[inst].opcodeLookup, 0, sizeof(OpcodeLookup) * gScrParserGlob[inst].opcodeLookupMaxLen);
         gScrParserGlob[inst].sourcePosLookupMaxLen = inst != SCRIPTINSTANCE_CLIENT ? 393216 : 16;
         gScrParserGlob[inst].sourcePosLookupLen = 0;
         gScrParserGlob[inst].sourcePosLookup = (SourceLookup *)Hunk_UserAlloc(
@@ -80,13 +80,13 @@ void __cdecl Scr_InitOpcodeLookup(scriptInstance_t inst)
         gScrParserPub[inst].sourceBufferLookupLen = 0;
         gScrParserPub[inst].sourceBufferLookup = (SourceBufferInfo *)Hunk_UserAlloc(
             g_DebugHunkUser,
-            24 * gScrParserGlob[inst].sourceBufferLookupMaxLen,
+            sizeof(SourceBufferInfo) * gScrParserGlob[inst].sourceBufferLookupMaxLen,
             4,
             "Scr_InitOpcodeLookup");
         memset(
             (unsigned __int8 *)gScrParserPub[inst].sourceBufferLookup,
             0,
-            24 * gScrParserGlob[inst].sourceBufferLookupMaxLen);
+            sizeof(SourceBufferInfo) * gScrParserGlob[inst].sourceBufferLookupMaxLen);
     }
 }
 
@@ -206,14 +206,14 @@ void __cdecl AddOpcodePos(scriptInstance_t inst, unsigned int sourcePos, int typ
                 }
                 newOpcodeLookup = (unsigned __int8 *)Hunk_UserAlloc(
                     g_DebugHunkUser,
-                    12 * gScrParserGlob[inst].opcodeLookupMaxLen,
+                    sizeof(OpcodeLookup) * gScrParserGlob[inst].opcodeLookupMaxLen,
                     4,
                     "AddOpcodePos");
-                memset(newOpcodeLookup, 0, 12 * gScrParserGlob[inst].opcodeLookupMaxLen);
+                memset(newOpcodeLookup, 0, sizeof(OpcodeLookup) * gScrParserGlob[inst].opcodeLookupMaxLen);
                 memcpy(
                     newOpcodeLookup,
                     (unsigned __int8 *)gScrParserGlob[inst].opcodeLookup,
-                    12 * gScrParserGlob[inst].opcodeLookupLen);
+                    sizeof(OpcodeLookup) * gScrParserGlob[inst].opcodeLookupLen);
                 Hunk_UserFree(g_DebugHunkUser, gScrParserGlob[inst].opcodeLookup);
                 gScrParserGlob[inst].opcodeLookup = (OpcodeLookup *)newOpcodeLookup;
             }
@@ -1081,14 +1081,14 @@ SourceBufferInfo *__cdecl Scr_GetNewSourceBuffer(scriptInstance_t inst)
         }
         newSourceBufferInfo = (unsigned __int8 *)Hunk_UserAlloc(
             g_DebugHunkUser,
-            24 * gScrParserGlob[inst].sourceBufferLookupMaxLen,
+            sizeof(SourceBufferInfo) * gScrParserGlob[inst].sourceBufferLookupMaxLen,
             4,
             "Scr_AddSourceBuffer4");
-        memset(newSourceBufferInfo, 0, 24 * gScrParserGlob[inst].sourceBufferLookupMaxLen);
+        memset(newSourceBufferInfo, 0, sizeof(SourceBufferInfo) * gScrParserGlob[inst].sourceBufferLookupMaxLen);
         Com_Memcpy(
             newSourceBufferInfo,
             (unsigned char*)gScrParserPub[inst].sourceBufferLookup,
-            24 * gScrParserPub[inst].sourceBufferLookupLen);
+            sizeof(SourceBufferInfo) * gScrParserPub[inst].sourceBufferLookupLen);
         Hunk_UserFree(g_DebugHunkUser, gScrParserPub[inst].sourceBufferLookup);
         gScrParserPub[inst].sourceBufferLookup = (SourceBufferInfo *)newSourceBufferInfo;
     }

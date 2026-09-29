@@ -625,8 +625,8 @@ PhysGeomList *__cdecl Xmodel_ParsePhysicsCollMap(
                 v8->geoms = 0;
                 v8->contents = 0;
                 geomList->count = geomCount;
-                geomList->geoms = (PhysGeomInfo *)Alloc(68 * geomCount);
-                memset((unsigned __int8 *)geomList->geoms, 0, 68 * geomCount);
+                geomList->geoms = (PhysGeomInfo *)Alloc(sizeof(PhysGeomInfo) * geomCount);
+                memset((unsigned __int8 *)geomList->geoms, 0, sizeof(PhysGeomInfo) * geomCount);
                 geomIndex = 0;
                 while ( geomIndex < geomCount )
                 {

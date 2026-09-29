@@ -2811,10 +2811,10 @@ void __cdecl R_ClearScene(int localClientNum)
         __debugbreak();
     }
     scene.dpvs.localClientNum = localClientNum;
-    Com_Memset((unsigned int *)scene.sceneDObj, 0, 132 * scene.sceneDObjCount);
-    Com_Memset((unsigned int *)&scene.sceneModel[0].info, 0, 76 * scene.sceneModelCount);
-    Com_Memset((unsigned int *)&scene.sceneBrush[0].info.surfId, 0, 44 * scene.sceneBrushCount);
-    Com_Memset((unsigned int *)scene.glassBrush, 0, 40 * scene.glassBrushCount);
+    Com_Memset((unsigned int *)scene.sceneDObj, 0, sizeof(scene.sceneDObj[0]) * scene.sceneDObjCount);   // nx-port: element sizes were x86 literals
+    Com_Memset((unsigned int *)scene.sceneModel, 0, sizeof(scene.sceneModel[0]) * scene.sceneModelCount);
+    Com_Memset((unsigned int *)scene.sceneBrush, 0, sizeof(scene.sceneBrush[0]) * scene.sceneBrushCount);
+    Com_Memset((unsigned int *)scene.glassBrush, 0, sizeof(scene.glassBrush[0]) * scene.glassBrushCount);
     scene.addedLightCount = 0;
     memset((unsigned __int8 *)scene.drawSurfCount, 0, sizeof(scene.drawSurfCount));
     for ( viewIndex = 0; viewIndex < 7; ++viewIndex )

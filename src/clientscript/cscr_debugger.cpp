@@ -1649,12 +1649,12 @@ void __thiscall Scr_ScriptWatch::EvaluateWatchChildren(
             oldChildCount = parentElement->childCount;
             newElements = (Scr_WatchElement_s *)Scr_AllocDebugMem(
                 inst,
-                100 * count,
+                sizeof(Scr_WatchElement_s) * count,
                 "Scr_ScriptWatch::EvaluateWatchChildren3");
-            memset((unsigned __int8 *)&newElements->expr.parseData, 0, 100 * count);
+            memset((unsigned __int8 *)newElements, 0, sizeof(Scr_WatchElement_s) * count);
             newElementOldRef = (Scr_WatchElement_s **)Scr_AllocDebugMem(
                 inst,
-                4 * count,
+                sizeof(Scr_WatchElement_s *) * count,
                 "Scr_ScriptWatch::EvaluateWatchChildren");
             v11 = oldElements && parentElement->objectType == oldObjectType;
             sameType = v11;

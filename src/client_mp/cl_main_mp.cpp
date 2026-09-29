@@ -2676,7 +2676,7 @@ void __cdecl AllocatePerLocalClientMemory(int maxLocalClients, int maxClients, u
     int mem_neededb; // [esp+0h] [ebp-4h]
 
     CL_FreePerLocalClientMemory();
-    mem_needed = 2449480 * maxLocalClients;
+    mem_needed = (int)((sizeof(clientActive_t) + sizeof(clientConnection_t) + 16) * maxLocalClients);   // nx-port: was 2449480, the x86 sizes
     if ( (flags & 1) == 0 )
         mem_needed += (int)SV_AllocateClientMemory_SizeRequired(maxLocalClients, maxClients);
     mem_neededa = mem_needed + CG_AllocateClientMemory_SizeRequired(maxLocalClients);
@@ -2693,14 +2693,14 @@ void __cdecl AllocatePerLocalClientMemory(int maxLocalClients, int maxClients, u
                                                         0,
                                                         "PerLocalClient Memory",
                                                         42);
-    clients = (clientActive_t *)Hunk_UserAlloc(perLocalClientMemHunk, 1728768 * maxLocalClients, 4, "clients");
+    clients = (clientActive_t *)Hunk_UserAlloc(perLocalClientMemHunk, sizeof(clientActive_t) * maxLocalClients, 8, "clients");
     clientConnections = (clientConnection_t *)Hunk_UserAlloc(
                                                                                             perLocalClientMemHunk,
-                                                                                            720712 * maxLocalClients,
-                                                                                            4,
+                                                                                            sizeof(clientConnection_t) * maxLocalClients,
+                                                                                            8,
                                                                                             "clientConnections");
-    memset((unsigned __int8 *)clients, 0, 1728768 * maxLocalClients);
-    memset((unsigned __int8 *)clientConnections, 0, 720712 * maxLocalClients);
+    memset((unsigned __int8 *)clients, 0, sizeof(clientActive_t) * maxLocalClients);
+    memset((unsigned __int8 *)clientConnections, 0, sizeof(clientConnection_t) * maxLocalClients);
     memset((unsigned __int8 *)&cls.gameState, 0, sizeof(cls.gameState));
     cls.serverId = 0;
     if ( (flags & 1) == 0 )

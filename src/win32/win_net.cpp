@@ -120,6 +120,17 @@ void __cdecl NET_Sleep(unsigned int msec)
     Sleep(msec);
 }
 
+// nx-port: with the console offline every recvfrom fails with WSAENETDOWN, and
+// the error went to the log every frame. Report it once; a local game runs
+// over the loopback and does not need the socket.
+static bool nxNetDownReported()
+{
+    static bool s_reported;
+    bool was = s_reported;
+    s_reported = true;
+    return was;
+}
+
 const char *__cdecl NET_ErrorString()
 {
     const char *result; // eax
@@ -364,7 +375,9 @@ int __cdecl Sys_GetPacket(netadr_t *net_from, msg_t *net_message)
             if (ret == -1)
             {
                 err = WSAGetLastError();
-                if (err != 10035 && err != 10054)
+                if (err == 10050 && nxNetDownReported())   // nx-port: WSAENETDOWN, the console offline
+                    ;
+                else if (err != 10035 && err != 10054)
                 {
                     v2 = NET_ErrorString();
                     Com_PrintError(16, "NET_GetPacket: %s\n", v2);
@@ -785,7 +798,9 @@ int __cdecl Sys_SocketPool_GetPacket(netadr_t *net_from, msg_t *net_message)
                 return 1;
             }
             err = WSAGetLastError();
-            if ( err != 10035 && err != 10054 )
+            if (err == 10050 && nxNetDownReported())   // nx-port: WSAENETDOWN, the console offline
+                ;
+            else if ( err != 10035 && err != 10054 )
             {
                 v3 = NET_ErrorString();
                 Com_PrintError(16, "NET_GetPacket: %s\n", v3);

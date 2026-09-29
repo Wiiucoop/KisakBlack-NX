@@ -222,21 +222,30 @@ deliberately ignored (nothing fills a depth buffer correctly until they all
 land together); `DrawPrimitive` and `DrawPrimitiveUP` draw nothing; only
 render target 0 of an MRT set is bound; sRGB reads and writes are ignored.
 
-**The report.** Every 60 frames the driver prints a census to the log:
+**The report.** With `+set nx_glreport 1` in `cmdline.txt`, every 60 frames the
+driver prints a census to the log:
 `[d3d census]` (call counts), `[nx-gl] geometry`, `textures` (formats, what
 each frame sampled), `targets` (framebuffers, where the frame's draws went,
 the current target, viewport and scissor) and `shaders` (translated,
 compiled, linked, and how many draws ran the engine's shaders versus the
-built-in program and why). Read it first.
+built-in program and why). It costs a visible hitch each time (about 60 SD
+writes, and a `glGetError` around every draw of the frame before), which is
+why it is off by default: it made the game stutter once a second.
 
-The present block ends with the **frame profile**: ms per present over the
-last 60, MB of buffer data sent whole and partial, then ms and calls per
+Without it, a **summary** goes out every 600 frames: `[nx-gl] frames A..B`
+with the average and the slowest frame (a hitch shows as a max far above the
+average), MB of buffer data sent whole and partial, MB of buffer data sent whole and partial, then ms and calls per
 present for each part of the GL work (draw total, `glDrawElements`, buffer
 uploads, constants, texture uploads, pipeline, program lookup, target, blend
 and depth state, `glGetError`, swap), and the buffers most often re-sent
 whole with the reason. Time not in "draw total" or "swap" is the engine.
 
 Performance findings so far, all in this layer:
+
+- **Log volume is frame time.** stdout is unbuffered, so every line is an SD
+  write. The report above, the heap report (every 30 s: `mallinfo` walks the
+  heap) and `NET_GetPacket: WSAENETDOWN`, printed every frame with the console
+  offline (now once), all showed up as hitches.
 
 - **Whole-buffer re-uploads.** Every `Unlock` used to mark the whole buffer
   dirty and the next draw re-sent it with `glBufferData`. The engine appends

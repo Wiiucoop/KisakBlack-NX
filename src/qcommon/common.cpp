@@ -2795,10 +2795,11 @@ void __cdecl Com_Frame()
     }
 #ifdef KISAK_NX
     {
-        // Heap state every 5 s, to tell a steady leak from a single spike.
+        // Heap state every 30 s, to tell a steady leak from a single spike (mallinfo
+        // walks the whole heap, so not more often).
         static int s_lastMemReport;
         int now = Sys_Milliseconds();
-        if (now - s_lastMemReport >= 5000)
+        if (now - s_lastMemReport >= 30000)
         {
             s_lastMemReport = now;
             char why[48];

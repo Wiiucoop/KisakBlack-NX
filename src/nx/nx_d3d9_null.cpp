@@ -46,6 +46,7 @@
 // GfxImage is where the engine keeps it -- see nxImageFromOutPtr.
 #include <gfx_d3d/r_material.h>
 #include <gfx_d3d/r_image.h>   // MapType
+#include <universal/dvar.h>
 
 // Counters for the D3D9 call census. The point is to learn which subset of
 // the API the engine actually uses before writing any real backend.
@@ -1721,6 +1722,8 @@ static uint64_t s_bufferBytesWhole, s_bufferBytesPartial;
 static void nxBufferRangeLock() { mutexLock(&s_bufferRangeMutex); }
 static void nxBufferRangeUnlock() { mutexUnlock(&s_bufferRangeMutex); }
 
+static bool nxGlFullReport();   // nx_glreport set: see Present
+
 // Per-vertex geometry statistics in the present report (see nxFrameAccumulate).
 #define NX_GL_GEOMETRY_STATS 0
 
@@ -3324,7 +3327,7 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
 
     // glGetError makes the driver wait for its queue: two per draw were ~630 ms
     // of a 690 ms frame. Only the frame the report describes checks.
-    bool checkErrors = (s_nSwapPresent % 60) == 0;
+    bool checkErrors = nxGlFullReport() && (s_nSwapPresent % 60) == 0;
     if (checkErrors) { NxProfScope p(NXP_GETERROR); glGetError(); }   // clear anything stale
     {
     NxProfScope prof(NXP_DRAW_CALL);
@@ -4656,9 +4659,30 @@ HRESULT IDirect3DDevice9::EvictManagedResources() { return D3D_OK; }
 // ===========================================================================
 // IDirect3DSwapChain9
 // ===========================================================================
+// The full report (every dump below, and glGetError around every draw of the
+// frame before it) costs a visible hitch, so it runs only with nx_glreport set
+// (+set nx_glreport 1). Without it a short summary -- frame time, the
+// profile, the buffers re-sent whole -- goes out every 600 presents.
+static const dvar_s *s_glReportDvar;
+static bool nxGlFullReport() { return s_glReportDvar && s_glReportDvar->current.enabled; }
+
 HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const void *, DWORD)
 {
-    bool report = (++s_nSwapPresent % 60) == 1;
+    if (!s_glReportDvar)
+        s_glReportDvar = _Dvar_RegisterBool("nx_glreport", false, 0,
+                                            "Full [nx-gl] report every 60 frames (causes a hitch each time)");
+    // The longest gap between two presents since the last summary: a hitch
+    // shows as a max far above the average.
+    static u64 s_prevPresentTick, s_maxPresentTicks;
+    {
+        u64 t = armGetSystemTick();
+        if (s_prevPresentTick && t - s_prevPresentTick > s_maxPresentTicks)
+            s_maxPresentTicks = t - s_prevPresentTick;
+        s_prevPresentTick = t;
+    }
+    ++s_nSwapPresent;
+    bool report = nxGlFullReport() && (s_nSwapPresent % 60) == 1;
+    bool summary = report || (s_nSwapPresent % 600) == 1;
     if (report) nxDumpCallCensus();
     if (report) nxGlDumpGeometry();
     if (report) nxGlDumpTextures();
@@ -4689,8 +4713,9 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     }
 
     // Whatever is still pending from the frame the engine just drew, read
-    // before the swap so the report can attribute it to that frame.
-    GLenum errBeforeSwap = glGetError();
+    // before the swap so the report can attribute it to that frame. Only on
+    // report frames: glGetError makes the driver catch up.
+    GLenum errBeforeSwap = report ? glGetError() : GL_NO_ERROR;
 
     // The back buffer to the window. Every target is stored top row first,
     // the window wants its top row last, so the destination rows run
@@ -4721,12 +4746,12 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         swapped = eglSwapBuffers(s_display, s_surface);
     }
     EGLint eglErr = eglGetError();
-    GLenum errAfterSwap = glGetError();
+    GLenum errAfterSwap = report ? glGetError() : GL_NO_ERROR;
 
+    if (!blitted && (summary || s_nSwapPresent < 3))
+        printf("[nx-gl] present %u: the back buffer could not be copied to the "
+               "window; the screen shows whatever was there before\n", s_nSwapPresent);
     if (report) {
-        if (!blitted)
-            printf("[nx-gl] present %u: the back buffer could not be copied to the "
-                   "window; the screen shows whatever was there before\n", s_nSwapPresent);
         u32 winW = 0, winH = 0;
         nwindowGetDimensions(nwindowGetDefault(), &winW, &winH);
         printf("[nx-gl] present %u: glGetError before swap 0x%x | eglSwapBuffers %s "
@@ -4748,6 +4773,8 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
                (s_lastClearFlags & D3DCLEAR_TARGET)  ? " TARGET"  : "",
                (s_lastClearFlags & D3DCLEAR_ZBUFFER) ? " ZBUFFER" : "",
                (s_lastClearFlags & D3DCLEAR_STENCIL) ? " STENCIL" : "");
+    }
+    if (summary) {
         // Frame time and buffer traffic since the last report.
         static u64 s_lastReportTick;
         static unsigned s_lastReportPresent;
@@ -4755,8 +4782,10 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         u64 now = armGetSystemTick();
         unsigned frames = s_nSwapPresent - s_lastReportPresent;
         if (s_lastReportTick && frames)
-            printf("        %.1f ms per present over %u | buffer uploads: %.1f MB whole, %.1f MB partial\n",
-                   armTicksToNs(now - s_lastReportTick) / 1e6 / frames, frames,
+            printf("[nx-gl] frames %u..%u: %.1f ms per present, slowest %.1f ms | buffer uploads: %.1f MB whole, %.1f MB partial\n",
+                   s_lastReportPresent, s_nSwapPresent,
+                   armTicksToNs(now - s_lastReportTick) / 1e6 / frames,
+                   armTicksToNs(s_maxPresentTicks) / 1e6,
                    (s_bufferBytesWhole - s_lastWhole) / 1048576.0,
                    (s_bufferBytesPartial - s_lastPartial) / 1048576.0);
         nxProfReport(frames);
@@ -4764,6 +4793,7 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         s_lastReportPresent = s_nSwapPresent;
         s_lastWhole = s_bufferBytesWhole;
         s_lastPartial = s_bufferBytesPartial;
+        s_maxPresentTicks = 0;
         fflush(stdout);
     }
     return D3D_OK;

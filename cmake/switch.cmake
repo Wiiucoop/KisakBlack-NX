@@ -164,6 +164,8 @@ target_link_options(${BIN_NAME} PRIVATE
     -Wl,--wrap=fopen
     -Wl,--wrap=remove
     -Wl,--wrap=rename
+    # heap growth logging (nx_wincompat.cpp, __wrap__sbrk_r)
+    -Wl,--wrap=_sbrk_r
 )
 
 # ----- Mesa EGL / OpenGL -----

@@ -9,6 +9,7 @@
 
 #include <switch.h>
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <malloc.h> // memalign
@@ -1320,6 +1321,8 @@ void *GetProcAddress(HMODULE, LPCSTR) { return NULL; }
 #define NX_MAX_VMEM 512
 
 extern "C" void nx_mem_status(uint64_t *total, uint64_t *avail);
+extern "C" char *fake_heap_start;
+extern "C" char *fake_heap_end;
 
 static uintptr_t nx_text_base(void)
 {
@@ -1340,10 +1343,12 @@ extern "C" void nx_mem_report(const char *why, size_t request)
     struct mallinfo mi = mallinfo();
     int regions = 0;
     size_t vtotal = nxVmemTotal(&regions);
+    char *brk = (char *)sbrk(0);
     printf("[nx-mem] %s (request %zu KB): free heap %llu MB, arena %zu MB, in use %zu MB, "
-           "top chunk %zu KB, VirtualAlloc %zu MB in %d regions\n",
+           "top chunk %zu KB, VirtualAlloc %zu MB in %d regions, break at heap+%zu MB of %zu MB\n",
            why, request >> 10, (unsigned long long)(avail >> 20), (size_t)mi.arena >> 20,
-           (size_t)mi.uordblks >> 20, (size_t)mi.keepcost >> 10, vtotal >> 20, regions);
+           (size_t)mi.uordblks >> 20, (size_t)mi.keepcost >> 10, vtotal >> 20, regions,
+           (size_t)(brk - fake_heap_start) >> 20, (size_t)(fake_heap_end - fake_heap_start) >> 20);
 }
 struct NxVMemRegion { uintptr_t base; size_t size; };
 static NxVMemRegion s_vmem[NX_MAX_VMEM];
@@ -1483,6 +1488,41 @@ BOOL GlobalUnlock(HGLOBAL) { return TRUE; }
 // allocate, i.e. the unused portion of the heap.
 extern "C" char *fake_heap_start;
 extern "C" char *fake_heap_end;
+
+// Every heap growth goes through _sbrk_r (linked with --wrap=_sbrk_r). Log
+// large steps and every refusal, with the break position, to tell a heap that
+// is really full from one malloc cannot grow. This runs under malloc's lock,
+// so format on the stack and write() instead of printf.
+extern "C" void *__real__sbrk_r(struct _reent *r, ptrdiff_t incr);
+static char *s_heapBreak;
+
+static void nxSbrkLog(const char *fmt, ...)
+{
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (n > 0)
+        write(fileno(stdout), buf, n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1);
+}
+
+extern "C" void *__wrap__sbrk_r(struct _reent *r, ptrdiff_t incr)
+{
+    void *p = __real__sbrk_r(r, incr);
+    if (p == (void *)-1) {
+        char *brk = (char *)__real__sbrk_r(r, 0);
+        nxSbrkLog("[nx-mem] sbrk refused %td KB: break at heap+%zu MB, %zu MB left to heap end\n",
+                  incr >> 10, (size_t)(brk - fake_heap_start) >> 20, (size_t)(fake_heap_end - brk) >> 20);
+        return p;
+    }
+    s_heapBreak = (char *)p + incr;
+    if (incr >= (ptrdiff_t)(8u << 20))
+        nxSbrkLog("[nx-mem] sbrk %td MB (caller elf+0x%llx), break at heap+%zu MB\n", incr >> 20,
+                  (unsigned long long)((uintptr_t)__builtin_return_address(0) - nx_text_base()),
+                  (size_t)(s_heapBreak - fake_heap_start) >> 20);
+    return p;
+}
 
 extern "C" void nx_mem_status(uint64_t *totalOut, uint64_t *availOut)
 {

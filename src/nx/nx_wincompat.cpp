@@ -1415,38 +1415,52 @@ extern "C" void __real_free(void *p);
 extern "C" void *__real_calloc(size_t n, size_t size);
 extern "C" void *__real_realloc(void *p, size_t size);
 
+// A guarded block is [base: NxGuardHdr ... tag | user bytes | guard page].
+// The tag is the 16 bytes right before the user pointer: the base, then the
+// magic. free() can only read those 16 bytes of an arbitrary pointer -- for
+// an ordinary malloc block they are its chunk header, and the bytes before
+// them may be the guard page of the block in front -- and the second word
+// of a chunk header is its size, which never equals the magic.
 struct NxGuardHdr
 {
-    uint64_t magic;
-    char *base;
     size_t size;    // what the caller asked for
     char *guard;    // NULL when the page could not be protected
+    char *user;
+};
+struct NxGuardTag
+{
+    char *base;
+    uint64_t magic;
 };
 static const uint64_t NX_GUARD_MAGIC = 0x4B424755415244ull; // "KBGUARD"
 
 static NxGuardHdr *nxGuardHdr(void *p)
 {
     char *c = (char *)p;
-    if (!c || ((uintptr_t)c & 15) || c - sizeof(NxGuardHdr) < fake_heap_start || c >= fake_heap_end)
+    if (!c || ((uintptr_t)c & 15) || c - sizeof(NxGuardTag) < fake_heap_start || c >= fake_heap_end)
         return NULL;
-    NxGuardHdr *h = (NxGuardHdr *)(c - sizeof(NxGuardHdr));
-    return h->magic == NX_GUARD_MAGIC && h->base < c ? h : NULL;
+    const NxGuardTag *t = (const NxGuardTag *)(c - sizeof(NxGuardTag));
+    if (t->magic != NX_GUARD_MAGIC || t->base < fake_heap_start || t->base >= c)
+        return NULL;
+    return (NxGuardHdr *)t->base;
 }
 
 static void *nxGuardedMalloc(size_t size)
 {
     size_t body = (size + 15) & ~(size_t)15;
-    size_t total = ((body + sizeof(NxGuardHdr) + NX_PAGE - 1) & ~(size_t)(NX_PAGE - 1)) + NX_PAGE;
+    size_t total = ((body + sizeof(NxGuardHdr) + sizeof(NxGuardTag) + NX_PAGE - 1) & ~(size_t)(NX_PAGE - 1)) + NX_PAGE;
     char *base = (char *)memalign(NX_PAGE, total);
     if (!base)
         return NULL;
     char *guard = base + total - NX_PAGE;
     char *user = guard - body;
-    NxGuardHdr *h = (NxGuardHdr *)(user - sizeof(NxGuardHdr));
-    h->magic = NX_GUARD_MAGIC;
-    h->base = base;
+    NxGuardHdr *h = (NxGuardHdr *)base;
     h->size = size;
     h->guard = nxGuardProtect(guard) ? guard : NULL;
+    h->user = user;
+    NxGuardTag *t = (NxGuardTag *)(user - sizeof(NxGuardTag));
+    t->base = base;
+    t->magic = NX_GUARD_MAGIC;
     return user;
 }
 
@@ -1454,8 +1468,8 @@ static void nxGuardedFree(NxGuardHdr *h)
 {
     if (h->guard)
         nxGuardRelease(h->guard);
-    h->magic = 0;
-    __real_free(h->base);
+    ((NxGuardTag *)(h->user - sizeof(NxGuardTag)))->magic = 0;
+    __real_free(h);
 }
 
 extern "C" void *__wrap_malloc(size_t size)

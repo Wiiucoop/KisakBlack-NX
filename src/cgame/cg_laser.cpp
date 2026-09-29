@@ -50,7 +50,7 @@ void __cdecl CG_Laser_Add_Core(
     FxPostLight postLight; // [esp+140h] [ebp-34h] BYREF
     float laserEnd[3]; // [esp+168h] [ebp-Ch] BYREF
 
-    Com_Memset((unsigned int *)&traceResults, 0, 56);
+    Com_Memset((unsigned int *)&traceResults, 0, sizeof(traceResults));   // nx-port: was 56
     if ( (unsigned int)laserOwner >= 2
         && !Assert_MyHandler(
                     "C:\\projects_pc\\cod\\codsrc\\src\\cgame\\cg_laser.cpp",

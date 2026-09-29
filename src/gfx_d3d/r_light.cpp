@@ -1286,7 +1286,7 @@ int __cdecl R_EmitPointLightPartitionSurfs(
         drawSurfCount = frontEndDataOut->drawSurfCount - firstDrawSurf;
         if ( drawSurfCount )
         {
-            memcpy(partition, light, 0x170u);
+            memcpy(partition, light, sizeof(*light));   // nx-port: was 0x170 (x86)
             partition->info.drawSurfs = &frontEndDataOut->drawSurfs[firstDrawSurf];
             partitions[partitionCount++].info.drawSurfCount = drawSurfCount;
         }

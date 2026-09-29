@@ -27,7 +27,7 @@ void __cdecl CG_ClearEntityCollWorld(int localClientNum)
         __debugbreak();
     }
     memset((unsigned __int8 *)&cgEntCollWorld[localClientNum], 0, sizeof(CgEntCollWorld));
-    memset((unsigned __int8 *)cgEntCollNodes[localClientNum], 0, 0xA800u);
+    memset((unsigned __int8 *)cgEntCollNodes[localClientNum], 0, sizeof(cgEntCollNodes_data[0]));   // nx-port: was 0xA800 (x86)
     world = &cgEntCollWorld[localClientNum];
     CM_ModelBounds(0, world->mins, world->maxs);
     world->freeHead = 2;

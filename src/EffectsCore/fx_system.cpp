@@ -121,7 +121,7 @@ void __cdecl FX_InitSystem(int localClientNum)
     {
         __debugbreak();
     }
-    memset((unsigned __int8 *)system, 0, 0x360u);
+    memset((unsigned __int8 *)system, 0, sizeof(*system));   // nx-port: was 0x360 (x86)
     system->system.shared = &system->shared;
     systemBuffers = FX_GetSystemBuffers(localClientNum);
     if ( !systemBuffers
@@ -262,7 +262,7 @@ void __cdecl FX_ShutdownSystem(int localClientNum)
     {
         __debugbreak();
     }
-    memset((unsigned __int8 *)system, 0, 0x360u);
+    memset((unsigned __int8 *)system, 0, sizeof(*system));   // nx-port: was 0x360 (x86)
     if ( !systemBuffers
         && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\EffectsCore\\fx_system.cpp", 558, 0, "%s", "systemBuffers") )
     {
@@ -3539,7 +3539,7 @@ void __cdecl FX_FreeElem(
         Phys_ObjDestroy(1, remoteElem->item.elem.physObjId);
         Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
     }
-    memset((unsigned __int8 *)remoteElem, 0, 0x2Cu);
+    memset((unsigned __int8 *)remoteElem, 0, sizeof(*remoteElem));   // nx-port: was 0x2C (x86)
     FX_FreePool_Generic_FxElem_FxElemContainer_(
         &remoteEffect->effect,
         (FxElem *)remoteElem,

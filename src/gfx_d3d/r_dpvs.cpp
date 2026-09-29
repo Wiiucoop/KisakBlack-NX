@@ -1656,9 +1656,12 @@ int __cdecl R_DrawBModel(
     {
         __debugbreak();
     }
-    size = 20 * surfaceCount + 32;
+    // nx-port: was 20 * n + 32 (+ 120): the x86 BModelSurface, placement and
+    // constant set. BModelSurface is 32 bytes on LP64, so each brush model ran
+    // into the next one's reservation.
+    size = (int)(sizeof(BModelSurface) * surfaceCount + sizeof(GfxScaledPlacement));
     if ( constSet )
-        size = 20 * surfaceCount + 152;
+        size += (int)sizeof(ShaderConstantSet);
     newConstantSet = 0;
     startSurfPos = _InterlockedExchangeAdd(&frontEndDataOut->surfPos, size);
     if ( size + startSurfPos <= 0x40000 )
@@ -1676,8 +1679,8 @@ int __cdecl R_DrawBModel(
         if ( constSet )
         {
             newConstantSet = (ShaderConstantSet *)&frontEndDataOut->surfsBuffer[startSurfPos];
-            memcpy(&frontEndDataOut->surfsBuffer[startSurfPos], constSet, 0x78u);
-            startSurfPos += 120;
+            memcpy(&frontEndDataOut->surfsBuffer[startSurfPos], constSet, sizeof(ShaderConstantSet));
+            startSurfPos += sizeof(ShaderConstantSet);
         }
         newPlacement = (GfxScaledPlacement *)&frontEndDataOut->surfsBuffer[startSurfPos];
         memcpy(&frontEndDataOut->surfsBuffer[startSurfPos], placement, 0x1Cu);

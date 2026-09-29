@@ -3547,7 +3547,7 @@ void __cdecl CG_InitEntities(int localClientNum)
         }
         cent->pose.localClientNum = localClientNum;
     }
-    memset((unsigned __int8 *)&cg_fakeEntitiesArray[512 * localClientNum], 0, 0x65800u);
+    memset((unsigned __int8 *)&cg_fakeEntitiesArray[512 * localClientNum], 0, 512 * sizeof(fake_centity_s));   // nx-port: was 0x65800 (x86)
     CG_InitFakeEntities(localClientNum, 1);
     LocalClientGlobals = CG_GetLocalClientGlobals(localClientNum);
     LocalClientGlobals->predictedPlayerEntity.pose.localClientNum = localClientNum;

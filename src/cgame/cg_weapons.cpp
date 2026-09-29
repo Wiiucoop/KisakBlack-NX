@@ -608,7 +608,7 @@ void __cdecl CG_FreeWeapons(int localClientNum)
             XAnimFreeTree(viewModelInfo->tree, 0, SCRIPTINSTANCE_SERVER);
         viewModelInfo->tree = 0;
     }
-    memset((unsigned __int8 *)cg_weaponsArray[localClientNum], 0, 0x12000u);
+    memset((unsigned __int8 *)cg_weaponsArray[localClientNum], 0, 2048 * sizeof(weaponInfo_s));   // nx-port: was 0x12000 (x86)
 }
 
 int removeMeWhenMPStopsCrashingInHere;
@@ -5942,7 +5942,7 @@ void __cdecl CG_SndPingAutoSim(snd_weapon_shot *shot)
         found_sim->lastPing = 0;
         if ( found_sim->shot.fakeFire )
             found_sim->shotCount = 0;
-        memcpy(found_sim, shot, 0x34u);
+        memcpy(found_sim, shot, sizeof(*shot));   // nx-port: was 0x34 (x86)
     }
     else if ( free_sim )
     {
@@ -5960,7 +5960,7 @@ void __cdecl CG_SndPingAutoSim(snd_weapon_shot *shot)
         {
             __debugbreak();
         }
-        memcpy(free_sim, shot, 0x34u);
+        memcpy(free_sim, shot, sizeof(*shot));   // nx-port: was 0x34 (x86)
         free_sim->lastPing = 0;
         free_sim->lastShot = fireTime;
         free_sim->fireTime = fireTime;

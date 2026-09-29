@@ -4749,7 +4749,7 @@ void __cdecl CG_DrawStanceHintPrints(
     const char *binding; // [esp+248h] [ebp-8h]
     float y; // [esp+24Ch] [ebp-4h]
 
-    memset(standCmds, 0, 24);
+    memset(standCmds[0], 0, sizeof(standCmds[0]));   // nx-port: was 24, six x86 pointers
     standCmds[1][0] = "gocrouch";
     standCmds[1][1] = "togglecrouch";
     standCmds[1][2] = "lowerstance";

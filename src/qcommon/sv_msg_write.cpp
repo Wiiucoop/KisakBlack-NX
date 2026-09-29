@@ -2159,6 +2159,13 @@ LABEL_17:
     {
         __debugbreak();
     }
+#ifdef KISAK_NX
+    if (nx_snapTraceW > 0)
+    {
+        printf("[nx-snap] W ps fields=%d lc+1=%d\n", numFields, lc + 1);
+        fflush(stdout);
+    }
+#endif
     MSG_WriteLastChangedField(msg, lc + 1, numFields + 1);
     lastChanged = -1;
     lastAlwaysChangesField = -1;

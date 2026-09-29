@@ -2461,7 +2461,7 @@ int __cdecl GetMinBitCountForNum(unsigned int num)
 {
     int v2; // eax
 
-    if (!_BitScanReverse((unsigned long *)&v2, num))
+    if (!_BitScanReverse((unsigned int *)&v2, num))   // nx-port: was (unsigned long *), 8 bytes into a 4-byte int
     {
         //v2 = `CountLeadingZeros'::`2': : notFound;
         v2 = 63;
@@ -2724,8 +2724,8 @@ unsigned int __cdecl MSG_CompressWithZLib(
     stream.avail_in = inSizeBytes;
     stream.next_out = to;
     stream.avail_out = outSizeBytes;
-    memset(&stream.zalloc, 0, 16);
-    err = deflateInit2_(&stream, 9, 8, -13, 1, 0, "1.2.3", 52);
+    stream.zalloc = 0; stream.zfree = 0; stream.opaque = 0; stream.data_type = 0;   // nx-port: was memset(&zalloc, 0, 16)
+    err = deflateInit2_(&stream, 9, 8, -13, 1, 0, "1.2.3", (int)sizeof(z_stream_s))   /* nx-port: was 52, the x86 sizeof */;
     if ( !err )
     {
         erra = deflate(&stream, 4u);
@@ -2814,8 +2814,8 @@ unsigned int __cdecl MSG_DecompressWithZLib(
     stream.avail_in = inSizeBytes;
     stream.next_out = to;
     stream.avail_out = outSizeBytes;
-    memset(&stream.zalloc, 0, 16);
-    err = inflateInit2_(&stream, -13, "1.2.3", 52);
+    stream.zalloc = 0; stream.zfree = 0; stream.opaque = 0; stream.data_type = 0;   // nx-port: was memset(&zalloc, 0, 16)
+    err = inflateInit2_(&stream, -13, "1.2.3", (int)sizeof(z_stream_s))   /* nx-port: was 52, the x86 sizeof */;
     if ( !err )
     {
         erra = inflate(&stream, 4);
@@ -4835,6 +4835,13 @@ void __cdecl MSG_ReadDeltaPlayerstate(
     v7 = Demo_IsPlaying();
     count = MSG_GetNetFieldList(NET_FIELD_TYPE_PLAYERSTATE, v7)->count;
     lc = MSG_ReadLastChangedField(msg, count + 1);
+#ifdef KISAK_NX
+    if (nx_snapTraceR > 0)
+    {
+        printf("[nx-snap] R ps fields=%d lc=%d first-bit=%d\n", count, lc, v51);
+        fflush(stdout);
+    }
+#endif
     if (lc < 0 && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\qcommon\\msg_mp.cpp", 2671, 0, "%s", "lc >= 0"))
         __debugbreak();
     if (lc <= count + 1)

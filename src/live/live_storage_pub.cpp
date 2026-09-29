@@ -297,7 +297,7 @@ bool __cdecl LiveStorage_DecompressBuffer(
     memset(&stream.zalloc, 0, 12);
     stream.avail_in = compressedSize;
     stream.next_in = compressedBuffer;
-    inflateInit2_(&stream, 15, "1.2.3", 52);
+    inflateInit2_(&stream, 15, "1.2.3", (int)sizeof(z_stream_s))   /* nx-port: was 52, the x86 sizeof */;
     stream.avail_out = uncompressedSize;
     stream.next_out = uncompressedBuffer;
     err = inflate(&stream, 0);

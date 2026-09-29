@@ -607,6 +607,14 @@ void __cdecl CL_ParseServerMessage(int localClientNum, msg_t *msg)
         msgCompressed_buf, 
         sizeof(msgCompressed_buf)
     );
+#ifdef KISAK_NX
+    if (nx_snapTraceR > 0)
+    {
+        printf("[nx-snap] R packet: compression %d, %d bytes in, %d bytes out\n",
+               msg->data[msg->readcount], msg->cursize - msg->readcount, msgCompressed.cursize);
+        fflush(stdout);
+    }
+#endif
 
     while ( 2 )
     {
@@ -648,6 +656,14 @@ void __cdecl CL_ParseServerMessage(int localClientNum, msg_t *msg)
                 CL_ParseDownload(localClientNum, &msgCompressed);
                 continue;
             case svc_snapshot:
+#ifdef KISAK_NX
+                if (nx_snapTraceR > 0)
+                {
+                    NX_SNAPTRACE("R", nx_snapTraceR, "start", &msgCompressed);
+                    int nxLeft = msgCompressed.cursize - msgCompressed.readcount + 1;
+                    NX_SnapDump("R", msgCompressed.data + msgCompressed.readcount - 1, nxLeft < 48 ? nxLeft : 48);
+                }
+#endif
                 CL_ParseSnapshot(localClientNum, &msgCompressed);
                 continue;
 
@@ -692,6 +708,7 @@ void __cdecl CL_ParseSnapshot(int localClientNum, msg_t *msg)
     else
         newSnap.deltaNum = -1;
     newSnap.snapFlags = MSG_ReadByte(msg);
+    NX_SNAPTRACE("R", nx_snapTraceR, "header", msg);
     if (newSnap.deltaNum > 0)
     {
         old = &LocalClientGlobals->snapshots[newSnap.deltaNum & 0x1F];
@@ -732,6 +749,7 @@ void __cdecl CL_ParseSnapshot(int localClientNum, msg_t *msg)
     serverTimeBackup = LocalClientGlobals->serverTime;
     MSG_ClearLastReferencedEntity(msg);
     CL_ParsePacketMatchState(LocalClientGlobals, msg, newSnap.serverTime, old, &newSnap);
+    NX_SNAPTRACE("R", nx_snapTraceR, "matchstate", msg);
     CL_ProcessMapCenterFromMatchState(localClientNum, &newSnap);
     MSG_ClearLastReferencedEntity(msg);
     SHOWNET(msg, (char *)"playerstate");
@@ -739,6 +757,7 @@ void __cdecl CL_ParseSnapshot(int localClientNum, msg_t *msg)
         MSG_ReadDeltaPlayerstate(localClientNum, msg, newSnap.serverTime, &old->ps, &newSnap.ps, 1);
     else
         MSG_ReadDeltaPlayerstate(localClientNum, msg, newSnap.serverTime, 0, &newSnap.ps, 1);
+    NX_SNAPTRACE("R", nx_snapTraceR, "ps", msg);
     if (serverTimeBackup != LocalClientGlobals->serverTime)
     {
         v2 = va(
@@ -757,9 +776,15 @@ void __cdecl CL_ParseSnapshot(int localClientNum, msg_t *msg)
     MSG_ClearLastReferencedEntity(msg);
     SHOWNET(msg, (char *)"packet entities");
     CL_ParsePacketEntities(LocalClientGlobals, msg, newSnap.serverTime, old, &newSnap);
+    NX_SNAPTRACE("R", nx_snapTraceR, "entities", msg);
     MSG_ClearLastReferencedEntity(msg);
     SHOWNET(msg, (char*)"packet clients");
     CL_ParsePacketClients(LocalClientGlobals, msg, newSnap.serverTime, old, &newSnap);
+    NX_SNAPTRACE("R", nx_snapTraceR, "clients", msg);
+#ifdef KISAK_NX
+    if (nx_snapTraceR > 0)
+        --nx_snapTraceR;
+#endif
     if (msg->overflowed)
     {
         newSnap.valid = 0;

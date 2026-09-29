@@ -143,6 +143,10 @@ void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
         (lastframe) = 0;
         lastServerTime = 0;
     }
+#ifdef KISAK_NX
+    const int nxSnapStart = msg->cursize;
+    NX_SNAPTRACE("W", nx_snapTraceW, "start", msg);
+#endif
     MSG_WriteByte(msg, 0xCu);
     MSG_WriteLong(msg, svsHeader.time);
     MSG_WriteLong(msg, svsHeader.physicsTime);
@@ -165,6 +169,7 @@ void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
     if ( !sendAsActive )
         snapFlags |= 2u;
     MSG_WriteByte(msg, snapFlags);
+    NX_SNAPTRACE("W", nx_snapTraceW, "header", msg);
     MSG_GetUsedBitCount(msg);
     MSG_ClearLastReferencedEntity(msg);
     toEA = &svsHeader.snapshotMatchStates[frame->matchState % svsHeader.numSnapshotMatchStates];
@@ -178,6 +183,7 @@ void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
             (MatchState *)to);
     else
         MSG_WriteDeltaMatchState(&snapInfo, msg, svsHeader.time, 0, (MatchState *)to);
+    NX_SNAPTRACE("W", nx_snapTraceW, "matchstate", msg);
     MSG_ClearLastReferencedEntity(msg);
     if ( oldframe )
     {
@@ -195,16 +201,31 @@ void __cdecl SV_WriteSnapshotToClient(client_t *client, msg_t *msg)
         from_num_clients = 0;
         from_first_client = 0;
     }
+    NX_SNAPTRACE("W", nx_snapTraceW, oldframe ? "ps(delta)" : "ps(full)", msg);
     MSG_ClearLastReferencedEntity(msg);
     SV_EmitPacketEntities(&snapInfo, from_num_entities, from_first_entity, frame->num_entities, frame->first_entity, msg);
+    NX_SNAPTRACE("W", nx_snapTraceW, "entities", msg);
     SV_EmitPacketClients(&snapInfo, from_num_clients, from_first_client, frame->num_clients, frame->first_client, msg);
+    NX_SNAPTRACE("W", nx_snapTraceW, "clients", msg);
     if ( oldframe )
         GlassSv_WriteSnapshotToClient(msg, oldframe->serverTime);
     else
         GlassSv_WriteSnapshotToClient(msg, 0);
     for ( i = 0; i < sv_padPackets->current.integer; ++i )
         MSG_WriteByte(msg, 0);
+#ifdef KISAK_NX
+    NX_SNAPTRACE("W", nx_snapTraceW, "end", msg);
+    if (nx_snapTraceW > 0)
+    {
+        NX_SnapDump("W", msg->data + nxSnapStart, msg->cursize - nxSnapStart < 48 ? msg->cursize - nxSnapStart : 48);
+        --nx_snapTraceW;
+    }
+#endif
 }
+
+#ifdef KISAK_NX
+int nx_snapTraceW = 6, nx_snapTraceR = 6;
+#endif
 
 void __cdecl SV_EmitPacketEntities(
                 SnapshotInfo_s *snapInfo,

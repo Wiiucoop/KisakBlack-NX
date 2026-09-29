@@ -60,6 +60,24 @@ struct msg_t // sizeof=0x30
     netsrc_t targetLocalNetID;
 };
 
+#ifdef KISAK_NX
+// nx-port: trace of the first snapshots, writer (W) against reader (R): the
+// first snapshot desynced on the device (MSG_ReadDeltaPlayerstate read past
+// the end). Remove once snapshots parse.
+#include <cstdio>
+extern int nx_snapTraceW, nx_snapTraceR;
+#define NX_SNAPTRACE(side, budget, tag, m) do { if ((budget) > 0) { printf("[nx-snap] %s %-12s cursize=%d readcount=%d bit=%d overflowed=%d\n", side, tag, (m)->cursize, (m)->readcount, (m)->bit, (m)->overflowed); fflush(stdout); } } while (0)
+static inline void NX_SnapDump(const char *side, const unsigned char *p, int n)
+{
+    printf("[nx-snap] %s bytes:", side);
+    for (int i = 0; i < n; ++i) printf(" %02x", p[i]);
+    printf("\n");
+    fflush(stdout);
+}
+#else
+#define NX_SNAPTRACE(side, budget, tag, m) do {} while (0)
+#endif
+
 struct NetFieldList // sizeof=0xC
 {                                       // XREF: .rdata:s_entityNetFieldList/r
     const struct NetField *array;

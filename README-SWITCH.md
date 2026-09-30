@@ -722,6 +722,15 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   per draw), 1560 draws (30 ms), program binds (14 ms), whole uploads (13 ms),
   constants (11 ms). The next step is persistent-mapped dynamic buffers, so
   locks write into GPU memory and no draw uploads anything.
+- **Low graphics preset (both builds).** `nx_main.cpp` puts `+set` lines on
+  the built-in command line: picmip 3 for color, normal and specular maps, no
+  anisotropy or AA, no shadow maps, no depth prepass, no DOF, distortion,
+  flame effect, bullet marks or brass. `Com_StartupVariable` applies them after
+  the saved config and before the renderer starts; `cmdline.txt` comes after
+  and can override any of them. Second Zombies run before it: 136-141 ms per
+  frame, of which partial uploads 71 ms (2344 per frame), draws 39 ms (2883),
+  whole uploads 17, programs 16, constants 13 -- nearly all of it in the GL
+  layer.
 - `Could not load rawfile "maps/gametypes/zom.gsc"` is expected: retail ships
   no gametype script for Zombies and the load is optional under `KISAK_SP`.
 - The SP `ui/menus.txt` and some lobby materials are not in the zones loaded

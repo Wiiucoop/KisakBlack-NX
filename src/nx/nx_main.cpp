@@ -244,7 +244,22 @@ int main(int argc, char **argv)
 
     // "allowdupe" (must be a prefix) skips the duplicate-instance semaphore
     // file; "nodump" skips the minidump handler.
-    static char cmdline[2048] = "allowdupe nodump";
+    //
+    // Then the lowest graphics settings, resolution aside. Com_StartupVariable
+    // applies +set lines after the saved config and just before the renderer
+    // starts, so textures load at the reduced size; cmdline.txt comes after
+    // and can override any of them.
+    //   picmip 3        color, normal and specular maps at 1/8 size
+    //   sm_enable 0     no shadow maps (their passes are whole extra scenes)
+    //   depthPrepass 0  no depth-only pass over the opaque world
+    //   dof, distortion, flame, marks, brass: extra passes and draws
+    static char cmdline[2048] =
+        "allowdupe nodump"
+        " +set r_picmip_manual 1 +set r_picmip 3 +set r_picmip_bump 3 +set r_picmip_spec 3"
+        " +set r_texFilterAnisoMax 1 +set r_aaSamples 1"
+        " +set sm_enable 0 +set r_depthPrepass 0"
+        " +set r_dof_enable 0 +set r_distortion 0 +set r_flame_allowed 0"
+        " +set fx_marks 0 +set fx_marks_ents 0 +set cg_brass 0";
     nxAppendCmdlineFile(cmdline, sizeof(cmdline));
     printf("command line: %s\n", cmdline);
     nx_set_command_line(cmdline);

@@ -19,9 +19,6 @@
 #include "cg_animscripted_mp.h"
 #include <clientscript/cscr_animtree.h>
 #include <bgame/bg_animation.h>
-#ifdef KISAK_SP
-#include <game_mp/g_scr_main_mp.h>   // g_scr_data.actorCorpseInfo, for CG_ActorCorpse_TakeServerPose_SP
-#endif
 #include <cstddef>
 #include <bgame/bg_sp_anim_snapshot.h>
 #include <clientscript/cscr_stringlist.h>
@@ -583,33 +580,8 @@ bool __cdecl CG_EntityNeedsScriptThread(int localClientNum, centity_s *cent)
     return 0;
 }
 
-#ifdef KISAK_SP
-// The corpse slot's client tree starts empty: the actor was animated through
-// its own actorInfo, and the corpse draws through actorCorpseInfo[slot]. In
-// retail the ragdoll takes the bones over at that moment, so the empty tree is
-// never seen; with no ragdoll (nx_physics off) the model fell back to its bind
-// pose -- the T-pose after every death animation. The server runs in this
-// process and Actor_BecomeCorpse moved the actor's live tree, death pose and
-// all, into g_scr_data.actorCorpseInfo[slot]; copy it once per corpse into
-// the client tree, and the corpse holds the last frame of its death.
-static void CG_ActorCorpse_TakeServerPose_SP(int localClientNum, unsigned int corpseIndex,
-                                             const centity_s *cent, actorInfo_t *ai)
-{
-    static int s_takenTime[MAX_LOCAL_CLIENTS][MAX_ACTOR_CORPSES];
-    if ( !com_sv_running->current.enabled || corpseIndex >= MAX_ACTOR_CORPSES || !ai->pXAnimTree )
-        return;
-    const corpseInfo_t *server = &g_scr_data.actorCorpseInfo[corpseIndex];
-    if ( server->entnum != cent->nextState.number || !server->tree
-        || s_takenTime[localClientNum][corpseIndex] == server->time )
-        return;
-    if ( XAnimGetAnims(server->tree) != XAnimGetAnims(ai->pXAnimTree) )
-        return;
-    s_takenTime[localClientNum][corpseIndex] = server->time;
-    const __int16 inst = ai->pXAnimTree->inst;
-    XAnimCloneAnimTree(server->tree, ai->pXAnimTree);
-    ai->pXAnimTree->inst = inst;   // the client's script instance, not the server's
-    ai->dobjDirty = 1;
-}
+#ifdef KISAK_NX
+extern const dvar_t *nx_physics;   // phys_main.cpp
 #endif
 
 void __cdecl CG_ActorCorpse(int localClientNum, centity_s *cent)
@@ -633,6 +605,18 @@ void __cdecl CG_ActorCorpse(int localClientNum, centity_s *cent)
     }
     if ( (cent->nextState.lerp.eFlags & 0x20) == 0 )
     {
+#ifdef KISAK_NX
+        // HACK while the physics solver is unported (nx_physics off): there is
+        // no ragdoll to take the body over when the death animation ends, and
+        // the corpse's client anim tree starts empty, so it stood in its bind
+        // pose (a T-pose). The corpse is not drawn instead: it vanishes as the
+        // death animation finishes. The server entity stays, so scripts keep
+        // their reference and the corpse limit still clears it. Copying the
+        // server's corpse tree over instead crashed: it carries server script
+        // strings into client notetrack notifies. See README-SWITCH, physics.
+        if ( !nx_physics || !nx_physics->current.enabled )
+            return;
+#endif
 #ifdef KISAK_SP
         // Retail SP uses the corpse slot carried in actorNum because the actor
         // entity itself becomes the corpse; it is not one of MP's fixed 36..43
@@ -653,9 +637,6 @@ void __cdecl CG_ActorCorpse(int localClientNum, centity_s *cent)
         }
         ai = (actorInfo_t *)&CG_GetLocalClientStaticGlobals(localClientNum)->actorCorpseInfo[corpseIndex].animInfo.legs.pitchAngle;
         CG_UpdateActorDObj(localClientNum, cent, ai);
-#ifdef KISAK_SP
-        CG_ActorCorpse_TakeServerPose_SP(localClientNum, corpseIndex, cent, ai);
-#endif
         obj = Com_GetClientDObj(p_nextState->number, localClientNum);
         if ( obj )
         {

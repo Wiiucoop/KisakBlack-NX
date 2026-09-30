@@ -612,6 +612,20 @@ The handles around it are LP64 now (`physObjId`, `physUserBody`,
 the solver in `physics_system_internal.cpp` still walks its free lists by x86
 word index (`m_ptr_list[87]`, `+296`) and needs porting against the structs.
 
+What that costs until it is ported, and the stand-ins:
+
+- **No ragdolls.** `Ragdoll_CreateRagdollForDObj` creates none while
+  `nx_physics` is off (a ragdoll is solver rigid bodies and joints).
+- **HACK: Zombies corpses vanish when their death animation ends.** SP turns
+  the dead actor into a corpse whose client anim tree starts empty; in retail
+  the ragdoll takes the bones over at that moment, and without one the corpse
+  stood in its bind pose (T-pose). `CG_ActorCorpse` (`cg_actors_mp.cpp`)
+  therefore does not draw actor corpses while `nx_physics` is off. The server
+  entity stays (scripts keep their reference, the corpse limit clears it).
+  Copying the server's corpse tree into the client one was tried and crashed:
+  the tree carries server script strings into client notetrack notifies.
+  Remove the hack once ragdolls work.
+
 Still open, known: `actor_fields.cpp` and
 `sentient_fields.cpp` still hold x86 offsets (mostly SP); word-stride
 reads in `rb_backend.cpp` (render cmd), `fx_convert.cpp` / `fx_system.cpp`
@@ -782,11 +796,10 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   can go into the NRO's romfs (loader still to add).
 - **Zombie corpses in T-pose:** SP converts the actor into a corpse in place
   (`Actor_BecomeCorpse`), and the client draws the corpse through
-  `actorCorpseInfo[slot]`, whose tree starts empty. Retail hides that with the
-  ragdoll; with none the model fell to its bind pose after the death animation.
-  `CG_ActorCorpse_TakeServerPose_SP` copies the server's corpse tree (the
-  actor's live tree, moved there at death) into the client tree once per
-  corpse, so the corpse holds its last death frame.
+  `actorCorpseInfo[slot]`, whose tree starts empty; retail hides that with the
+  ragdoll. Copying the server's corpse tree across crashed (server script
+  strings in client notifies), so corpses are hidden instead while physics is
+  off -- see the physics note in section 3.
 - `Could not load rawfile "maps/gametypes/zom.gsc"` is expected: retail ships
   no gametype script for Zombies and the load is optional under `KISAK_SP`.
 - The SP `ui/menus.txt` and some lobby materials are not in the zones loaded
@@ -814,6 +827,8 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
   sRGB.
 - **In game it is slow** (section 2, "The report"); being profiled down.
 - **Physics is off** (`nx_physics 0`): the solver is still at x86 offsets.
+  No ragdolls; Zombies corpses are hidden when their death animation ends
+  (section 3, physics).
 - **`r_water_sim.cpp` is not LP64-clean** (dozens of pointer/int casts); maps
   with dynamic water will break. `mp_nuked` has none.
 - **`ui_viewer_mp` cannot be converted**: it contains a `ComWorld` (asset type

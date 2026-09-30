@@ -692,6 +692,17 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   pointers in ints and read fields at x86 offsets 48/72/76). The
   watch-expression evaluator in `cscr_evaluate.cpp` still has int pointer
   casts; only the PC debugger window reaches it.
+- **Script developer mode is always on in SP**, `map` or `devmap`: the merge
+  forces `gScrVarPub.developer` in `Scr_Settings` (`cscr_vm.cpp`) so compile
+  errors name the file and line. That makes SP the first real user of the
+  debug hunk (`g_DebugHunkUser`, first-fit), which exposed an allocator bug:
+  the owner back-pointer sits in the 8 bytes before the user pointer, and
+  with a 16-byte header it landed on the block node's `size`. Every block's
+  size became address bits, frees merged garbage-sized blocks, and later
+  allocations overlapped (crash in `Hunk_FirstFitFree` growing the client
+  script source table). The header is now node + pointer (24), sizes are
+  rounded to 8, the hunk is 32 MB on NX (23 on x86; the tables hold
+  pointers), and running out is a named fatal error instead of a write to 0.
 - `Could not load rawfile "maps/gametypes/zom.gsc"` is expected: retail ships
   no gametype script for Zombies and the load is optional under `KISAK_SP`.
 - The SP `ui/menus.txt` and some lobby materials are not in the zones loaded

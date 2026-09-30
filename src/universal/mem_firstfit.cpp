@@ -3,10 +3,16 @@
 #include <win32/win_common.h>
 #include <string.h>
 
-// Bytes reserved before each user pointer. The original used 12 and stashed
-// the owning node at userptr-4; on LP64 that back-pointer needs 8, so the
-// header is 16 to keep alignment sane.
-static const size_t kBlockHeader = 16;
+// Bytes reserved before each user pointer: the block's node, then the
+// back-pointer to it in the 8 bytes just before the user pointer. The original
+// used 12 (an 8-byte node plus a 4-byte back-pointer at userptr-4). On LP64 the
+// node is 16 bytes, so the header is 24; at 16 the back-pointer landed on
+// node->size, every block's size became address bits, and frees merged
+// garbage-sized blocks into overlapping allocations.
+static const size_t kBlockHeader = sizeof(_firstfit_heapnode) + sizeof(_firstfit_heapnode *);
+
+// Sizes are rounded up to 8 so the node split off after a block stays 8-aligned.
+static const int kBlockGranule = 8;
 
 // Written into node->next while a block is handed out, so a double free or a
 // bad pointer is caught instead of corrupting the free list.
@@ -83,6 +89,8 @@ void *__cdecl Hunk_FirstFitAlloc(HunkUser *_user, int size, int alignment)
     {
         __debugbreak();
     }
+
+    size = (size + kBlockGranule - 1) & ~(kBlockGranule - 1);
 
     Sys_EnterCriticalSection(CRITSECT_MEMFIRSTFIT);
 

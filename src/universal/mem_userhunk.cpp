@@ -172,7 +172,11 @@ void *__cdecl Hunk_UserDebugAlloc(HunkUser *_user, int size, int alignment)
     {
         __debugbreak();
     }
-    return Hunk_FirstFitAlloc(((DebugHunkUser *)_user)->firstFit, size, alignment);
+    void *ptr = Hunk_FirstFitAlloc(((DebugHunkUser *)_user)->firstFit, size, alignment);
+    // Callers write through the result unchecked; say so instead of faulting at 0.
+    if ( !ptr && size > 0 )
+        Com_Error(ERR_FATAL, "Hunk_UserDebugAlloc: debug hunk out of memory (%d bytes)", size);
+    return ptr;
 }
 
 void __cdecl Hunk_UserDebugFree(HunkUser *_user, void *ptr)
@@ -464,7 +468,13 @@ void __cdecl Hunk_UserDefaultFree(HunkUser *user, void *ptr)
 void __cdecl Hunk_UserStartup()
 {
     iassert(!g_DebugHunkUser);
+#ifdef KISAK_NX
+    // 23 MB on x86. The script opcode and source tables hold pointers, so they
+    // are a third larger on LP64, and SP keeps script developer mode on.
+    g_DebugHunkUser = Hunk_UserCreate(0x2000000, HU_SCHEME_DEBUG, 0, 0, "Hunk_InitDebugMemory", 0);
+#else
     g_DebugHunkUser = Hunk_UserCreate(0x1700000, HU_SCHEME_DEBUG, 0, 0, "Hunk_InitDebugMemory", 0);
+#endif
 }
 
 void __cdecl Hunk_UserShutdown()

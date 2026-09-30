@@ -2078,6 +2078,27 @@ void __cdecl CG_PrimaryLight(int localClientNum, centity_s *cent)
                                                                              - cent->currentState.u.primaryLight.colorAndExp[3])
                                                              * cgameGlob->frameInterpolation)
                                     + cent->currentState.u.primaryLight.colorAndExp[3];
+#ifdef KISAK_NX
+    // The inner cone travels in u.turret.heatVal, which the entity net fields
+    // send as MSG_FIELD_0TO1_P2 -- quantized -- while the outer one is a full
+    // float. A light whose inner cone is only a hair tighter than the outer
+    // (Kino's power-on spotlights: outer cos 40 deg = 0.766044) can arrive with
+    // inner <= outer, and the assert below trapped. Restore the order; the
+    // difference is a fraction of a degree at the cone's edge.
+    if ( light->cosHalfFovOuter <= 0.0f )
+        light->cosHalfFovOuter = 0.0001f;
+    if ( light->cosHalfFovInner > 1.0f )
+        light->cosHalfFovInner = 1.0f;
+    if ( light->cosHalfFovInner <= light->cosHalfFovOuter )
+    {
+        light->cosHalfFovInner = light->cosHalfFovOuter + 0.0005f;
+        if ( light->cosHalfFovInner > 1.0f )
+        {
+            light->cosHalfFovInner = 1.0f;
+            light->cosHalfFovOuter = 0.9995f;
+        }
+    }
+#endif
     if ( light->cosHalfFovOuter <= 0.0 || light->cosHalfFovInner <= light->cosHalfFovOuter || light->cosHalfFovInner > 1.0 )
     {
         v4 = va("%g, %g", light->cosHalfFovOuter, light->cosHalfFovInner);

@@ -41,6 +41,11 @@
 #include <ui/ui_shared.h>
 #include <gfx_d3d/r_bsp.h>
 #include <gfx_d3d/r_buffers.h>
+
+// The loading bar's counters (db_file_load.cpp), fed by slurp below.
+extern volatile int g_totalSize;
+extern volatile unsigned int g_loadedSize;
+extern int g_trackLoadProgress;
 #include <clientscript/cscr_stringlist.h>
 
 // Written by tools/ffconv (prelink.h ZEROBLK): sized in the header, no bytes in the file.
@@ -68,7 +73,23 @@ uint8_t *slurp(const char *path, long *n)
     if (sz <= 0) { fclose(f); return nullptr; }
     uint8_t *buf = (uint8_t *)malloc(sz);
     if (!buf) { fclose(f); return nullptr; }
-    long got = (long)fread(buf, 1, sz, f);
+    // Read in 256 KB units and count them as DB_LoadXFile counts its .ff
+    // reads: the loading bar is DB_GetLoadedFraction, g_loadedSize over
+    // g_totalSize, and without this it stayed empty.
+    enum { UNIT = 0x40000 };
+    if (g_trackLoadProgress && sz >= 0x100000) {
+        g_totalSize = (int)((sz + UNIT - 1) / UNIT) - (int)g_loadedSize;
+        g_loadedSize = 0;
+    }
+    long got = 0;
+    while (got < sz) {
+        long want = sz - got < UNIT ? sz - got : UNIT;
+        long n = (long)fread(buf + got, 1, want, f);
+        if (n <= 0)
+            break;
+        got += n;
+        __atomic_fetch_add(&g_loadedSize, 1u, __ATOMIC_SEQ_CST);
+    }
     fclose(f);
     if (got != sz) { free(buf); return nullptr; }
     *n = sz;

@@ -1017,6 +1017,15 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    `sharedUiInfo.loadingScreen` in its place while loading, and cinematic
    subtitle items no longer print the decomp's "NOT USING
    CINEMATIC_SUBTITLES" placeholder.
+   Seventh run: sounds right; loading image shows. **Turning on the power
+   crashed**: `CG_UpdatePrimaryLight`'s cone assert (inner 0.764745 <= outer
+   0.766044). The inner cone rides in `u.turret.heatVal`, sent as
+   `MSG_FIELD_0TO1_P2` (quantized) while the outer is a full float, so Kino's
+   power-on spotlights (outer cos 40 deg, inner a hair tighter) arrive out of
+   order; NX restores the order before the assert. **No loading bar**: the bar
+   is `DB_GetLoadedFraction` (`g_loadedSize / g_totalSize`, 256 KB units),
+   counted by `DB_LoadXFile`, which the KBZ path bypasses; `slurp`
+   (`nx_kbz.cpp`) now reads in 256 KB units and feeds the same counters.
    Still to port from the PC driver, all as plumbing -- the algorithms are in
    the engine as plain C: the reverb bus (`SND_RvFrame`, `snd_radverb.cpp`, fed
    by each voice's wet level), the per-voice occlusion low-pass and futz

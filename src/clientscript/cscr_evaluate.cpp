@@ -56,13 +56,13 @@ void __cdecl Scr_ArchiveCanonicalStrings(scriptInstance_t inst)
         "Scr_ArchiveCanonicalStrings1");
     gScrEvaluateGlob[inst].archivedCanonicalStrings = (ArchivedCanonicalStringInfo *)Hunk_UserAlloc(
         g_DebugHunkUser,
-        8
+        sizeof(ArchivedCanonicalStringInfo)
         * gScrVarPub[inst].canonicalStrCount,
         4,
         "Scr_ArchiveCanonicalStrings2");
     gScrEvaluateGlob[inst].canonicalStringLookup = (int *)Hunk_UserAlloc(
         g_DebugHunkUser,
-        4 * gScrVarPub[inst].canonicalStrCount + 4,
+        sizeof(int) * gScrVarPub[inst].canonicalStrCount + sizeof(int),
         4,
         "Scr_ArchiveCanonicalStrings3");
     i = 0;
@@ -110,7 +110,7 @@ void __cdecl Scr_ArchiveCanonicalStrings(scriptInstance_t inst)
     qsort(
         gScrEvaluateGlob[inst].archivedCanonicalStrings,
         gScrVarPub[inst].canonicalStrCount,
-        8u,
+        sizeof(ArchivedCanonicalStringInfo),
         (int(__cdecl *)(const void *, const void *))CompareCanonicalStrings);
     for (ia = 0; ia < (int)gScrVarPub[inst].canonicalStrCount; ++ia)
     {
@@ -139,9 +139,9 @@ void __cdecl Scr_ArchiveCanonicalStrings(scriptInstance_t inst)
     *gScrEvaluateGlob[inst].canonicalStringLookup = 0;
 }
 
-int __cdecl CompareCanonicalStrings(const char **arg1, const char **arg2)
+int __cdecl CompareCanonicalStrings(const ArchivedCanonicalStringInfo *arg1, const ArchivedCanonicalStringInfo *arg2)
 {
-    return strcmp(arg1[1], arg2[1]);
+    return strcmp(arg1->value, arg2->value);
 }
 
 const char *__cdecl Scr_GetCanonicalString(scriptInstance_t inst, unsigned int fieldName)

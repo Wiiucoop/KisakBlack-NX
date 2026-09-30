@@ -680,6 +680,20 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   `CM_LoadMapData_FastFile` waits 33 s and errors "Couldn't find the bsp for
   this map" (the stuck popup). The game worlds need nothing: pools 14 and 15
   alias the same storage.
+- **`devmap` turns on developer, and developer turns on the script
+  debugger.** `Scr_EndLoadScripts` runs `Scr_InitDebugger` and archives the
+  canonical strings whenever `gScrVarPub.developer` is set, which `+map` in
+  MP never did. That code used x86 sizes: `ArchivedCanonicalStringInfo` (a
+  `ushort` plus a pointer, 16 bytes here) allocated and sorted at 8 bytes a
+  record, so `qsort` handed `strcmp` half-records (crash in `strcmp`, far
+  0x120). Fixed with `sizeof` there and on every debugger allocation reached
+  without the debugger window (the 294910-pointer breakpoint table, assignment
+  list, script windows, watch nodes, and the child sort, which stored
+  pointers in ints and read fields at x86 offsets 48/72/76). The
+  watch-expression evaluator in `cscr_evaluate.cpp` still has int pointer
+  casts; only the PC debugger window reaches it.
+- `Could not load rawfile "maps/gametypes/zom.gsc"` is expected: retail ships
+  no gametype script for Zombies and the load is optional under `KISAK_SP`.
 - The SP `ui/menus.txt` and some lobby materials are not in the zones loaded
   without the frontend: harmless for `+devmap`.
 

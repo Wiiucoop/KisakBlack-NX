@@ -1618,6 +1618,32 @@ unsigned int __cdecl SND_ContinueLoopingSound(
         }
     }
 
+#ifdef KISAK_NX
+    // Looping ambients (amb_fire, amb_chandelier_loop) restart every frame on
+    // the Switch: the continue finds no voice, a new one starts, and the old
+    // one is retired by SNDL_UpdateLoopingSounds. Name what did not match: a
+    // voice of the same alias playing under another entity handle, or none.
+    {
+        static int s_nxLoopMissPrints;
+        if (s_nxLoopMissPrints < 20 && fadeTime >= 0)
+        {
+            for (i = 0; i < 74; ++i)
+            {
+                if (g_snd.voiceAliasHash[i] && g_snd.voice[i].alias && g_snd.voice[i].alias->id == aliasId)
+                {
+                    ++s_nxLoopMissPrints;
+                    printf("[nx-snd] loop continue missed: alias '%s' id %08x, asked for handle %08x; "
+                                  "voice %d has handle %08x, loop flag %d, fade goal %.2f\n",
+                               g_snd.voice[i].alias->name, aliasId, sndEnt.handle, i,
+                               g_snd.voice[i].sndEnt.handle, (g_snd.voice[i].alias->flags & 1) != 0,
+                               g_snd.voice[i].fade.goal);
+                    break;
+                }
+            }
+        }
+    }
+#endif
+
     return -1;
 }
 

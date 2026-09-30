@@ -964,6 +964,23 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    vary (VBR-like), averaging ~6.6 KB/s mono -- consistent with the PC
    driver's 6000 x channels bytes/s. A WMA decode error no longer ends the
    sound (it went on to the next packet on PC); the report counts them.
+   Third run: the loops are all stopped by `SNDL_UpdateLoopingSounds`, i.e.
+   the continue from the emitter missed (`amb_fire` comes from the fire
+   manager, `CG_SndUpdateFire`, replayed every frame with the player's handle);
+   `SND_ContinueLoopingSound` now prints the first 20 misses with the handles.
+   **Fast zombie vocals: a WMA decoded frame is a whole superframe** (~10000
+   samples a packet for the vocals) and only its first 4096 samples were kept,
+   so most of every packet was skipped; the frame is now handed out a stage at
+   a time. **Streamed sounds still failed the length check** (10 files, then
+   ~6000 "not found at load time" lines as the engine kept retrying): the
+   first file opened from an iwd read through the iwd's own unzip handle,
+   which every later open repositions (seeks its FILE to the central
+   directory, swaps `cur_file_info`). On NX every iwd open is now a clone with
+   its own FILE (`unzReOpen`).
+   Still to port from the PC driver, all as plumbing -- the algorithms are in
+   the engine as plain C: the reverb bus (`SND_RvFrame`, `snd_radverb.cpp`, fed
+   by each voice's wet level), the per-voice occlusion low-pass and futz
+   (`snd_dsp.cpp`), the master EQ and limiter.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

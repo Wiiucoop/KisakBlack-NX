@@ -821,7 +821,18 @@ unsigned int __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, 
                                         v14->referenced = 1;
                                         FS_AddIwdPureCheckReference(search);
                                     }
+#ifdef KISAK_NX
+                                    // Always a clone with its own FILE. The first file opened from an
+                                    // iwd used to read through the iwd's own handle, and every later
+                                    // open repositions that handle (unzSetCurrentFileInfoPosition seeks
+                                    // its FILE to the central directory and swaps its cur_file_info), so
+                                    // the first file's next read and its FS_filelength came from another
+                                    // entry: streamed sounds kept open by snd_stream failed their length
+                                    // check ("Invalid file (incorrect length)") and were marked missing.
+                                    if ( true )
+#else
                                     if ( _InterlockedCompareExchange(&v14->hasOpenFile, 1, 0) == 1 )
+#endif
                                     {
                                         fsh[*file].handleFiles.iwdIsClone = 1;
                                         fsh[*file].handleFiles.file.o = (_iobuf *)unzReOpen(v14->iwdFilename, v14->handle);

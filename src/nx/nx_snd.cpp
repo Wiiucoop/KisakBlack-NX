@@ -118,6 +118,7 @@ struct NxWma {
     AVPacket *packet;
     unsigned rate, channels;
     bool draining;
+    unsigned frameLeft;   // samples of d.frame not yet handed to the stage
     alignas(16) uint8_t scratch[NX_WMA_BLOCK_STEREO + AV_INPUT_BUFFER_PADDING_SIZE];
 };
 NxWma s_wma[SND_MAX_VOICES];
@@ -232,25 +233,34 @@ bool refillWma(NxVoice &v)
     const unsigned blockAlign = v.channels > 1 ? NX_WMA_BLOCK_STEREO : NX_WMA_BLOCK_MONO;
     const unsigned packets = v.dataSize / blockAlign < v.totalUnits ? v.dataSize / blockAlign : v.totalUnits;
     for (int guard = 0; guard < 64; ++guard) {
-        int r = avcodec_receive_frame(d.ctx, d.frame);
-        if (r == 0) {
-            unsigned n = (unsigned)d.frame->nb_samples;
-            if (n > NX_STAGE_FRAMES)
-                n = NX_STAGE_FRAMES;
+        // A decoded frame is a whole superframe -- with the bit reservoir about
+        // one packet, ~10000 samples for the zombie vocals -- so it is handed
+        // out a stage at a time. Keeping only the first 4096 samples of each
+        // skipped the rest of the packet: sounds ran fast and short.
+        if (d.frameLeft) {
+            unsigned n = d.frameLeft < NX_STAGE_FRAMES ? d.frameLeft : NX_STAGE_FRAMES;
+            const unsigned at = (unsigned)d.frame->nb_samples - d.frameLeft;
             const bool planar = d.frame->format == AV_SAMPLE_FMT_FLTP;
             for (unsigned c = 0; c < v.channels; ++c) {
                 const float *src = (const float *)d.frame->extended_data[planar ? c : 0];
                 for (unsigned i = 0; i < n; ++i) {
-                    float s = planar ? src[i] : src[i * v.channels + c];
+                    float s = planar ? src[at + i] : src[(at + i) * v.channels + c];
                     v.stage[i * v.channels + c] = clamp16((int)(s * 32767.0f));
                 }
             }
-            av_frame_unref(d.frame);
-            if (!n)
-                continue;
+            d.frameLeft -= n;
+            if (!d.frameLeft)
+                av_frame_unref(d.frame);
             v.stageFrames = n;
             v.stagePos = 0;
             return true;
+        }
+        int r = avcodec_receive_frame(d.ctx, d.frame);
+        if (r == 0) {
+            d.frameLeft = d.frame->nb_samples > 0 ? (unsigned)d.frame->nb_samples : 0;
+            if (!d.frameLeft)
+                av_frame_unref(d.frame);
+            continue;
         }
         if (r == AVERROR_EOF)
             return false;   // drained
@@ -555,6 +565,9 @@ bool openWma(int voiceIndex, const snd_asset *snd)
     if (!d.packet)
         d.packet = av_packet_alloc();
     d.draining = false;
+    if (d.frameLeft && d.frame)
+        av_frame_unref(d.frame);   // what the slot's previous sound left undelivered
+    d.frameLeft = 0;
     return d.frame && d.packet;
 }
 

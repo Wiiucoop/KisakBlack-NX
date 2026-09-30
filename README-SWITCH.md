@@ -1007,6 +1007,16 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    (not `onlinegame`/`systemlink`), and it has always been a black screen
    here; on NX it is never started, so SP shows the `loadscreen_<map>` image
    (`code_post_gfx`), as co-op does.
+   Sixth run: the game crashed right after loading, on the `valid` assert in
+   `Snd_StreamReleaseWindowWork`: `Snd_StreamReleaseWindow` handed windows
+   back through `window_return[]` with a 32-bit compare-exchange, storing the
+   low half of the address; now a pointer-sized `__atomic_compare_exchange_n`.
+   (Streams only got that far once their headers parsed.) The loading screen
+   still looked like the movie: SP's loading menu (`briefing`) draws the
+   `cinematic` material, black with no movie; on NX `UI_DrawHandlePic` draws
+   `sharedUiInfo.loadingScreen` in its place while loading, and cinematic
+   subtitle items no longer print the decomp's "NOT USING
+   CINEMATIC_SUBTITLES" placeholder.
    Still to port from the PC driver, all as plumbing -- the algorithms are in
    the engine as plain C: the reverb bus (`SND_RvFrame`, `snd_radverb.cpp`, fed
    by each voice's wet level), the per-voice occlusion low-pass and futz

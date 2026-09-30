@@ -9041,8 +9041,15 @@ void __cdecl Item_Text_Paint(int localClientNum, UiContext *dc, itemDef_s *item)
     textDefPtr = Item_GetTextDef(item);
     cinematic = (textDefPtr->itemFlags & 2) != 0;
     subtitle = cinematic;
+#ifdef KISAK_NX
+    // A cinematic-subtitles item: the decomp puts a placeholder string here,
+    // which the loading screen then printed. No movie plays on NX; draw nothing.
+    if ( cinematic )
+        return;
+#else
     if ( cinematic )
         textDefPtr->text = "NOT USING CINEMATIC_SUBTITLES";
+#endif
     if ( textDefPtr && textDefPtr->text )
     {
         textPtr = (char *)textDefPtr->text;

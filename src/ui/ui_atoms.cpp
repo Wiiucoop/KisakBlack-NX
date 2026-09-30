@@ -7,6 +7,10 @@
 #include <database/db_file_load.h>
 #include "ui_shared.h"
 #include <qcommon/common.h>
+#ifdef KISAK_NX
+#include <client/client.h>
+#include <gfx_d3d/r_cinematic.h>
+#endif
 
 void __cdecl UI_DrawHandlePic(
                 const ScreenPlacement *scrPlace,
@@ -23,6 +27,19 @@ void __cdecl UI_DrawHandlePic(
     float t1; // [esp+34h] [ebp-Ch]
     float s1; // [esp+38h] [ebp-8h]
     float s0; // [esp+3Ch] [ebp-4h]
+
+#ifdef KISAK_NX
+    // SP's loading menu ("briefing") shows the Bink load movie through the
+    // cinematic material. The Switch never starts that movie (SV_SpawnServer),
+    // so while loading, draw the level's loadscreen image in its place -- what
+    // the online/co-op loading path shows -- instead of a black panel.
+    if ( material && sharedUiInfo.loadingScreen && !R_Cinematic_IsStarted()
+        && CL_GetLocalClientConnectionState(0) < CA_ACTIVE
+        && !strcmp(Material_GetName(material), "cinematic") )
+    {
+        material = sharedUiInfo.loadingScreen;
+    }
+#endif
 
     if ( w >= 0.0 )
     {

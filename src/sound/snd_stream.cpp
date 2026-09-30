@@ -927,10 +927,12 @@ void __cdecl Snd_StreamReleaseWindow(unsigned int index, char *data)
     }
     for ( i = 0; i < 3; ++i )
     {
-        if ( !_InterlockedCompareExchange(
-                        (volatile unsigned __int32 *)&g_snd_streams[index].window_return[i],
-                        (signed __int32)data,
-                        0) )
+        // A pointer-sized compare-exchange: the decompiled 32-bit one stored the
+        // low half of the window's address, and the release that read it back
+        // matched no buffer (the "valid" assert, then a trap).
+        char *expected = nullptr;
+        if ( __atomic_compare_exchange_n(&g_snd_streams[index].window_return[i], &expected, data,
+                                         false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST) )
         {
             Sys_WakeStream();
             return;

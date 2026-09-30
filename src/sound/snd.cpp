@@ -2602,8 +2602,14 @@ void SND_UpdateStaticSounds()
     }
 }
 
+#ifdef KISAK_NX
+extern void *g_nxSndStopCaller;   // nx_snd.cpp: which engine code stopped a voice
+#endif
 void __cdecl SND_StopVoice(int voiceIndex)
 {
+#ifdef KISAK_NX
+    g_nxSndStopCaller = __builtin_return_address(0);
+#endif
     if (g_snd.voiceAliasHash[voiceIndex])
     {
         if (g_snd.voice[voiceIndex].alias

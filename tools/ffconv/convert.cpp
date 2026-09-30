@@ -3319,16 +3319,18 @@ static void tSndPayload(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field,
 
 // snd_asset sits inline inside LoadedSound; its 56-byte block has already been
 // read by the caller, so only seek_table and data follow.
-static void tSndAsset(Reader &r, Prelink &z, Prelink::Loc ls, uint32_t base,
+static Prelink::Loc tSndAsset(Reader &r, Prelink &z, Prelink::Loc ls, uint32_t base,
                       uint32_t seekTag, uint32_t seekCount,
                       uint32_t dataTag, uint32_t dataSize) {
+    Prelink::Loc seek = Prelink::none();
     if (seekTag != TAG_NULL)
-        tSimpleArray(r, z, ls, base + 48, seekTag, seekCount, 4, 3);
+        seek = tSimpleArray(r, z, ls, base + 48, seekTag, seekCount, 4, 3);
     else
         z.putPtr(ls, base + 48, Prelink::none());
 
     if (dataTag != TAG_NULL) tSndPayload(r, z, ls, base + 64, dataSize);
     else                     z.putPtr(ls, base + 64, Prelink::none());
+    return seek;
 }
 
 // Loaded sounds by snd_asset_format (0 PCM16 .. 6 MS-ADPCM, 7 WMA): count and
@@ -3362,8 +3364,32 @@ static void tLoadedSound(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field
     }
 
     z.putPtr(obj, field, ls);
-    putXStringFromTag(r, z, ls, 0, nameTag);
-    tSndAsset(r, z, ls, 8, seekTag, seekCount, dataTag, dataSize);
+    std::string name;
+    if (nameTag == TAG_INLINE) {
+        name = r.cstr();
+        z.putPtr(ls, 0, emitInlineStr(z, name));
+    } else {
+        putXStringFromTag(r, z, ls, 0, nameTag);
+    }
+    Prelink::Loc seek = tSndAsset(r, z, ls, 8, seekTag, seekCount, dataTag, dataSize);
+    // FFCONV_SNDDUMP=1: every loaded sound's header, to check lengths and rates,
+    // and for WMA the seek table (decoded bytes after each packet).
+    if (getenv("FFCONV_SNDDUMP")) {
+        uint32_t h[11];
+        memcpy(h, head, 44);
+        printf("  snd '%s': ver %u frames %u rate %u ch %u hdr %u block %u buf %u fmt %u chflags %u flags %u seek %u data %u",
+               name.c_str(), h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10], dataSize);
+        if (seek.valid() && seekCount) {
+            const uint32_t *t = (const uint32_t *)z.at(seek);
+            printf(" | seek[0] %u seek[last] %u", t[0], t[seekCount - 1]);
+            if (getenv("FFCONV_SNDDUMP_SEEK")) {
+                printf(" | deltas");
+                for (uint32_t i = 1; i < seekCount && i < 24; ++i)
+                    printf(" %u", t[i] - t[i - 1]);
+            }
+        }
+        printf("\n");
+    }
 }
 
 // PrimedSound: 12 -> 24. buffer is another 2048-aligned payload.

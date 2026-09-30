@@ -45,6 +45,9 @@ extern "C" {
 // codec list, and every codec with it. FFCodec starts with its AVCodec.
 extern "C" const AVCodec ff_wmav2_decoder;
 
+// Set by SND_StopVoice (snd.cpp) to its return address; see s_loopStops.
+void *g_nxSndStopCaller;
+
 namespace {
 
 enum {
@@ -124,6 +127,14 @@ struct NxStartTally { const snd_alias_t *alias; unsigned count; bool stream; };
 NxStartTally s_tally[64];
 NxStartTally s_cutTally[64];
 unsigned s_nEnded, s_nCut;
+unsigned s_nWmaErrors;   // decode errors (the sound goes on with the next packet)
+
+// Who stopped looping voices: SND_StopVoice records its caller
+// (g_nxSndStopCaller, snd.cpp). A loop the engine restarts every frame shows
+// which engine code keeps stopping it.
+struct NxCallerTally { uintptr_t addr; unsigned count; const snd_alias_t *alias; };
+NxCallerTally s_loopStops[16];
+unsigned s_nLoopStops;
 
 Thread s_thread;
 bool s_threadRunning;
@@ -241,8 +252,10 @@ bool refillWma(NxVoice &v)
             v.stagePos = 0;
             return true;
         }
+        if (r == AVERROR_EOF)
+            return false;   // drained
         if (r != AVERROR(EAGAIN))
-            return false;   // drained (AVERROR_EOF) or broken
+            ++s_nWmaErrors;   // a packet it could not decode: go on with the next one
         if (v.nextUnit >= packets) {
             if (v.looping && packets) {
                 avcodec_flush_buffers(d.ctx);
@@ -752,6 +765,41 @@ void updateGains(int voiceIndex)
     memcpy(v.gain, gain, sizeof(gain));
 }
 
+void noteCaller(uintptr_t addr, const snd_alias_t *alias)
+{
+    NxCallerTally *freeSlot = nullptr;
+    for (NxCallerTally &t : s_loopStops) {
+        if (t.addr == addr) {
+            ++t.count;
+            t.alias = alias;
+            return;
+        }
+        if (!t.addr && !freeSlot)
+            freeSlot = &t;
+    }
+    if (freeSlot) {
+        freeSlot->addr = addr;
+        freeSlot->count = 1;
+        freeSlot->alias = alias;
+    }
+}
+
+// Caller addresses as offsets into KisakBlack.elf, for addr2line.
+void printLoopStops()
+{
+    MemoryInfo text = {};
+    u32 pageInfo;
+    svcQueryMemory(&text, &pageInfo, (u64)&noteCaller);
+    for (NxCallerTally &t : s_loopStops) {
+        if (!t.addr)
+            continue;
+        printf("[nx-snd]   loops stopped %ux by elf+0x%llx (last: %s)\n", t.count,
+               (unsigned long long)(t.addr - text.addr),
+               t.alias && t.alias->name ? t.alias->name : "?");
+    }
+    memset(s_loopStops, 0, sizeof(s_loopStops));
+}
+
 void printTop(NxStartTally (&table)[64], const char *what, int count)
 {
     for (int n = 0; n < count; ++n) {
@@ -792,6 +840,11 @@ void report()
     // here -- and those the engine cut short most.
     printTop(s_tally, "started", 5);
     printTop(s_cutTally, "cut", 3);
+    printf("[nx-snd]   wma decode errors: %u\n", s_nWmaErrors);
+    s_nWmaErrors = 0;
+    printf("[nx-snd]   looping voices stopped: %u\n", s_nLoopStops);
+    s_nLoopStops = 0;
+    printLoopStops();
     s_peakRunning = 0;
     s_mixTicks = 0;
     s_lastRefused[0] = 0;
@@ -856,6 +909,11 @@ void __cdecl SD_StopVoice(int voiceIndex)
 {
     Lock lock;
     NxVoice &v = s_voice[voiceIndex];
+    if (v.active && v.looping) {
+        ++s_nLoopStops;
+        noteCaller((uintptr_t)g_nxSndStopCaller, g_snd.voice[voiceIndex].alias);
+    }
+    g_nxSndStopCaller = nullptr;
     if (v.active) {
         // Ended: the driver ran out of sound. Cut: the engine stopped it early.
         if (v.finished || (v.stream && !v.queueCount))

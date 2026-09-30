@@ -949,6 +949,21 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    that never end would cause too. The report now counts one-shots that
    played to their end against those stopped early, and lists the aliases
    cut most.
+   Second run: the engine barely cuts one-shots (0-6 per 10 s against ~100
+   played through). What restarts is two looping ambients, `amb_fire`
+   (140-460 starts per 10 s) and `amb_chandelier_loop` (80-440): a loop is
+   kept alive by the emitter calling `SND_ContinueLoopingSound` every frame,
+   and a loop voice not continued is stopped by `SNDL_UpdateLoopingSounds`, so
+   something stops these and the emitter starts them again. `SND_StopVoice`
+   now records its caller (`g_nxSndStopCaller`, KISAK_NX) and the report
+   lists who stopped looping voices, as elf offsets for addr2line.
+   Asset check (`FFCONV_SNDDUMP=1`, `FFCONV_SNDDUMP_SEEK=1` on the converter):
+   the fire loops are MS-ADPCM, looping, frames = blocks x 512; for all 1444
+   WMA sounds in common_zombie the seek table's last entry equals frames x
+   2 x channels, so `frame_count` is exact. Decoded bytes per 2230-byte packet
+   vary (VBR-like), averaging ~6.6 KB/s mono -- consistent with the PC
+   driver's 6000 x channels bytes/s. A WMA decode error no longer ends the
+   sound (it went on to the next packet on PC); the report counts them.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

@@ -1120,6 +1120,13 @@ void __cdecl Snd_StreamLoadHeader(snd_stream *s, char *data, const char *filenam
             else
             {
                 Com_PrintError(9, "### Invalid file (incorrect length) %s\n", filename);
+#ifdef KISAK_NX
+                printf("[nx-snd] stream header %s: ver %u frames %u rate %u ch %u hdr %u fmt %u flags %u "
+                       "data %u -> expects %u, file size %u, looping %d\n",
+                       filename, s->header.version, s->header.frame_count, s->header.frame_rate,
+                       s->header.channel_count, s->header.header_size, (unsigned)s->header.format,
+                       (unsigned)s->header.flags, s->header.data_size, size, file_size, (int)s->looping);
+#endif
                 s->error = 1;
             }
         }

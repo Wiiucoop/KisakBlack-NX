@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include <switch.h>
 
@@ -1320,6 +1321,7 @@ static bool s_progFailed;
 static bool s_glHasS3tc;
 static bool s_glHasAniso;
 static PFNGLBUFFERSTORAGEPROC s_glBufferStorage;   // null: no persistent-mapped buffers
+static bool s_progCacheOn;   // program binaries saved and loaded: see "Program binary cache"
 
 // How the persistent-mapped buffers are made, picked at startup by
 // nxGlPickRingMode. The first try (coherent) mapped memory the CPU writes at
@@ -1806,6 +1808,10 @@ static bool nxGlEnsurePipeline(void)
     GLint binaryFormats = 0;
     glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, &binaryFormats);
     printf("[nx-gl] program binary formats: %d\n", (int)binaryFormats);
+    if (binaryFormats > 0) {
+        mkdir("shadercache", 0777);   // NX_PROGRAM_CACHE_DIR
+        s_progCacheOn = true;
+    }
 
     if (s_glBufferStorage)
         nxGlPickRingMode();
@@ -1845,7 +1851,8 @@ enum NxProf {
     NXP_DRAW_CALL,     // glDrawElementsBaseVertex alone
     NXP_BUF_WHOLE,     // glBufferData
     NXP_BUF_PARTIAL,   // glBufferSubData
-    NXP_CONSTANTS,     // glUseProgram and the uniform uploads
+    NXP_CONSTANTS,     // the uniform uploads
+    NXP_USE_PROGRAM,   // glUseProgram alone
     NXP_TEX_UPLOAD,    // glTexImage / glCompressedTexImage
     NXP_SWAP,          // eglSwapBuffers
     NXP_PIPELINE,      // nxGlEnsurePipeline
@@ -1857,7 +1864,7 @@ enum NxProf {
 };
 static const char *const s_profNames[NXP_COUNT] = {
     "draw total", "  glDrawElements", "  buffer whole", "  buffer partial", "  constants",
-    "texture upload", "swap", "  pipeline", "  program", "  target", "  state", "  glGetError",
+    "  glUseProgram", "texture upload", "swap", "  pipeline", "  program", "  target", "  state", "  glGetError",
 };
 static u64 s_profTicks[NXP_COUNT];
 static unsigned s_profCalls[NXP_COUNT];
@@ -3060,6 +3067,117 @@ static int nxConstRuns(GLuint prog, const char *arr, const uint32_t mask[8], GLi
     return n;
 }
 
+// ---------------------------------------------------------------------------
+// Program binary cache
+// ---------------------------------------------------------------------------
+// Building a program on first use is a hitch: 179 of them took 5.5 s in the
+// first Zombies minute, the slowest 759 ms. Every linked program is saved to
+// shadercache/<key>.bin with glGetProgramBinary and loaded with
+// glProgramBinary on any later run, which skips the compile and the link. The
+// key hashes both GLSL sources and the attribute bindings. Mesa is linked into
+// the NRO, so a binary is good for every copy of the same build; a binary the
+// driver refuses (another build) is deleted and the program is built again.
+static const char NX_PROGRAM_CACHE_DIR[] = "shadercache";
+static const uint32_t NX_PROGRAM_CACHE_MAGIC = 0x3150584Eu;   // "NXP1"
+static unsigned s_progCacheHits, s_progCacheStores;
+
+static uint64_t nxFnv1a(uint64_t h, const void *data, size_t len)
+{
+    const BYTE *p = (const BYTE *)data;
+    for (size_t i = 0; i < len; ++i) {
+        h ^= p[i];
+        h *= 0x100000001B3ull;
+    }
+    return h;
+}
+
+static uint64_t nxProgramCacheKey(const NxShader *vs, const NxShader *ps)
+{
+    uint64_t h = 0xCBF29CE484222325ull;
+    h = nxFnv1a(h, vs->glsl, strlen(vs->glsl) + 1);
+    h = nxFnv1a(h, ps->glsl, strlen(ps->glsl) + 1);
+    int pairs[32][2];
+    int n = NX_ShaderAttribAll(pairs, 32);
+    for (int i = 0; i < n; ++i) {
+        char name[32];
+        NX_ShaderAttribName(pairs[i][0], pairs[i][1], name, sizeof(name));
+        int loc = NX_ShaderAttribLocation(pairs[i][0], pairs[i][1]);
+        h = nxFnv1a(h, &loc, sizeof(loc));
+        h = nxFnv1a(h, name, strlen(name) + 1);
+    }
+    return h;
+}
+
+struct NxProgramCacheHeader {
+    uint32_t magic;
+    uint32_t format;
+    uint32_t length;
+};
+
+static void nxProgramCachePath(uint64_t key, char *path, size_t size)
+{
+    snprintf(path, size, "%s/%016llx.bin", NX_PROGRAM_CACHE_DIR, (unsigned long long)key);
+}
+
+static GLuint nxGlLoadProgramBinary(uint64_t key)
+{
+    char path[64];
+    nxProgramCachePath(key, path, sizeof(path));
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return 0;
+    NxProgramCacheHeader h;
+    void *data = nullptr;
+    bool read = fread(&h, sizeof(h), 1, f) == 1 && h.magic == NX_PROGRAM_CACHE_MAGIC
+             && h.length && h.length < (16u << 20)
+             && (data = malloc(h.length)) && fread(data, 1, h.length, f) == h.length;
+    fclose(f);
+    GLuint prog = 0;
+    if (read) {
+        prog = glCreateProgram();
+        glProgramBinary(prog, (GLenum)h.format, data, (GLsizei)h.length);
+        GLint ok = GL_FALSE;
+        glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+        if (!ok) {
+            glDeleteProgram(prog);
+            prog = 0;
+        }
+    }
+    free(data);
+    if (!prog)
+        remove(path);   // unreadable, or from another build: build it again
+    return prog;
+}
+
+static void nxGlStoreProgramBinary(GLuint prog, uint64_t key)
+{
+    GLint length = 0;
+    glGetProgramiv(prog, GL_PROGRAM_BINARY_LENGTH, &length);
+    if (length <= 0)
+        return;
+    void *data = malloc((size_t)length);
+    if (!data)
+        return;
+    GLsizei got = 0;
+    GLenum format = 0;
+    glGetProgramBinary(prog, length, &got, &format, data);
+    if (got > 0) {
+        char path[64];
+        nxProgramCachePath(key, path, sizeof(path));
+        FILE *f = fopen(path, "wb");
+        if (f) {
+            NxProgramCacheHeader h = { NX_PROGRAM_CACHE_MAGIC, (uint32_t)format, (uint32_t)got };
+            bool written = fwrite(&h, sizeof(h), 1, f) == 1 && fwrite(data, 1, (size_t)got, f) == (size_t)got;
+            fclose(f);
+            if (written)
+                ++s_progCacheStores;
+            else
+                remove(path);
+        }
+    }
+    free(data);
+}
+
 static const NxProgram *nxGlProgram(void)
 {
     if (!s_vs || !s_ps) { ++s_frame.fallbackNoShader; return nullptr; }
@@ -3082,30 +3200,46 @@ static const NxProgram *nxGlProgram(void)
     }
 
     NxShaderBuildTimer buildTimer;
-    GLuint vs = nxGlShaderObject(s_vs), ps = nxGlShaderObject(s_ps);
-    if (!vs || !ps) { ++s_frame.fallbackCompile; return nullptr; }
-
     NxProgram p = { 0, -1, -1, 0, 0, -1, -1, -1 };
-    GLuint prog = glCreateProgram();
-    glAttachShader(prog, vs);
-    glAttachShader(prog, ps);
-    int pairs[32][2];
-    int n = NX_ShaderAttribAll(pairs, 32);
-    for (int i = 0; i < n; ++i) {
-        char name[32];
-        NX_ShaderAttribName(pairs[i][0], pairs[i][1], name, sizeof(name));
-        glBindAttribLocation(prog, (GLuint)NX_ShaderAttribLocation(pairs[i][0], pairs[i][1]), name);
+
+    // A program linked before, on any run, comes back from the cache.
+    uint64_t binKey = 0;
+    GLuint prog = 0;
+    if (s_progCacheOn && s_vs->glsl && s_ps->glsl) {
+        binKey = nxProgramCacheKey(s_vs, s_ps);
+        prog = nxGlLoadProgramBinary(binKey);
     }
-    glLinkProgram(prog);
-    GLint ok = GL_FALSE;
-    glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        nxGlShaderLog(prog, true, "program link", nullptr);
-        glDeleteProgram(prog);
-        ++s_nProgLinkFailed;
-        s_programs[key] = p;   // name 0: remembered as failed
-        ++s_frame.fallbackLink;
-        return nullptr;
+    if (prog) {
+        ++s_progCacheHits;
+    } else {
+        GLuint vs = nxGlShaderObject(s_vs), ps = nxGlShaderObject(s_ps);
+        if (!vs || !ps) { ++s_frame.fallbackCompile; return nullptr; }
+
+        prog = glCreateProgram();
+        glAttachShader(prog, vs);
+        glAttachShader(prog, ps);
+        int pairs[32][2];
+        int n = NX_ShaderAttribAll(pairs, 32);
+        for (int i = 0; i < n; ++i) {
+            char name[32];
+            NX_ShaderAttribName(pairs[i][0], pairs[i][1], name, sizeof(name));
+            glBindAttribLocation(prog, (GLuint)NX_ShaderAttribLocation(pairs[i][0], pairs[i][1]), name);
+        }
+        if (binKey)
+            glProgramParameteri(prog, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
+        glLinkProgram(prog);
+        GLint ok = GL_FALSE;
+        glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+        if (!ok) {
+            nxGlShaderLog(prog, true, "program link", nullptr);
+            glDeleteProgram(prog);
+            ++s_nProgLinkFailed;
+            s_programs[key] = p;   // name 0: remembered as failed
+            ++s_frame.fallbackLink;
+            return nullptr;
+        }
+        if (binKey)
+            nxGlStoreProgramBinary(prog, binKey);
     }
     p.name = prog;
     p.vsc = glGetUniformLocation(prog, "vsc");
@@ -3208,8 +3342,11 @@ static void nxGlUploadConstRuns(const NxProgram::ConstRun *runs, int n, const fl
 // Everything a translated pair needs before the draw call.
 static void nxGlSetupTranslated(const NxProgram *p)
 {
+    {
+        NxProfScope useProf(NXP_USE_PROGRAM);
+        glUseProgram(p->name);
+    }
     NxProfScope prof(NXP_CONSTANTS);
-    glUseProgram(p->name);
     // Only the registers each shader reads, as the runs found at link.
     // Of those, only the span changed since this program last drew.
     if (p->vsVersion != s_vsConstVersion) {
@@ -5097,16 +5234,18 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         unsigned frames = s_nSwapPresent - s_lastReportPresent;
         if (s_lastReportTick && frames)
             printf("[nx-gl] frames %u..%u: %.1f ms per present, slowest %.1f ms | buffer uploads: %.1f MB whole, %.1f MB partial, %u ring waits"
-                   " | %u programs built, %.1f ms (slowest %.1f)\n",
+                   " | %u programs built (%u from cache, %u saved), %.1f ms (slowest %.1f)\n",
                    s_lastReportPresent, s_nSwapPresent,
                    armTicksToNs(now - s_lastReportTick) / 1e6 / frames,
                    armTicksToNs(s_maxPresentTicks) / 1e6,
                    (s_bufferBytesWhole - s_lastWhole) / 1048576.0,
                    (s_bufferBytesPartial - s_lastPartial) / 1048576.0, s_ringWaits,
-                   s_shaderBuilds, armTicksToNs(s_shaderBuildTicks) / 1e6,
+                   s_shaderBuilds, s_progCacheHits, s_progCacheStores,
+                   armTicksToNs(s_shaderBuildTicks) / 1e6,
                    armTicksToNs(s_shaderBuildMaxTicks) / 1e6);
         s_ringWaits = 0;
         s_shaderBuilds = 0;
+        s_progCacheHits = s_progCacheStores = 0;
         s_shaderBuildTicks = s_shaderBuildMaxTicks = 0;
         nxProfReport(frames);
         s_lastReportTick = now;

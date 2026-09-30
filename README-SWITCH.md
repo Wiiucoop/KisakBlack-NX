@@ -766,6 +766,27 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   prints the number of program binary formats: a shader cache shipped with the
   NRO would rest on `glGetProgramBinary`, and the Mesa in the NRO is the same
   for every user.
+- **Third result:** program binary formats: 1. The stutters are shader builds:
+  179 programs in the first gameplay minute took 5.5 s (slowest 759 ms), then
+  34 (0.9 s), then 9. Constants stayed ~27 ms per ~1000 draws after the
+  diffing while `glDrawElements` itself showed 0.3 ms a frame: the driver
+  queues the real work and the call that finds the queue full waits, so this is
+  the driver's per-draw cost showing up in the uniform uploads. `glUseProgram`
+  now has its own profile row to check that.
+- **Program binary cache** (`shadercache/<key>.bin` in the game folder). Every
+  program linked is saved with `glGetProgramBinary`; later runs load it with
+  `glProgramBinary` and skip compile and link. Key: FNV-1a of both GLSL sources
+  and the attribute bindings. A binary the driver refuses is deleted and
+  rebuilt. The frame summary says how many programs came from the cache and
+  how many were saved. Shipping a cache: play the maps once, then the folder
+  can go into the NRO's romfs (loader still to add).
+- **Zombie corpses in T-pose:** SP converts the actor into a corpse in place
+  (`Actor_BecomeCorpse`), and the client draws the corpse through
+  `actorCorpseInfo[slot]`, whose tree starts empty. Retail hides that with the
+  ragdoll; with none the model fell to its bind pose after the death animation.
+  `CG_ActorCorpse_TakeServerPose_SP` copies the server's corpse tree (the
+  actor's live tree, moved there at death) into the client tree once per
+  corpse, so the corpse holds its last death frame.
 - `Could not load rawfile "maps/gametypes/zom.gsc"` is expected: retail ships
   no gametype script for Zombies and the load is optional under `KISAK_SP`.
 - The SP `ui/menus.txt` and some lobby materials are not in the zones loaded

@@ -1205,6 +1205,12 @@ enum { NX_PS_CONST_ROWS = 256 };
 static float s_psConst[NX_PS_CONST_ROWS][4];
 // Bumped by every Set*ShaderConstantF; see NxProgram::vsVersion.
 static unsigned s_vsConstVersion = 1, s_psConstVersion = 1;
+// The version at which each register last took a different value. A program
+// re-sends only the registers changed since it last drew: the engine re-sets
+// the same values draw after draw, and every re-send is constant data copied
+// into the command stream -- the largest item in the frame once the buffer
+// uploads were gone.
+static unsigned s_vsConstSerial[256], s_psConstSerial[256];
 static bool s_vsConstWritten[NX_VS_CONST_ROWS];
 static unsigned s_vsConstBase;   // the register quad used as the transform
 
@@ -1795,6 +1801,12 @@ static bool nxGlEnsurePipeline(void)
         if (ext && !strcmp(ext, "GL_ARB_buffer_storage"))
             s_glBufferStorage = (PFNGLBUFFERSTORAGEPROC)eglGetProcAddress("glBufferStorage");
     }
+    // Whether linked programs can be saved and reloaded (glGetProgramBinary):
+    // what a shader cache shipped with the NRO would rest on.
+    GLint binaryFormats = 0;
+    glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, &binaryFormats);
+    printf("[nx-gl] program binary formats: %d\n", (int)binaryFormats);
+
     if (s_glBufferStorage)
         nxGlPickRingMode();
     else
@@ -2936,6 +2948,21 @@ static unsigned s_nShTranslated, s_nShUntranslatable, s_nShSuspect, s_nShNot3;
 static unsigned s_nShCompiled, s_nShCompileFailed;
 static unsigned s_nProgLinked, s_nProgLinkFailed;
 
+// Programs built (compiled and linked) since the last frame summary, and the
+// time it took: a first-use build is a hitch the size of that time.
+static unsigned s_shaderBuilds;
+static u64 s_shaderBuildTicks, s_shaderBuildMaxTicks;
+struct NxShaderBuildTimer {
+    u64 t0 = armGetSystemTick();
+    ~NxShaderBuildTimer() {
+        u64 t = armGetSystemTick() - t0;
+        s_shaderBuildTicks += t;
+        if (t > s_shaderBuildMaxTicks)
+            s_shaderBuildMaxTicks = t;
+        ++s_shaderBuilds;
+    }
+};
+
 enum { NX_CONST_RUNS = 16 };
 
 struct NxProgram {
@@ -3054,6 +3081,7 @@ static const NxProgram *nxGlProgram(void)
         return &it->second;
     }
 
+    NxShaderBuildTimer buildTimer;
     GLuint vs = nxGlShaderObject(s_vs), ps = nxGlShaderObject(s_ps);
     if (!vs || !ps) { ++s_frame.fallbackCompile; return nullptr; }
 
@@ -3155,22 +3183,41 @@ static void nxGlBindShaderSampler(GLuint unit, NxTexture *t, unsigned char dim, 
                       : want == GL_TEXTURE_3D       ? s_white3D : s_whiteTex);
 }
 
+// Sends, for each run, the registers from the first to the last one changed
+// after version `since` (array elements have consecutive locations).
+static void nxGlUploadConstRuns(const NxProgram::ConstRun *runs, int n, const float (*file)[4],
+                                const unsigned *serial, unsigned since)
+{
+    for (int i = 0; i < n; ++i) {
+        const NxProgram::ConstRun &run = runs[i];
+        if (run.loc < 0)
+            continue;
+        int first = -1, last = -1;
+        for (int r = run.start; r < run.start + run.count; ++r) {
+            if (serial[r] > since) {
+                if (first < 0)
+                    first = r;
+                last = r;
+            }
+        }
+        if (first >= 0)
+            glUniform4fv(run.loc + (first - run.start), last - first + 1, file[first]);
+    }
+}
+
 // Everything a translated pair needs before the draw call.
 static void nxGlSetupTranslated(const NxProgram *p)
 {
     NxProfScope prof(NXP_CONSTANTS);
     glUseProgram(p->name);
     // Only the registers each shader reads, as the runs found at link.
+    // Of those, only the span changed since this program last drew.
     if (p->vsVersion != s_vsConstVersion) {
-        for (int i = 0; i < p->vsRunCount; ++i)
-            if (p->vsRuns[i].loc >= 0)
-                glUniform4fv(p->vsRuns[i].loc, p->vsRuns[i].count, &s_vsConst[p->vsRuns[i].start][0]);
+        nxGlUploadConstRuns(p->vsRuns, p->vsRunCount, s_vsConst, s_vsConstSerial, p->vsVersion);
         p->vsVersion = s_vsConstVersion;
     }
     if (p->psVersion != s_psConstVersion) {
-        for (int i = 0; i < p->psRunCount; ++i)
-            if (p->psRuns[i].loc >= 0)
-                glUniform4fv(p->psRuns[i].loc, p->psRuns[i].count, &s_psConst[p->psRuns[i].start][0]);
+        nxGlUploadConstRuns(p->psRuns, p->psRunCount, s_psConst, s_psConstSerial, p->psVersion);
         p->psVersion = s_psConstVersion;
     }
     if (p->alphaFunc >= 0)
@@ -4847,11 +4894,18 @@ HRESULT IDirect3DDevice9::SetVertexShaderConstantF(UINT startRegister, const flo
 {
     if (!data)
         return D3D_OK;
+    bool changed = false;
     for (UINT i = 0; i < count && startRegister + i < NX_VS_CONST_ROWS; ++i) {
-        memcpy(s_vsConst[startRegister + i], data + i * 4, 4 * sizeof(float));
-        s_vsConstWritten[startRegister + i] = true;
+        UINT r = startRegister + i;
+        s_vsConstWritten[r] = true;
+        if (memcmp(s_vsConst[r], data + i * 4, 4 * sizeof(float))) {
+            if (!changed)
+                ++s_vsConstVersion;
+            changed = true;
+            memcpy(s_vsConst[r], data + i * 4, 4 * sizeof(float));
+            s_vsConstSerial[r] = s_vsConstVersion;
+        }
     }
-    ++s_vsConstVersion;
 
     // Four rows in one call is a matrix; one row is a plain code constant.
     if (count >= 4 && startRegister + 4 <= NX_VS_CONST_ROWS) {
@@ -4884,9 +4938,17 @@ HRESULT IDirect3DDevice9::SetPixelShaderConstantF(UINT startRegister, const floa
 {
     if (!data)
         return D3D_OK;
-    for (UINT i = 0; i < count && startRegister + i < NX_PS_CONST_ROWS; ++i)
-        memcpy(s_psConst[startRegister + i], data + i * 4, 4 * sizeof(float));
-    ++s_psConstVersion;
+    bool changed = false;
+    for (UINT i = 0; i < count && startRegister + i < NX_PS_CONST_ROWS; ++i) {
+        UINT r = startRegister + i;
+        if (memcmp(s_psConst[r], data + i * 4, 4 * sizeof(float))) {
+            if (!changed)
+                ++s_psConstVersion;
+            changed = true;
+            memcpy(s_psConst[r], data + i * 4, 4 * sizeof(float));
+            s_psConstSerial[r] = s_psConstVersion;
+        }
+    }
     return D3D_OK;
 }
 HRESULT IDirect3DDevice9::SetStreamSource(UINT streamNumber, IDirect3DVertexBuffer9 *vb,
@@ -5034,13 +5096,18 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         u64 now = armGetSystemTick();
         unsigned frames = s_nSwapPresent - s_lastReportPresent;
         if (s_lastReportTick && frames)
-            printf("[nx-gl] frames %u..%u: %.1f ms per present, slowest %.1f ms | buffer uploads: %.1f MB whole, %.1f MB partial, %u ring waits\n",
+            printf("[nx-gl] frames %u..%u: %.1f ms per present, slowest %.1f ms | buffer uploads: %.1f MB whole, %.1f MB partial, %u ring waits"
+                   " | %u programs built, %.1f ms (slowest %.1f)\n",
                    s_lastReportPresent, s_nSwapPresent,
                    armTicksToNs(now - s_lastReportTick) / 1e6 / frames,
                    armTicksToNs(s_maxPresentTicks) / 1e6,
                    (s_bufferBytesWhole - s_lastWhole) / 1048576.0,
-                   (s_bufferBytesPartial - s_lastPartial) / 1048576.0, s_ringWaits);
+                   (s_bufferBytesPartial - s_lastPartial) / 1048576.0, s_ringWaits,
+                   s_shaderBuilds, armTicksToNs(s_shaderBuildTicks) / 1e6,
+                   armTicksToNs(s_shaderBuildMaxTicks) / 1e6);
         s_ringWaits = 0;
+        s_shaderBuilds = 0;
+        s_shaderBuildTicks = s_shaderBuildMaxTicks = 0;
         nxProfReport(frames);
         s_lastReportTick = now;
         s_lastReportPresent = s_nSwapPresent;

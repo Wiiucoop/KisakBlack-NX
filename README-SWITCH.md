@@ -753,6 +753,19 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   without `GL_CLIENT_STORAGE_BIT`), timed against `glBufferSubData`, fastest
   kept, all printed as `[nx-gl] buffer write speed`. Buffers first uploaded
   before the pick move onto the ring.
+- **Second result:** the pick chose explicit flush with client storage (4 KB
+  append: glBufferSubData 20.1 us, coherent 4.0, explicit flush 1.8). Partial
+  uploads fell from 35 ms to ~2 ms a frame. The frame (42-55 ms) then spent
+  21-27 ms in constants: uniform data goes into the command stream, and every
+  program re-sent every register it reads whenever any constant changed.
+- **Constants now go up by change.** Each register keeps the version at which
+  it last took a different value (an equal write changes nothing); a program
+  sends, per run, only the span changed since it last drew.
+- **Shader builds are in the frame summary** ("N programs built, X ms,
+  slowest Y") so hitches can be matched to first-use compiles, and startup
+  prints the number of program binary formats: a shader cache shipped with the
+  NRO would rest on `glGetProgramBinary`, and the Mesa in the NRO is the same
+  for every user.
 - `Could not load rawfile "maps/gametypes/zom.gsc"` is expected: retail ships
   no gametype script for Zombies and the load is optional under `KISAK_SP`.
 - The SP `ui/menus.txt` and some lobby materials are not in the zones loaded

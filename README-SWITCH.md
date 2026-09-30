@@ -64,13 +64,15 @@ fetched with `eglGetProcAddress` (`src/nx/nx_gl_mesa20.cpp`). The NRO is
 
 Face buttons are mapped by **position**, not label (`src/nx/nx_xinput.cpp`):
 the game is written for an Xbox pad, so the Switch's bottom button is the
-Xbox A. On-screen prompts keep their Xbox glyphs.
+Xbox A. On-screen prompts keep their Xbox glyphs. Menus swap the pair back to the Nintendo
+convention (`NX_UI_GamepadDirectionToArrow`, `ui_main.cpp`): A confirms, B goes
+back.
 
 | Switch | Game |
 | --- | --- |
 | D-pad / left stick | move menu focus (remapped to the arrow keys the PC menus expect) |
-| B (bottom) | confirm (Xbox A) |
-| A (right) | back (Xbox B) |
+| A (right) | menus: confirm. In game: the Xbox B binding |
+| B (bottom) | menus: back. In game: the Xbox A binding (jump) |
 | Y (left) / X (top) | Xbox X / Xbox Y |
 | + / − | Start / Back |
 | ZL / ZR | triggers (digital: fully released or fully pulled) |
@@ -992,6 +994,19 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    before copying it into their clone. Opening from an iwd is now serialized
    (`s_nxIwdOpenLock`). The converter's `FFCONV_ALIASDUMP=<substring>` prints
    aliases' limit, distance, volume and pitch fields.
+   Fifth run: loops fixed. **Streams still failed: `data 0` in every
+   header** -- `Snd_StreamLoadHeader` copied the file's header (the x86
+   `snd_asset`, 56 bytes: `data_size` at 48 after a 4-byte `seek_table`) straight
+   into the LP64 struct, where `data_size` sits at 56, past the header. It now
+   copies the 44 leading bytes and takes `data_size` from offset 48. Picking up
+   a power-up crashed on a stream mutex with a null `ThisPtr`: `Snd_StreamInit`
+   allocated `g_snd_streams` and `g_snd_buffers` at x86 sizes (0xFA0 = 10 x
+   400, 0x15E0 = 20 x 280), so the last streams overlapped the buffers and
+   `Snd_StreamBufferInit` zeroed their mutexes; both now use `sizeof`.
+   **No Bink load movie on NX**: `SV_SpawnServer` starts it only for solo
+   (not `onlinegame`/`systemlink`), and it has always been a black screen
+   here; on NX it is never started, so SP shows the `loadscreen_<map>` image
+   (`code_post_gfx`), as co-op does.
    Still to port from the PC driver, all as plumbing -- the algorithms are in
    the engine as plain C: the reverb bus (`SND_RvFrame`, `snd_radverb.cpp`, fed
    by each voice's wet level), the per-voice occlusion low-pass and futz

@@ -3753,6 +3753,13 @@ static int NX_UI_GamepadDirectionToArrow(int key)
     case K_DPAD_RIGHT:
     case K_APAD_RIGHT:
         return K_RIGHTARROW;
+    // Nintendo layout in menus: A (right) confirms, B (bottom) goes back. The
+    // pad layer maps by position (Switch B is Xbox A), which in game keeps the
+    // engine's bindings under the thumb, so swap the pair back here.
+    case K_BUTTON_A:
+        return K_BUTTON_B;
+    case K_BUTTON_B:
+        return K_BUTTON_A;
     }
     return key;
 }

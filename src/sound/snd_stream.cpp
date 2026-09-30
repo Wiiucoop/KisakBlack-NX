@@ -78,7 +78,7 @@ void __cdecl Snd_StreamInit()
             "C:\\projects_pc\\cod\\codsrc\\src\\sound\\snd_stream.cpp",
             247);
         g_snd_streams = (snd_stream *)_PMem_Alloc(
-            0xFA0u,
+            10 * sizeof(snd_stream),   // 0xFA0 on x86 (10 x 400): LP64 streams are larger and overran into g_snd_buffers
             0x80u,
             4u,
             1u,
@@ -86,7 +86,7 @@ void __cdecl Snd_StreamInit()
             "C:\\projects_pc\\cod\\codsrc\\src\\sound\\snd_stream.cpp",
             254);
         g_snd_buffers = (snd_buffer *)_PMem_Alloc(
-            0x15E0u,
+            20 * sizeof(snd_buffer),   // 0x15E0 on x86 (20 x 280)
             0x80u,
             4u,
             1u,
@@ -1093,7 +1093,13 @@ void __cdecl Snd_StreamLoadHeader(snd_stream *s, char *data, const char *filenam
     {
         __debugbreak();
     }
-    memcpy(&s->header, data, sizeof(s->header));
+    // The file holds the x86 snd_asset: version .. seek_table_count (44 bytes),
+    // then 4-byte seek_table, data_size, data pointers, 56 bytes in all. On LP64
+    // the pointers are 8 bytes, so a straight copy read data_size from past the
+    // header (0): every unprimed stream failed its length check.
+    memcpy(&s->header, data, 44);
+    memcpy(&s->header.data_size, data + 48, 4);
+    s->header.data = 0;
     s->header.seek_table = (unsigned int *)(data + 56);
     s->have_header = 1;
     if ( s->looping == ((s->header.flags & 1) != 0) )

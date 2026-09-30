@@ -606,10 +606,18 @@ void __cdecl    SV_SpawnServer(int controllerIndex, char *server, int mapIsPrelo
         // Retail SP 0x0050F2A9 -> 0x0046BF30 -> 0x004E27D0/0x00882B00. The
         // cinematic owner runs after CL_ShutdownAll, is suppressed for tool/savegame/networked
         // paths, maps every menu level to the frontend selector, and owns the final audio fade.
+        // KISAK_NX: never -- the Bink load movie the solo path plays has always
+        // been trouble in this decomp (a black screen here); the online/co-op
+        // path, which skips it, shows the map's loadscreen_<map> image
+        // (code_post_gfx) instead.
+#ifdef KISAK_NX
+        if ( false )
+#else
         if ( !G_ExitAfterToolComplete()
             && !savegame
             && !onlinegame->current.enabled
             && !Dvar_GetBool("systemlink") )
+#endif
         {
             const float menuMaster = snd_menu_master->current.value;
             const float menuCinematic = snd_menu_cinematic->current.value;

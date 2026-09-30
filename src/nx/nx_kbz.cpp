@@ -121,6 +121,11 @@ static XAssetHeader registerAsset(XAssetType type, XAssetHeader h)
 {
     if (type == ASSET_TYPE_IMAGE)
         RB_Resource_Flush();
+    // Load_ClipMapAsset registers every clip map as CLIPMAP_PVS whatever the
+    // zone numbered it: SP maps ship col_map_sp as CLIPMAP (11), and
+    // CM_LoadMapData_FastFile looks it up as CLIPMAP_PVS (12).
+    if (type == ASSET_TYPE_CLIPMAP)
+        type = ASSET_TYPE_CLIPMAP_PVS;
 
     XAssetHeader given = h;
     XAssetHeader added = DB_AddXAsset(type, h);

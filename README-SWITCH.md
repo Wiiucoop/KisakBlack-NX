@@ -656,6 +656,33 @@ converts the Zombies set after the MP one (`code_pre_gfx`, `code_post_gfx`,
 `zombie_theater` + `_patch`, and their `en_` zones); all validate. Boot with
 `+devmap zombie_theater`, skipping the frontend.
 
+**Running SP.** Copy `build-nx-sp/KisakBlack.nro` as `KisakBlack-SP.nro`; both
+NROs use the same game folder, `sdmc:/switch/kisakblack/`, and the same
+`cmdline.txt` -- the one on the SD card, which the log's first lines echo
+(`command line: ...`). For Zombies: `+devmap zombie_theater`. The engine
+loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
+`common_zombie_patch`, `en_common_zombie`, `common_zombie`,
+`en_zombie_theater`, `zombie_theater` for the map (not `common`).
+
+**SP findings so far:**
+
+- **Load cinematics.** SP opens `<map>_load` with Bink for every map. The
+  Bink stub (`nx_bink_stubs.cpp`) must report no error: the engine checks
+  `BinkGetError` before each Bink call and asserts on anything non-empty.
+  `BinkOpen` failing is what makes it skip the video (black load screen with
+  "NOT USING CINEMATIC_SUBTITLES").
+- **Commands before the client exists.** SP's map-start scripts send
+  `cmd mlvl ...` (menu open/close) before the client state is allocated;
+  `CL_ForwardToServer_f` now reports "not connected" instead of asserting.
+- **Clip map pool.** `Load_ClipMapAsset` registers every clip map as
+  `CLIPMAP_PVS` whatever the zone numbers it; SP zones number `col_map_sp`
+  `CLIPMAP` (11). The KBZ loader now does the same remap, or
+  `CM_LoadMapData_FastFile` waits 33 s and errors "Couldn't find the bsp for
+  this map" (the stuck popup). The game worlds need nothing: pools 14 and 15
+  alias the same storage.
+- The SP `ui/menus.txt` and some lobby materials are not in the zones loaded
+  without the frontend: harmless for `+devmap`.
+
 **Zombies goes through OpenBLOPS.** OpenBLOPS (GPL-3.0, no history available)
 is the same KisakBlack tree with SP and Zombies built from it under `KISAK_SP`:
 1344 of its 1372 engine/game files map one-to-one onto `src/<module>`, the SP
@@ -727,6 +754,10 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    by the physics debug buffers (found with guard pages), and the menu
    expression operands. **The match now runs** to the team select and
    countdown; next is frame time, then whatever the match itself hits.
+6. **Zombies (branch `sp-merge`).** OpenBLOPS merged (section 5), the SP
+   build (`-DNX_SP=ON`) boots, the Zombies zones convert and load, and
+   `+devmap zombie_theater` reaches `CM_LoadMap`. Next: the SP game code on
+   the map path (actors, pathnodes, zombie scripts), the same LP64 loop as MP.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

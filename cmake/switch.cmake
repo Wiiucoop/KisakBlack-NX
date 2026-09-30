@@ -42,8 +42,8 @@ set(NX_EXCLUDED_SOURCES
     "${SRC_DIR}/win32/win_voice.cpp"              # waveIn/mixer voice chat -> nx_platform_stubs
     "${SRC_DIR}/binklib/dx9rad3d.cpp"             # Bink RAD3D-over-D3D9 (unreferenced)
     "${SRC_DIR}/binklib/binktextures.cpp"         # Bink texture helpers (unreferenced; Bink stubbed)
-    "${SRC_DIR}/sound/snd_driver_xaudio2.cpp"     # XAudio2 driver -> nx_snd_null
-    "${SRC_DIR}/sound/snd_driver_xaudio2_dsp.cpp" # XAPO DSP effects -> nx_snd_null
+    "${SRC_DIR}/sound/snd_driver_xaudio2.cpp"     # XAudio2 driver -> nx_snd
+    "${SRC_DIR}/sound/snd_driver_xaudio2_dsp.cpp" # XAPO DSP effects -> nx_snd
     "${SRC_DIR}/groupvoice/play_dsound.cpp"       # DirectSound playback -> stubs
     "${SRC_DIR}/groupvoice/record_dsound.cpp"     # DirectSound capture -> stubs
     "${SRC_DIR}/vpx/vpx.cpp"                      # VP8 clip encoder -> nx_platform_stubs

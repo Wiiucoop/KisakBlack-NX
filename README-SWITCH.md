@@ -289,7 +289,7 @@ supplies fake `windows.h`, `d3d9.h`, `d3dx9.h` and friends that are found ahead
 of the real headers, so ~647,000 lines of engine compile nearly unmodified.
 On top of that sit the platform pieces: `nx_main.cpp` (entry point, logging,
 crash handler), `nx_wincompat.cpp` (Win32 API surface, threads, files),
-`nx_winsock.cpp`, `nx_winuser.cpp`, `nx_xinput.cpp` (HID), `nx_snd_null.cpp`,
+`nx_winsock.cpp`, `nx_winuser.cpp`, `nx_xinput.cpp` (HID), `nx_snd.cpp`,
 `nx_platform_stubs.cpp`, and the big ones, `nx_kbz.cpp`, `nx_d3d9_null.cpp`
 and `nx_d3d9_shader.cpp`.
 
@@ -893,15 +893,25 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    ~42-45 ms a frame in play. Open: sound, ragdolls (physics), a report of
    zombies animating about twice as fast in round 2 (unconfirmed), small
    visual bugs.
-7. **Sound.** The whole sound engine runs; only the XAudio2 driver layer
-   (`snd_driver_xaudio2*.cpp`, ~1600 lines) is replaced by the null driver
-   `nx_snd_null.cpp`. The banks (asset type 9) already convert and load, with
-   their PCM in the KBZ. The work: an `SD_*` driver that starts, updates
-   (volume per channel, pitch), pauses and stops voices and reports when they
-   finish; a software mixer on its own thread feeding libnx audio output; an
-   MS-ADPCM decoder; and a plan for WMA (the converter can decode it on the PC
-   and store PCM or ADPCM) and for streamed sounds (their files are not yet
-   located).
+7. **Sound (first pass).** The whole sound engine runs; only the XAudio2
+   driver layer (`snd_driver_xaudio2*.cpp`) is replaced, by `src/nx/nx_snd.cpp`
+   (was the null driver `nx_snd_null.cpp`). It mirrors the PC driver call for
+   call: `SD_StartAlias` creates a voice from the alias's `snd_asset`,
+   `SD_UpdateVoice` takes the engine's speaker-map volumes times the dry level
+   and the pitch, starts the voice once its start delay is over and stops it
+   when its data runs out; streams take two windows at a time from
+   `Snd_Stream*` and release them on the main thread once played. A software
+   mixer thread (priority 0x2B) resamples each voice linearly (rate x pitch to
+   48 kHz) and feeds libnx audout in 1024-frame buffers, four queued.
+   Formats: PCM 16-bit and MS-ADPCM (262-byte blocks per channel, 512 frames,
+   the standard seven coefficients). Streamed sounds are **not** WAV files
+   despite the name: each `.wav` in the `.iwd` archives (`main/iw_100.iwd`,
+   1.3 GB, and the `localized_English_iw1*` / some `iw_2x` ones) starts with
+   the engine's own 2096-byte `snd_asset` header (version 1, 48 kHz, format 6
+   = MS-ADPCM for the voice lines). Not done yet: WMA (refused and counted),
+   the reverb bus, the per-voice low-pass and futz DSP, the master EQ and
+   limiter. `[nx-snd]` prints every 10 s: voices started by format, refused
+   (with the last alias), peak playing, starved stream reads, mixer time.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

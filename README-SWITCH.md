@@ -938,6 +938,17 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    way. It costs ~12 MB of NRO (the codec core comes with `avcodec_open2`).
    The 10-second report also lists the five aliases started most, to find the
    sounds reported as repeating endlessly.
+   First WMA run: WMA plays (45-134 started per 10 s, none refused), mixer
+   23-58 ms per second of audio. The alias list came out empty: for an
+   in-memory sound `g_snd.voice[i].alias` is only set after the driver's start
+   (`SND_SetVoiceStartInfo` follows it), so `createVoice` now takes the alias
+   from the start info. Open: zombie grunts cut short, and some sounds (the
+   chandeliers above spawn among them) repeating. The engine does not stop
+   one-shots by time (`soundFileInfo.endtime` is never read), so a cut is the
+   engine stopping the voice itself -- voice limits, stealing -- which voices
+   that never end would cause too. The report now counts one-shots that
+   played to their end against those stopped early, and lists the aliases
+   cut most.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

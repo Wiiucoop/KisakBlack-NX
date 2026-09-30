@@ -122,6 +122,8 @@ NxWma s_wma[SND_MAX_VOICES];
 // Which aliases start most, for the periodic report.
 struct NxStartTally { const snd_alias_t *alias; unsigned count; bool stream; };
 NxStartTally s_tally[64];
+NxStartTally s_cutTally[64];
+unsigned s_nEnded, s_nCut;
 
 Thread s_thread;
 bool s_threadRunning;
@@ -543,10 +545,12 @@ bool openWma(int voiceIndex, const snd_asset *snd)
     return d.frame && d.packet;
 }
 
-void noteStart(const snd_alias_t *alias, bool stream)
+void noteTally(NxStartTally (&table)[64], const snd_alias_t *alias, bool stream)
 {
+    if (!alias)
+        return;
     NxStartTally *freeSlot = nullptr;
-    for (NxStartTally &t : s_tally) {
+    for (NxStartTally &t : table) {
         if (t.alias == alias) {
             ++t.count;
             return;
@@ -561,9 +565,10 @@ void noteStart(const snd_alias_t *alias, bool stream)
     }
 }
 
-bool createVoice(int voiceIndex, const snd_asset *snd, bool isLooping)
+// alias: the one being started. For an in-memory sound g_snd.voice[i].alias is
+// not set yet here (SND_SetVoiceStartInfo comes after).
+bool createVoice(int voiceIndex, const snd_alias_t *alias, const snd_asset *snd, bool isLooping)
 {
-    const snd_alias_t *alias = g_snd.voice[voiceIndex].alias;
     const bool stream = SND_IsStream(voiceIndex);
     const bool wma = snd->format == SND_ASSET_FORMAT_WMA && !stream && snd->seek_table_count;
     bool ok = (snd->format == SND_ASSET_FORMAT_PCMS16 || snd->format == SND_ASSET_FORMAT_MSADPCM || wma)
@@ -575,7 +580,7 @@ bool createVoice(int voiceIndex, const snd_asset *snd, bool isLooping)
         noteRefused(alias, snd->format);
         return false;
     }
-    noteStart(alias, stream);
+    noteTally(s_tally, alias, stream);
     NxVoice &v = s_voice[voiceIndex];
     memset(&v, 0, sizeof(v));
     v.totalUnits = wma ? snd->seek_table_count : 0;
@@ -646,7 +651,7 @@ void updateStreamVoice(int voiceIndex)
             return;
         const snd_asset *header = Snd_StreamGetHeader(voiceIndex);
         bool isLooping = (g_snd.voice[voiceIndex].alias->flags & 1) != 0;
-        if (!createVoice(voiceIndex, header, isLooping)) {
+        if (!createVoice(voiceIndex, g_snd.voice[voiceIndex].alias, header, isLooping)) {
             channelError(voiceIndex);
             return;
         }
@@ -716,7 +721,7 @@ int startAliasRam(SndStartAliasInfo *startAliasInfo, int voiceIndex)
 {
     bool isLooping = (startAliasInfo->alias->flags & 1) != 0;
     const snd_asset *snd = &startAliasInfo->alias->soundFile->u.loadSnd->sound;
-    if (!createVoice(voiceIndex, snd, isLooping))
+    if (!createVoice(voiceIndex, startAliasInfo->alias, snd, isLooping))
         return -1;
     unsigned rate = snd->frame_rate;
     unsigned totalMsec = isLooping ? 0
@@ -747,6 +752,22 @@ void updateGains(int voiceIndex)
     memcpy(v.gain, gain, sizeof(gain));
 }
 
+void printTop(NxStartTally (&table)[64], const char *what, int count)
+{
+    for (int n = 0; n < count; ++n) {
+        NxStartTally *best = nullptr;
+        for (NxStartTally &t : table)
+            if (t.alias && t.count && (!best || t.count > best->count))
+                best = &t;
+        if (!best)
+            break;
+        printf("[nx-snd]   %s %ux: %s (%s)\n", what, best->count,
+               best->alias->name ? best->alias->name : "?", best->stream ? "stream" : "loaded");
+        best->count = 0;
+    }
+    memset(table, 0, sizeof(table));
+}
+
 void report()
 {
     u64 now = armGetSystemTick();
@@ -763,21 +784,14 @@ void report()
            s_lastRefused[0] ? " (last '" : "", s_lastRefused, s_lastRefused[0] ? "')" : "",
            s_peakRunning, s_nStarved,
            armTicksToNs(s_mixTicks) / 1e6 / (armTicksToNs(elapsed) / 1e9));
+    printf("[nx-snd]   one-shots: %u played to their end, %u stopped early by the engine\n",
+           s_nEnded, s_nCut);
     s_nStartPcm = s_nStartAdpcm = s_nStartWma = s_nRefusedWma = s_nRefusedOther = s_nStarved = 0;
-    // The five aliases started most, with how often: a sound restarted over and
-    // over shows up here.
-    for (int n = 0; n < 5; ++n) {
-        NxStartTally *best = nullptr;
-        for (NxStartTally &t : s_tally)
-            if (t.alias && t.count && (!best || t.count > best->count))
-                best = &t;
-        if (!best)
-            break;
-        printf("[nx-snd]   started %ux: %s (%s)\n", best->count,
-               best->alias->name ? best->alias->name : "?", best->stream ? "stream" : "loaded");
-        best->count = 0;
-    }
-    memset(s_tally, 0, sizeof(s_tally));
+    s_nEnded = s_nCut = 0;
+    // The aliases started most -- a sound restarted over and over shows up
+    // here -- and those the engine cut short most.
+    printTop(s_tally, "started", 5);
+    printTop(s_cutTally, "cut", 3);
     s_peakRunning = 0;
     s_mixTicks = 0;
     s_lastRefused[0] = 0;
@@ -842,6 +856,15 @@ void __cdecl SD_StopVoice(int voiceIndex)
 {
     Lock lock;
     NxVoice &v = s_voice[voiceIndex];
+    if (v.active) {
+        // Ended: the driver ran out of sound. Cut: the engine stopped it early.
+        if (v.finished || (v.stream && !v.queueCount))
+            ++s_nEnded;
+        else if (!v.looping) {
+            ++s_nCut;
+            noteTally(s_cutTally, g_snd.voice[voiceIndex].alias, v.stream);
+        }
+    }
     v.active = false;
     v.running = false;
     if (SND_IsStream(voiceIndex)) {

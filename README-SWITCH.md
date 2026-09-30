@@ -794,6 +794,14 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   rebuilt. The frame summary says how many programs came from the cache and
   how many were saved. Shipping a cache: play the maps once, then the folder
   can go into the NRO's romfs (loader still to add).
+- **Fourth result:** second run, first gameplay minute: 170 of 171 programs
+  from the cache, 2.7 s in all (~16 ms each, slowest 47 ms, was 759). Later
+  windows settle at 42-45 ms per frame. `glUseProgram` alone is 0.24 ms, so the
+  ~22 ms under "constants" (per ~900 draws) is the driver doing the queued
+  draw work when the next uniform update arrives. Next step for it: constants
+  in uniform buffers (vsc/psc as std140 blocks, written into the
+  persistent-mapped ring and bound with `glBindBufferRange`), so a draw binds a
+  buffer instead of pushing constant data through the command stream.
 - **Zombie corpses in T-pose:** SP converts the actor into a corpse in place
   (`Actor_BecomeCorpse`), and the client draws the corpse through
   `actorCorpseInfo[slot]`, whose tree starts empty; retail hides that with the
@@ -880,8 +888,20 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    countdown; next is frame time, then whatever the match itself hits.
 6. **Zombies (branch `sp-merge`).** OpenBLOPS merged (section 5), the SP
    build (`-DNX_SP=ON`) boots, the Zombies zones convert and load, and
-   `+devmap zombie_theater` reaches `CM_LoadMap`. Next: the SP game code on
-   the map path (actors, pathnodes, zombie scripts), the same LP64 loop as MP.
+   `+devmap zombie_theater` is playable: move, shoot, knife, kill, rounds
+   advance, with the gamepad (always on) and the low graphics preset, at
+   ~42-45 ms a frame in play. Open: sound, ragdolls (physics), a report of
+   zombies animating about twice as fast in round 2 (unconfirmed), small
+   visual bugs.
+7. **Sound.** The whole sound engine runs; only the XAudio2 driver layer
+   (`snd_driver_xaudio2*.cpp`, ~1600 lines) is replaced by the null driver
+   `nx_snd_null.cpp`. The banks (asset type 9) already convert and load, with
+   their PCM in the KBZ. The work: an `SD_*` driver that starts, updates
+   (volume per channel, pitch), pauses and stops voices and reports when they
+   finish; a software mixer on its own thread feeding libnx audio output; an
+   MS-ADPCM decoder; and a plan for WMA (the converter can decode it on the PC
+   and store PCM or ADPCM) and for streamed sounds (their files are not yet
+   located).
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

@@ -75,6 +75,13 @@ Xbox A. On-screen prompts keep their Xbox glyphs.
 | + / − | Start / Back |
 | ZL / ZR | triggers (digital: fully released or fully pulled) |
 
+The gamepad is always on (`gpad_enabled` is forced true in `Dvar_SetVariant`
+and registered on): with it off the engine drops every pad key in
+`CL_KeyEvent` and binds nothing. The pad bindings (the profile's button and
+stick configs, else `buttons_default` / `thumbstick_default`) are executed at
+every `CL_InitCGame`, since a map started from the command line never passes
+through the profile sign-in or options menu that normally runs them.
+
 ---
 
 ## 2. How it is put together

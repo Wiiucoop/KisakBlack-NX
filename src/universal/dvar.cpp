@@ -10,6 +10,7 @@
 #include <qcommon/common.h>
 #include <server_mp/sv_bot_mp.h>
 #include <win32/win_common.h>
+#include <win32/win_gamepad.h>
 #include <win32/win_net.h>
 #include "com_memory.h"
 #include "q_parse.h"
@@ -1577,6 +1578,13 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
     {
         __debugbreak();
     }
+#ifdef KISAK_NX
+    // The Switch always has a controller, and with gpad_enabled off the engine
+    // drops every pad key (CL_KeyEvent) and skips the pad bindings: no input at
+    // all. SP profiles and saved configs default it off, so no source may.
+    if ( dvar == gpad_enabled )
+        value.enabled = true;
+#endif
     if ( dvar && dvar->name && *dvar->name )
     {
         if ( Com_LogFileOpen() && !Dvar_ValuesEqual(dvar->type, dvar->current, value) && (dvar->flags & 0x20000) == 0 )

@@ -108,7 +108,13 @@ void GPad_InitAll()
                                                 "thumbstick_default",
                                                 1u,
                                                 "Game pad stick configuration");
+#ifdef KISAK_NX
+    // Always on: see Dvar_SetVariant.
+    gpad_enabled = _Dvar_RegisterBool("gpad_enabled", 1, 1u, "Game pad enabled");
+    Dvar_SetBool((dvar_s *)gpad_enabled, 1);
+#else
     gpad_enabled = _Dvar_RegisterBool("gpad_enabled", 0, 1u, "Game pad enabled");
+#endif
     gpad_present = _Dvar_RegisterBool("gpad_present", 0, 0x40u, "Game pad present");
     for ( portIndex = 0; portIndex < 1; ++portIndex )
     {

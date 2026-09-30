@@ -160,6 +160,16 @@ void __cdecl GamerProfile_ExecControllerBindings(int controllerIndex)
         __debugbreak();
     }
     localClientNum = Com_ControllerIndex_GetLocalClientNum(controllerIndex);
+#ifdef KISAK_NX
+    // Always a controller here (see Dvar_SetVariant). A profile that was never
+    // written -- SP starting straight into a map -- has no configs named, so
+    // fall back to the defaults instead of binding nothing.
+    gamerSettings[controllerIndex].gpadEnabled = 1;
+    if ( !gamerSettings[controllerIndex].gpadButtonsConfig[0] )
+        I_strncpyz(gamerSettings[controllerIndex].gpadButtonsConfig, "buttons_default", 256);
+    if ( !gamerSettings[controllerIndex].gpadSticksConfig[0] )
+        I_strncpyz(gamerSettings[controllerIndex].gpadSticksConfig, "thumbstick_default", 256);
+#endif
     if ( gamerSettings[controllerIndex].gpadEnabled )
     {
         if ( gamerSettings[controllerIndex].gpadButtonsConfig[0] )
@@ -226,6 +236,9 @@ void __cdecl GamerProfile_UpdateDvarsFromProfile(int controllerIndex)
         Dvar_SetInt((dvar_s *)com_first_time, gamerSettings[controllerIndex].firstTime);
         Dvar_SetBool((dvar_s *)zombietron_discovered, gamerSettings[controllerIndex].zombietron_discovered);
         Dvar_SetBool((dvar_s *)zombiefive_discovered, gamerSettings[controllerIndex].zombiefive_discovered);
+#ifdef KISAK_NX
+        gamerSettings[controllerIndex].gpadEnabled = 1;
+#endif
         Dvar_SetBool((dvar_s *)gpad_enabled, gamerSettings[controllerIndex].gpadEnabled);
         Dvar_SetBool((dvar_s *)input_invertPitch, gamerSettings[controllerIndex].invertPitch);
         Dvar_SetFloat((dvar_s *)input_viewSensitivity, gamerSettings[controllerIndex].viewSensitivity);

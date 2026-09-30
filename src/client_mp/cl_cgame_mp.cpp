@@ -36,6 +36,7 @@
 #include <cgame_mp/cg_servercmds_mp.h>
 #include <EffectsCore/fx_system.h>
 #include <cgame/cg_drawtools.h>
+#include <win32/win_gamerprofile.h>
 
 const float g_color_table[17][4] =
 {
@@ -1143,6 +1144,13 @@ void __cdecl CL_InitCGame(int localClientNum)
     Con_ClearNotify(localClientNum);
     Con_InitMessageBuffer();
     Con_InitGameMsgChannels();
+#ifdef KISAK_NX
+    // Bind the pad for every map. The bindings otherwise come only from a
+    // profile sign-in or the options menu, which SP launched straight into a
+    // map never passes through: the pad then moved nothing and Start did not
+    // pause.
+    GamerProfile_ExecControllerBindings(Com_LocalClient_GetControllerIndex(localClientNum));
+#endif
     if ( !useFastFile->current.enabled )
     {
         ControllerIndex = Com_LocalClient_GetControllerIndex(localClientNum);

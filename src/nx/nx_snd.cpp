@@ -10,9 +10,10 @@
 // 16-bit), with the engine talking to it through the same SD_* entry points,
 // mirroring snd_driver_xaudio2.cpp call for call.
 //
-// Formats: PCM 16-bit and MS-ADPCM (the streamed voice lines are ADPCM).
-// WMA is refused for now (named in the log). Not reproduced yet: the reverb
-// bus, the per-voice low-pass / futz DSP and the master EQ / limiter.
+// Formats: PCM 16-bit, MS-ADPCM (the streamed voice lines) and xWMA (most
+// loaded sounds), the last through FFmpeg's WMA v2 decoder. Not reproduced
+// yet: the reverb bus, the per-voice low-pass / futz DSP and the master EQ /
+// limiter.
 //
 // IMPORTANT: SD_Xaudio2CanInit MUST return true and SD_Init MUST succeed --
 // Sys_StreamSleep blocks the shared stream thread on sndInitializedEvent,
@@ -34,6 +35,16 @@
 
 #include <switch.h>
 
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavutil/channel_layout.h>
+#include <libavutil/mem.h>
+}
+
+// The WMA v2 decoder by name: avcodec_find_decoder would pull in the whole
+// codec list, and every codec with it. FFCodec starts with its AVCodec.
+extern "C" const AVCodec ff_wmav2_decoder;
+
 namespace {
 
 enum {
@@ -43,7 +54,9 @@ enum {
     NX_OUT_BYTES = NX_MIX_FRAMES * 2 * 2,        // stereo int16
     NX_ADPCM_BLOCK_BYTES = 262,                  // per channel; the PC driver's nBlockAlign
     NX_ADPCM_BLOCK_FRAMES = 2 * NX_ADPCM_BLOCK_BYTES - 12,   // 512
-    NX_STAGE_FRAMES = NX_ADPCM_BLOCK_FRAMES,
+    NX_STAGE_FRAMES = 4096,                      // an ADPCM block (512) or a WMA frame (2048)
+    NX_WMA_BLOCK_STEREO = 4096,                  // the PC driver's nBlockAlign for xWMA
+    NX_WMA_BLOCK_MONO = 2230,
 };
 
 struct NxVoice {
@@ -61,7 +74,8 @@ struct NxVoice {
     // In-memory source.
     const uint8_t *data;
     unsigned dataSize;
-    unsigned nextUnit;        // next ADPCM block, or next PCM frame
+    unsigned nextUnit;        // next ADPCM block, PCM frame or WMA packet
+    unsigned totalUnits;      // WMA: packets (the seek table count)
 
     // Stream source: up to two windows, played in order. A window the mixer
     // has finished is flagged here and released on the main thread.
@@ -89,6 +103,26 @@ struct NxVoice {
 NxVoice s_voice[SND_MAX_VOICES];
 RMutex s_lock;
 
+// A WMA decoder per voice slot, kept across sounds (flushed when the next one
+// has the same rate and channels) and apart from NxVoice, which is cleared on
+// every start. xWMA is a run of fixed-size packets (the asset's seek table
+// counts them) of WMA v2 with no extradata; FFmpeg's own xWMA demuxer fills
+// in the same six bytes. Packets are copied to a padded buffer because the
+// decoder reads up to AV_INPUT_BUFFER_PADDING_SIZE past the end.
+struct NxWma {
+    AVCodecContext *ctx;
+    AVFrame *frame;
+    AVPacket *packet;
+    unsigned rate, channels;
+    bool draining;
+    alignas(16) uint8_t scratch[NX_WMA_BLOCK_STEREO + AV_INPUT_BUFFER_PADDING_SIZE];
+};
+NxWma s_wma[SND_MAX_VOICES];
+
+// Which aliases start most, for the periodic report.
+struct NxStartTally { const snd_alias_t *alias; unsigned count; bool stream; };
+NxStartTally s_tally[64];
+
 Thread s_thread;
 bool s_threadRunning;
 volatile bool s_quit;
@@ -97,7 +131,7 @@ int16_t *s_outData[NX_OUT_BUFFERS];
 float s_mix[NX_MIX_FRAMES * 2];
 
 // For the periodic report.
-unsigned s_nStartPcm, s_nStartAdpcm, s_nRefusedWma, s_nRefusedOther, s_nStarved;
+unsigned s_nStartPcm, s_nStartAdpcm, s_nStartWma, s_nRefusedWma, s_nRefusedOther, s_nStarved;
 unsigned s_peakRunning;
 u64 s_mixTicks, s_reportTick;
 char s_lastRefused[64];
@@ -174,8 +208,70 @@ unsigned blockBytes(const NxVoice &v)
 // Sources: refill the stage with the next decoded frames. False when nothing
 // is available (the end of an in-memory sound, or a stream starving).
 // ---------------------------------------------------------------------------
+// WMA: the next decoded frame into the stage, feeding packets as the decoder
+// asks. A looping sound restarts at packet 0 with the decoder flushed; a
+// one-shot drains the decoder and ends.
+bool refillWma(NxVoice &v)
+{
+    NxWma &d = s_wma[&v - s_voice];
+    if (!d.ctx)
+        return false;
+    const unsigned blockAlign = v.channels > 1 ? NX_WMA_BLOCK_STEREO : NX_WMA_BLOCK_MONO;
+    const unsigned packets = v.dataSize / blockAlign < v.totalUnits ? v.dataSize / blockAlign : v.totalUnits;
+    for (int guard = 0; guard < 64; ++guard) {
+        int r = avcodec_receive_frame(d.ctx, d.frame);
+        if (r == 0) {
+            unsigned n = (unsigned)d.frame->nb_samples;
+            if (n > NX_STAGE_FRAMES)
+                n = NX_STAGE_FRAMES;
+            const bool planar = d.frame->format == AV_SAMPLE_FMT_FLTP;
+            for (unsigned c = 0; c < v.channels; ++c) {
+                const float *src = (const float *)d.frame->extended_data[planar ? c : 0];
+                for (unsigned i = 0; i < n; ++i) {
+                    float s = planar ? src[i] : src[i * v.channels + c];
+                    v.stage[i * v.channels + c] = clamp16((int)(s * 32767.0f));
+                }
+            }
+            av_frame_unref(d.frame);
+            if (!n)
+                continue;
+            v.stageFrames = n;
+            v.stagePos = 0;
+            return true;
+        }
+        if (r != AVERROR(EAGAIN))
+            return false;   // drained (AVERROR_EOF) or broken
+        if (v.nextUnit >= packets) {
+            if (v.looping && packets) {
+                avcodec_flush_buffers(d.ctx);
+                d.draining = false;
+                v.nextUnit = 0;
+                continue;
+            }
+            if (d.draining)
+                return false;
+            d.draining = true;
+            avcodec_send_packet(d.ctx, nullptr);
+            continue;
+        }
+        memcpy(d.scratch, v.data + v.nextUnit * blockAlign, blockAlign);
+        memset(d.scratch + blockAlign, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+        ++v.nextUnit;
+        d.packet->data = d.scratch;
+        d.packet->size = (int)blockAlign;
+        avcodec_send_packet(d.ctx, d.packet);   // a packet it refuses is skipped
+    }
+    return false;
+}
+
 bool refillRam(NxVoice &v)
 {
+    if (v.format == SND_ASSET_FORMAT_WMA) {
+        // The decoder pads the tail: stop at the asset's frame count.
+        if (!v.looping && v.totalFrames && v.framesOut >= v.totalFrames)
+            return false;
+        return refillWma(v);
+    }
     for (int attempt = 0; attempt < 2; ++attempt) {
         if (v.format == SND_ASSET_FORMAT_MSADPCM) {
             unsigned bb = blockBytes(v);
@@ -408,18 +504,81 @@ void noteRefused(const snd_alias_t *alias, snd_asset_format format)
 
 // iSND_CreateVoice: the voice exists and, for an in-memory sound, holds its
 // data. Returns false for a format this driver cannot play.
+// The slot's WMA decoder, ready for this sound: reused and flushed when the
+// rate and channels match, else made anew. Called with the lock held.
+bool openWma(int voiceIndex, const snd_asset *snd)
+{
+    NxWma &d = s_wma[voiceIndex];
+    if (d.ctx && (d.rate != snd->frame_rate || d.channels != snd->channel_count))
+        avcodec_free_context(&d.ctx);
+    if (!d.ctx) {
+        AVCodecContext *ctx = avcodec_alloc_context3(&ff_wmav2_decoder);
+        if (!ctx)
+            return false;
+        ctx->sample_rate = (int)snd->frame_rate;
+        av_channel_layout_default(&ctx->ch_layout, (int)snd->channel_count);
+        ctx->bit_rate = 6000 * 8 * (int64_t)snd->channel_count;   // nAvgBytesPerSec in the PC driver
+        ctx->block_align = snd->channel_count > 1 ? NX_WMA_BLOCK_STEREO : NX_WMA_BLOCK_MONO;
+        ctx->thread_count = 1;
+        ctx->extradata = (uint8_t *)av_mallocz(6 + AV_INPUT_BUFFER_PADDING_SIZE);
+        if (ctx->extradata) {
+            ctx->extradata_size = 6;
+            ctx->extradata[4] = 31;   // as FFmpeg's xwma demuxer: exp VLC, bit reservoir, variable blocks
+        }
+        if (avcodec_open2(ctx, &ff_wmav2_decoder, nullptr) < 0) {
+            avcodec_free_context(&ctx);
+            return false;
+        }
+        d.ctx = ctx;
+        d.rate = snd->frame_rate;
+        d.channels = snd->channel_count;
+    } else {
+        avcodec_flush_buffers(d.ctx);
+    }
+    if (!d.frame)
+        d.frame = av_frame_alloc();
+    if (!d.packet)
+        d.packet = av_packet_alloc();
+    d.draining = false;
+    return d.frame && d.packet;
+}
+
+void noteStart(const snd_alias_t *alias, bool stream)
+{
+    NxStartTally *freeSlot = nullptr;
+    for (NxStartTally &t : s_tally) {
+        if (t.alias == alias) {
+            ++t.count;
+            return;
+        }
+        if (!t.alias && !freeSlot)
+            freeSlot = &t;
+    }
+    if (freeSlot) {
+        freeSlot->alias = alias;
+        freeSlot->count = 1;
+        freeSlot->stream = stream;
+    }
+}
+
 bool createVoice(int voiceIndex, const snd_asset *snd, bool isLooping)
 {
     const snd_alias_t *alias = g_snd.voice[voiceIndex].alias;
-    bool ok = (snd->format == SND_ASSET_FORMAT_PCMS16 || snd->format == SND_ASSET_FORMAT_MSADPCM)
+    const bool stream = SND_IsStream(voiceIndex);
+    const bool wma = snd->format == SND_ASSET_FORMAT_WMA && !stream && snd->seek_table_count;
+    bool ok = (snd->format == SND_ASSET_FORMAT_PCMS16 || snd->format == SND_ASSET_FORMAT_MSADPCM || wma)
            && (snd->channel_count == 1 || snd->channel_count == 2) && snd->frame_rate;
+    Lock lock;
+    if (ok && wma && !openWma(voiceIndex, snd))
+        ok = false;
     if (!ok) {
         noteRefused(alias, snd->format);
         return false;
     }
-    Lock lock;
+    noteStart(alias, stream);
     NxVoice &v = s_voice[voiceIndex];
     memset(&v, 0, sizeof(v));
+    v.totalUnits = wma ? snd->seek_table_count : 0;
     v.active = true;
     v.stream = SND_IsStream(voiceIndex);
     v.looping = isLooping;
@@ -434,6 +593,8 @@ bool createVoice(int voiceIndex, const snd_asset *snd, bool isLooping)
     }
     if (snd->format == SND_ASSET_FORMAT_MSADPCM)
         ++s_nStartAdpcm;
+    else if (wma)
+        ++s_nStartWma;
     else
         ++s_nStartPcm;
     return true;
@@ -596,13 +757,27 @@ void report()
     u64 elapsed = now - s_reportTick;
     if (armTicksToNs(elapsed) < 10000000000ull)
         return;
-    printf("[nx-snd] 10 s: started %u pcm, %u adpcm; refused %u wma, %u other%s%s%s; "
+    printf("[nx-snd] 10 s: started %u pcm, %u adpcm, %u wma; refused %u wma, %u other%s%s%s; "
            "peak %u playing; %u starved; mixer %.1f ms/s\n",
-           s_nStartPcm, s_nStartAdpcm, s_nRefusedWma, s_nRefusedOther,
+           s_nStartPcm, s_nStartAdpcm, s_nStartWma, s_nRefusedWma, s_nRefusedOther,
            s_lastRefused[0] ? " (last '" : "", s_lastRefused, s_lastRefused[0] ? "')" : "",
            s_peakRunning, s_nStarved,
            armTicksToNs(s_mixTicks) / 1e6 / (armTicksToNs(elapsed) / 1e9));
-    s_nStartPcm = s_nStartAdpcm = s_nRefusedWma = s_nRefusedOther = s_nStarved = 0;
+    s_nStartPcm = s_nStartAdpcm = s_nStartWma = s_nRefusedWma = s_nRefusedOther = s_nStarved = 0;
+    // The five aliases started most, with how often: a sound restarted over and
+    // over shows up here.
+    for (int n = 0; n < 5; ++n) {
+        NxStartTally *best = nullptr;
+        for (NxStartTally &t : s_tally)
+            if (t.alias && t.count && (!best || t.count > best->count))
+                best = &t;
+        if (!best)
+            break;
+        printf("[nx-snd]   started %ux: %s (%s)\n", best->count,
+               best->alias->name ? best->alias->name : "?", best->stream ? "stream" : "loaded");
+        best->count = 0;
+    }
+    memset(s_tally, 0, sizeof(s_tally));
     s_peakRunning = 0;
     s_mixTicks = 0;
     s_lastRefused[0] = 0;

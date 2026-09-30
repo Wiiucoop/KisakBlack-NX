@@ -264,6 +264,16 @@ target_link_libraries(${BIN_NAME} PRIVATE
 
 endif()
 
+# FFmpeg (devkitPro's switch-ffmpeg) decodes the WMA sounds, most of the loaded
+# ones (src/nx/nx_snd.cpp). Only the WMA v2 decoder is referenced, by name, so
+# little of libavcodec is linked in. zlib comes from the engine's own copy.
+target_link_libraries(${BIN_NAME} PRIVATE
+    "${NX_PORTLIBS}/lib/libavcodec.a"
+    "${NX_PORTLIBS}/lib/libswresample.a"
+    "${NX_PORTLIBS}/lib/libavutil.a"
+    "${NX_PORTLIBS}/lib/libdav1d.a"
+    nx m)
+
 # ----- NRO packaging -----
 nx_create_nro(${BIN_NAME}
     NAME    "${NX_NRO_NAME}"

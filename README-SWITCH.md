@@ -928,6 +928,16 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    `code_post_gfx` 30 WMA. As PCM that would be ~16x (hundreds of MB), as
    ADPCM ~4x; decoding at play time (devkitPro's `switch-ffmpeg`, wmav2) keeps
    the memory as it is.
+   **WMA now decodes at play time**: `switch-ffmpeg` (install with devkitPro's
+   pacman) is linked for its WMA v2 decoder alone, referenced by name
+   (`ff_wmav2_decoder`; `avcodec_find_decoder` would pull in every codec). One
+   decoder per voice slot, flushed and reused when rate and channels match.
+   xWMA here is fixed packets (4096 bytes stereo, 2230 mono, the PC driver's
+   nBlockAlign; the seek table counts them) of WMA v2 without extradata; the
+   six bytes FFmpeg's xwma demuxer fills in (flags 31) are supplied the same
+   way. It costs ~12 MB of NRO (the codec core comes with `avcodec_open2`).
+   The 10-second report also lists the five aliases started most, to find the
+   sounds reported as repeating endlessly.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

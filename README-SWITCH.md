@@ -731,6 +731,19 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   frame, of which partial uploads 71 ms (2344 per frame), draws 39 ms (2883),
   whole uploads 17, programs 16, constants 13 -- nearly all of it in the GL
   layer.
+- **With the preset:** 48-72 ms per frame in Zombies (from ~140), 370-930
+  draws. Uploads were then two thirds of the frame: partial 35 ms (712 per
+  frame, ~50 us each), whole 11 ms (the 8 MB vertex and 2 MB index rings
+  re-sent whole on every `D3DLOCK_DISCARD`).
+- **Persistent-mapped dynamic buffers** (`nxGlSyncRing`, needs
+  `ARB_buffer_storage`, which Mesa 26 has on the 4.3 core context). A dynamic
+  buffer is up to 3 GL buffers with immutable storage mapped write +
+  persistent + coherent; an unlock `memcpy`s its bytes into the mapping and
+  makes no GL call. `NOOVERWRITE` writes into the slot in use; `DISCARD`
+  moves to the next slot after waiting on its fence and copies only the bytes
+  written since; a lock with neither flag waits for the GPU. The frame
+  summary counts fence waits that found the GPU busy ("ring waits"). Without
+  the extension it falls back to the upload path.
 - `Could not load rawfile "maps/gametypes/zom.gsc"` is expected: retail ships
   no gametype script for Zombies and the load is optional under `KISAK_SP`.
 - The SP `ui/menus.txt` and some lobby materials are not in the zones loaded

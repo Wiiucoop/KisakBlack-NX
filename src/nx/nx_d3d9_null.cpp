@@ -628,7 +628,11 @@ struct NxBuffer {
     bool discard;      // a D3DLOCK_DISCARD since the last upload: orphan it
     bool synced;       // a lock without D3DLOCK_NOOVERWRITE since the last upload
     bool glAllocated;  // glBufferData has given the GL buffer its storage
+    struct NxGlRing *ring;  // dynamic buffers: persistent-mapped storage, see nxGlSyncRing
+    bool noRing;            // that storage could not be made: upload instead
 };
+
+static void nxGlReleaseRing(NxBuffer *b);
 
 struct NxQuery {
     NxD3DObject obj;
@@ -897,7 +901,9 @@ static void nxDestroy(NxD3DObject *o)
         NxBuffer *b = (NxBuffer *)o;
         // Only the owning thread may delete it. Anywhere else the name leaks,
         // which is the lesser of the two outcomes.
-        if (b->glName && s_glReady && nxGlAcquire())
+        if (b->ring)
+            nxGlReleaseRing(b);
+        else if (b->glName && s_glReady && nxGlAcquire())
             glDeleteBuffers(1, &b->glName);
         free(b->bits);
         free(b);
@@ -1307,6 +1313,7 @@ static GLint s_locTex = -1;
 static bool s_progFailed;
 static bool s_glHasS3tc;
 static bool s_glHasAniso;
+static PFNGLBUFFERSTORAGEPROC s_glBufferStorage;   // null: no persistent-mapped buffers
 static GLuint s_glSampler[NX_MAX_SAMPLERS];
 enum { NX_ATTR_POS = 0, NX_ATTR_COLOR = 1, NX_ATTR_TEXCOORD = 2 };
 
@@ -1700,7 +1707,11 @@ static bool nxGlEnsurePipeline(void)
         if (ext && (!strcmp(ext, "GL_EXT_texture_filter_anisotropic")
                  || !strcmp(ext, "GL_ARB_texture_filter_anisotropic")))
             s_glHasAniso = true;
+        if (ext && !strcmp(ext, "GL_ARB_buffer_storage"))
+            s_glBufferStorage = (PFNGLBUFFERSTORAGEPROC)eglGetProcAddress("glBufferStorage");
     }
+    printf("[nx-gl] persistent-mapped dynamic buffers: %s\n",
+           s_glBufferStorage ? "yes" : "no (ARB_buffer_storage missing; uploading per unlock)");
 
     printf("[nx-gl] textured vertex-colour pipeline up: program %u vao %u "
            "white %u, nxTransform at %d nxTex at %d, %d sampler objects, "
@@ -1810,10 +1821,155 @@ static void nxProfReport(unsigned frames)
     memset(s_wholeUploads, 0, sizeof(s_wholeUploads));
 }
 
+// ---------------------------------------------------------------------------
+// Persistent-mapped dynamic buffers
+// ---------------------------------------------------------------------------
+// The engine appends to its dynamic buffers under D3DLOCK_NOOVERWRITE hundreds
+// of times a frame and wraps them with D3DLOCK_DISCARD. Uploading every append
+// cost ~50 us of GL calls each -- half the frame in Zombies -- and every
+// DISCARD re-sent the whole buffer (8 MB for the big vertex ring). Instead a
+// dynamic buffer is up to NX_RING_SLOTS GL buffers with immutable storage,
+// each mapped once for good (write, persistent, coherent): an unlock copies
+// its bytes straight into the mapping and makes no GL call at all.
+//   NOOVERWRITE is the engine's promise not to touch what a pending draw
+//   reads, so the copy goes into the slot in use.
+//   DISCARD moves to the next slot, after waiting on the fence set when that
+//   slot was last left, so the GPU never reads bytes being replaced; only the
+//   bytes written since go into it, which is all D3D keeps across a discard.
+//   A lock with neither flag waits for the GPU, as D3D does.
+enum { NX_RING_SLOTS = 3 };
+
+struct NxGlRing {
+    GLuint name[NX_RING_SLOTS];
+    BYTE *map[NX_RING_SLOTS];
+    GLsync fence[NX_RING_SLOTS];
+    int cur;
+};
+
+static unsigned s_ringWaits;   // fence waits that found the GPU still busy
+
+static bool nxGlRingSlot(NxGlRing *r, int slot, GLenum target, UINT length)
+{
+    if (r->name[slot])
+        return true;
+    glGenBuffers(1, &r->name[slot]);
+    if (!r->name[slot])
+        return false;
+    glBindBuffer(target, r->name[slot]);
+    const GLbitfield flags = GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT;
+    s_glBufferStorage(target, (GLsizeiptr)length, nullptr, flags);
+    r->map[slot] = (BYTE *)glMapBufferRange(target, 0, (GLsizeiptr)length, flags);
+    if (!r->map[slot]) {
+        glDeleteBuffers(1, &r->name[slot]);
+        r->name[slot] = 0;
+        return false;
+    }
+    return true;
+}
+
+// Waits until the GPU has finished every command issued before the slot's
+// fence, then drops the fence.
+static void nxGlRingWait(NxGlRing *r, int slot)
+{
+    GLsync f = r->fence[slot];
+    if (!f)
+        return;
+    if (glClientWaitSync(f, GL_SYNC_FLUSH_COMMANDS_BIT, 0) == GL_TIMEOUT_EXPIRED) {
+        ++s_ringWaits;
+        glClientWaitSync(f, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000ull);
+    }
+    glDeleteSync(f);
+    r->fence[slot] = 0;
+}
+
+// Fences the slot in use and waits for it: the GPU is done with it after.
+static void nxGlRingDrain(NxGlRing *r)
+{
+    r->fence[r->cur] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    nxGlRingWait(r, r->cur);
+}
+
+// False when the storage could not be made; the buffer then uploads instead,
+// for good.
+static bool nxGlSyncRing(NxBuffer *b, GLenum target)
+{
+    NxGlRing *r = b->ring;
+    bool first = !r;
+    if (first) {
+        r = (NxGlRing *)calloc(1, sizeof(*r));
+        if (!r || !nxGlRingSlot(r, 0, target, b->length)) {
+            free(r);
+            b->noRing = true;
+            return false;
+        }
+        b->ring = r;
+    }
+
+    nxBufferRangeLock();
+    UINT lo = b->dirtyLo, hi = b->dirtyHi;
+    bool dirty = b->glDirty, discard = b->discard, synced = b->synced;
+    b->glDirty = false;
+    b->discard = false;
+    b->synced = false;
+    b->dirtyLo = b->length;
+    b->dirtyHi = 0;
+    nxBufferRangeUnlock();
+
+    if (first) {
+        // Whatever the CPU copy holds, all of it.
+        lo = 0;
+        hi = b->length;
+        dirty = true;
+    } else if (dirty && discard) {
+        int next = (r->cur + 1) % NX_RING_SLOTS;
+        r->fence[r->cur] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        nxGlRingWait(r, next);
+        if (nxGlRingSlot(r, next, target, b->length)) {
+            r->cur = next;
+        } else {
+            nxGlRingWait(r, r->cur);   // no new slot: reuse this one once idle
+        }
+    } else if (dirty && synced) {
+        nxGlRingDrain(r);
+    }
+
+    b->glName = r->name[r->cur];
+    glBindBuffer(target, b->glName);
+    if (dirty && hi > lo) {
+        NxProfScope prof(first ? NXP_BUF_WHOLE : NXP_BUF_PARTIAL);
+        memcpy(r->map[r->cur] + lo, (const BYTE *)b->bits + lo, hi - lo);
+        if (first)
+            s_bufferBytesWhole += hi - lo;
+        else
+            s_bufferBytesPartial += hi - lo;
+    }
+    return true;
+}
+
+static void nxGlReleaseRing(NxBuffer *b)
+{
+    NxGlRing *r = b->ring;
+    // Only the owning thread may delete them; anywhere else they leak.
+    if (s_glReady && nxGlAcquire()) {
+        for (int i = 0; i < NX_RING_SLOTS; ++i) {
+            if (r->fence[i])
+                glDeleteSync(r->fence[i]);
+            if (r->name[i])
+                glDeleteBuffers(1, &r->name[i]);
+        }
+    }
+    free(r);
+    b->ring = nullptr;
+    b->glName = 0;
+}
+
 static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
 {
     if (!b || !b->bits || !b->length)
         return false;
+    if (s_glBufferStorage && (b->usage & D3DUSAGE_DYNAMIC) && !b->noRing
+        && (b->ring || !b->glName) && nxGlSyncRing(b, target))
+        return true;
     if (!b->glName) {
         glGenBuffers(1, &b->glName);
         if (!b->glName)
@@ -4782,12 +4938,13 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         u64 now = armGetSystemTick();
         unsigned frames = s_nSwapPresent - s_lastReportPresent;
         if (s_lastReportTick && frames)
-            printf("[nx-gl] frames %u..%u: %.1f ms per present, slowest %.1f ms | buffer uploads: %.1f MB whole, %.1f MB partial\n",
+            printf("[nx-gl] frames %u..%u: %.1f ms per present, slowest %.1f ms | buffer uploads: %.1f MB whole, %.1f MB partial, %u ring waits\n",
                    s_lastReportPresent, s_nSwapPresent,
                    armTicksToNs(now - s_lastReportTick) / 1e6 / frames,
                    armTicksToNs(s_maxPresentTicks) / 1e6,
                    (s_bufferBytesWhole - s_lastWhole) / 1048576.0,
-                   (s_bufferBytesPartial - s_lastPartial) / 1048576.0);
+                   (s_bufferBytesPartial - s_lastPartial) / 1048576.0, s_ringWaits);
+        s_ringWaits = 0;
         nxProfReport(frames);
         s_lastReportTick = now;
         s_lastReportPresent = s_nSwapPresent;

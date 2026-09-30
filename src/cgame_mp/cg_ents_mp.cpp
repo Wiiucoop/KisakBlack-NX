@@ -2748,9 +2748,9 @@ void __cdecl CG_CreateRagdollObject(int localClientNum, centity_s *cent)
                                              1);
     }
     if ( shareRagdoll )
-        cent->pose.ragdollHandle = (int)RagdollForDObj;
+        cent->pose.ragdollHandle = Ragdoll_BodyHandle(RagdollForDObj);
     else
-        cent->pose.killcamRagdollHandle = (int)RagdollForDObj;
+        cent->pose.killcamRagdollHandle = Ragdoll_BodyHandle(RagdollForDObj);
     cent->pose.isRagdoll = 1;
 }
 

@@ -140,6 +140,47 @@ bool __cdecl Ragdoll_BodyHasPhysics(RagdollBody *body)
     return body->state >= BS_DOBJ_WAIT && body->state <= BS_RUNNING;
 }
 
+#ifdef KISAK_NX
+extern const dvar_t *nx_physics;   // phys_main.cpp
+
+// Enough for every body the pool can hold (Ragdoll_GetUnusedBody caps it at 32).
+static RagdollBody *s_ragdollHandleBodies[32 + 1];
+
+RagdollBody *__cdecl Ragdoll_HandleBody(int handle)
+{
+    if ( handle <= 0 || handle >= (int)ARRAY_COUNT(s_ragdollHandleBodies) )
+        return NULL;
+    return s_ragdollHandleBodies[handle];
+}
+
+int __cdecl Ragdoll_BodyHandle(const RagdollBody *body)
+{
+    if ( !body )
+        return 0;
+    int freeSlot = 0;
+    for ( int i = 1; i < (int)ARRAY_COUNT(s_ragdollHandleBodies); ++i )
+    {
+        if ( s_ragdollHandleBodies[i] == body )
+            return i;
+        if ( !freeSlot && !s_ragdollHandleBodies[i] )
+            freeSlot = i;
+    }
+    iassert(freeSlot);
+    if ( freeSlot )
+        s_ragdollHandleBodies[freeSlot] = (RagdollBody *)body;
+    return freeSlot;
+}
+
+static void Ragdoll_ReleaseBodyHandle(const RagdollBody *body)
+{
+    for ( int i = 1; i < (int)ARRAY_COUNT(s_ragdollHandleBodies); ++i )
+    {
+        if ( s_ragdollHandleBodies[i] == body )
+            s_ragdollHandleBodies[i] = NULL;
+    }
+}
+#endif
+
 const RagdollBody *__cdecl Ragdoll_CreateRagdollForDObj(
                 int localClientNum,
                 int ragdollDef,
@@ -152,6 +193,12 @@ const RagdollBody *__cdecl Ragdoll_CreateRagdollForDObj(
 
     iassert(dobj != DOBJ_HANDLE_NONE);
 
+#ifdef KISAK_NX
+    // A ragdoll is rigid bodies and joints in the physics solver, which is not
+    // LP64-ported yet. With it off the corpse keeps its death-animation pose.
+    if ( !nx_physics || !nx_physics->current.enabled )
+        return 0;
+#endif
     if ( !Ragdoll_BindDef(1u) )
         return 0;
 
@@ -171,7 +218,7 @@ const RagdollBody *__cdecl Ragdoll_CreateRagdollForDObj(
 
     if ( ragdoll )
     {
-        body = (RagdollBody *)Ragdoll_HandleBody((int)ragdoll);
+        body = (RagdollBody *)ragdoll;
         if ( reset )
             Ragdoll_BodyNewState(body, BS_DEAD);
         if ( body->state == BS_DEAD )
@@ -325,6 +372,9 @@ void __cdecl Ragdoll_FreeBody(int ragdollBody)
 
     Ragdoll_BodyNewState(body, BS_DEAD);
     body->references = 0;
+#ifdef KISAK_NX
+    Ragdoll_ReleaseBodyHandle(body);
+#endif
 
     //phys_free_list<RagdollBody>::remove(&g_ragdoll_body_pool, body);
     g_ragdoll_body_pool.remove(body);

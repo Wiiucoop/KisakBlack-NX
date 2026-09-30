@@ -201,10 +201,22 @@ void __cdecl Ragdoll_Register();
 void __cdecl Ragdoll_Init();
 void __cdecl Ragdoll_Shutdown();
 
+#ifdef KISAK_NX
+// A ragdoll handle was the body pointer in an int (cpose_t::ragdollHandle and
+// friends). On LP64 that truncates, and the code tests handles with "> 0". A
+// handle is now a slot in a small table instead: 0 is none, 1..N a body.
+RagdollBody *__cdecl Ragdoll_HandleBody(int handle);
+int __cdecl Ragdoll_BodyHandle(const RagdollBody *body);
+#else
 inline RagdollBody *__cdecl Ragdoll_HandleBody(int handle)
 {
     return (RagdollBody *)handle;
 }
+inline int __cdecl Ragdoll_BodyHandle(const RagdollBody *body)
+{
+    return (int)body;
+}
+#endif
 
 extern const dvar_t *ragdoll_enable;
 extern const dvar_t *ragdoll_debug;

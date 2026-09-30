@@ -710,6 +710,18 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   script source table). The header is now node + pointer (24), sizes are
   rounded to 8, the hunk is 32 MB on NX (23 on x86; the tables hold
   pointers), and running out is a named fatal error instead of a write to 0.
+- **Ragdoll handles were pointers in ints** (`cpose_t::ragdollHandle`,
+  `killcamRagdollHandle`, tested with `> 0`). The first zombie kill that
+  reached ragdoll creation crashed on the truncated pointer. On NX a handle is
+  now a slot in a 32-entry table (`Ragdoll_BodyHandle` / `Ragdoll_HandleBody`),
+  and no ragdoll is created while `nx_physics` is off: a ragdoll is solver
+  rigid bodies and joints, which are not LP64-ported. Corpses keep their
+  death-animation pose.
+- **In-game performance (Zombies, first look):** about 112 ms per frame.
+  Per frame: ~1330 partial buffer uploads (41 ms; ~450 bytes each, nearly one
+  per draw), 1560 draws (30 ms), program binds (14 ms), whole uploads (13 ms),
+  constants (11 ms). The next step is persistent-mapped dynamic buffers, so
+  locks write into GPU memory and no draw uploads anything.
 - `Could not load rawfile "maps/gametypes/zom.gsc"` is expected: retail ships
   no gametype script for Zombies and the load is optional under `KISAK_SP`.
 - The SP `ui/menus.txt` and some lobby materials are not in the zones loaded

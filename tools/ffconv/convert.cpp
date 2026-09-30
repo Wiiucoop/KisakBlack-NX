@@ -3331,6 +3331,11 @@ static void tSndAsset(Reader &r, Prelink &z, Prelink::Loc ls, uint32_t base,
     else                     z.putPtr(ls, base + 64, Prelink::none());
 }
 
+// Loaded sounds by snd_asset_format (0 PCM16 .. 6 MS-ADPCM, 7 WMA): count and
+// payload bytes, printed with the zone summary.
+static unsigned g_sndFormatCount[8];
+static uint64_t g_sndFormatBytes[8];
+
 // LoadedSound: 60 -> 80, a name followed by an inline snd_asset (56 -> 72).
 static void tLoadedSound(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) {
     Prelink::Loc ls = z.alloc(OUT, SZ_LOADEDSOUND, 8);
@@ -3349,6 +3354,12 @@ static void tLoadedSound(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field
 
     uint32_t seekCount;
     memcpy(&seekCount, head + 40, 4);
+    uint32_t format;
+    memcpy(&format, head + 28, 4);
+    if (format < 8) {
+        ++g_sndFormatCount[format];
+        g_sndFormatBytes[format] += dataSize;
+    }
 
     z.putPtr(obj, field, ls);
     putXStringFromTag(r, z, ls, 0, nameTag);
@@ -4857,6 +4868,10 @@ int main(int argc, char **argv) {
     }
     if (missing) printf("  first unresolved ref comes from asset %d\n", firstBad);
     printf("  temp (block 0) bytes, not counted in block 4: %u\n", g_x86temp);
+    for (int f = 0; f < 8; ++f)
+        if (g_sndFormatCount[f])
+            printf("  loaded sounds, format %d: %u, %llu bytes\n", f, g_sndFormatCount[f],
+                   (unsigned long long)g_sndFormatBytes[f]);
     return (b4ok && missing == 0 && g_aliasBad == 0) ? 0 : 5;
 }
 

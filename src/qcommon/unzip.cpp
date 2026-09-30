@@ -275,7 +275,9 @@ static int unzlocal_getShort (ZIP_FILE* fin, uLong *pX)
 
 	ZIP_fread( &v, sizeof(v),fin );
 
-	*pX = LittleShort( v);
+	// nx-port: through the unsigned type -- uLong is 64-bit on LP64, and a signed
+	// short or int would sign-extend values with the top bit set.
+	*pX = (unsigned short)LittleShort( v);
 	return UNZ_OK;
 }
 
@@ -285,7 +287,7 @@ static int unzlocal_getLong (ZIP_FILE *fin, uLong *pX)
 
 	ZIP_fread( &v, sizeof(v),fin );
 
-	*pX = LittleLong( v);
+	*pX = (unsigned int)LittleLong( v);
 	return UNZ_OK;
 }
 
@@ -1069,6 +1071,27 @@ extern int unzOpenCurrentFile (unzFile file)
 */
 extern int unzReadCurrentFile  (unzFile file, void *buf, unsigned len)
 {
+	// nx-port: FS_Seek skips forward by reading into a null buffer. The stored
+	// path checks for that; inflate does not (a null next_out is Z_STREAM_ERROR,
+	// and FS_Seek took any nonzero return as success), so skipping inside a
+	// deflated entry -- most of the streamed voice lines -- left the read where it
+	// was. Skip through a scratch buffer instead.
+	if (!buf && len && file && ((unz_s*)file)->pfile_in_zip_read
+		&& ((unz_s*)file)->pfile_in_zip_read->compression_method != 0)
+	{
+		char scratch[4096];
+		int total = 0;
+		while (len)
+		{
+			unsigned chunk = len < sizeof(scratch) ? len : (unsigned)sizeof(scratch);
+			int got = unzReadCurrentFile(file, scratch, chunk);
+			if (got <= 0)
+				return total ? total : got;
+			total += got;
+			len -= (unsigned)got;
+		}
+		return total;
+	}
 	int err=UNZ_OK;
 	uInt iRead = 0;
 	unz_s* s;

@@ -847,7 +847,11 @@ unsigned int __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, 
                                     filetemp = zfi->file;
                                     ziptemp = zfi->pfile_in_zip_read;
                                     unzSetCurrentFileInfoPosition(v14->handle, i->pos);
-                                    Com_Memcpy(zfi, v14->handle, 128);
+                                    // Everything up to tmpFile: 128 bytes of the x86 layout, which on
+                                    // LP64 stopped short of cur_file_info -- a clone kept the sizes and
+                                    // offset of whatever entry the iwd handle held before, and a second
+                                    // file open in the same iwd read the wrong bytes (streamed sounds).
+                                    Com_Memcpy(zfi, v14->handle, offsetof(unz_s, tmpFile));
                                     zfi->file = filetemp;
                                     zfi->pfile_in_zip_read = ziptemp;
                                     unzOpenCurrentFile(fsh[*file].handleFiles.file.z);

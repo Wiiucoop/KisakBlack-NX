@@ -912,6 +912,22 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    the reverb bus, the per-voice low-pass and futz DSP, the master EQ and
    limiter. `[nx-snd]` prints every 10 s: voices started by format, refused
    (with the last alias), peak playing, starved stream reads, mixer time.
+   **Reading the `.iwd` archives was broken on LP64**, which is what the
+   streams hit first: `FS_FOpenFileRead` clones the iwd's unzip state for a
+   second open file with `Com_Memcpy(zfi, handle, 128)` -- the x86 size of
+   `unz_s` up to `tmpFile`, which on LP64 (8-byte `unsigned long`) stops short
+   of `cur_file_info`, so the clone read another entry's size and offset
+   ("Invalid file (incorrect length)", "could not read file"); now
+   `offsetof(unz_s, tmpFile)`. Also in `unzip.cpp`: `unzlocal_getShort/Long`
+   sign-extended into the 64-bit `uLong`, and `FS_Seek`'s skip-by-reading into
+   a null buffer failed inside deflated entries (inflate refuses a null
+   output); it now skips through a scratch buffer.
+   **WMA is most of the loaded sounds**: the converter now prints loaded sounds
+   by format per zone. `common_zombie`: 1444 WMA (18.0 MB) and 69 MS-ADPCM;
+   `zombie_theater`: 302 WMA (4.4 MB) and 24 ADPCM; `en_zombie_theater` 43 WMA;
+   `code_post_gfx` 30 WMA. As PCM that would be ~16x (hundreds of MB), as
+   ADPCM ~4x; decoding at play time (devkitPro's `switch-ffmpeg`, wmav2) keeps
+   the memory as it is.
    After any converter change, re-convert **and re-copy the `kbz/` folder**.
 
 ---

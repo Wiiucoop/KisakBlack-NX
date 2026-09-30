@@ -744,6 +744,15 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   written since; a lock with neither flag waits for the GPU. The frame
   summary counts fence waits that found the GPU busy ("ring waits"). Without
   the extension it falls back to the upload path.
+- **First result: no gain.** The coherent mapping is uncached on this driver:
+  a 4 KB `memcpy` into it took ~53 us (~80 MB/s), the same as the
+  `glBufferSubData` it replaced, so the frame stayed at 48-63 ms even though
+  whole-buffer traffic fell from ~7.5 GB to ~1.3 GB per 600 frames. The mapping
+  flags are now chosen at startup (`nxGlPickRingMode`): 4 MB written in 4 KB
+  appends into a buffer made each way (coherent, explicit flush, each with and
+  without `GL_CLIENT_STORAGE_BIT`), timed against `glBufferSubData`, fastest
+  kept, all printed as `[nx-gl] buffer write speed`. Buffers first uploaded
+  before the pick move onto the ring.
 - `Could not load rawfile "maps/gametypes/zom.gsc"` is expected: retail ships
   no gametype script for Zombies and the load is optional under `KISAK_SP`.
 - The SP `ui/menus.txt` and some lobby materials are not in the zones loaded

@@ -1314,6 +1314,91 @@ static bool s_progFailed;
 static bool s_glHasS3tc;
 static bool s_glHasAniso;
 static PFNGLBUFFERSTORAGEPROC s_glBufferStorage;   // null: no persistent-mapped buffers
+
+// How the persistent-mapped buffers are made, picked at startup by
+// nxGlPickRingMode. The first try (coherent) mapped memory the CPU writes at
+// ~80 MB/s -- uncached -- so a 4 KB append cost as much as the upload it
+// replaced. Which flags give a cached or write-combined mapping is the
+// driver's business, so each combination is timed on the real thing.
+struct NxRingMode {
+    const char *name;
+    GLbitfield storage, map;
+    bool flush;   // explicit: glFlushMappedBufferRange after each copy
+};
+static const NxRingMode s_ringModes[] = {
+    { "coherent",                GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT,
+                                 GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT, false },
+    { "explicit flush",          GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT,
+                                 GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_FLUSH_EXPLICIT_BIT, true },
+    { "coherent, client",        GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT | GL_CLIENT_STORAGE_BIT,
+                                 GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT, false },
+    { "explicit flush, client",  GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_CLIENT_STORAGE_BIT,
+                                 GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_FLUSH_EXPLICIT_BIT, true },
+};
+static const NxRingMode *s_ringMode;   // null: dynamic buffers upload per unlock
+
+// Times 4 MB written the way the engine writes it -- 4 KB appends -- into a
+// buffer made each way, plus glBufferSubData of the same appends for
+// reference, and keeps the fastest mapping if it beats the upload.
+static void nxGlPickRingMode(void)
+{
+    enum { TOTAL = 4 << 20, CHUNK = 4096 };
+    BYTE *src = (BYTE *)malloc(TOTAL);
+    if (!src)
+        return;
+    for (UINT i = 0; i < TOTAL; ++i)
+        src[i] = (BYTE)(i * 131u);
+
+    auto usPerChunk = [](u64 ticks) { return armTicksToNs(ticks) / 1e3 / (TOTAL / CHUNK); };
+
+    GLuint name = 0;
+    glGenBuffers(1, &name);
+    glBindBuffer(GL_ARRAY_BUFFER, name);
+    glBufferData(GL_ARRAY_BUFFER, TOTAL, nullptr, GL_DYNAMIC_DRAW);
+    u64 t0 = armGetSystemTick();
+    for (UINT off = 0; off < TOTAL; off += CHUNK)
+        glBufferSubData(GL_ARRAY_BUFFER, off, CHUNK, src + off);
+    glFinish();
+    double subUs = usPerChunk(armGetSystemTick() - t0);
+    glDeleteBuffers(1, &name);
+    printf("[nx-gl] buffer write speed, per 4 KB append: glBufferSubData %.1f us\n", subUs);
+
+    double bestUs = subUs;
+    for (const NxRingMode &m : s_ringModes) {
+        name = 0;
+        glGenBuffers(1, &name);
+        glBindBuffer(GL_ARRAY_BUFFER, name);
+        while (glGetError() != GL_NO_ERROR) {}
+        s_glBufferStorage(GL_ARRAY_BUFFER, TOTAL, nullptr, m.storage);
+        BYTE *map = glGetError() == GL_NO_ERROR
+                  ? (BYTE *)glMapBufferRange(GL_ARRAY_BUFFER, 0, TOTAL, m.map) : nullptr;
+        if (!map) {
+            printf("[nx-gl]   %-24s could not be made\n", m.name);
+            glDeleteBuffers(1, &name);
+            continue;
+        }
+        double us = 0;
+        for (int pass = 0; pass < 2; ++pass) {   // the first pass also faults the pages in
+            t0 = armGetSystemTick();
+            for (UINT off = 0; off < TOTAL; off += CHUNK) {
+                memcpy(map + off, src + off, CHUNK);
+                if (m.flush)
+                    glFlushMappedBufferRange(GL_ARRAY_BUFFER, off, CHUNK);
+            }
+            us = usPerChunk(armGetSystemTick() - t0);
+        }
+        glUnmapBuffer(GL_ARRAY_BUFFER);
+        glDeleteBuffers(1, &name);
+        printf("[nx-gl]   %-24s %.1f us\n", m.name, us);
+        if (us < bestUs) {
+            bestUs = us;
+            s_ringMode = &m;
+        }
+    }
+    free(src);
+    printf("[nx-gl] dynamic buffers: %s\n",
+           s_ringMode ? s_ringMode->name : "uploaded per unlock (no mapping was faster)");
+}
 static GLuint s_glSampler[NX_MAX_SAMPLERS];
 enum { NX_ATTR_POS = 0, NX_ATTR_COLOR = 1, NX_ATTR_TEXCOORD = 2 };
 
@@ -1710,8 +1795,10 @@ static bool nxGlEnsurePipeline(void)
         if (ext && !strcmp(ext, "GL_ARB_buffer_storage"))
             s_glBufferStorage = (PFNGLBUFFERSTORAGEPROC)eglGetProcAddress("glBufferStorage");
     }
-    printf("[nx-gl] persistent-mapped dynamic buffers: %s\n",
-           s_glBufferStorage ? "yes" : "no (ARB_buffer_storage missing; uploading per unlock)");
+    if (s_glBufferStorage)
+        nxGlPickRingMode();
+    else
+        printf("[nx-gl] dynamic buffers: uploaded per unlock (ARB_buffer_storage missing)\n");
 
     printf("[nx-gl] textured vertex-colour pipeline up: program %u vao %u "
            "white %u, nxTransform at %d nxTex at %d, %d sampler objects, "
@@ -1856,9 +1943,8 @@ static bool nxGlRingSlot(NxGlRing *r, int slot, GLenum target, UINT length)
     if (!r->name[slot])
         return false;
     glBindBuffer(target, r->name[slot]);
-    const GLbitfield flags = GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT;
-    s_glBufferStorage(target, (GLsizeiptr)length, nullptr, flags);
-    r->map[slot] = (BYTE *)glMapBufferRange(target, 0, (GLsizeiptr)length, flags);
+    s_glBufferStorage(target, (GLsizeiptr)length, nullptr, s_ringMode->storage);
+    r->map[slot] = (BYTE *)glMapBufferRange(target, 0, (GLsizeiptr)length, s_ringMode->map);
     if (!r->map[slot]) {
         glDeleteBuffers(1, &r->name[slot]);
         r->name[slot] = 0;
@@ -1938,6 +2024,8 @@ static bool nxGlSyncRing(NxBuffer *b, GLenum target)
     if (dirty && hi > lo) {
         NxProfScope prof(first ? NXP_BUF_WHOLE : NXP_BUF_PARTIAL);
         memcpy(r->map[r->cur] + lo, (const BYTE *)b->bits + lo, hi - lo);
+        if (s_ringMode->flush)
+            glFlushMappedBufferRange(target, (GLintptr)lo, (GLsizeiptr)(hi - lo));
         if (first)
             s_bufferBytesWhole += hi - lo;
         else
@@ -1967,9 +2055,17 @@ static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
 {
     if (!b || !b->bits || !b->length)
         return false;
-    if (s_glBufferStorage && (b->usage & D3DUSAGE_DYNAMIC) && !b->noRing
-        && (b->ring || !b->glName) && nxGlSyncRing(b, target))
-        return true;
+    if (s_ringMode && (b->usage & D3DUSAGE_DYNAMIC) && !b->noRing) {
+        // A buffer first uploaded the old way, before the mode was picked,
+        // moves over: its GL buffer goes, and the ring starts from the CPU copy.
+        if (!b->ring && b->glName) {
+            glDeleteBuffers(1, &b->glName);
+            b->glName = 0;
+            b->glAllocated = false;
+        }
+        if (nxGlSyncRing(b, target))
+            return true;
+    }
     if (!b->glName) {
         glGenBuffers(1, &b->glName);
         if (!b->glName)

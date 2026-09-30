@@ -1772,6 +1772,15 @@ void __cdecl CL_ForwardToServer_f()
     clientConnection_t *clc; // [esp+10h] [ebp-40Ch]
     char command[1028]; // [esp+14h] [ebp-408h] BYREF
 
+    // nx-port: SP runs its map-start configs before the client state is
+    // allocated, and any command it does not register lands here; with no
+    // client there is no server to forward to.
+    if ( !clientConnections )
+    {
+        Cmd_ArgsBuffer(0, command, 1024);
+        Com_Printf(0, "Not connected to a server (no client yet): '%s'\n", command);
+        return;
+    }
     clc = CL_GetLocalClientConnection(0);
     connstate = CL_GetLocalClientConnectionState(0);
     if ( clc->demoplaying || connstate != CA_ACTIVE )

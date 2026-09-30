@@ -3449,6 +3449,9 @@ static void tSoundFile(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field) 
     tSoundFileRef(r, z, sf, uTag, tail[0]);
 }
 
+// The alias list being read, for FFCONV_ALIASDUMP.
+static std::string g_curAliasList;
+
 // snd_alias_t: 84 -> 104. Load_snd_alias_tArray reads the whole 84*count run
 // before walking it.
 static void tSndAliasArray(Reader &r, Prelink &z, Prelink::Loc list,
@@ -3474,7 +3477,23 @@ static void tSndAliasArray(Reader &r, Prelink &z, Prelink::Loc list,
     }
     for (int i = 0; i < count; ++i) {
         Prelink::Loc a{tbl.blk, tbl.off + (uint32_t)i * SZ_SNDALIAS};
+        // FFCONV_ALIASDUMP=<substring>: the limit and distance fields of the
+        // aliases whose list name contains it (an alias's own name is usually
+        // a reference to its list's).
         putXStringFromTag(r, z, a, 0,  at[i].name);
+        if (getenv("FFCONV_ALIASDUMP") && strstr(g_curAliasList.c_str(), getenv("FFCONV_ALIASDUMP"))) {
+            const std::string &nm = g_curAliasList;
+            {
+                const uint8_t *d = z.at(a);
+                uint32_t flags; memcpy(&flags, d + 40, 4);
+                uint16_t u[16]; memcpy(u, d + 56, 32);   // fluxTime .. envelopPercentage
+                const uint8_t *b = d + 88;               // minPriorityThreshold ..
+                printf("  alias '%s' #%d: flags %08x loop %u limitType %u limit %u entLimitType %u entLimit %u "
+                       "startDelay %u distMin %u distMax %u vol %u-%u pitch %u-%u probability %u\n",
+                       nm.c_str(), i, flags, flags & 1, (flags >> 25) & 3, b[12], (flags >> 27) & 3, b[13],
+                       u[1], u[10], u[11], u[4], u[5], u[7], u[8], b[2]);
+            }
+        }
         putXStringFromTag(r, z, a, 16, at[i].subtitle);
         putXStringFromTag(r, z, a, 24, at[i].secondary);
         if (at[i].soundFile == TAG_NULL)        z.putPtr(a, 32, Prelink::none());
@@ -3506,7 +3525,13 @@ static void tSndAliasListArray(Reader &r, Prelink &z, Prelink::Loc bank,
     }
     for (int i = 0; i < count; ++i) {
         Prelink::Loc l{tbl.blk, tbl.off + (uint32_t)i * SZ_SNDALIASLIST};
-        putXStringFromTag(r, z, l, 0, names[i]);
+        if (names[i] == TAG_INLINE) {
+            g_curAliasList = r.cstr();
+            z.putPtr(l, 0, emitInlineStr(z, g_curAliasList));
+        } else {
+            g_curAliasList.clear();
+            putXStringFromTag(r, z, l, 0, names[i]);
+        }
         if (heads[i] == TAG_NULL)        z.putPtr(l, 16, Prelink::none());
         else if (heads[i] != TAG_INLINE) putStructOffsetRef(z, l, 16, heads[i]);
         else                             tSndAliasArray(r, z, l, 16, counts[i]);

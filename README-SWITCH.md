@@ -977,6 +977,21 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    which every later open repositions (seeks its FILE to the central
    directory, swaps `cur_file_info`). On NX every iwd open is now a clone with
    its own FILE (`unzReOpen`).
+   Fourth run: the fast vocals and the pistol are fixed; the spawn portal
+   sound plays. Still wrong: **emitter loops restarting** -- the misses show
+   `amb_fire` on loop emitters 3714-3722 (handle entIndex 3710 + slot), limit
+   4 by priority. `SND_Frame` pumps every queued command then runs
+   `SNDL_Update`, which continues the emitters; a late sound job pumps two
+   client frames, two `UPDATE_LOOPS` with no emitter update between, and the
+   second retired every emitter loop (then restarted from the top). Now only
+   the first check after an emitter update retires (`g_nxLoopsRetiredThisSndFrame`).
+   **Streams still failing the length check** (round-start music, theater
+   underscore, announcer and player lines) although their headers match the
+   iwd sizes exactly: `FS_FOpenFileReadForThread` has no lock, and the stream
+   thread and the main thread both reposition the iwd's shared unzip handle
+   before copying it into their clone. Opening from an iwd is now serialized
+   (`s_nxIwdOpenLock`). The converter's `FFCONV_ALIASDUMP=<substring>` prints
+   aliases' limit, distance, volume and pitch fields.
    Still to port from the PC driver, all as plumbing -- the algorithms are in
    the engine as plain C: the reverb bus (`SND_RvFrame`, `snd_radverb.cpp`, fed
    by each voice's wet level), the per-voice occlusion low-pass and futz

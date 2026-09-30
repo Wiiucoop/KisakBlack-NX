@@ -4,6 +4,11 @@
 
 #include <ShlObj.h>
 #include <qcommon/threads.h>
+#ifdef KISAK_NX
+#include <mutex>
+// Serializes opening files from iwds; see FS_FOpenFileReadForThread.
+static std::recursive_mutex s_nxIwdOpenLock;
+#endif
 #include <qcommon/common.h>
 
 #include <qcommon/unzip.h>
@@ -816,6 +821,13 @@ unsigned int __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, 
                                         impureIwd = (const char *)v14;
                                         break;
                                     }
+#ifdef KISAK_NX
+                                    // One open at a time per process: the stream thread opens
+                                    // streamed sounds while the main thread opens other files, and
+                                    // both reposition the iwd's shared unzip handle (a seek and read
+                                    // of its FILE) before copying it into their clone.
+                                    std::lock_guard<std::recursive_mutex> nxIwdOpenGuard(s_nxIwdOpenLock);
+#endif
                                     if ( !v14->referenced && !FS_FilesAreLoadedGlobally(sanitizedName) )
                                     {
                                         v14->referenced = 1;

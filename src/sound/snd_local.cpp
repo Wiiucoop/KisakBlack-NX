@@ -772,11 +772,30 @@ void __cdecl SNDL_SetContext(unsigned int type, unsigned int value)
         g_snd.currentContexts[index] = value;
 }
 
+#ifdef KISAK_NX
+// SND_Frame pumps every queued command, then runs SNDL_Update, which continues
+// the loop emitters (SND_PlayLoopAt: ambient fires, chandeliers). When the
+// sound job runs late it pumps two client frames at once -- two UPDATE_LOOPS
+// with no SNDL_Update between them -- and the second retired every emitter
+// loop as not continued; SNDL_Update then restarted it from the top, over and
+// over at the Switch's frame rate. Only the first check after an emitter
+// update retires; later ones just advance looptime.
+bool g_nxLoopsRetiredThisSndFrame;
+#endif
+
 void __cdecl SNDL_UpdateLoopingSounds()
 {
     snd_voice_t *voice; // [esp+4h] [ebp-8h]
     unsigned int i; // [esp+8h] [ebp-4h]
 
+#ifdef KISAK_NX
+    if (!g_snd.paused && g_nxLoopsRetiredThisSndFrame)
+    {
+        ++g_snd.looptime;
+        return;
+    }
+    g_nxLoopsRetiredThisSndFrame = true;
+#endif
     if (!g_snd.paused)
     {
         for (i = 0; i < 0x4A; ++i)

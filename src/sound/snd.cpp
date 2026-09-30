@@ -2276,10 +2276,19 @@ void __cdecl SND_UpdateDebugAlias()
     }
 }
 
+#ifdef KISAK_NX
+extern bool g_nxLoopsRetiredThisSndFrame;   // snd_local.cpp, SNDL_UpdateLoopingSounds
+#endif
+
 void __cdecl SNDL_Update()
 {
     float fdt; // [esp+4Ch] [ebp-8h]
     int frametime; // [esp+50h] [ebp-4h]
+
+#ifdef KISAK_NX
+    // The loop emitters are continued below; the next UPDATE_LOOPS may retire.
+    g_nxLoopsRetiredThisSndFrame = false;
+#endif
 
     if (!SND_Active())
     {

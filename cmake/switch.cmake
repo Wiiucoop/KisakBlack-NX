@@ -58,12 +58,16 @@ set_target_properties(${BIN_NAME} PROPERTIES SOURCES "${KB_SOURCES}")
 # place of KISAK_MP. Use its own build directory:
 #   cmake -S . -B build-nx-sp -DNX_SP=ON
 option(NX_SP "Build the single-player / Zombies executable (KISAK_SP)" OFF)
+# NX_NRO_NAME is both the .nro file name and the title the homebrew menu shows;
+# the icons are 256x256 JPEGs in switch-meta/ (see README-SWITCH).
 if(NX_SP)
     set(NX_GAME_MODE KISAK_SP)
-    set(NX_NRO_NAME "KisakBlack SP")
+    set(NX_NRO_NAME "KisakBlack")
+    set(NX_NRO_ICON "${CMAKE_SOURCE_DIR}/switch-meta/icon-zm.jpg")
 else()
     set(NX_GAME_MODE KISAK_MP)
-    set(NX_NRO_NAME "KisakBlack")
+    set(NX_NRO_NAME "KisakBlack-MP")
+    set(NX_NRO_ICON "${CMAKE_SOURCE_DIR}/switch-meta/icon-mp.jpg")
 endif()
 target_compile_definitions(${BIN_NAME} PUBLIC
     ${NX_GAME_MODE}
@@ -275,8 +279,15 @@ target_link_libraries(${BIN_NAME} PRIVATE
     nx m)
 
 # ----- NRO packaging -----
-nx_create_nro(${BIN_NAME}
+# nx_create_nro takes no NAME/AUTHOR/VERSION (those belong to the NACP, and
+# were ignored here before), so the title goes in through an explicit NACP.
+nx_generate_nacp(${BIN_NAME}.nacp
     NAME    "${NX_NRO_NAME}"
     AUTHOR  "SwagSoftware"
     VERSION "0.1.0"
+)
+nx_create_nro(${BIN_NAME}
+    OUTPUT  "${CMAKE_CURRENT_BINARY_DIR}/${NX_NRO_NAME}.nro"
+    ICON    "${NX_NRO_ICON}"
+    NACP    ${BIN_NAME}.nacp
 )

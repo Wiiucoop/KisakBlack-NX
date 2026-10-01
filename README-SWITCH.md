@@ -416,6 +416,19 @@ kernel's memory map. Smaller blocks are not guarded.
   A file that comes out clean can join `NX_SANITIZED_SOURCES`.
 - **Push:** Git Credential Manager holds the GitHub login on the dev machine,
   so `git push origin switch-port` works non-interactively there.
+- **NRO names and icons:** SP/Zombies (`build-nx-sp/`) builds
+  `KisakBlack.nro`, multiplayer (`build-nx/`) builds `KisakBlack-MP.nro`; the
+  same string is the title the homebrew menu shows. Both live in
+  `cmake/switch.cmake`, in the `if(NX_SP)` block: `NX_NRO_NAME` (file name and
+  title) and `NX_NRO_ICON`. The author and version are in the
+  `nx_generate_nacp` call further down. The icons are
+  `switch-meta/icon-zm.jpg` and `switch-meta/icon-mp.jpg` (libnx's default
+  icon for now): replace them with **256x256 baseline JPEGs** (not
+  progressive; hbmenu shows nothing for a progressive one) and rebuild.
+  After changing a name, re-run `cmake build-nx-sp` / `cmake build-nx`. To
+  restamp an NRO without rebuilding, devkitPro's tools work on the ELF:
+  `nacptool --create "<title>" "<author>" "<version>" out.nacp`, then
+  `elf2nro KisakBlack.elf out.nro --icon=icon.jpg --nacp=out.nacp`.
 
 ---
 
@@ -681,8 +694,9 @@ converts the Zombies set after the MP one (`code_pre_gfx`, `code_post_gfx`,
 `zombie_theater` + `_patch`, and their `en_` zones); all validate. Boot with
 `+devmap zombie_theater`, skipping the frontend.
 
-**Running SP.** Copy `build-nx-sp/KisakBlack.nro` as `KisakBlack-SP.nro`; both
-NROs use the same game folder, `sdmc:/switch/kisakblack/`, and the same
+**Running SP.** SP/Zombies is `build-nx-sp/KisakBlack.nro`, multiplayer
+`build-nx/KisakBlack-MP.nro` (until 2026-10-01 they were `KisakBlack-SP.nro`
+and `KisakBlack.nro`); both NROs use the same game folder, `sdmc:/switch/kisakblack/`, and the same
 `cmdline.txt` -- the one on the SD card, which the log's first lines echo
 (`command line: ...`). For Zombies: `+devmap zombie_theater`. The engine
 loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then

@@ -614,8 +614,15 @@ void __cdecl CG_ActorCorpse(int localClientNum, centity_s *cent)
         // their reference and the corpse limit still clears it. Copying the
         // server's corpse tree over instead crashed: it carries server script
         // strings into client notetrack notifies. See README-SWITCH, physics.
+        // The actor's DObj must go too: it still points at the anim tree of
+        // the actor slot, and the next zombie in that slot shares it, so
+        // CG_UpdateEntInfo advanced that tree twice a frame (double speed).
         if ( !nx_physics || !nx_physics->current.enabled )
+        {
+            if ( Com_GetClientDObj(p_nextState->number, localClientNum) )
+                CG_SafeDObjFree(localClientNum, p_nextState->number);
             return;
+        }
 #endif
 #ifdef KISAK_SP
         // Retail SP uses the corpse slot carried in actorNum because the actor

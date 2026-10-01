@@ -622,7 +622,9 @@ What that costs until it is ported, and the stand-ins:
   the dead actor into a corpse whose client anim tree starts empty; in retail
   the ragdoll takes the bones over at that moment, and without one the corpse
   stood in its bind pose (T-pose). `CG_ActorCorpse` (`cg_actors_mp.cpp`)
-  therefore does not draw actor corpses while `nx_physics` is off. The server
+  therefore does not draw actor corpses while `nx_physics` is off, and frees
+  their client DObj (left alive, it shared its actor slot's anim tree with the
+  next zombie in that slot and doubled its animation speed). The server
   entity stays (scripts keep their reference, the corpse limit clears it).
   Copying the server's corpse tree into the client one was tried and crashed:
   the tree carries server script strings into client notetrack notifies.
@@ -1034,6 +1036,12 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    with lags of 100-290 s (the log's `lag` field) so the catch-up ran them to
    their ends, on top of its own. `G_FreeEntity` now calls
    `CG_ForgetAnimCommandsForEnt_SP`, dropping the freed number's commands.
+   That removed the late replays but not the **double-speed zombies**: those
+   came from the corpse hide (see the physics limitation). A dying actor's
+   entity becomes the corpse but kept its client DObj, which points at
+   `actorinfo[actorNum].pXAnimTree`; the next zombie given that actor slot got
+   a DObj on the same tree, and `CG_UpdateEntInfo` advanced the tree once per
+   DObj -- twice a frame. The hide path now frees the corpse's DObj.
    Still to port from the PC driver, all as plumbing -- the algorithms are in
    the engine as plain C: the reverb bus (`SND_RvFrame`, `snd_radverb.cpp`, fed
    by each voice's wet level), the per-voice occlusion low-pass and futz

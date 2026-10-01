@@ -29,6 +29,9 @@
 #include <stringed/stringed_hooks.h>
 #ifdef KISAK_SP
 #include <cgame_mp/cg_actors_mp.h>
+#ifdef KISAK_SP
+#include <cgame_mp/cg_animscripted_mp.h>   // CG_ForgetAnimCommandsForEnt_SP
+#endif
 
 // Retail SP keeps this state in five gentity_s fields at +0x284..+0x294.
 // The reconstruction deliberately retains the MP gentity_s layout, so keep
@@ -1787,6 +1790,10 @@ void __cdecl G_FreeEntity(gentity_s *ed)
     while ( ed->tagChildren )
         G_EntUnlink(ed->tagChildren);
     SV_UnlinkEntity(ed);
+#ifdef KISAK_SP
+    // The integrated client's stored anim commands for this number go with it.
+    CG_ForgetAnimCommandsForEnt_SP(ed->s.number);
+#endif
     tree = SV_DObjGetTree(ed);
     if ( tree )
         XAnimClearTree(tree);

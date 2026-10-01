@@ -46,6 +46,9 @@ int __cdecl CG_StoreServerAnimCommand_SP(
     int flags);
 void __cdecl CG_ApplyPendingAnimCommands_SP(int localClientNum);
 void __cdecl CG_ApplyPendingAnimCommandsForDObj_SP(int localClientNum, int entNum, DObj *obj);
+// The entity was freed: its stored commands belong to it, not to whatever
+// takes the number next (see the definition).
+void __cdecl CG_ForgetAnimCommandsForEnt_SP(int entNum);
 #endif
 
 void __cdecl CG_GetTagMatrix(int localClientNum, int linkEntNum, unsigned __int16 tagName, float (*resultTagMat)[3]);

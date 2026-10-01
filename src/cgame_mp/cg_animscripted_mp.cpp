@@ -284,6 +284,27 @@ void __cdecl CG_ApplyPendingAnimCommandsForDObj_SP(int localClientNum, int entNu
     }
 }
 
+// Called from G_FreeEntity. CG_ApplyPendingAnimCommandsForDObj_SP replays every
+// command still in the ring for an entity number whenever its DObj is made,
+// and zombies reuse entity numbers constantly: a new zombie got the previous
+// occupants' commands -- minutes old, so the catch-up ran them to their ends
+// -- stacked on its own. Zombies sped up, stuck in a pose until damaged, or
+// with limbs at odd angles, more of them the longer a game ran.
+void __cdecl CG_ForgetAnimCommandsForEnt_SP(int entNum)
+{
+    std::lock_guard<std::mutex> lock(g_animCommandMutex_SP);
+    for ( StoredAnimCommand_SP &stored : g_animCommands_SP )
+    {
+        if ( stored.occupied && stored.command.entNum == entNum )
+            stored.occupied = false;
+    }
+    if ( entNum >= 0 && entNum < 1024 )
+    {
+        g_lastAppliedAnimIndex_SP[entNum] = 0;
+        g_lastAppliedAnimType_SP[entNum] = 0;
+    }
+}
+
 void __cdecl CG_ApplyPendingAnimCommands_SP(int localClientNum)
 {
     if (!com_sv_running->current.enabled)

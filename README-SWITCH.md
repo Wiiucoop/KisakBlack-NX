@@ -1026,6 +1026,14 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    is `DB_GetLoadedFraction` (`g_loadedSize / g_totalSize`, 256 KB units),
    counted by `DB_LoadXFile`, which the KBZ path bypasses; `slurp`
    (`nx_kbz.cpp`) now reads in 256 KB units and feeds the same counters.
+   **Zombies with sped-up, stuck or broken-looking animations**, more of them
+   the longer a game ran: `CG_ApplyPendingAnimCommandsForDObj_SP` replays
+   every command still in the 1024-entry anim command ring for an entity
+   number whenever that entity's DObj is made, and zombies reuse entity numbers
+   constantly -- a new zombie got the previous occupants' commands, applied
+   with lags of 100-290 s (the log's `lag` field) so the catch-up ran them to
+   their ends, on top of its own. `G_FreeEntity` now calls
+   `CG_ForgetAnimCommandsForEnt_SP`, dropping the freed number's commands.
    Still to port from the PC driver, all as plumbing -- the algorithms are in
    the engine as plain C: the reverb bus (`SND_RvFrame`, `snd_radverb.cpp`, fed
    by each voice's wet level), the per-voice occlusion low-pass and futz

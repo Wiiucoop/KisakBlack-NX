@@ -39,6 +39,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/mem.h>
+#include <libavutil/log.h>
 }
 
 // The WMA v2 decoder by name: avcodec_find_decoder would pull in the whole
@@ -537,6 +538,13 @@ bool openWma(int voiceIndex, const snd_asset *snd)
     if (d.ctx && (d.rate != snd->frame_rate || d.channels != snd->channel_count))
         avcodec_free_context(&d.ctx);
     if (!d.ctx) {
+        // FFmpeg logs to stderr: "Could not update timestamps for skipped
+        // samples" came ~670 times a session (we do not use its timestamps).
+        static bool s_avLogQuiet;
+        if (!s_avLogQuiet) {
+            av_log_set_level(AV_LOG_ERROR);
+            s_avLogQuiet = true;
+        }
         AVCodecContext *ctx = avcodec_alloc_context3(&ff_wmav2_decoder);
         if (!ctx)
             return false;

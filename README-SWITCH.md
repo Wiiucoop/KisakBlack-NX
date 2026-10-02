@@ -1013,6 +1013,23 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   render thread 85-120 ms in the swap, i.e. the GPU itself, likely heavy
   effects (to be read from `GPU time by part`); (3) once, entering the map:
   `Com_EventLoop` 500-600 ms and the first `SV_SendClientMessages` 800 ms.
+- **`+set` lines after the map command came too late.** `r_picmip 2` in
+  `cmdline.txt` showed `Using picmip 2` and then `Using picmip 3` for the map:
+  the file's own `+devmap zombie_theater` came before the added lines, and the
+  startup commands run in order -- the map loaded with the preset's picmip
+  before the user's value was set. `nxAppendCmdlineFile` now moves a
+  `+devmap` / `+map` / `+spdevmap` / `+spmap` command and its map name to the
+  end of the line. Not cheat protection.
+- **FFmpeg on stderr.** The WMA decoder logged `Could not update timestamps for
+  skipped samples` ~670 times a session (we do not use its timestamps);
+  `av_log_set_level(AV_LOG_ERROR)` at the first decoder open. ~20 `nb_frames
+  is 0` errors a session remain visible.
+- **Hitches still open (log of 2026-10-02 12:53):** frames 1409-1411, 0.4-0.8 s,
+  the server thread 338 ms in one `G_RunFrameForEntity` (script/AI); frame
+  1926, 1.07 s with the swap, the sound worker (`SND_CommandPump`) and the
+  server all stalled the same ~1.06 s, then ~60 frames of ~100 ms with
+  `RB_StandardDrawCommands` ~100 ms but almost no GL draws -- what the player
+  did then decides where to look.
 - **Restart Map, still broken (SP).** Reloading the level now gets past the
   UI shutdown but crashes unloading the map's zones: `DB_FreeUnusedResources`
   -> `Mark_WeaponVariantDef` -> `Mark_XModelPtr` follows a weapon (still

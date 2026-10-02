@@ -48,6 +48,30 @@ static void nxAppendCmdlineFile(char *cmdline, size_t size)
             if (*p == '\r' || *p == '\n') *p = ' ';
     }
     fclose(f);
+
+    // The startup commands run in order, and a map command loads the level
+    // there and then: a "+set" after it (cmdline.txt lines added below an
+    // existing +devmap) only took effect after the textures had loaded --
+    // r_picmip 2 was used for the frontend and then back to 3 for the map.
+    // So the map command, with its map name, moves to the end.
+    static const char *const mapCommands[] = { "+devmap ", "+map ", "+spdevmap ", "+spmap " };
+    for (const char *cmd : mapCommands) {
+        char *at = strstr(cmdline, cmd);
+        if (!at)
+            continue;
+        char *name = at + strlen(cmd);
+        while (*name == ' ')
+            ++name;
+        char *end = name;
+        while (*end && *end != ' ')
+            ++end;
+        char moved[128];
+        snprintf(moved, sizeof(moved), " %.*s", (int)(end - at), at);
+        memmove(at, end, strlen(end) + 1);
+        if (strlen(cmdline) + strlen(moved) + 1 < size)
+            strcat(cmdline, moved);
+        break;
+    }
 }
 
 // Route stdout/stderr somewhere the user can read after a crash: nxlink if the

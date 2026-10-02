@@ -1818,7 +1818,12 @@ void __cdecl Com_Init(char *commandLine)
         }
         if ( !com_startupIntroPlayed->current.enabled )
         {
+#ifndef KISAK_NX
+            // NX: Bink is stubbed (nx_bink_stubs.cpp), so the startup reel could
+            // only be an empty movie in front of the menu. Not queuing it sends
+            // the frontend's UI_SetActiveMenu through its "no active playback" arm.
             R_Cinematic_SetNextPlayback("number_lady_intro", 0);
+#endif
             Dvar_SetBool((dvar_s *)com_startupIntroPlayed, true);
         }
         Com_LoadFrontEnd();

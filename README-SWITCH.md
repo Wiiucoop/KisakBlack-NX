@@ -743,7 +743,8 @@ inline strings are recorded as byte ranges (`emitInlineStr`). `convert-zones.sh`
 converts the Zombies set after the MP one (`code_pre_gfx`, `code_post_gfx`,
 `common`, `patch`, `frontend` + `_patch`, `common_zombie` + `_patch`,
 `zombie_theater` + `_patch`, and their `en_` zones); all validate. Boot with
-`+devmap zombie_theater`, skipping the frontend.
+`+devmap zombie_theater` to skip the frontend, or with no map command for
+the main menu (see "Frontend" in section 5).
 
 **Running SP.** SP/Zombies is `build-nx-sp/KisakBlack.nro`, multiplayer
 `build-nx/KisakBlack-MP.nro` (until 2026-10-01 they were `KisakBlack-SP.nro`
@@ -1138,6 +1139,21 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   The field is 5 bits in SP now. The corpse hand-off in `cg_snapshot_mp.cpp`
   only remembered slots below 16 (`< 16u`, `<= 16`); it uses `MAX_ACTORS`.
   The one-DObj-per-tree guard and its report stay as a safety net.
+- **Frontend (main menu), first attempt (2026-10-02).** Until now SP always
+  booted with `+devmap zombie_theater`, which starts the server before the
+  end of `Com_Init`, so the frontend was never loaded. Without a map command
+  `Com_Init` ends in `Com_LoadFrontEnd` -> `map frontend`. The frontend is a
+  3D level: `Com_LoadLevelFastFiles` loads `patch_ui` (not in this game set),
+  `frontend` (zone/Common, flag 0x2000000) and `en_frontend`, and not
+  `common`. A missing zone is only a warning: the "localized?" test in
+  `DB_TryLoadXFileInternal` compares the full path's first three characters
+  with `en_`, which never match. Both frontend `.kbz` are converted and
+  validated; `frontend_patch.ff` does not exist in this set. The startup reel
+  `number_lady_intro` is not queued on NX (Bink is stubbed), so the menu's
+  `UI_SetActiveMenu` takes its "no active playback" path. `frontend.gsc`'s
+  `Start3DCinematic("frontend")` opens a stubbed Bink and shows nothing.
+  Starting Zombies from the menu changes level, which goes through the zone
+  unload that still crashes on Restart Map (section 6).
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

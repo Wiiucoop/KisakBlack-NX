@@ -981,6 +981,19 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   lines: from `nx_prof.cpp`, that main-thread frame's costliest scopes on
   every thread (each frame snapshots every site to diff against the next);
   from the GL layer, that present's GL work by kind and programs built.
+- **540p, first reading (handheld, 460.8 MHz).** `Attempting 960 x 540
+  window`; in-game frames 26-28 ms (from 31-36 at 720p), GPU 15.7-16.7 ms:
+  Lit 9.2-9.9, post effects ~1.5, Emissive ~0.5.
+- **Stutters: texture streaming, not shaders.** The `[nx-hitch]` lines showed
+  `programs built 0` in every hitch but one (2 programs, ~62 ms). They came in
+  bursts -- ~30 frames of ~200 ms right after the map started (about 6 s at
+  5 fps), shorter ones entering new areas -- and every one had the Stream
+  thread in `R_StreamUpdate_ReadTextures` for 130-220 ms of the frame, the
+  render thread re-uploading textures (15-45 ms) and binding them (35-90 ms
+  under samplers). The 2.1 s freeze was `Snd_StreamUpdate` on the same
+  thread sitting 1.9 s, the sound streams' reads queued behind the texture
+  reads. `r_stream` (high mip streaming) now defaults to 0 on NX: with
+  `r_picmip 3` the streamed high mips are dropped anyway.
 - **Restart Map, still broken (SP).** Reloading the level now gets past the
   UI shutdown but crashes unloading the map's zones: `DB_FreeUnusedResources`
   -> `Mark_WeaponVariantDef` -> `Mark_XModelPtr` follows a weapon (still

@@ -1426,7 +1426,17 @@ void __cdecl R_RegisterDvars()
                                                                  0x1080u,
                                                                  "Provides high-res spot shadows for the only one spotlight in the scene.");
     sm_debugFastSunShadow = _Dvar_RegisterBool("sm_debugFastSunShadow", 0, 0x80u, "Debug fast sun shadow");
+#ifdef KISAK_NX
+    // Off on NX: streaming in the high mips was the stutter in Zombies -- the
+    // Stream thread spent 130-220 ms a frame in R_StreamUpdate_ReadTextures for
+    // seconds after the map started and on entering new areas, the render
+    // thread then re-uploaded them, and the sound streams on the same thread
+    // starved (one 1.9 s Snd_StreamUpdate). With r_picmip 3 the high mips are
+    // dropped anyway. README-SWITCH, "Stutters".
+    r_stream = _Dvar_RegisterInt("r_stream", 0, 0, 7, 0x80u, "Stream high mip levels (1=world|2=xmodels|4=bmodels)");
+#else
     r_stream = _Dvar_RegisterInt("r_stream", 7, 0, 7, 0x80u, "Stream high mip levels (1=world|2=xmodels|4=bmodels)");
+#endif
     r_streamCheckAabb = _Dvar_RegisterBool("r_streamCheckAabb", 0, 0x80u, "Enables runtime checking of stream aabb tree");
     r_streamClear = _Dvar_RegisterBool("r_streamClear", 0, 0x80u, "Set true to clear all streamed highmip levels");
     r_streamDebug = _Dvar_RegisterBool(

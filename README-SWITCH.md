@@ -49,6 +49,35 @@ repository and none ever should be.
   Direct3D-over-GL layer per draw (section 2, "The report"), which is being
   profiled down.
 
+**Zombies (SP build, `KisakBlack.nro`) -- state as of 2026-10-02.** Kino der
+Toten (`zombie_theater`) boots every time, loads, and is playable through the
+rounds: menus with the controller (A/B in the Nintendo layout), the coop load
+screen with a progress bar, sound (PCM, ADPCM, WMA through FFmpeg, streams),
+power, perks, power-ups, the mystery box. Handheld at 460.8 MHz and 540p it
+runs at roughly 19-30 ms a frame depending on the area (~33-50 fps), with the
+GPU at 12-19 ms; the multiplayer build is `KisakBlack-MP.nro`.
+
+**Defaults that matter**, all overridable in `cmdline.txt` (a map command in
+it is moved to the end of the line, so `+set` lines always apply first):
+
+| Setting | Default | Why |
+|---|---|---|
+| `r_mode` | 960x540 handheld, 1280x720 docked (chosen at boot) | GPU-bound in handheld; the present blit upscales |
+| `nx_gpuclock` | 460 (MHz, handheld only; 0 = leave the system's) | GPU-bound; only replaces the 307.2 MHz default, so sys-clk wins |
+| `r_picmip` / `_bump` / `_spec` | 2 | 3 too blurry with no streaming; 1 brought driver stalls |
+| `r_stream` | 0 | high-mip streaming was the stutter |
+| `nx_bloom` | 0 | bloom drew glows offset from their lights |
+| `nx_vsync` | 0 | the refresh wait rounded frames up to 33/50 ms |
+| `nx_glflush` | 64 | flush every N draws so CPU and GPU overlap |
+| `nx_splog` | 0 | SP bring-up traces off the log |
+| shadows, depth prepass, DoF, distortion, flame, marks, brass | off | the low preset (`nx_main.cpp`) |
+
+**Shader warm-up.** Every shader pair ever built is listed in
+`shadercache/pairs.txt` and built while the loading screen is up; a session
+after the first builds none in game. Binaries go to `shadercache/*.bin` (Mesa
+still runs its back end on load, ~18 ms each, which is why the warm-up
+matters). `pairs.txt` is build-independent and can ship in the NRO.
+
 Hardware and driver, as the log reports them: Mesa 26.2.1, OpenGL 4.3 core,
 renderer `NV12B` — Mesa's native nvc0 driver on the Tegra X1, not Zink.
 
@@ -1105,17 +1134,45 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
 - **Renderer gaps** (section 2): no depth, stencil or culling yet; no
   `DrawPrimitive` / `DrawPrimitiveUP`; one render target of an MRT set; no
   sRGB.
-- **In game it is slow** (section 2, "The report"); being profiled down.
+- **Frame rate is area-dependent, ~33-50 fps handheld (SP).** Both the GPU
+  (12-19 ms at 540p, 460.8 MHz; Lit is ~60% of it) and the render thread's
+  per-draw driver cost (~25-30 us a draw, 500-900 draws) are close to the
+  frame time. Further gains: fewer draws, cheaper Lit, or the GPU clock.
+- **Resolution is chosen at boot.** Docking or undocking mid-game keeps the
+  boot resolution until the title restarts (changing it live would be a
+  `vid_restart`, never exercised here).
+- **Restart Map / quitting to the menu (SP).** The level reload crashes
+  unloading the map's zones (`DB_FreeUnusedResources` -> `Mark_XModelPtr`
+  following a still-loaded weapon into the zone being freed); zone unloading
+  has never run on NX. The in-place restart (MP's) does not rebuild SP's
+  per-player script state. Retail SP's `map_restart` / `fast_restart` are not
+  in the decomp. Section 5, "Restart Map".
+- **Texture streaming is off** (`r_stream 0`), so textures are the level's
+  own mips at `r_picmip 2`. Smooth streaming needs per-frame upload budgets
+  and the sound reads ahead of the texture reads (section 5).
+- **Occasional hitches remain**: a first-time shader (~140 ms, once, then it
+  is in `pairs.txt`), heavy-effect GPU frames, and one-off spikes entering
+  the map. `[nx-hitch]` lines in the log name the scopes of any frame over
+  100 ms.
+- **Vision sets (SP).** `player VisionSetNaked()` works; `VisionSetLastStand`
+  is a stub (no last-stand vision channel in this client) and
+  `GetVisionSetNaked` returns nothing.
+- **SP script stubs.** Builtins the decomp has not reconstructed report once
+  in the log (`TODO(SP-STUB) script builtin '...'`): e.g. `setblur`,
+  `allowlean`, `allowmelee`, `weaponisgasweapon`.
 - **Physics is off** (`nx_physics 0`): the solver is still at x86 offsets.
   No ragdolls; Zombies corpses are hidden when their death animation ends
   (section 3, physics).
+- **No light coronas**: occlusion queries report 0 visible pixels, so
+  `RB_DrawCorona` never draws one.
 - **`r_water_sim.cpp` is not LP64-clean** (dozens of pointer/int casts); maps
   with dynamic water will break. `mp_nuked` has none.
 - **`ui_viewer_mp` cannot be converted**: it contains a `ComWorld` (asset type
   13), map data the converter does not handle yet. The engine carries on
   without it.
-- **Light glows drawn away from their lights** (Zombies: the Quick Revive
-  machine, the lamps outside), more visibly from afar. **It is the bloom**:
+- **Bloom is off** (`nx_bloom 0`) -- the light glows drawn away from their
+  lights (Zombies: the Quick Revive machine, the lamps outside), more
+  visibly from afar, were **the bloom**:
   `nx_bloom 0` makes it go, so the low preset (`nx_main.cpp`) now sets it --
   which also saves the bloom's ~10 small passes. The fault inside
   `RB_BloomLDR` (one of its downsample / blur / streak / smooth passes reading

@@ -1071,6 +1071,15 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
    `actorinfo[actorNum].pXAnimTree`; the next zombie given that actor slot got
    a DObj on the same tree, and `CG_UpdateEntInfo` advanced the tree once per
    DObj -- twice a frame. The hide path now frees the corpse's DObj.
+   **Random boot failures** (a black screen for a few seconds, then back to the
+   menu; relaunching eventually works), there since the SP merge: "Error
+   during initialization: Could not load default asset '' for asset type
+   'ddl'. Tried to load asset 'ddl/stats.ddl'." SP's stats DDL ships only in
+   `patch.ff`, which `DB_LoadGraphicsAssetsForPC` queues without a sync, and
+   `LiveStats_Init` asks for it during init. `DB_FindXAssetHeader` stops
+   waiting for missing assets during init once the minimum fastfiles are in,
+   so whether the boot survived depended on whether `patch` had finished.
+   Under KISAK_SP, DDLs now wait for the load queue.
    Still to port from the PC driver, all as plumbing -- the algorithms are in
    the engine as plain C: the reverb bus (`SND_RvFrame`, `snd_radverb.cpp`, fed
    by each voice's wet level), the per-voice occlusion low-pass and futz

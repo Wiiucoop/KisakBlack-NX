@@ -1474,8 +1474,18 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, char *name, bool error
                 break;
             }
         }
+#ifdef KISAK_SP
+        // SP's ddl/stats.ddl ships only in patch.ff, which DB_LoadGraphicsAssetsForPC queues
+        // without a sync, and LiveStats_Init asks for it during init. The minimum-fastfile
+        // early-out then raced the patch load: whenever patch was still loading, the boot died
+        // with "Could not load default asset '' for asset type 'ddl'" (MP's DDLs are in
+        // code_post_gfx_mp, so MP never waits here). DDLs wait for the queue instead.
+        if (Sys_IsDatabaseReady2() || DB_IsMinimumFastFileLoaded() && DB_GetInitializing() && type != ASSET_TYPE_DDL)
+            break;
+#else
         if (Sys_IsDatabaseReady2() || DB_IsMinimumFastFileLoaded() && DB_GetInitializing())
             break;
+#endif
         if (Sys_IsDatabaseReady()
             && (Sys_IsMainThread() || Sys_IsRenderThread() && R_IsInRemoteScreenUpdate() && Sys_QueryRGRegisteredEvent()))
         {

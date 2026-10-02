@@ -283,8 +283,8 @@ target_link_libraries(${BIN_NAME} PRIVATE
 # were ignored here before), so the title goes in through an explicit NACP.
 nx_generate_nacp(${BIN_NAME}.nacp
     NAME    "${NX_NRO_NAME}"
-    AUTHOR  "SwagSoftware"
-    VERSION "0.1.0"
+    AUTHOR  "HDErick-wiiucoop"
+    VERSION "1.0.0"
 )
 nx_create_nro(${BIN_NAME}
     OUTPUT  "${CMAKE_CURRENT_BINARY_DIR}/${NX_NRO_NAME}.nro"

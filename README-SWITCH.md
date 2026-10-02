@@ -940,6 +940,20 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   the x86 stride of `UILocalVar` (24 bytes on LP64), so every UI local
   variable was read and written in the wrong place; shutdown freed a garbage
   name. They return `&context->table[hash]` now.
+- **Handheld GPU clock.** The frame is GPU-bound, and handheld runs the GPU at
+  307.2 MHz by default while the console offers 384.0 and 460.8 MHz there.
+  `nx_clock.cpp` sets it through `clkrst` (8.0.0+; `pcv` before), from
+  `nx_gpuclock` (MHz: 307 / 384 / 460, default 460; 0 leaves the system's),
+  only in handheld mode, re-checked every ~2 s since docking resets it, and
+  restores the clock it found on exit.
+- **Restart Map, still broken (SP).** Reloading the level now gets past the
+  UI shutdown but crashes unloading the map's zones: `DB_FreeUnusedResources`
+  -> `Mark_WeaponVariantDef` -> `Mark_XModelPtr` follows a weapon (still
+  loaded, in `common_zombie`) into an XModel of the zone being unloaded.
+  Zone unloading has never run on NX -- quitting to the menu takes the same
+  path. The in-place restart (MP's) does not rebuild SP's per-player script
+  state; retail SP's own `map_restart` / `fast_restart` are not in this
+  decomp yet. Either needs reconstructing.
 - **Vision sets (SP).** `player VisionSetNaked()` was a no-op stub; it now does
   what the global `VisionSetNaked` does (configstring 1550, which the client
   lerps to). `VisionSetLastStand` stays a stub: this client has no last-stand

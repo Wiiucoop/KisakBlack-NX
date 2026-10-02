@@ -2,6 +2,7 @@
 // sets up the game directory, then hands control to the game's WinMain
 // (src/win32/win_main.cpp), which never returns.
 #include <switch.h>
+#include "nx_clock.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -229,6 +230,8 @@ int main(int argc, char **argv)
     chdir(NX_GAME_DIR);
 
     nxSetupLogging();
+    NX_ClockInit();
+    atexit(NX_ClockExit);
 
     nx_wincompat_init_main_thread();
 

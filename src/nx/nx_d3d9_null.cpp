@@ -39,6 +39,7 @@
 #include <qcommon/threads.h>
 
 #include "nx_d3d9_shader.h"
+#include "nx_clock.h"
 
 #include <map>
 #include <mutex>
@@ -5913,6 +5914,11 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     if (!s_glFlushDvar)
         s_glFlushDvar = _Dvar_RegisterInt("nx_glflush", 64, 0, 100000, 0,
                                           "glFlush every N draws so the GPU starts before the swap (0: off)");
+    static const dvar_s *s_gpuClockDvar;
+    if (!s_gpuClockDvar)
+        s_gpuClockDvar = _Dvar_RegisterInt("nx_gpuclock", 460, 0, 460, 0,
+                                           "Handheld GPU clock in MHz: 307, 384 or 460; 0 leaves the system's");
+    NX_ClockUpdate(s_gpuClockDvar->current.integer);
     s_drawsSinceFlush = 0;
     if ((int)s_vsyncDvar->current.enabled != s_vsyncApplied) {
         s_vsyncApplied = s_vsyncDvar->current.enabled;

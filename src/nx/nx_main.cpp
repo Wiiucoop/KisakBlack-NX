@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/iosupport.h>
 #include <sys/stat.h>
 
 #include <windows.h>
@@ -59,17 +61,134 @@ static void nxAppendCmdlineFile(char *cmdline, size_t size)
 // there: the stray binary in front of some lines, and a GL renderer string
 // that never reached the log. Append mode makes newlib seek to the current
 // end before every write, so the two can interleave but never overlap.
+// ----- Asynchronous log -----
+// Every printf used to be a write to the SD card on the thread that printed:
+// the 600-frame summaries (~60 lines) made a 140-190 ms hitch each time. Now
+// stdout and stderr are line-buffered FILEs whose output goes into a ring in
+// memory, and a low-priority thread writes the ring to the log file. A full
+// ring makes the printing thread wait, so nothing is lost. The crash handler
+// writes out what the ring still holds before its own report (nxLogDrainUnlocked).
+static int s_logFd = -1;
+static char s_logRing[4 << 20];
+static size_t s_logHead, s_logTail;   // write at head, the thread reads from tail
+static Mutex s_logLock;
+static CondVar s_logHasData, s_logHasRoom;
+static Thread s_logThread;
+static volatile bool s_logStop;
+
+static ssize_t nxLogWrite(struct _reent *, void *, const char *data, size_t length)
+{
+    const int size = (int)length;
+    if (size <= 0)
+        return 0;
+    mutexLock(&s_logLock);
+    for (int done = 0; done < size;) {
+        size_t used = s_logHead - s_logTail;
+        if (used == sizeof(s_logRing)) {
+            condvarWait(&s_logHasRoom, &s_logLock);
+            continue;
+        }
+        size_t chunk = sizeof(s_logRing) - used;
+        if (chunk > (size_t)(size - done))
+            chunk = (size_t)(size - done);
+        size_t at = s_logHead % sizeof(s_logRing);
+        if (chunk > sizeof(s_logRing) - at)
+            chunk = sizeof(s_logRing) - at;
+        memcpy(s_logRing + at, data + done, chunk);
+        s_logHead += chunk;
+        done += (int)chunk;
+    }
+    condvarWakeOne(&s_logHasData);
+    mutexUnlock(&s_logLock);
+    return size;
+}
+
+static void nxLogThread(void *)
+{
+    for (;;) {
+        mutexLock(&s_logLock);
+        while (s_logHead == s_logTail && !s_logStop)
+            condvarWait(&s_logHasData, &s_logLock);
+        if (s_logHead == s_logTail && s_logStop) {
+            mutexUnlock(&s_logLock);
+            return;
+        }
+        size_t at = s_logTail % sizeof(s_logRing);
+        size_t chunk = s_logHead - s_logTail;
+        if (chunk > sizeof(s_logRing) - at)
+            chunk = sizeof(s_logRing) - at;
+        mutexUnlock(&s_logLock);
+        ssize_t written = write(s_logFd, s_logRing + at, chunk);   // outside the lock
+        mutexLock(&s_logLock);
+        s_logTail += written > 0 ? (size_t)written : chunk;
+        condvarWakeAll(&s_logHasRoom);
+        mutexUnlock(&s_logLock);
+    }
+}
+
+// Exit: everything printed reaches the file.
+static void nxLogShutdown(void)
+{
+    fflush(stdout);
+    fflush(stderr);
+    mutexLock(&s_logLock);
+    s_logStop = true;
+    condvarWakeAll(&s_logHasData);
+    mutexUnlock(&s_logLock);
+    threadWaitForExit(&s_logThread);
+    threadClose(&s_logThread);
+}
+
+// Crash: whatever the ring holds, without the lock (its holder may be the
+// thread that faulted), then the report goes straight to the file.
+static void nxLogDrainUnlocked(void)
+{
+    if (s_logFd < 0)
+        return;
+    while (s_logTail < s_logHead) {
+        size_t at = s_logTail % sizeof(s_logRing);
+        size_t chunk = s_logHead - s_logTail;
+        if (chunk > sizeof(s_logRing) - at)
+            chunk = sizeof(s_logRing) - at;
+        ssize_t written = write(s_logFd, s_logRing + at, chunk);
+        if (written <= 0)
+            break;
+        s_logTail += (size_t)written;
+    }
+}
+
 static void nxSetupLogging(void)
 {
-    if (nxlinkStdio() < 0) {
-        FILE *f = fopen(NX_GAME_DIR "/kisakblack.log", "w");
-        if (f)
-            fclose(f);
-        freopen(NX_GAME_DIR "/kisakblack.log", "a", stdout);
-        freopen(NX_GAME_DIR "/kisakblack.log", "a", stderr);
+    if (nxlinkStdio() >= 0) {
+        setvbuf(stdout, NULL, _IONBF, 0);
+        setvbuf(stderr, NULL, _IONBF, 0);
+        return;
     }
+    s_logFd = open(NX_GAME_DIR "/kisakblack.log", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (s_logFd < 0)
+        return;
+    mutexInit(&s_logLock);
+    condvarInit(&s_logHasData);
+    condvarInit(&s_logHasRoom);
+    if (R_FAILED(threadCreate(&s_logThread, nxLogThread, nullptr, nullptr, 0x10000, 0x3B, -2))
+        || R_FAILED(threadStart(&s_logThread))) {
+        // No thread: write as before, synchronously.
+        dup2(s_logFd, fileno(stdout));
+        dup2(s_logFd, fileno(stderr));
+        setvbuf(stdout, NULL, _IONBF, 0);
+        setvbuf(stderr, NULL, _IONBF, 0);
+        return;
+    }
+    // Every thread's stdout and stderr end on descriptors 1 and 2, whose
+    // device this replaces -- the way libnx routes them to nxlink.
+    static devoptab_t s_logDevice;
+    s_logDevice.name = "kblog";
+    s_logDevice.write_r = nxLogWrite;
+    devoptab_list[STD_OUT] = &s_logDevice;
+    devoptab_list[STD_ERR] = &s_logDevice;
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+    atexit(nxLogShutdown);
 }
 
 extern "C" void nx_mem_status(uint64_t *total, uint64_t *avail); // nx_wincompat.cpp
@@ -119,8 +238,11 @@ static void nxCrashWrite(const char *fmt, ...)
     va_start(args, fmt);
     int n = vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
-    if (n > 0)
-        write(fileno(stdout), buf, n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1);
+    if (n <= 0)
+        return;
+    // The asynchronous log first, so the lines before the crash come first.
+    nxLogDrainUnlocked();
+    write(s_logFd >= 0 ? s_logFd : fileno(stdout), buf, n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1);
 }
 
 static const char *nxExceptionName(u32 desc)

@@ -345,11 +345,17 @@ clean sweep — it also documents what the sweeps are structurally blind to.
 ### Logs
 
 `stdout` and `stderr` go to **nxlink** if the title was launched from it, and
-otherwise to `sdmc:/switch/kisakblack/kisakblack.log`. Both are unbuffered and
-open the file in append mode — they used to share it through `dup2` with
-separate write positions and overwrote each other, which is where stray binary
-in older logs came from. `nxlink -s KisakBlack.nro` is the better loop while
-debugging.
+otherwise to `sdmc:/switch/kisakblack/kisakblack.log`. They used to share the
+file through `dup2` with separate write positions and overwrote each other,
+which is where stray binary in older logs came from. `nxlink -s
+KisakBlack.nro` is the better loop while debugging.
+
+The log is **asynchronous** (`nx_main.cpp`, "Asynchronous log"): descriptors 1
+and 2 get a device (`devoptab_list[STD_OUT/STD_ERR]`, the way libnx routes
+them to nxlink) whose writes go into a 4 MB ring, and a low-priority thread
+writes the ring to the file. Writing on the printing thread made every
+600-frame summary a 140-190 ms hitch. A full ring makes the printer wait; the
+crash handler writes out what the ring still holds before its report.
 
 Assertions print an `ASSERTBEGIN` / `ASSERTEND` block with file and line before
 the trap.
@@ -994,6 +1000,19 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   thread sitting 1.9 s, the sound streams' reads queued behind the texture
   reads. `r_stream` (high mip streaming) now defaults to 0 on NX: with
   `r_picmip 3` the streamed high mips are dropped anyway.
+- **`r_stream 0`, result.** Stutter bursts gone; frames 17-31 ms. But the
+  textures were visibly worse than with streaming: the streamed high mips
+  were not all dropped by `r_picmip 3`. `r_stream` is a bitmask of what
+  streams its high mips -- 1 world surfaces, 2 xmodels, 4 brush models --
+  and 7, all three, is the PC default. Raising texture quality without the
+  streaming hitches: a lower `r_picmip` (and `_bump` / `_spec`), all loaded
+  with the level.
+- **The hitches left after that:** (1) at every 600th frame, 140-190 ms --
+  the log summaries written to the SD card on the printing thread, fixed by
+  the asynchronous log (section 3, Logs); (2) runs of slow frames with the
+  render thread 85-120 ms in the swap, i.e. the GPU itself, likely heavy
+  effects (to be read from `GPU time by part`); (3) once, entering the map:
+  `Com_EventLoop` 500-600 ms and the first `SV_SendClientMessages` 800 ms.
 - **Restart Map, still broken (SP).** Reloading the level now gets past the
   UI shutdown but crashes unloading the map's zones: `DB_FreeUnusedResources`
   -> `Mark_WeaponVariantDef` -> `Mark_XModelPtr` follows a weapon (still

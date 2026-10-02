@@ -384,6 +384,17 @@ void __cdecl AimTarget_GetTagPos_0(const centity_s *ent, unsigned int tagName, f
     else
     {
         dobj = Com_GetClientDObj(ent->nextState.number, ent->pose.localClientNum);
+#ifdef KISAK_NX
+        // An actor's DObj can be gone for a frame (freed and recreated by
+        // CG_UpdateActorDObj); aim at its origin rather than stopping the game.
+        if ( !dobj )
+        {
+            pos[0] = ent->pose.origin[0];
+            pos[1] = ent->pose.origin[1];
+            pos[2] = ent->pose.origin[2];
+            return;
+        }
+#endif
         if ( !dobj
             && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\aim_assist\\aim_target.cpp", 333, 0, "%s", "dobj") )
         {

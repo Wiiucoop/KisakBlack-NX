@@ -99,6 +99,8 @@ static Mutex s_logLock;
 static CondVar s_logHasData, s_logHasRoom;
 static Thread s_logThread;
 static volatile bool s_logStop;
+static int s_logState;          // 0 idle, 1 the thread is writing, 2 crashed: the crash handler writes
+static bool s_logThreadDone;    // the thread finished its last write after a crash
 
 static ssize_t nxLogWrite(struct _reent *, void *, const char *data, size_t length)
 {
@@ -141,12 +143,22 @@ static void nxLogThread(void *)
         size_t chunk = s_logHead - s_logTail;
         if (chunk > sizeof(s_logRing) - at)
             chunk = sizeof(s_logRing) - at;
+        int idle = 0;
+        if (!__atomic_compare_exchange_n(&s_logState, &idle, 1, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+            mutexUnlock(&s_logLock);   // crashed: the crash handler writes the rest
+            return;
+        }
         mutexUnlock(&s_logLock);
         ssize_t written = write(s_logFd, s_logRing + at, chunk);   // outside the lock
         mutexLock(&s_logLock);
         s_logTail += written > 0 ? (size_t)written : chunk;
         condvarWakeAll(&s_logHasRoom);
         mutexUnlock(&s_logLock);
+        int writing = 1;
+        if (!__atomic_compare_exchange_n(&s_logState, &writing, 0, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+            __atomic_store_n(&s_logThreadDone, true, __ATOMIC_SEQ_CST);
+            return;
+        }
     }
 }
 
@@ -165,10 +177,20 @@ static void nxLogShutdown(void)
 
 // Crash: whatever the ring holds, without the lock (its holder may be the
 // thread that faulted), then the report goes straight to the file.
+//
+// The writer thread may be in the middle of a write() of the same bytes. The
+// drain used to write them again, then the thread moved the tail past the head
+// and wrote the whole ring over and over: a crash left a log of tens of MB,
+// the same lines four or five times. Now the first drain stops the thread and
+// waits (up to a second) for a write it has in progress to finish.
 static void nxLogDrainUnlocked(void)
 {
     if (s_logFd < 0)
         return;
+    if (__atomic_exchange_n(&s_logState, 2, __ATOMIC_SEQ_CST) == 1) {
+        for (int ms = 0; ms < 1000 && !__atomic_load_n(&s_logThreadDone, __ATOMIC_SEQ_CST); ++ms)
+            svcSleepThread(1000000);
+    }
     while (s_logTail < s_logHead) {
         size_t at = s_logTail % sizeof(s_logRing);
         size_t chunk = s_logHead - s_logTail;

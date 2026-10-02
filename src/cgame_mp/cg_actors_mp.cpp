@@ -304,7 +304,22 @@ void __cdecl CG_UpdateActorDObj(int localClientNum, centity_s *cent, actorInfo_t
                 {
                     const int previous = s_treeOwnerEnt[slot];
                     const DObj *previousObj = Com_GetClientDObj(previous, localClientNum);
-                    if ( previousObj && DObjGetTree(previousObj) == pAnimTree )
+                    // Both entities in this snapshot as actors on the same slot:
+                    // freeing the other only makes it recreate its DObj next
+                    // frame and free ours, every frame, and anything that reads
+                    // its DObj in between (aim assist) finds none. Leave it.
+                    const centity_s *previousCent = CG_GetEntity(localClientNum, previous);
+                    const bool previousLive = (previousCent->clientFlags & 2) != 0   // in this snapshot
+                        && previousCent->nextState.eType == p_nextState->eType
+                        && previousCent->nextState.lerp.u.actor.actorNum == p_nextState->lerp.u.actor.actorNum;
+                    if ( previousObj && DObjGetTree(previousObj) == pAnimTree && previousLive )
+                    {
+                        static int s_reportedLive;
+                        if ( s_reportedLive++ < 5 )
+                            Com_Printf(15, "[nx-anim] ents %d and %d are both live on actor slot %u; tree shared\n",
+                                       previous, p_nextState->number, p_nextState->lerp.u.actor.actorNum);
+                    }
+                    else if ( previousObj && DObjGetTree(previousObj) == pAnimTree )
                     {
                         static int s_reported;
                         if ( s_reported++ < 20 )

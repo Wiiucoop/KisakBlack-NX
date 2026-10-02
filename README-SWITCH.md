@@ -385,7 +385,10 @@ and 2 get a device (`devoptab_list[STD_OUT/STD_ERR]`, the way libnx routes
 them to nxlink) whose writes go into a 4 MB ring, and a low-priority thread
 writes the ring to the file. Writing on the printing thread made every
 600-frame summary a 140-190 ms hitch. A full ring makes the printer wait; the
-crash handler writes out what the ring still holds before its report.
+crash handler writes out what the ring still holds before its report, after
+stopping the thread and letting a write it has in progress finish (otherwise
+both wrote the same bytes and the thread ran past the end, rewriting the ring
+until the process died).
 
 Assertions print an `ASSERTBEGIN` / `ASSERTEND` block with file and line before
 the trap.
@@ -1108,6 +1111,24 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   port uses converted and validated (`tools/nx/convert-zones.sh`);
   `frontend_patch.ff` is not in this set (the engine runs without it). Most
   `.kbz` came out byte-for-byte the size of the previous conversion.
+- **Crash: aim assist found no DObj (log of 2026-10-02 15:28).** Assert
+  `dobj` at `aim_target.cpp:333`. Two zombies, ents 571 and 714, were both in
+  the snapshot as actors on the same actor slot, so on the same client anim
+  tree. The one-DObj-per-tree guard freed the other's DObj each time it
+  created its own, they alternated every frame, and aim assist read one in
+  the frame it had none. The guard now leaves the other DObj alone when that
+  entity is itself in the snapshot as an actor on the same slot (logs
+  `[nx-anim] ents N and M are both live on actor slot S; tree shared`, those
+  two share the tree and may play at double speed), and
+  `AimTarget_GetTagPos` aims at the origin of an entity with no DObj instead
+  of asserting. Why the server sends two actors on one slot is still open.
+- **28 MB log after a crash.** Not the cause of the crash: the crash handler
+  wrote out the ring while the log thread was in the middle of writing the
+  same bytes; the thread then moved its read position past the write
+  position and wrote the whole 4 MB ring again and again (the log held the
+  same 23,000 lines four times plus zeroed ring memory). The first crash
+  drain now stops the thread and waits up to a second for its write in
+  progress.
 - **Streaming without stutters (not done).** The streaming hitches had three
   parts: the Stream thread's reads (off the main thread, harmless alone), the
   render thread uploading every streamed texture whole at its next bind

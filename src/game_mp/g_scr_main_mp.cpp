@@ -21119,8 +21119,13 @@ SP_STUB_METHOD(GScr_SPStubMeth_makefakeai,            "makefakeai", "0x00610130"
     // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/_drone:507 -- drone makefakeai();
 SP_STUB_METHOD(GScr_SPStubMeth_visionsetlaststand,    "visionsetlaststand", "0x007ff900")
     // TODO(SP-STUB) 4 GSC ref(s), e.g. maps/_laststand:132 -- self VisionSetLastStand( "zombie_last_stand", 1 );
-SP_STUB_METHOD(GScr_SPStubMeth_visionsetnaked,        "visionsetnaked", "0x007ff420")
-    // TODO(SP-STUB) 3 GSC ref(s), e.g. maps/_callbackglobal:187 -- player VisionSetNaked( player.savedVisionSet, 0.1 );
+// player VisionSetNaked( <name>, <time> ): SP has one player, so the method does what
+// the global VisionSetNaked does (configstring 1550, which the client lerps to).
+// Was a no-op stub; e.g. maps/_callbackglobal:187 restores player.savedVisionSet.
+static void __cdecl GScr_SPMeth_visionsetnaked(scr_entref_t)
+{
+    Scr_VisionSetNaked();
+}
 // ---------------------------------------------------------------------------
 // self CodeSpawnerSpawn( [flag], [targetname] ) / self CodeSpawnerForceSpawn(...)
 // -- SP only. REAL BODIES (these rows used to be no-op TODO(SP-STUB)s).
@@ -21917,7 +21922,7 @@ BuiltinMethodDef methods_3[] =
   { "magicgrenademanual", GScr_SPStubMeth_magicgrenademanual, 0 },                  // TODO(SP-STUB) SP 0x007f3e20
   { "makefakeai", GScr_SPStubMeth_makefakeai, 0 },                                  // TODO(SP-STUB) SP 0x00610130
   { "visionsetlaststand", GScr_SPStubMeth_visionsetlaststand, 0 },                  // TODO(SP-STUB) SP 0x007ff900
-  { "visionsetnaked", GScr_SPStubMeth_visionsetnaked, 0 },                          // TODO(SP-STUB) SP 0x007ff420
+  { "visionsetnaked", GScr_SPMeth_visionsetnaked, 0 },                              // SP 0x007ff420: the global VisionSetNaked
   { "codespawnerforcespawn", GScr_CodeSpawnerForceSpawn_SP, 0 },                    // IMPLEMENTED from SP handler 0x007f33c0
   { "codespawnerspawn", GScr_CodeSpawnerSpawn_SP, 0 },                              // IMPLEMENTED from SP handler 0x007f3250
   { "getaivelocity", GScr_SPStubMeth_getaivelocity, 0 },                            // TODO(SP-STUB) SP 0x007f53e0

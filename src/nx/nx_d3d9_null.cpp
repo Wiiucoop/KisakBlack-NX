@@ -44,6 +44,7 @@
 #include <mutex>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -621,8 +622,25 @@ struct NxTexture {
     GLuint glRing[3];
     BYTE *glRingShadow[3];
     unsigned char glRingCur;
+    u64 dirtyTick;     // when the engine last wrote it: see nxTexMarkDirty
 };
 enum { NX_TEX_RING = 3 };
+
+// Textures never uploaded, with pixels written: the loading screen uploads
+// them ahead of the first draw (nxGlPreuploadTextures), which used to upload
+// a whole map at once -- 4700 levels and a ~2 s freeze entering Zombies.
+static std::recursive_mutex s_texPendingLock;
+static std::unordered_set<NxTexture *> s_texPending;
+
+static void nxTexMarkDirty(NxTexture *t)
+{
+    t->glDirty = true;
+    t->dirtyTick = armGetSystemTick();
+    if (!t->glUploads) {
+        std::lock_guard<std::recursive_mutex> lock(s_texPendingLock);
+        s_texPending.insert(t);
+    }
+}
 
 struct NxBuffer {
     NxD3DObject obj;   // D3DRTYPE_VERTEXBUFFER / INDEXBUFFER
@@ -1009,6 +1027,10 @@ static void nxDestroy(NxD3DObject *o)
         for (UINT i = 0; i < NX_SHADER_VS_SAMPLERS; ++i)
             if (s_vtxSamplerTex[i] == t) s_vtxSamplerTex[i] = nullptr;
         nxFrameForgetTexture(t);
+        {
+            std::lock_guard<std::recursive_mutex> lock(s_texPendingLock);
+            s_texPending.erase(t);
+        }
         // Same rule as the buffers below: only the thread that owns the
         // context may delete a GL name, and a leak beats a lost context.
         if ((t->glName || t->glRing[0]) && s_glReady && nxGlAcquire()) {
@@ -1088,7 +1110,7 @@ static NxTexture *nxCreateTexture(D3DRESOURCETYPE type, D3DFORMAT fmt,
         }
     }
     t->magic = NX_TEXTURE_MAGIC;
-    t->glDirty = true;
+    nxTexMarkDirty(t);
     nxTextureCreated(t);
     return t;
 }
@@ -2575,6 +2597,8 @@ static void nxGlFullUpload(NxTexture *t, const NxTexFormat *f, GLenum target);
 static UINT nxTexLevelBytes(const NxTexture *t, GLenum target, UINT level);
 static UINT nxTexShadowBytes(const NxTexture *t, GLenum target);
 static void nxGlTextureParams(const NxTexture *t, GLenum target, const NxTexFormat *f);
+static void nxGlTexSubImageRows(GLenum faceTarget, GLint level, const NxTexFormat *f, UINT w, UINT h, UINT d,
+                                UINT y0, UINT rows, const BYTE *bits, UINT pitch, UINT slicePitch);
 
 static void nxGlUpdateTexture(NxTexture *t, const NxTexFormat *f, GLenum target, BYTE **shadowp)
 {
@@ -2605,32 +2629,23 @@ static void nxGlUpdateTexture(NxTexture *t, const NxTexFormat *f, GLenum target,
             const BYTE *bits = (const BYTE *)t->levelBits[face * t->levels + level];
             BYTE *shadow = *shadowp + offset;
             offset += size * d;
-            for (UINT z = 0; z < d; ++z) {
-                const BYTE *src = bits + z * size;
-                BYTE *old = shadow + z * size;
-                UINT y = 0;
-                while (y < h) {
-                    if (!fresh && !memcmp(src + y * pitch, old + y * pitch, pitch)) {
-                        ++y;
-                        continue;
+            // The rows that changed in any slice, as one band: one upload per
+            // level. Each call into the driver for a tiled texture pays for a
+            // staging transfer of its own, which cost more than the bytes.
+            UINT y0 = h, y1 = 0;
+            for (UINT z = 0; z < d; ++z)
+                for (UINT y = 0; y < h; ++y)
+                    if (fresh || memcmp(bits + z * size + y * pitch, shadow + z * size + y * pitch, pitch)) {
+                        if (y < y0) y0 = y;
+                        if (y > y1) y1 = y;
                     }
-                    // A run of changed rows, bridging gaps of up to two.
-                    UINT y0 = y, last = y;
-                    for (UINT k = y + 1; k < h && k - last <= 3; ++k)
-                        if (fresh || memcmp(src + k * pitch, old + k * pitch, pitch))
-                            last = k;
-                    UINT rows = last - y0 + 1;
-                    if (target == GL_TEXTURE_3D)
-                        glTexSubImage3D(GL_TEXTURE_3D, (GLint)level, 0, (GLint)y0, (GLint)z, (GLsizei)w,
-                                        (GLsizei)rows, 1, f->format, f->type, src + y0 * pitch);
-                    else
-                        glTexSubImage2D(faceTarget, (GLint)level, 0, (GLint)y0, (GLsizei)w, (GLsizei)rows,
-                                        f->format, f->type, src + y0 * pitch);
-                    memcpy(old + y0 * pitch, src + y0 * pitch, rows * pitch);
-                    sent += rows * pitch;
-                    y = last + 1;
-                }
-            }
+            if (y0 > y1)
+                continue;
+            const UINT rows = y1 - y0 + 1;
+            nxGlTexSubImageRows(faceTarget, (GLint)level, f, w, h, d, y0, rows, bits, pitch, size);
+            for (UINT z = 0; z < d; ++z)
+                memcpy(shadow + z * size + y0 * pitch, bits + z * size + y0 * pitch, rows * pitch);
+            sent += rows * pitch * d;
         }
     }
     nxNoteTexUpload(t->imageName, t->width, t->height, sent, armGetSystemTick() - start);
@@ -2673,8 +2688,9 @@ static bool nxGlSyncTexture(NxTexture *t)
     // would read every row after the first one skewed.
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    if (t->glUploads && f.format) {
-        // Rewritten in place. Writing into the copy the GPU may still be
+    if (t->glUploads >= 2 && f.format) {
+        // Rewritten in place (a second upload can still be the loader
+        // finishing a texture uploaded early; a third is not). Writing into the copy the GPU may still be
         // reading makes the driver wait for it -- ~5 ms a frame for
         // $model_lighting even at a few KB -- so each update goes to the next
         // of NX_TEX_RING copies, one the GPU finished with frames ago. A new
@@ -2719,7 +2735,10 @@ static bool nxGlSyncTexture(NxTexture *t)
         return true;
     }
     nxGlFullUpload(t, &f, target);
-    ++t->glUploads;
+    if (!t->glUploads++) {
+        std::lock_guard<std::recursive_mutex> lock(s_texPendingLock);
+        s_texPending.erase(t);
+    }
     nxGlTextureParams(t, target, &f);
 
     t->glDirty = false;
@@ -3700,6 +3719,43 @@ static void nxWarmNotePair(const NxShader *vs, const NxShader *ps)
     }
 }
 
+// Textures the loader has finished with go up while the loading screen is
+// shown, NX_PREUPLOAD_MS a present, instead of at their first draw. "Finished"
+// is NX_PRESETTLE_MS without a write: the loader fills a texture a mip level
+// at a time, and one sent half-written would have to go up again.
+enum { NX_PREUPLOAD_MS = 60, NX_PRESETTLE_MS = 300 };
+static unsigned s_preuploaded;
+static u64 s_preuploadBytes, s_preuploadTicks;
+
+static void nxGlPreuploadTextures(void)
+{
+    if (!g_nxLoadingHint)
+        return;
+    const u64 start = armGetSystemTick();
+    const u64 budget = armNsToTicks((u64)NX_PREUPLOAD_MS * 1000000);
+    const u64 settle = armNsToTicks((u64)NX_PRESETTLE_MS * 1000000);
+    std::lock_guard<std::recursive_mutex> lock(s_texPendingLock);
+    for (auto it = s_texPending.begin(); it != s_texPending.end();) {
+        const u64 now = armGetSystemTick();
+        if (now - start > budget)
+            break;
+        NxTexture *t = *it;
+        if ((t->usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)) || t->glUnsupported || t->glUploads) {
+            it = s_texPending.erase(it);   // not ours to fill, or done already
+            continue;
+        }
+        if (t->dirtyTick > now || now - t->dirtyTick < settle) {
+            ++it;   // still being written
+            continue;
+        }
+        ++it;   // nxGlSyncTexture takes t out of the set on its first upload
+        nxGlSyncTexture(t);
+        ++s_preuploaded;
+        s_preuploadBytes += t->bytes;
+    }
+    s_preuploadTicks += armGetSystemTick() - start;
+}
+
 // GL thread, after a swap.
 static void nxGlWarmPrograms(void)
 {
@@ -3862,6 +3918,47 @@ static void nxGlBindConstants(GLuint binding, const float (*file)[4], unsigned v
     glBindBufferRange(GL_UNIFORM_BUFFER, binding, s_uboName, off, size);
     s_uboVersion[binding] = version;
     s_uboRows[binding] = rows;
+}
+
+// Rows y0..y0+rows of every slice of one level, in one upload. The rows go
+// through the constant buffer's mapped storage as a pixel unpack buffer, so the
+// driver copies on the GPU from memory it already owns instead of staging the
+// pixels itself; without a mapping (or for a band larger than a segment) they
+// go straight from the texture's bits.
+static void nxGlTexSubImageRows(GLenum faceTarget, GLint level, const NxTexFormat *f, UINT w, UINT h, UINT d,
+                                UINT y0, UINT rows, const BYTE *bits, UINT pitch, UINT slicePitch)
+{
+    const GLsizeiptr bytes = (GLsizeiptr)rows * pitch * d;
+    const bool is3d = faceTarget == GL_TEXTURE_3D;
+    if (nxGlUboInit() && s_uboMap && bytes <= NX_UBO_SEGMENT) {
+        const GLintptr off = nxGlUboAlloc(bytes);
+        for (UINT z = 0; z < d; ++z)
+            memcpy(s_uboMap + off + (GLintptr)z * rows * pitch, bits + z * slicePitch + y0 * pitch,
+                   (size_t)rows * pitch);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, s_uboName);
+        if (s_ringMode->flush)
+            glFlushMappedBufferRange(GL_PIXEL_UNPACK_BUFFER, off, bytes);
+        if (is3d) {
+            glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, (GLint)rows);
+            glTexSubImage3D(GL_TEXTURE_3D, level, 0, (GLint)y0, 0, (GLsizei)w, (GLsizei)rows, (GLsizei)d,
+                            f->format, f->type, (const void *)off);
+            glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
+        } else {
+            glTexSubImage2D(faceTarget, level, 0, (GLint)y0, (GLsizei)w, (GLsizei)rows, f->format, f->type,
+                            (const void *)off);
+        }
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        return;
+    }
+    if (is3d) {
+        glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, (GLint)h);
+        glTexSubImage3D(GL_TEXTURE_3D, level, 0, (GLint)y0, 0, (GLsizei)w, (GLsizei)rows, (GLsizei)d,
+                        f->format, f->type, bits + y0 * pitch);
+        glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
+    } else {
+        glTexSubImage2D(faceTarget, level, 0, (GLint)y0, (GLsizei)w, (GLsizei)rows, f->format, f->type,
+                        bits + y0 * pitch);
+    }
 }
 
 // Everything a translated pair needs before the draw call.
@@ -5742,6 +5839,7 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     EGLint eglErr = eglGetError();
     GLenum errAfterSwap = report ? glGetError() : GL_NO_ERROR;
     nxGlWarmPrograms();
+    nxGlPreuploadTextures();
 
     if (!blitted && (summary || s_nSwapPresent < 3))
         printf("[nx-gl] present %u: the back buffer could not be copied to the "
@@ -5790,6 +5888,11 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         if (s_warmBuilt)
             printf("[nx-gl] warm-up: %u programs built ahead of use, %.1f ms (%u this run, %u pairs listed)\n",
                    s_warmBuilt, armTicksToNs(s_warmTicks) / 1e6, s_warmBuiltTotal, (unsigned)s_warmPairs.size());
+        if (s_preuploaded)
+            printf("[nx-gl] pre-upload: %u textures (%.1f MB) uploaded while loading, %.1f ms\n",
+                   s_preuploaded, s_preuploadBytes / 1048576.0, armTicksToNs(s_preuploadTicks) / 1e6);
+        s_preuploaded = 0;
+        s_preuploadBytes = s_preuploadTicks = 0;
         s_warmBuilt = 0;
         s_warmTicks = 0;
         s_ringWaits = 0;
@@ -5833,7 +5936,7 @@ HRESULT IDirect3DSurface9::UnlockRect()
     // texture's level bits, so writing through it is the texture changing.
     NxSurface *s = (NxSurface *)this;
     if (s->owner)
-        s->owner->glDirty = true;
+        nxTexMarkDirty(s->owner);
     return D3D_OK;
 }
 HRESULT IDirect3DSurface9::GetDesc(D3DSURFACE_DESC *desc)
@@ -5874,7 +5977,7 @@ HRESULT IDirect3DTexture9::LockRect(UINT level, D3DLOCKED_RECT *lockedRect, cons
 // texture that is never drawn with, it never comes.
 HRESULT IDirect3DTexture9::UnlockRect(UINT)
 {
-    ((NxTexture *)this)->glDirty = true;
+    nxTexMarkDirty((NxTexture *)this);
     return D3D_OK;
 }
 HRESULT IDirect3DTexture9::GetSurfaceLevel(UINT level, IDirect3DSurface9 **surface)
@@ -5897,7 +6000,7 @@ HRESULT IDirect3DTexture9::GetLevelDesc(UINT level, D3DSURFACE_DESC *desc)
 }
 HRESULT IDirect3DTexture9::AddDirtyRect(const RECT *)
 {
-    ((NxTexture *)this)->glDirty = true;
+    nxTexMarkDirty((NxTexture *)this);
     return D3D_OK;
 }
 
@@ -5915,7 +6018,7 @@ HRESULT IDirect3DCubeTexture9::LockRect(D3DCUBEMAP_FACES face, UINT level, D3DLO
 }
 HRESULT IDirect3DCubeTexture9::UnlockRect(D3DCUBEMAP_FACES, UINT)
 {
-    ((NxTexture *)this)->glDirty = true;
+    nxTexMarkDirty((NxTexture *)this);
     return D3D_OK;
 }
 HRESULT IDirect3DCubeTexture9::GetLevelDesc(UINT level, D3DSURFACE_DESC *desc)
@@ -5943,7 +6046,7 @@ HRESULT IDirect3DVolumeTexture9::LockBox(UINT level, D3DLOCKED_BOX *lockedBox, c
 }
 HRESULT IDirect3DVolumeTexture9::UnlockBox(UINT)
 {
-    ((NxTexture *)this)->glDirty = true;
+    nxTexMarkDirty((NxTexture *)this);
     return D3D_OK;
 }
 HRESULT IDirect3DVolumeTexture9::GetLevelDesc(UINT level, D3DVOLUME_DESC *desc)

@@ -889,6 +889,22 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   frames ago and still sends only the rows changed since that copy was last
   current. In-game frames were ~32-45 ms, the render thread ~24 ms drawing
   plus ~9 ms in the swap.
+- **Third result.** The three copies did not help either (~5.2 ms): the cost
+  is per upload call -- a write into a tiled texture makes the driver stage
+  it -- and a frame's patches came out as dozens of small row runs. Now the
+  changed rows of all slices go up as one band per level, from the constant
+  buffer's mapped storage bound as a pixel unpack buffer
+  (`nxGlTexSubImageRows`).
+- **The freeze entering the map** was the first frame uploading the map's
+  textures: 4732 levels in that window. Textures are now uploaded during the
+  loading screen once the loader has left them alone for 300 ms
+  (`nxGlPreuploadTextures`, 60 ms a present; `s_texPending` fed by
+  `nxTexMarkDirty`). The summary prints `pre-upload: N textures`.
+- **Vision sets (SP).** `player VisionSetNaked()` was a no-op stub; it now does
+  what the global `VisionSetNaked` does (configstring 1550, which the client
+  lerps to). `VisionSetLastStand` stays a stub: this client has no last-stand
+  vision channel (`VISIONSETMODE_*` stops at EXTRACAM), so the last-stand
+  look needs that part of the retail SP client reconstructed.
 - **Zombie corpses in T-pose:** SP converts the actor into a corpse in place
   (`Actor_BecomeCorpse`), and the client draws the corpse through
   `actorCorpseInfo[slot]`, whose tree starts empty; retail hides that with the

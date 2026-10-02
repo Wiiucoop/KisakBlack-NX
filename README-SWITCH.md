@@ -1127,6 +1127,17 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   entity its client state (eType, slot, eFlags, in the snapshot, time its
   DObj was created) and the local server's (inuse, eType, slot, health,
   whether its `actor_s` is live or freed and which entity owns it).
+- **Double-speed and mixed crawler/walker zombies: root cause (log of
+  2026-10-02 15:59).** The detailed report showed the pairs: server slot 16
+  arrived on the client as slot 0, 17 as 1, 18 as 2, 19 as 3. SP has 32 actor
+  slots (`MAX_ACTORS`), but `actorStateFields` sent `lerp.u.actor.actorNum`
+  in 4 bits (MP's 16). From the 17th zombie on, two live zombies drove one
+  client anim tree: both played at double speed, and when one was a nova
+  crawler and the other a walker, `CG_UpdateActorDObj` swapped the tree's
+  anim set between them every frame, so both moved with a mix of the two.
+  The field is 5 bits in SP now. The corpse hand-off in `cg_snapshot_mp.cpp`
+  only remembered slots below 16 (`< 16u`, `<= 16`); it uses `MAX_ACTORS`.
+  The one-DObj-per-tree guard and its report stay as a safety net.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

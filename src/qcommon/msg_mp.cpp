@@ -1859,7 +1859,14 @@ const NetField actorStateFields[69 + SP_ENTITY_ANIM_FIELDS] =
     "0"
   },
   { "targetname", 206, 2, 16, 0u, "16", "0" },
+#ifdef KISAK_SP
+  // SP has 32 actor slots (MAX_ACTORS); 4 bits sent slot 16-31 as 0-15, so
+  // two live zombies shared one client anim tree (double speed, and crawler
+  // and walker anims mixed when their anim sets differed).
+  { "lerp.u.actor.actorNum", 84, 4, 5, 0u, "ACTOR_BITS", "0" },
+#else
   { "lerp.u.actor.actorNum", 84, 4, 4, 0u, "ACTOR_BITS", "0" },
+#endif
   { "time2", 120, 4, -97, 0u, "MSG_FIELD_TIME", "0" },
   { "index", 194, 2, 10, 0u, "SUBMODEL_BITS", "0" },
   { "solid", 128, 4, 24, 0u, "24", "0" },

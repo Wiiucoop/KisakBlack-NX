@@ -1150,7 +1150,7 @@ void CG_ResetEntity(int localClientNum, centity_s *cent, int newEntity)
         cent->previousEventSequence = cent->nextState.eventSequence;
 #ifdef KISAK_SP
         if ( cent->nextState.number >= 0 && cent->nextState.number < 1024
-            && cent->nextState.lerp.u.actor.actorNum < 16u )
+            && cent->nextState.lerp.u.actor.actorNum < MAX_ACTORS )
         {
             s_actorSlotPlusOneForEntity_SP[cent->nextState.number] =
                 static_cast<unsigned char>(cent->nextState.lerp.u.actor.actorNum + 1);
@@ -1185,7 +1185,7 @@ void CG_ResetEntity(int localClientNum, centity_s *cent, int newEntity)
         if ( cent->nextState.number >= 0 && cent->nextState.number < 1024 )
         {
             const unsigned int slotPlusOne = s_actorSlotPlusOneForEntity_SP[cent->nextState.number];
-            if ( slotPlusOne && slotPlusOne <= 16 )
+            if ( slotPlusOne && slotPlusOne <= MAX_ACTORS )
             {
                 actorInfo_t *candidate = &cgameGlob->bgs.actorinfo[slotPlusOne - 1];
                 if ( !liveActorTree || candidate->pXAnimTree == liveActorTree )

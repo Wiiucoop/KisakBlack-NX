@@ -900,6 +900,22 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   loading screen once the loader has left them alone for 300 ms
   (`nxGlPreuploadTextures`, 60 ms a present; `s_texPending` fed by
   `nxTexMarkDirty`). The summary prints `pre-upload: N textures`.
+- **Fourth result, and vsync.** `$model_lighting` fell to ~0.7 ms a frame and
+  samplers to ~4 ms; the first frame no longer uploads the map (1000+
+  textures went up during loading). The render thread was then ~27 ms drawing
+  plus ~11 ms in `eglSwapBuffers`: EGL's default swap interval of 1 waits for
+  the display refresh, so a 38 ms frame showed at 50 (or 33). `nx_vsync`
+  (default 0) sets the interval; 1 restores the wait. A `GL_TIME_ELAPSED`
+  query around each frame now prints `GPU time: N ms per frame` in the
+  summary, to tell a GPU limit from a CPU one.
+- **Crash on Restart Map (SP)**, assert `startLocalId == localId` in
+  `VM_TrimStack` during `map_restart` -> `G_ShutdownGame`. Three walkers of a
+  waiting thread's saved stack (`VM_TrimStack`, the one at cscr_vm.cpp:849,
+  `Scr_GetThreadUsage`) still stepped 5-byte x86 entries with 4-byte values,
+  while `VM_ArchiveStack` writes `SCR_STACKBUF_ENTRY` (1 + 8) bytes; they now
+  match it. Shutdown is the first time live waiting threads get walked that
+  way. `Scr_DumpScriptThreads` / `Scr_DumpScriptVariables` (debug dumps) had
+  the same entries and x86 struct sizes (0x8C, 0x10) and are fixed too.
 - **Vision sets (SP).** `player VisionSetNaked()` was a no-op stub; it now does
   what the global `VisionSetNaked` does (configstring 1550, which the client
   lerps to). `VisionSetLastStand` stays a stub: this client has no last-stand

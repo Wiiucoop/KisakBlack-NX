@@ -5757,6 +5757,61 @@ HRESULT IDirect3DDevice9::EvictManagedResources() { return D3D_OK; }
 static const dvar_s *s_glReportDvar;
 static bool nxGlFullReport() { return s_glReportDvar && s_glReportDvar->current.enabled; }
 
+// nx_vsync: EGL's default swap interval of 1 waits for the display's refresh,
+// so a frame that took 38 ms of render thread showed at 50 (or 33): ~11 ms a
+// frame went to eglSwapBuffers. Off by default; 1 brings the wait back (no
+// tearing, frame times rounded up to a multiple of 16.7 ms).
+static const dvar_s *s_vsyncDvar;
+static int s_vsyncApplied = -1;
+
+// GPU time per frame: a GL_TIME_ELAPSED query spans each frame's commands,
+// from just after one swap to just before the next, read back a few frames
+// later without waiting. Large against the frame time means the GPU is the
+// limit; small means the CPU is.
+enum { NX_GPU_QUERIES = 4 };
+static GLuint s_gpuQuery[NX_GPU_QUERIES];
+static bool s_gpuQueryPending[NX_GPU_QUERIES];
+static int s_gpuQueryOpen = -1;   // the slot between Begin and End, or -1
+static int s_gpuQueryNext;
+static u64 s_gpuNs, s_gpuNsMax;
+static unsigned s_gpuFrames;
+
+static void nxGlGpuTimerEnd(void)
+{
+    if (s_gpuQueryOpen < 0)
+        return;
+    glEndQuery(GL_TIME_ELAPSED);
+    s_gpuQueryPending[s_gpuQueryOpen] = true;
+    s_gpuQueryOpen = -1;
+}
+
+static void nxGlGpuTimerBegin(void)
+{
+    if (!s_gpuQuery[0])
+        glGenQueries(NX_GPU_QUERIES, s_gpuQuery);
+    for (int i = 0; i < NX_GPU_QUERIES; ++i) {
+        if (!s_gpuQueryPending[i])
+            continue;
+        GLuint ready = 0;
+        glGetQueryObjectuiv(s_gpuQuery[i], GL_QUERY_RESULT_AVAILABLE, &ready);
+        if (!ready)
+            continue;
+        GLuint ns = 0;   // 32 bits of nanoseconds: 4 s, plenty for a frame
+        glGetQueryObjectuiv(s_gpuQuery[i], GL_QUERY_RESULT, &ns);
+        s_gpuQueryPending[i] = false;
+        s_gpuNs += ns;
+        if (ns > s_gpuNsMax)
+            s_gpuNsMax = ns;
+        ++s_gpuFrames;
+    }
+    int slot = s_gpuQueryNext;
+    if (s_gpuQueryPending[slot])
+        return;   // still unread: skip timing this frame
+    glBeginQuery(GL_TIME_ELAPSED, s_gpuQuery[slot]);
+    s_gpuQueryOpen = slot;
+    s_gpuQueryNext = (slot + 1) % NX_GPU_QUERIES;
+}
+
 HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const void *, DWORD)
 {
     if (!s_glReportDvar)
@@ -5831,6 +5886,15 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         s_boundFbo = ~0u;
     }
 
+    if (!s_vsyncDvar)
+        s_vsyncDvar = _Dvar_RegisterBool("nx_vsync", false, 0,
+                                         "Wait for the display refresh at each swap (no tearing, slower)");
+    if ((int)s_vsyncDvar->current.enabled != s_vsyncApplied) {
+        s_vsyncApplied = s_vsyncDvar->current.enabled;
+        eglSwapInterval(s_display, s_vsyncApplied);
+        printf("[nx-gl] swap interval %d\n", s_vsyncApplied);
+    }
+    nxGlGpuTimerEnd();
     EGLBoolean swapped;
     {
         NxProfScope prof(NXP_SWAP);
@@ -5838,6 +5902,7 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     }
     EGLint eglErr = eglGetError();
     GLenum errAfterSwap = report ? glGetError() : GL_NO_ERROR;
+    nxGlGpuTimerBegin();
     nxGlWarmPrograms();
     nxGlPreuploadTextures();
 
@@ -5891,6 +5956,11 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         if (s_preuploaded)
             printf("[nx-gl] pre-upload: %u textures (%.1f MB) uploaded while loading, %.1f ms\n",
                    s_preuploaded, s_preuploadBytes / 1048576.0, armTicksToNs(s_preuploadTicks) / 1e6);
+        if (s_gpuFrames)
+            printf("[nx-gl] GPU time: %.1f ms per frame, slowest %.1f ms (%u frames timed)\n",
+                   s_gpuNs / 1e6 / s_gpuFrames, s_gpuNsMax / 1e6, s_gpuFrames);
+        s_gpuNs = s_gpuNsMax = 0;
+        s_gpuFrames = 0;
         s_preuploaded = 0;
         s_preuploadBytes = s_preuploadTicks = 0;
         s_warmBuilt = 0;

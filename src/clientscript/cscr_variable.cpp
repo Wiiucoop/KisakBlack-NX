@@ -81,7 +81,7 @@ void __cdecl Scr_DumpScriptThreads(scriptInstance_t inst)
     }
     if ( num )
     {
-        infoArray = (ThreadDebugInfo *)Z_TryVirtualAlloc(140 * num, "Scr_DumpScriptThreads", 0);
+        infoArray = (ThreadDebugInfo *)Z_TryVirtualAlloc(sizeof(ThreadDebugInfo) * num, "Scr_DumpScriptThreads", 0);   // nx-port: was 140 *
         if ( infoArray )
         {
             num = 0;
@@ -100,8 +100,8 @@ void __cdecl Scr_DumpScriptThreads(scriptInstance_t inst)
                     {
                         --size;
                         type = *buf++;
-                        u.intValue = *(int *)buf;
-                        buf += 4;
+                        memcpy(&u, buf, sizeof(u));   // nx-port: entries are pointer-sized (SCR_STACKBUF_ENTRY)
+                        buf += sizeof(VariableUnion);
                         if ( type == 7 )
                             info.pos[info.posSize++] = u.codePosValue;
                     }
@@ -113,7 +113,8 @@ void __cdecl Scr_DumpScriptThreads(scriptInstance_t inst)
                         pInfo->pos[j] = info.pos[info.posSize - j];
                 }
             }
-            qsort(infoArray, num, 0x8Cu, (int (__cdecl *)(const void *, const void *))ThreadInfoCompare);
+            qsort(infoArray, num, sizeof(infoArray[0]),   // nx-port: was 0x8C, the x86 size
+                   (int (__cdecl *)(const void *, const void *))ThreadInfoCompare);
             Com_Printf(24, "********************************\n");
             varUsage = 0.0f;
             endonUsage = 0.0f;
@@ -235,7 +236,7 @@ void __cdecl Scr_DumpScriptVariables(
         && (gScrVarPub[inst].developer
             || !spreadsheet && !fileName && !functionName && !lineSort && !functionSummary && !minCount))
     {
-        infoArray = Z_TryVirtualAlloc(4718560, "Scr_DumpScriptVariables", 0);
+        infoArray = Z_TryVirtualAlloc(0x47FFE * sizeof(VariableDebugInfo), "Scr_DumpScriptVariables", 0);
         if (infoArray)
         {
             num = 0;
@@ -244,7 +245,7 @@ void __cdecl Scr_DumpScriptVariables(
                 pos = (char *)gScrVarDebugPub[inst]->varUsage[index];
                 if (pos)
                 {
-                    pInfo = (VariableDebugInfo *)&infoArray[16 * num];
+                    pInfo = (VariableDebugInfo *)&infoArray[sizeof(VariableDebugInfo) * num];
                     if (!fileName || Scr_PrevCodePosFileNameMatches(inst, pos, fileName))
                     {
                         if (functionName || functionSummary)
@@ -271,32 +272,32 @@ void __cdecl Scr_DumpScriptVariables(
                 if (summary)
                 {
                     VariableInfoCompareCallBack = (int(__cdecl *)(const void *, const void *))VariableInfoFileNameCompare;
-                    qsort(infoArray, num, 0x10u, (int(__cdecl *)(const void *, const void *))VariableInfoFileNameCompare);
+                    qsort(infoArray, num, sizeof(VariableDebugInfo), (int(__cdecl *)(const void *, const void *))VariableInfoFileNameCompare);
                 }
                 else if (functionSummary)
                 {
                     VariableInfoCompareCallBack = (int(__cdecl *)(const void *, const void *))VariableInfoFunctionCompare;
-                    qsort(infoArray, num, 0x10u, (int(__cdecl *)(const void *, const void *))VariableInfoFunctionCompare);
+                    qsort(infoArray, num, sizeof(VariableDebugInfo), (int(__cdecl *)(const void *, const void *))VariableInfoFunctionCompare);
                 }
                 else
                 {
                     VariableInfoCompareCallBack = (int(__cdecl *)(const void *, const void *))CompareThreadIndices;
-                    qsort(infoArray, num, 0x10u, (int(__cdecl *)(const void *, const void *))CompareThreadIndices);
+                    qsort(infoArray, num, sizeof(VariableDebugInfo), (int(__cdecl *)(const void *, const void *))CompareThreadIndices);
                 }
                 i = 0;
                 while (i < num)
                 {
-                    pInfoa = (VariableDebugInfo *)&infoArray[16 * i];
+                    pInfoa = (VariableDebugInfo *)&infoArray[sizeof(VariableDebugInfo) * i];
                     do
                     {
                         ++pInfoa->varUsage;
-                        --*(_DWORD *)&infoArray[16 * i++ + 12];
-                    } while (i < num && !VariableInfoCompareCallBack(pInfoa, &infoArray[16 * i]));
+                        --((VariableDebugInfo *)&infoArray[sizeof(VariableDebugInfo) * i++])->varUsage;   // nx-port: was +12, the x86 offset
+                    } while (i < num && !VariableInfoCompareCallBack(pInfoa, &infoArray[sizeof(VariableDebugInfo) * i]));
                 }
                 if (lineSort)
-                    qsort(infoArray, num, 0x10u, (int(__cdecl *)(const void *, const void *))VariableInfoFileLineCompare);
+                    qsort(infoArray, num, sizeof(VariableDebugInfo), (int(__cdecl *)(const void *, const void *))VariableInfoFileLineCompare);
                 else
-                    qsort(infoArray, num, 0x10u, (int(__cdecl *)(const void *, const void *))VariableInfoCountCompare);
+                    qsort(infoArray, num, sizeof(VariableDebugInfo), (int(__cdecl *)(const void *, const void *))VariableInfoCountCompare);
                 Com_Printf(24, "********************************\n");
                 if (spreadsheet)
                 {
@@ -317,7 +318,7 @@ void __cdecl Scr_DumpScriptVariables(
                 filteredCount = 0;
                 for (ia = 0; ia < num; ++ia)
                 {
-                    pInfob = (VariableDebugInfo *)&infoArray[16 * ia];
+                    pInfob = (VariableDebugInfo *)&infoArray[sizeof(VariableDebugInfo) * ia];
                     if (pInfob->varUsage)
                     {
                         count += pInfob->varUsage;
@@ -7112,14 +7113,14 @@ double __cdecl Scr_GetThreadUsage(scriptInstance_t inst, const VariableStackBuff
     VariableUnion u; // [esp+10h] [ebp-8h]
 
     size = stackBuf->size;
-    buf = &stackBuf->buf[5 * size];
+    buf = &stackBuf->buf[SCR_STACKBUF_ENTRY * size];   // nx-port: was 5 * size
     usage = Scr_GetObjectUsage(inst, stackBuf->localId);
     *endonUsage = Scr_GetEndonUsage(inst, stackBuf->localId);
     localId = stackBuf->localId;
     while ( size )
     {
-        bufa = buf - 4;
-        u.intValue = *(int *)bufa;
+        bufa = buf - sizeof(VariableUnion);   // nx-port: entries are pointer-sized (SCR_STACKBUF_ENTRY)
+        memcpy(&u, bufa, sizeof(u));
         buf = bufa - 1;
         --size;
         if ( *buf == 7 )

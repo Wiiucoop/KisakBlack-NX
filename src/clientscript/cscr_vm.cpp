@@ -846,12 +846,12 @@ const char *__cdecl Scr_GetStackThreadPos(
     }
     size = stackValue->size;
     localId = stackValue->localId;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCR_STACKBUF_ENTRY * size];   // nx-port: was 5 * size
     pos = stackValue->pos;
     while (size)
     {
-        bufa = buf - 4;
-        u.intValue = *(int *)bufa;
+        bufa = buf - sizeof(VariableUnion);   // nx-port: entries are pointer-sized (SCR_STACKBUF_ENTRY)
+        memcpy(&u, bufa, sizeof(u));
         buf = bufa - 1;
         --size;
         if (*buf == 7)
@@ -1831,11 +1831,11 @@ void __cdecl VM_TrimStack(
     }
     size = stackValue->size;
     localId = stackValue->localId;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCR_STACKBUF_ENTRY * size];   // nx-port: was 5 * size
     while (size)
     {
-        bufa = buf - 4;
-        u.intValue = *(int *)bufa;
+        bufa = buf - sizeof(VariableUnion);   // nx-port: entries are pointer-sized (SCR_STACKBUF_ENTRY)
+        memcpy(&u, bufa, sizeof(u));
         buf = bufa - 1;
         --size;
         if (*buf == 7)

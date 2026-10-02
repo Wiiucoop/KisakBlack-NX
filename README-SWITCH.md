@@ -71,6 +71,7 @@ it is moved to the end of the line, so `+set` lines always apply first):
 | `nx_glflush` | 64 | flush every N draws so CPU and GPU overlap |
 | `nx_splog` | 0 | SP bring-up traces off the log |
 | `nx_switchglyphs` | 1 | button prompts show A/B and X/Y as the Switch labels them (visual only) |
+| `nx_aimassist` | 1 | console gamepad aim assist: slowdown over targets, lock-on (`aim_lockon_enabled` 1), ADS snap (`aim_autoaim_enabled` 1); 0 = off as on PC |
 | shadows, depth prepass, DoF, distortion, flame, marks, brass | off | the low preset (`nx_main.cpp`) |
 
 **Shader warm-up.** Every shader pair ever built is listed in
@@ -1122,6 +1123,18 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   two share the tree and may play at double speed), and
   `AimTarget_GetTagPos` aims at the origin of an entity with no DObj instead
   of asserting. Why the server sends two actors on one slot is still open.
+  When it happens again the log has three lines: the pair, then for each
+  entity its client state (eType, slot, eFlags, in the snapshot, time its
+  DObj was created) and the local server's (inuse, eType, slot, health,
+  whether its `actor_s` is live or freed and which entity owns it).
+- **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
+  (`AimTarget` collects targets every frame), but
+  `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets
+  `ps.targetAssistDisabled` and turns off slowdown and lock-on; ADS snap and
+  lock-on are also off by their dvar defaults. On NX the function follows
+  `nx_aimassist` (default 1) and `aim_lockon_enabled` / `aim_autoaim_enabled`
+  default to 1. The tuning dvars keep their registered values, which are the
+  console ones (shared code). Applies to the MP build too.
 - **28 MB log after a crash.** Not the cause of the crash: the crash handler
   wrote out the ring while the log thread was in the middle of writing the
   same bytes; the thread then moved its read position past the write

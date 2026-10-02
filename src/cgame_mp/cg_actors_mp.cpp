@@ -22,6 +22,10 @@
 #include <cstddef>
 #include <bgame/bg_sp_anim_snapshot.h>
 #include <clientscript/cscr_stringlist.h>
+#ifdef KISAK_NX
+#include <game_mp/g_main_mp.h>
+#include <game/actor.h>
+#endif
 #endif
 
 #ifdef KISAK_SP
@@ -107,6 +111,36 @@ void __cdecl CG_ActorProcessSnapshot(int localClientNum, centity_s *cent)
     if ( v2 && cent->currentState.u.turret.ownerNum != cent->nextState.lerp.u.turret.ownerNum )
         CScr_NotifyNum(localClientNum, cent->nextState.number, 0, cscr_const.enemy, 0);
 }
+
+#ifdef KISAK_NX
+// cgameGlob->time each entity last created its actor DObj, for the report below.
+static int s_nxActorDObjCreatedAt[1024];
+
+// One entity, client side and (when the server is local) server side, for the
+// "both live on one actor slot" report.
+static void CG_NxDescribeActorEnt(int localClientNum, int number, char *out, size_t size)
+{
+    const centity_s *cent = CG_GetEntity(localClientNum, number);
+    int len = snprintf(out, size, "ent %d: client eType %d slot %u eFlags 0x%x inSnap %d dobjAt %d",
+                       number, cent->nextState.eType, cent->nextState.lerp.u.actor.actorNum,
+                       cent->nextState.lerp.eFlags, (cent->clientFlags & 2) != 0,
+                       number >= 0 && number < 1024 ? s_nxActorDObjCreatedAt[number] : -1);
+    if ( len < 0 || (size_t)len >= size )
+        return;
+    if ( !com_sv_running || !com_sv_running->current.enabled || number < 0 || number >= MAX_GENTITIES )
+    {
+        snprintf(out + len, size - len, "; server not local");
+        return;
+    }
+    const gentity_s *ent = &g_entities[number];
+    const actor_s *actor = ent->actor;
+    len += snprintf(out + len, size - len, "; server inuse %d eType %d slot %u health %d actor %s",
+                    ent->r.inuse, ent->s.eType, ent->s.lerp.u.actor.actorNum, ent->health,
+                    !actor ? "none" : !actor->inuse ? "freed" : "live");
+    if ( actor && actor->inuse && len > 0 && (size_t)len < size )
+        snprintf(out + len, size - len, " (its ent %d)", actor->ent ? actor->ent->s.number : -1);
+}
+#endif
 
 void __cdecl CG_UpdateActorDObj(int localClientNum, centity_s *cent, actorInfo_t *ai)
 {
@@ -316,8 +350,16 @@ void __cdecl CG_UpdateActorDObj(int localClientNum, centity_s *cent, actorInfo_t
                     {
                         static int s_reportedLive;
                         if ( s_reportedLive++ < 5 )
-                            Com_Printf(15, "[nx-anim] ents %d and %d are both live on actor slot %u; tree shared\n",
-                                       previous, p_nextState->number, p_nextState->lerp.u.actor.actorNum);
+                        {
+                            char previousDesc[320], currentDesc[320];
+                            CG_NxDescribeActorEnt(localClientNum, previous, previousDesc, sizeof(previousDesc));
+                            CG_NxDescribeActorEnt(localClientNum, p_nextState->number, currentDesc, sizeof(currentDesc));
+                            Com_Printf(15, "[nx-anim] ents %d and %d are both live on actor slot %u; tree shared (time %d)\n",
+                                       previous, p_nextState->number, p_nextState->lerp.u.actor.actorNum,
+                                       cgameGlob->time);
+                            Com_Printf(15, "[nx-anim]   %s\n", previousDesc);
+                            Com_Printf(15, "[nx-anim]   %s\n", currentDesc);
+                        }
                     }
                     else if ( previousObj && DObjGetTree(previousObj) == pAnimTree )
                     {
@@ -332,6 +374,8 @@ void __cdecl CG_UpdateActorDObj(int localClientNum, centity_s *cent, actorInfo_t
                     slot = freeSlot >= 0 ? freeSlot : 0;
                 s_treeOwnerTree[slot] = pAnimTree;
                 s_treeOwnerEnt[slot] = p_nextState->number;
+                if ( p_nextState->number >= 0 && p_nextState->number < 1024 )
+                    s_nxActorDObjCreatedAt[p_nextState->number] = cgameGlob->time;
             }
 #endif
             v4 = Com_ClientDObjCreate(dobjModels, numModels, pAnimTree, p_nextState->number, localClientNum);

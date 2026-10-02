@@ -74,6 +74,9 @@ const dvar_s *aim_lockon_region_height;
 const dvar_s *aim_scale_view_axis;
 const dvar_s *aim_assist_script_disable;
 const dvar_s *aim_assist_min_target_distance;
+#ifdef KISAK_NX
+const dvar_s *nx_aimassist;
+#endif
 
 
 void __cdecl AimAssist_Init(int localClientNum)
@@ -98,6 +101,11 @@ void __cdecl AimAssist_Init(int localClientNum)
 
 void AimAssist_RegisterDvars()
 {
+#ifdef KISAK_NX
+    nx_aimassist = _Dvar_RegisterBool(
+        "nx_aimassist", 1, 0x1u,
+        "Gamepad aim assist as on console (slowdown over targets, lock-on, ADS snap); 0 = off as on PC");
+#endif
     const dvar_s *result; // eax
 
     aim_aimAssistRangeScale = _Dvar_RegisterFloat(
@@ -235,7 +243,12 @@ void AimAssist_RegisterDvars()
                                              100.0,
                                              0x1080u,
                                              "The rate in degrees per second that the auto aim will converge to its target");
+#ifdef KISAK_NX
+    // Console behaviour on the Switch: snap to a target when aiming down sights.
+    aim_autoaim_enabled = _Dvar_RegisterBool("aim_autoaim_enabled", 1, 0x1080u, "Turn on auto aim");
+#else
     aim_autoaim_enabled = _Dvar_RegisterBool("aim_autoaim_enabled", 0, 0x1080u, "Turn on auto aim");
+#endif
     aim_autoaim_debug = _Dvar_RegisterBool("aim_autoaim_debug", 0, 0x1080u, "Turn on auto aim debugging");
     aim_autoaim_region_width = _Dvar_RegisterFloat(
                                                              "aim_autoaim_region_width",
@@ -297,7 +310,11 @@ void AimAssist_RegisterDvars()
                                                                         "override value for view sensitivity");
     aim_lockon_enabled = _Dvar_RegisterBool(
                                                  "aim_lockon_enabled",
+#ifdef KISAK_NX
+                                                 1,   // console behaviour: the view follows a target while moving
+#else
                                                  0,
+#endif
                                                  0x1080u,
                                                  "Aim lock on helps the player to stay on target");
     aim_lockon_debug = _Dvar_RegisterBool("aim_lockon_debug", 0, 0x1080u, "Turn on debugging info for aim lock on");
@@ -505,7 +522,13 @@ centity_s *__cdecl CG_GetEntity(int localClientNum, int entityIndex)
 char __cdecl AimAssist_PlayerDisabledAutoAim()
 {
     Demo_IsPlaying();
+#ifdef KISAK_NX
+    // PC builds return 1 here: aim assist off for everyone. The Switch plays
+    // with a gamepad, so it follows nx_aimassist (slowdown, lock-on, ADS snap).
+    return !nx_aimassist || !nx_aimassist->current.enabled;
+#else
     return 1;
+#endif
 }
 
 void __cdecl AimAssist_UpdateScreenTargets(

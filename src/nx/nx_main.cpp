@@ -253,12 +253,14 @@ int main(int argc, char **argv)
     //   sm_enable 0     no shadow maps (their passes are whole extra scenes)
     //   depthPrepass 0  no depth-only pass over the opaque world
     //   dof, distortion, flame, marks, brass: extra passes and draws
+    //   nx_bloom 0      no bloom: ~10 extra passes, and it drew light glows
+    //                   offset from their lights (README-SWITCH, known problems)
     static char cmdline[2048] =
         "allowdupe nodump"
         " +set r_picmip_manual 1 +set r_picmip 3 +set r_picmip_bump 3 +set r_picmip_spec 3"
         " +set r_texFilterAnisoMax 1 +set r_aaSamples 1"
         " +set sm_enable 0 +set r_depthPrepass 0"
-        " +set r_dof_enable 0 +set r_distortion 0 +set r_flame_allowed 0"
+        " +set r_dof_enable 0 +set r_distortion 0 +set r_flame_allowed 0 +set nx_bloom 0"
         " +set fx_marks 0 +set fx_marks_ents 0 +set cg_brass 0";
     nxAppendCmdlineFile(cmdline, sizeof(cmdline));
     printf("command line: %s\n", cmdline);

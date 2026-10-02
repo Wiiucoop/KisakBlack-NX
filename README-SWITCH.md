@@ -861,8 +861,12 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
   13), map data the converter does not handle yet. The engine carries on
   without it.
 - **Light glows drawn away from their lights** (Zombies: the Quick Revive
-  machine, the lamps outside), more visibly from afar. Not found yet. Ruled
-  out: light coronas (`IDirect3DQuery9::GetData` reports 0 visible pixels, so
+  machine, the lamps outside), more visibly from afar. **It is the bloom**:
+  `nx_bloom 0` makes it go, so the low preset (`nx_main.cpp`) now sets it --
+  which also saves the bloom's ~10 small passes. The fault inside
+  `RB_BloomLDR` (one of its downsample / blur / streak / smooth passes reading
+  or writing offset) is not found yet; it matters beyond bloom, since depth of
+  field, blur and the revive effect use the same targets. Ruled out: light coronas (`IDirect3DQuery9::GetData` reports 0 visible pixels, so
   `RB_DrawCorona` never draws one), and the `*_eyeoffset` FX vertex shaders
   (translated, they pull the sprite towards the eye along x, y, z and w
   together, which leaves its screen position alone). Left: the FX sprites

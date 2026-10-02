@@ -1090,8 +1090,15 @@ void __cdecl Com_ServerPacketEvent()
 #ifdef KISAK_NX
     // Scoped apart for the hitch reports: 0.5-1.1 s stalls sat inside this
     // function with nothing under them -- the socket read, the loopback read
-    // and the processing of each packet.
+    // and the processing of each packet. They were the socket read: a
+    // recvfrom through the system's network service now and then took
+    // 0.3-1 s to come back. SP has no remote clients -- its one client is on
+    // the loopback -- so the SP build does not read the socket at all.
+#ifdef KISAK_SP
+    if ( false )
+#else
     if ( com_sv_running->current.enabled )
+#endif
     {
         for ( ;; )
         {

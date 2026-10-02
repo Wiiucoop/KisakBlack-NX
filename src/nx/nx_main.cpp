@@ -398,7 +398,10 @@ int main(int argc, char **argv)
     // applies +set lines after the saved config and just before the renderer
     // starts, so textures load at the reduced size; cmdline.txt comes after
     // and can override any of them.
-    //   picmip 3        color, normal and specular maps at 1/8 size
+    //   picmip 2        color, normal and specular maps at 1/4 size. With
+    //                   r_stream 0 (no high mips streamed in) 3 looked too
+    //                   blurry; 1 brought ~200 ms driver stalls in game
+    //                   (README-SWITCH, "picmip").
     //   sm_enable 0     no shadow maps (their passes are whole extra scenes)
     //   depthPrepass 0  no depth-only pass over the opaque world
     //   dof, distortion, flame, marks, brass: extra passes and draws
@@ -406,7 +409,7 @@ int main(int argc, char **argv)
     //                   offset from their lights (README-SWITCH, known problems)
     static char cmdline[2048] =
         "allowdupe nodump"
-        " +set r_picmip_manual 1 +set r_picmip 3 +set r_picmip_bump 3 +set r_picmip_spec 3"
+        " +set r_picmip_manual 1 +set r_picmip 2 +set r_picmip_bump 2 +set r_picmip_spec 2"
         " +set r_texFilterAnisoMax 1 +set r_aaSamples 1"
         " +set sm_enable 0 +set r_depthPrepass 0"
         " +set r_dof_enable 0 +set r_distortion 0 +set r_flame_allowed 0 +set nx_bloom 0"

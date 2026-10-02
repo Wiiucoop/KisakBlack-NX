@@ -1040,6 +1040,19 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   `SV_PacketEvent`, and `SV_ExecuteClientMessage`, `SV_ExecuteClientCommand`,
   `ClientThink_real`, `ClientCommand` and `Pmove` got scopes, so the next
   `[nx-hitch]` line names the part.
+- **The packet-path hitches were the network socket.** With the new scopes
+  the 0.3-1 s server stalls were all `NET_GetClientPacket`: the server polls
+  its UDP socket every frame, and a recvfrom through the system's network
+  service now and then took 0.3-1 s to return (once alongside a 1 s stall
+  of several threads at once). SP's only client is on the loopback, so the
+  SP build no longer reads the socket (`Com_ServerPacketEvent`). The client
+  side already skips it when a local server runs.
+- **picmip.** 3 with `r_stream 0` looked too blurry. 1 (`_bump`/`_spec` 2)
+  brought runs of ~200 ms frames where the wait landed in whichever GL call
+  came next (swap 177-199 ms, constants 176 ms, `glUseProgram` 39 ms) while
+  the GPU's own time stayed under 35 ms: the driver stalling, most likely
+  over the ~4x texture memory. 2 ran clean (slowest in-game frames 44-85 ms),
+  so the preset is now picmip 2 for colour, normal and specular maps.
 - **Streaming without stutters (not done).** The streaming hitches had three
   parts: the Stream thread's reads (off the main thread, harmless alone), the
   render thread uploading every streamed texture whole at its next bind

@@ -879,6 +879,16 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   sends only the rows that differ, with `glTexSubImage*` into the existing
   storage (`nxGlUpdateTexture`). The constant buffer ring grew to 8 x 2 MB:
   at ~2.5 MB of constants a busy frame, 4 segments made it wait on the GPU.
+- **Second result.** Warm-up: 250 of 251 listed pairs built during the boot
+  load, and only 2-13 programs per 600 frames in game (the new ones from a
+  room opened late). `$model_lighting` went from ~1 MB to ~16 KB a frame but
+  still cost ~5.6 ms: the write itself stalls, because the driver waits for
+  the GPU to finish reading the texture before changing it. A texture
+  rewritten in place now rotates through three GL copies (`glRing`), each
+  with its own shadow, so an update goes into a copy the GPU finished with
+  frames ago and still sends only the rows changed since that copy was last
+  current. In-game frames were ~32-45 ms, the render thread ~24 ms drawing
+  plus ~9 ms in the swap.
 - **Zombie corpses in T-pose:** SP converts the actor into a corpse in place
   (`Actor_BecomeCorpse`), and the client draws the corpse through
   `actorCorpseInfo[slot]`, whose tree starts empty; retail hides that with the

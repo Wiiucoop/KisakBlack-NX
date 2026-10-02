@@ -615,10 +615,14 @@ struct NxTexture {
     bool glAllocated;  // render target storage exists
     unsigned glUploads; // full uploads so far
     // An uncompressed texture uploaded again (the engine rewriting it in
-    // place, like $model_lighting every frame) keeps a copy of what GL holds,
-    // so later uploads send only the rows that differ: see nxGlUpdateTexture.
-    BYTE *glShadow;
+    // place, like $model_lighting every frame) rotates through NX_TEX_RING GL
+    // copies, each with a copy of what it holds, so an update sends only the
+    // rows that differ into a copy the GPU is done with: see nxGlSyncTexture.
+    GLuint glRing[3];
+    BYTE *glRingShadow[3];
+    unsigned char glRingCur;
 };
+enum { NX_TEX_RING = 3 };
 
 struct NxBuffer {
     NxD3DObject obj;   // D3DRTYPE_VERTEXBUFFER / INDEXBUFFER
@@ -1007,8 +1011,12 @@ static void nxDestroy(NxD3DObject *o)
         nxFrameForgetTexture(t);
         // Same rule as the buffers below: only the thread that owns the
         // context may delete a GL name, and a leak beats a lost context.
-        if (t->glName && s_glReady && nxGlAcquire()) {
-            nxDeleteTexture(&t->glName);
+        if ((t->glName || t->glRing[0]) && s_glReady && nxGlAcquire()) {
+            for (GLuint &copy : t->glRing)
+                if (copy && copy != t->glName)
+                    nxDeleteTexture(&copy);
+            if (t->glName)
+                nxDeleteTexture(&t->glName);
             t->glName = 0;
         }
         for (UINT i = 0; i < n; ++i)
@@ -1022,7 +1030,8 @@ static void nxDestroy(NxD3DObject *o)
             free(t->surfaces);
         }
         free(t->levelBits);
-        free(t->glShadow);
+        for (BYTE *shadow : t->glRingShadow)
+            free(shadow);
         free(t);
         break;
     }
@@ -2562,7 +2571,12 @@ static bool nxGlSyncSurface(NxSurface *s)
 // existing storage. $model_lighting (a 256x256x4 volume the engine patches a
 // few 4x4x4 blocks of every frame) went up whole each time: ~1 MB and 3-12 ms
 // a frame. The first such call only makes the copy and sends everything.
-static void nxGlUpdateTexture(NxTexture *t, const NxTexFormat *f, GLenum target)
+static void nxGlFullUpload(NxTexture *t, const NxTexFormat *f, GLenum target);
+static UINT nxTexLevelBytes(const NxTexture *t, GLenum target, UINT level);
+static UINT nxTexShadowBytes(const NxTexture *t, GLenum target);
+static void nxGlTextureParams(const NxTexture *t, GLenum target, const NxTexFormat *f);
+
+static void nxGlUpdateTexture(NxTexture *t, const NxTexFormat *f, GLenum target, BYTE **shadowp)
 {
     UINT total = 0;
     for (UINT face = 0; face < t->faces; ++face)
@@ -2572,8 +2586,8 @@ static void nxGlUpdateTexture(NxTexture *t, const NxTexFormat *f, GLenum target)
             UINT d = target == GL_TEXTURE_3D ? nxMipDim(t->depth, level) : 1;
             total += size * (d ? d : 1);
         }
-    bool fresh = !t->glShadow;
-    if (fresh && !(t->glShadow = (BYTE *)malloc(total)))
+    bool fresh = !*shadowp;
+    if (fresh && !(*shadowp = (BYTE *)malloc(total)))
         return;
 
     NxProfScope prof(NXP_TEX_UPLOAD);
@@ -2589,7 +2603,7 @@ static void nxGlUpdateTexture(NxTexture *t, const NxTexFormat *f, GLenum target)
             UINT pitch, size;
             nxLevelLayout(t->format, w, h, &pitch, &size);
             const BYTE *bits = (const BYTE *)t->levelBits[face * t->levels + level];
-            BYTE *shadow = t->glShadow + offset;
+            BYTE *shadow = *shadowp + offset;
             offset += size * d;
             for (UINT z = 0; z < d; ++z) {
                 const BYTE *src = bits + z * size;
@@ -2660,20 +2674,93 @@ static bool nxGlSyncTexture(NxTexture *t)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
     if (t->glUploads && f.format) {
-        // Storage, filtering and swizzle are already set: only pixels change.
-        nxGlUpdateTexture(t, &f, target);
+        // Rewritten in place. Writing into the copy the GPU may still be
+        // reading makes the driver wait for it -- ~5 ms a frame for
+        // $model_lighting even at a few KB -- so each update goes to the next
+        // of NX_TEX_RING copies, one the GPU finished with frames ago. A new
+        // copy gets everything; an old one the rows changed since it was last
+        // current, against its own shadow. Storage, filtering and swizzle are
+        // set once per copy.
+        if (!t->glRing[0])
+            t->glRing[0] = t->glName;   // the first upload; its shadow is made when it comes round
+        int next = (t->glRingCur + 1) % NX_TEX_RING;
+        bool made = false;
+        if (!t->glRing[next]) {
+            glGenTextures(1, &t->glRing[next]);
+            made = t->glRing[next] != 0;
+            if (!made)
+                next = t->glRingCur;   // no new name: update the current copy
+        }
+        t->glRingCur = (unsigned char)next;
+        t->glName = t->glRing[next];
+        nxBindTexture(target, t->glName);
+        if (made) {
+            nxGlFullUpload(t, &f, target);
+            nxGlTextureParams(t, target, &f);
+        }
+        // A new copy holds everything already; its shadow is filled (and
+        // nothing sent) by a pass that finds every row different -- so it is
+        // made by copying instead.
+        if (made && !t->glRingShadow[next]) {
+            UINT total = nxTexShadowBytes(t, target);
+            if ((t->glRingShadow[next] = (BYTE *)malloc(total))) {
+                UINT offset = 0;
+                for (UINT face = 0; face < t->faces; ++face)
+                    for (UINT level = 0; level < t->levels; ++level) {
+                        UINT bytes = nxTexLevelBytes(t, target, level);
+                        memcpy(t->glRingShadow[next] + offset, t->levelBits[face * t->levels + level], bytes);
+                        offset += bytes;
+                    }
+            }
+        } else if (!made) {
+            nxGlUpdateTexture(t, &f, target, &t->glRingShadow[next]);
+        }
         t->glDirty = false;
         return true;
     }
+    nxGlFullUpload(t, &f, target);
+    ++t->glUploads;
+    nxGlTextureParams(t, target, &f);
+
+    t->glDirty = false;
+    ++s_nTexUploaded;
+    s_texUploadBytes += t->bytes;
+    nxFormatTally(t->format)->uploaded++;
+    return true;
+}
+
+// Every level of every face, allocating the storage.
+static void nxGlFullUpload(NxTexture *t, const NxTexFormat *f, GLenum target)
+{
     for (UINT face = 0; face < t->faces; ++face) {
         GLenum faceTarget = target == GL_TEXTURE_CUBE_MAP
                           ? (GLenum)(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face)
                           : target;
         for (UINT level = 0; level < t->levels; ++level)
-            nxGlUploadLevel(t, &f, faceTarget, face, level);
+            nxGlUploadLevel(t, f, faceTarget, face, level);
     }
-    ++t->glUploads;
+}
 
+// The bytes of one level of one face, every slice of a volume.
+static UINT nxTexLevelBytes(const NxTexture *t, GLenum target, UINT level)
+{
+    UINT pitch, size;
+    nxLevelLayout(t->format, nxMipDim(t->width, level), nxMipDim(t->height, level), &pitch, &size);
+    UINT d = target == GL_TEXTURE_3D ? nxMipDim(t->depth, level) : 1;
+    return size * (d ? d : 1);
+}
+
+static UINT nxTexShadowBytes(const NxTexture *t, GLenum target)
+{
+    UINT total = 0;
+    for (UINT face = 0; face < t->faces; ++face)
+        for (UINT level = 0; level < t->levels; ++level)
+            total += nxTexLevelBytes(t, target, level);
+    return total;
+}
+
+static void nxGlTextureParams(const NxTexture *t, GLenum target, const NxTexFormat *f)
+{
     // What the engine asked for with SetSamplerState travels on the sampler
     // object bound next to the texture, which overrides all of these; they
     // only hold for a draw that finds no sampler object bound.
@@ -2685,13 +2772,7 @@ static bool nxGlSyncTexture(NxTexture *t)
     glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_REPEAT);
-    glTexParameteriv(target, GL_TEXTURE_SWIZZLE_RGBA, f.swizzle);
-
-    t->glDirty = false;
-    ++s_nTexUploaded;
-    s_texUploadBytes += t->bytes;
-    nxFormatTally(t->format)->uploaded++;
-    return true;
+    glTexParameteriv(target, GL_TEXTURE_SWIZZLE_RGBA, f->swizzle);
 }
 
 // ===========================================================================

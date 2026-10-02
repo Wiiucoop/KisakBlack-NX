@@ -82,6 +82,20 @@ void __cdecl SV_MapRestart(int fast_restart)
 
     PROF_SCOPED("SV_MapRestart");
 
+#if defined(KISAK_SP) && defined(KISAK_NX)
+    // The fast path restarts the game VM and reconnects the clients in place
+    // (MP's restart). SP's zombie scripts set the player up only when the
+    // level starts, so after it every per-player field was undefined
+    // (players[p].solo_powerup_hud...) and the HUD threads errored every pass
+    // -- the game crawled at ~1 fps. SP restarts by loading the level again
+    // through the same map command the first load used (SV_Map_f does SP
+    // work around SV_SpawnServer: the map mode, the pregame menu).
+    if ( com_sv_running->current.enabled )
+    {
+        Cbuf_AddText(0, va("%s %s\n", sv_cheats->current.enabled ? "devmap" : "map", Dvar_GetString("mapname")));
+        return;
+    }
+#endif
     Com_SyncThreads();
     track_hunk_ClearToStart();
     if ( com_sv_running->current.enabled )

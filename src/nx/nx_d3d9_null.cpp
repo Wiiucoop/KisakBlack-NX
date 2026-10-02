@@ -2034,6 +2034,26 @@ struct NxProfScope {
     ~NxProfScope() { s_profTicks[which] += armGetSystemTick() - start; ++s_profCalls[which]; }
 };
 
+// The driver holds a frame's commands until something flushes them, which was
+// the swap: the GPU started a frame only when the CPU had finished issuing
+// it, so the two never overlapped (render thread ~27 ms, GPU ~22 ms, frame
+// ~37 ms, ~9 ms of it waiting in the swap even without vsync). A glFlush every
+// nx_glflush draws hands the GPU each part as it is ready. 0 turns it off.
+static const dvar_s *s_glFlushDvar;
+static unsigned s_drawsSinceFlush, s_midFrameFlushes;
+
+static void nxGlMaybeFlush(void)
+{
+    if (!s_glFlushDvar)
+        return;   // registered at the first present
+    const int every = s_glFlushDvar->current.integer;
+    if (every > 0 && ++s_drawsSinceFlush >= (unsigned)every) {
+        glFlush();
+        s_drawsSinceFlush = 0;
+        ++s_midFrameFlushes;
+    }
+}
+
 // The buffers uploaded whole since the last report, and why: the first
 // upload, a D3DLOCK_DISCARD, or a lock that covered the whole buffer.
 struct NxWholeUpload {
@@ -4410,6 +4430,7 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
                              (const void *)(uintptr_t)(startIndex * idxSize),
                              baseVertexIndex);
     }
+    nxGlMaybeFlush();
     GLenum err = GL_NO_ERROR;
     if (checkErrors) { NxProfScope p(NXP_GETERROR); err = glGetError(); }
     if (err != GL_NO_ERROR) {
@@ -5889,6 +5910,10 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     if (!s_vsyncDvar)
         s_vsyncDvar = _Dvar_RegisterBool("nx_vsync", false, 0,
                                          "Wait for the display refresh at each swap (no tearing, slower)");
+    if (!s_glFlushDvar)
+        s_glFlushDvar = _Dvar_RegisterInt("nx_glflush", 64, 0, 100000, 0,
+                                          "glFlush every N draws so the GPU starts before the swap (0: off)");
+    s_drawsSinceFlush = 0;
     if ((int)s_vsyncDvar->current.enabled != s_vsyncApplied) {
         s_vsyncApplied = s_vsyncDvar->current.enabled;
         eglSwapInterval(s_display, s_vsyncApplied);
@@ -5960,6 +5985,9 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
             printf("[nx-gl] GPU time: %.1f ms per frame, slowest %.1f ms (%u frames timed)\n",
                    s_gpuNs / 1e6 / s_gpuFrames, s_gpuNsMax / 1e6, s_gpuFrames);
         s_gpuNs = s_gpuNsMax = 0;
+        if (s_midFrameFlushes)
+            printf("[nx-gl] mid-frame flushes: %.1f per present\n", (double)s_midFrameFlushes / frames);
+        s_midFrameFlushes = 0;
         s_gpuFrames = 0;
         s_preuploaded = 0;
         s_preuploadBytes = s_preuploadTicks = 0;

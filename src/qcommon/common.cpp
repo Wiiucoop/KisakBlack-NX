@@ -476,7 +476,13 @@ void __cdecl Com_PrintMessage(int channel, char *msg, int error)
 
             if ( *msg == 94 && msg[1] )
                 msg += 2;
+#ifdef KISAK_NX
+            // Channel 6 carries the script runtime error headers; without them
+            // the log showed bare call stacks and no message.
+            if ( (channel != 6 || error)
+#else
             if ( channel != 6
+#endif
                 && (!com_filter_output
                  || !com_filter_output->current.enabled
                  || Con_IsChannelVisible(CON_DEST_CONSOLE, channel, 3)) )

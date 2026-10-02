@@ -916,6 +916,19 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   match it. Shutdown is the first time live waiting threads get walked that
   way. `Scr_DumpScriptThreads` / `Scr_DumpScriptVariables` (debug dumps) had
   the same entries and x86 struct sizes (0x8C, 0x10) and are fixed too.
+- **Fifth result: GPU 20-24 ms, no overlap.** With vsync off frames were still
+  34-40 ms and the swap still ~9 ms: the driver kept the frame's commands
+  until the swap, so the GPU (20-24 ms a frame by the new timer) started only
+  when the render thread (~27 ms) had finished. A `glFlush` every
+  `nx_glflush` draws (default 64, 0 off) hands the GPU each part as it is
+  issued, so the two can overlap; the summary prints the flushes per present.
+- **Restart Map crawled at ~1 fps (SP).** The in-place restart (MP's:
+  `SV_RestartGameProgs` + reconnecting the clients) left SP's per-player
+  script state unbuilt -- `players[p].solo_powerup_hud` undefined -- and the
+  power-up HUD threads errored every pass, each error a stack written to the
+  SD card. SP now restarts by queueing `devmap`/`map` for the current map, the
+  path the first load takes. Script runtime error headers (channel 6) are
+  now logged too; the stacks used to appear without their message.
 - **Vision sets (SP).** `player VisionSetNaked()` was a no-op stub; it now does
   what the global `VisionSetNaked` does (configstring 1550, which the client
   lerps to). `VisionSetLastStand` stays a stub: this client has no last-stand

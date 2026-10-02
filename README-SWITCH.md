@@ -354,6 +354,17 @@ debugging.
 Assertions print an `ASSERTBEGIN` / `ASSERTEND` block with file and line before
 the trap.
 
+**CPU profile.** `PROF_SCOPED` (`universal/profile.h`) was Tracy-only; on NX
+each of its ~600 sites now adds ticks and calls to a per-thread slot
+(`src/nx/nx_prof.cpp`), and every 600 main-thread frames the log gets
+`[nx-prof]` lines: the 40 costliest scopes per frame, with thread and calls
+per frame. Times are inclusive (a scope contains the scopes nested in it), so
+read them as a tree, not a sum. Measure at stock clocks.
+
+**SP traces.** The SP bring-up prints (lines starting `SP `: anim commands,
+sound notifies, actor/mover/view probes) are dropped unless `nx_splog 1`;
+each was a write through to the SD card. Warnings and errors still print.
+
 ### Crashes
 
 `nx_main.cpp` installs a CPU exception handler. On a fault it writes an

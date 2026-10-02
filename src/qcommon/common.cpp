@@ -389,12 +389,35 @@ void __cdecl Com_EndRedirect()
     rd_flush = 0;
 }
 
+#ifdef KISAK_NX
+// nx_splog 0 (default) drops the SP bring-up traces -- every line starting "SP "
+// (anim commands, sound notifies, actor/mover/view probes): thousands a minute,
+// each written through to the SD card. A trace assembled from several
+// Com_Printf calls drops its continuations on that thread up to the newline.
+const dvar_t *nx_splog;
+static bool Com_NxDropSpTrace(const char *msg)
+{
+    static thread_local bool dropping = false;
+    if ( nx_splog && nx_splog->current.enabled )
+        return false;
+    if ( !dropping && strncmp(msg, "SP ", 3) )
+        return false;
+    dropping = !strchr(msg, '\n');
+    return true;
+}
+#endif
+
 void __cdecl Com_PrintMessage(int channel, char *msg, int error)
 {
     char v3; // [esp+23h] [ebp-25h]
     char *v4; // [esp+28h] [ebp-20h]
     char *v5; // [esp+2Ch] [ebp-1Ch]
     bool v6; // [esp+40h] [ebp-8h]
+
+#ifdef KISAK_NX
+    if ( !error && Com_NxDropSpTrace(msg) )
+        return;
+#endif
 
     v6 = channel >= 31 && !Con_IsChannelVisible(CON_DEST_CONSOLE, channel, 0);
     if ( !v6 || error == 2 || error == 3 )
@@ -2393,6 +2416,9 @@ void Com_InitDvars()
     Dvar_SetInt((dvar_s *)dedicated, 2);
 #endif
     com_maxfps = _Dvar_RegisterInt("com_maxfps", 85, 0, 1000, 1u, "Cap frames per second");
+#ifdef KISAK_NX
+    nx_splog = _Dvar_RegisterBool("nx_splog", 0, 0, "Log the SP bring-up traces (lines starting \"SP \")");
+#endif
     arcademode = _Dvar_RegisterBool("arcademode", 0, 0x100u, "Current game is an arcade mode game");
     zombiemode = _Dvar_RegisterBool("zombiemode", 0, 0x40u, "Current game is an zombie game");
     legacy_zombiemode = _Dvar_RegisterBool("legacy_zombiemode", 0, 0x40u, "Current game is a legacy zombie game");

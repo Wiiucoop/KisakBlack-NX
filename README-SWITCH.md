@@ -864,6 +864,21 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   shipping it in the NRO gives new players the same warm-up (their binaries
   are then made on that first load). Next: spread the warm-up over more cores
   (a second GL context), and build the stragglers in game in the background.
+- **Warm-up, first result.** The list had 236 pairs, but 718 programs were
+  built during the boot load and 97 more at the first draws in game: programs
+  were keyed by shader object, and the zones create the same shader many
+  times. Programs are now keyed by the GLSL hashes of the pair (`s_programs`),
+  so every copy shares one, and a program goes only when the last live shader
+  with that GLSL does (the registry keeps all of them per hash).
+  Skipping unchanged binds took attributes from ~11 to ~2-4 ms a frame.
+- **`$model_lighting` re-sent whole every frame.** The texture report named
+  it: a 256x256x4 volume the engine patches a few 4x4x4 blocks of each frame
+  (`RB_PatchModelLighting`, `LockBox` over the whole volume), uploaded whole
+  with `glTexImage3D` -- ~1 MB and 3-12 ms a frame, counted under samplers.
+  An uncompressed texture uploaded again now keeps a copy of what GL holds and
+  sends only the rows that differ, with `glTexSubImage*` into the existing
+  storage (`nxGlUpdateTexture`). The constant buffer ring grew to 8 x 2 MB:
+  at ~2.5 MB of constants a busy frame, 4 segments made it wait on the GPU.
 - **Zombie corpses in T-pose:** SP converts the actor into a corpse in place
   (`Actor_BecomeCorpse`), and the client draws the corpse through
   `actorCorpseInfo[slot]`, whose tree starts empty; retail hides that with the

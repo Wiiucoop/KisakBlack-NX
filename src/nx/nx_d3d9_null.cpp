@@ -613,6 +613,11 @@ struct NxTexture {
     bool glDirty;      // levelBits changed since the last upload
     bool glUnsupported; // no GL equivalent for this format: do not retry
     bool glAllocated;  // render target storage exists
+    unsigned glUploads; // full uploads so far
+    // An uncompressed texture uploaded again (the engine rewriting it in
+    // place, like $model_lighting every frame) keeps a copy of what GL holds,
+    // so later uploads send only the rows that differ: see nxGlUpdateTexture.
+    BYTE *glShadow;
 };
 
 struct NxBuffer {
@@ -663,7 +668,7 @@ struct NxShader {
 };
 // "Program warm-up": the live shaders by glslHash, and the pairs ever drawn.
 static void nxShaderRegister(NxShader *s);
-static void nxShaderUnregister(NxShader *s);
+static bool nxShaderUnregister(NxShader *s);
 static void nxWarmNotePair(const NxShader *vs, const NxShader *ps);
 
 struct NxVDecl {
@@ -745,7 +750,7 @@ static void nxFrameForgetTexture(const NxTexture *t);
 // current target before anything draws through it again.
 static void nxForgetSurface(const NxSurface *s);
 struct NxShader;
-static void nxForgetShader(const NxShader *s);
+static void nxForgetShader(const NxShader *s, bool lastOfItsGlsl);
 
 static void nxTextureCreated(NxTexture *t)
 {
@@ -1017,6 +1022,7 @@ static void nxDestroy(NxD3DObject *o)
             free(t->surfaces);
         }
         free(t->levelBits);
+        free(t->glShadow);
         free(t);
         break;
     }
@@ -1036,8 +1042,8 @@ static void nxDestroy(NxD3DObject *o)
     case 101:   // vertex shader
     case 102: { // pixel shader
         NxShader *sh = (NxShader *)o;
-        nxShaderUnregister(sh);
-        nxForgetShader(sh);   // unbinds it and drops every program linked from it
+        bool last = nxShaderUnregister(sh);
+        nxForgetShader(sh, last);   // unbinds it; the last of its GLSL drops its programs
         if (sh->glName && s_glReady && nxGlAcquire())
             glDeleteShader(sh->glName);
         free(sh->glsl);
@@ -2551,6 +2557,71 @@ static bool nxGlSyncSurface(NxSurface *s)
 // Creates the GL name on first use and re-uploads whenever Unlock said the
 // pixels moved. Leaves the texture bound to its own target on the active
 // unit, which is what the caller wants next.
+// Re-uploads an uncompressed texture GL already holds, row by row against the
+// copy of its last upload: only the runs of rows that differ go up, into the
+// existing storage. $model_lighting (a 256x256x4 volume the engine patches a
+// few 4x4x4 blocks of every frame) went up whole each time: ~1 MB and 3-12 ms
+// a frame. The first such call only makes the copy and sends everything.
+static void nxGlUpdateTexture(NxTexture *t, const NxTexFormat *f, GLenum target)
+{
+    UINT total = 0;
+    for (UINT face = 0; face < t->faces; ++face)
+        for (UINT level = 0; level < t->levels; ++level) {
+            UINT pitch, size;
+            nxLevelLayout(t->format, nxMipDim(t->width, level), nxMipDim(t->height, level), &pitch, &size);
+            UINT d = target == GL_TEXTURE_3D ? nxMipDim(t->depth, level) : 1;
+            total += size * (d ? d : 1);
+        }
+    bool fresh = !t->glShadow;
+    if (fresh && !(t->glShadow = (BYTE *)malloc(total)))
+        return;
+
+    NxProfScope prof(NXP_TEX_UPLOAD);
+    const u64 start = armGetSystemTick();
+    UINT sent = 0, offset = 0;
+    for (UINT face = 0; face < t->faces; ++face) {
+        GLenum faceTarget = target == GL_TEXTURE_CUBE_MAP
+                          ? (GLenum)(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face) : target;
+        for (UINT level = 0; level < t->levels; ++level) {
+            UINT w = nxMipDim(t->width, level), h = nxMipDim(t->height, level);
+            UINT d = target == GL_TEXTURE_3D ? nxMipDim(t->depth, level) : 1;
+            if (!d) d = 1;
+            UINT pitch, size;
+            nxLevelLayout(t->format, w, h, &pitch, &size);
+            const BYTE *bits = (const BYTE *)t->levelBits[face * t->levels + level];
+            BYTE *shadow = t->glShadow + offset;
+            offset += size * d;
+            for (UINT z = 0; z < d; ++z) {
+                const BYTE *src = bits + z * size;
+                BYTE *old = shadow + z * size;
+                UINT y = 0;
+                while (y < h) {
+                    if (!fresh && !memcmp(src + y * pitch, old + y * pitch, pitch)) {
+                        ++y;
+                        continue;
+                    }
+                    // A run of changed rows, bridging gaps of up to two.
+                    UINT y0 = y, last = y;
+                    for (UINT k = y + 1; k < h && k - last <= 3; ++k)
+                        if (fresh || memcmp(src + k * pitch, old + k * pitch, pitch))
+                            last = k;
+                    UINT rows = last - y0 + 1;
+                    if (target == GL_TEXTURE_3D)
+                        glTexSubImage3D(GL_TEXTURE_3D, (GLint)level, 0, (GLint)y0, (GLint)z, (GLsizei)w,
+                                        (GLsizei)rows, 1, f->format, f->type, src + y0 * pitch);
+                    else
+                        glTexSubImage2D(faceTarget, (GLint)level, 0, (GLint)y0, (GLsizei)w, (GLsizei)rows,
+                                        f->format, f->type, src + y0 * pitch);
+                    memcpy(old + y0 * pitch, src + y0 * pitch, rows * pitch);
+                    sent += rows * pitch;
+                    y = last + 1;
+                }
+            }
+        }
+    }
+    nxNoteTexUpload(t->imageName, t->width, t->height, sent, armGetSystemTick() - start);
+}
+
 static bool nxGlSyncTexture(NxTexture *t)
 {
     if (!t || t->glUnsupported)
@@ -2588,6 +2659,12 @@ static bool nxGlSyncTexture(NxTexture *t)
     // would read every row after the first one skewed.
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
+    if (t->glUploads && f.format) {
+        // Storage, filtering and swizzle are already set: only pixels change.
+        nxGlUpdateTexture(t, &f, target);
+        t->glDirty = false;
+        return true;
+    }
     for (UINT face = 0; face < t->faces; ++face) {
         GLenum faceTarget = target == GL_TEXTURE_CUBE_MAP
                           ? (GLenum)(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face)
@@ -2595,6 +2672,7 @@ static bool nxGlSyncTexture(NxTexture *t)
         for (UINT level = 0; level < t->levels; ++level)
             nxGlUploadLevel(t, &f, faceTarget, face, level);
     }
+    ++t->glUploads;
 
     // What the engine asked for with SetSamplerState travels on the sampler
     // object bound next to the texture, which overrides all of these; they
@@ -2992,15 +3070,15 @@ static void nxShaderRead(NxShader *s, const DWORD *code)
 
 static NxShader *s_vs;
 
-static void nxForgetPrograms(const NxShader *s);   // "Translated shaders", below
+static void nxForgetPrograms(const NxShader *s, bool lastOfItsGlsl);   // "Translated shaders", below
 
-static void nxForgetShader(const NxShader *s)
+static void nxForgetShader(const NxShader *s, bool lastOfItsGlsl)
 {
     if (s_ps == s)
         s_ps = nullptr;
     if (s_vs == s)
         s_vs = nullptr;
-    nxForgetPrograms(s);
+    nxForgetPrograms(s, lastOfItsGlsl);
 }
 
 struct NxAttrFormat {
@@ -3161,7 +3239,9 @@ struct NxProgram {
     mutable GLint lastAlphaFunc;
     mutable float lastAlphaRef, lastHalfX, lastHalfY;
 };
-static std::map<std::pair<const NxShader *, const NxShader *>, NxProgram> s_programs;
+// Keyed by the GLSL hashes of the pair, not the shader objects: zones carry
+// the same shader many times over, and every copy shares one program.
+static std::map<std::pair<uint64_t, uint64_t>, NxProgram> s_programs;
 // The last pair looked up: consecutive draws mostly share one. Map entries do
 // not move; nxForgetPrograms clears this before it erases any.
 static const NxShader *s_lastVs, *s_lastPs;
@@ -3344,7 +3424,7 @@ static const NxProgram *nxGlProgram(void)
         if (!s_lastProg->name) { ++s_frame.fallbackLink; return nullptr; }
         return s_lastProg;
     }
-    auto key = std::make_pair((const NxShader *)s_vs, (const NxShader *)s_ps);
+    auto key = std::make_pair(s_vs->glslHash, s_ps->glslHash);
     auto it = s_programs.find(key);
     if (it != s_programs.end()) {
         s_lastVs = s_vs;
@@ -3428,12 +3508,15 @@ static const NxProgram *nxGlProgram(void)
     return &(s_programs[key] = p);
 }
 
-static void nxForgetPrograms(const NxShader *s)
+static void nxForgetPrograms(const NxShader *s, bool lastOfItsGlsl)
 {
     s_lastProg = nullptr;
     s_lastVs = s_lastPs = nullptr;
+    if (!lastOfItsGlsl || !s->glsl)
+        return;   // another live shader has the same GLSL: its programs stay
+    const bool pixel = s->info.isPixel;
     for (auto it = s_programs.begin(); it != s_programs.end();) {
-        if (it->first.first == s || it->first.second == s) {
+        if ((pixel ? it->first.second : it->first.first) == s->glslHash) {
             if (it->second.name && s_glReady && nxGlAcquire())
                 glDeleteProgram(it->second.name);
             it = s_programs.erase(it);
@@ -3462,7 +3545,8 @@ static const char NX_PROGRAM_PAIRS_FILE[] = "shadercache/pairs.txt";
 volatile bool g_nxLoadingHint;   // SCR_UpdateFrame: the client is not active
 
 static std::mutex s_shaderRegLock;
-static std::unordered_map<uint64_t, NxShader *> s_shaderReg[2];   // vertex, pixel
+// Every live translated shader by its glslHash, per stage (vertex, pixel).
+static std::unordered_map<uint64_t, std::vector<NxShader *>> s_shaderReg[2];
 static unsigned s_shaderRegGen;          // bumped by every registration
 static std::vector<std::pair<uint64_t, uint64_t>> s_warmPairs;
 static std::set<std::pair<uint64_t, uint64_t>> s_warmPairSet;
@@ -3476,19 +3560,30 @@ static void nxShaderRegister(NxShader *s)
     if (!s->glsl)
         return;
     std::lock_guard<std::mutex> lock(s_shaderRegLock);
-    s_shaderReg[s->info.isPixel ? 1 : 0][s->glslHash] = s;
+    s_shaderReg[s->info.isPixel ? 1 : 0][s->glslHash].push_back(s);
     ++s_shaderRegGen;
 }
 
-static void nxShaderUnregister(NxShader *s)
+// True when no other live shader has the same GLSL: its programs can go.
+static bool nxShaderUnregister(NxShader *s)
 {
     if (!s->glsl)
-        return;
+        return true;
     std::lock_guard<std::mutex> lock(s_shaderRegLock);
     auto &reg = s_shaderReg[s->info.isPixel ? 1 : 0];
     auto it = reg.find(s->glslHash);
-    if (it != reg.end() && it->second == s)
-        reg.erase(it);
+    if (it == reg.end())
+        return true;
+    std::vector<NxShader *> &live = it->second;
+    for (size_t i = 0; i < live.size(); ++i)
+        if (live[i] == s) {
+            live.erase(live.begin() + (ptrdiff_t)i);
+            break;
+        }
+    if (!live.empty())
+        return false;
+    reg.erase(it);
+    return true;
 }
 
 static void nxWarmReadList(void)
@@ -3551,15 +3646,15 @@ static void nxGlWarmPrograms(void)
         }
         // Held across the build, so neither shader can be freed under it.
         std::lock_guard<std::mutex> lock(s_shaderRegLock);
+        if (s_programs.count(pair))
+            continue;
         auto v = s_shaderReg[0].find(pair.first);
         auto p = s_shaderReg[1].find(pair.second);
         if (v == s_shaderReg[0].end() || p == s_shaderReg[1].end())
             continue;
-        if (s_programs.count(std::make_pair((const NxShader *)v->second, (const NxShader *)p->second)))
-            continue;
         u64 t0 = armGetSystemTick();
-        s_vs = v->second;
-        s_ps = p->second;
+        s_vs = v->second.front();
+        s_ps = p->second.front();
         nxGlProgram();
         s_warmTicks += armGetSystemTick() - t0;
         ++s_warmBuilt;
@@ -3601,7 +3696,7 @@ static void nxGlBindShaderSampler(GLuint unit, NxTexture *t, unsigned char dim, 
 // NX_UBO_SEGMENTS segments used in turn; leaving one fences it and entering
 // one waits on its fence, so the GPU never reads rows being replaced.
 // Without persistent mapping the rows go up with glBufferSubData instead.
-enum { NX_UBO_SEGMENTS = 4, NX_UBO_SEGMENT = 2 << 20 };
+enum { NX_UBO_SEGMENTS = 8, NX_UBO_SEGMENT = 2 << 20 };   // ~2.5 MB a busy frame: 6 frames
 
 static GLuint s_uboName;
 static BYTE *s_uboMap;             // null: glBufferSubData

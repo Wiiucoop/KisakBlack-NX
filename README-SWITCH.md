@@ -1082,6 +1082,21 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   the GPU's own time stayed under 35 ms: the driver stalling, most likely
   over the ~4x texture memory. 2 ran clean (slowest in-game frames 44-85 ms),
   so the preset is now picmip 2 for colour, normal and specular maps.
+- **Double-speed zombies again, after killing several at once.** The corpse
+  fix freed a hidden corpse's DObj only inside `CG_ActorCorpse`'s
+  `!(eFlags & EF_NODRAW)` branch; a corpse flagged no-draw (several deaths at
+  once) kept its DObj on the actor slot's tree, and the next zombie in that
+  slot shared it again. The free now comes before that check, and
+  `CG_UpdateActorDObj` keeps one live DObj per actor tree: creating one frees
+  any other entity's DObj still on the same tree, printing `[nx-anim] ent N
+  still had a DObj on the anim tree ent M now uses; freed`.
+- **Long match (log of 2026-10-02 13:31): the stutters were shaders.** 57 of
+  60 hitches built at least one program, all first-time compiles (`0 from
+  cache, N saved`) at 140-200 ms each, one 996 ms -- turning the power on and
+  opening new areas brought materials and shader combinations never drawn
+  before. They are in `pairs.txt` now, so later sessions warm them while
+  loading. The other 3 were the first frames entering the map. Covering
+  first-time compiles in game needs the background builds (second context).
 - **Streaming without stutters (not done).** The streaming hitches had three
   parts: the Stream thread's reads (off the main thread, harmless alone), the
   render thread uploading every streamed texture whole at its next bind

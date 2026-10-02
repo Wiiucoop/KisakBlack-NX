@@ -284,6 +284,41 @@ void __cdecl CG_UpdateActorDObj(int localClientNum, centity_s *cent, actorInfo_t
                 }
             }
 #endif
+#ifdef KISAK_NX
+            // One live DObj per actor tree. CG_UpdateEntInfo advances the tree
+            // of every DObj in the snapshot, so a second DObj on the same tree
+            // -- an old occupant of this actor slot that was never freed --
+            // played the new zombie's animations at double speed.
+            {
+                static const XAnimTree_s *s_treeOwnerTree[64];
+                static int s_treeOwnerEnt[64];
+                int slot = -1, freeSlot = -1;
+                for ( int i = 0; i < 64; ++i )
+                {
+                    if ( s_treeOwnerTree[i] == pAnimTree )
+                        slot = i;
+                    else if ( !s_treeOwnerTree[i] && freeSlot < 0 )
+                        freeSlot = i;
+                }
+                if ( slot >= 0 && s_treeOwnerEnt[slot] != p_nextState->number )
+                {
+                    const int previous = s_treeOwnerEnt[slot];
+                    const DObj *previousObj = Com_GetClientDObj(previous, localClientNum);
+                    if ( previousObj && DObjGetTree(previousObj) == pAnimTree )
+                    {
+                        static int s_reported;
+                        if ( s_reported++ < 20 )
+                            Com_Printf(15, "[nx-anim] ent %d still had a DObj on the anim tree ent %d now uses; freed\n",
+                                       previous, p_nextState->number);
+                        CG_SafeDObjFree(localClientNum, previous);
+                    }
+                }
+                if ( slot < 0 )
+                    slot = freeSlot >= 0 ? freeSlot : 0;
+                s_treeOwnerTree[slot] = pAnimTree;
+                s_treeOwnerEnt[slot] = p_nextState->number;
+            }
+#endif
             v4 = Com_ClientDObjCreate(dobjModels, numModels, pAnimTree, p_nextState->number, localClientNum);
 #ifdef KISAK_SP
             if (!com_sv_running->current.enabled)
@@ -603,6 +638,13 @@ void __cdecl CG_ActorCorpse(int localClientNum, centity_s *cent)
     {
         __debugbreak();
     }
+#ifdef KISAK_NX
+    // The DObj goes even for a corpse flagged EF_NODRAW: those skipped the
+    // free below, kept the actor slot's tree, and the next zombie in the slot
+    // animated at double speed again -- seen after killing several at once.
+    if ( (!nx_physics || !nx_physics->current.enabled) && Com_GetClientDObj(p_nextState->number, localClientNum) )
+        CG_SafeDObjFree(localClientNum, p_nextState->number);
+#endif
     if ( (cent->nextState.lerp.eFlags & 0x20) == 0 )
     {
 #ifdef KISAK_NX

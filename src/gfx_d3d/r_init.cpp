@@ -1258,8 +1258,15 @@ int __cdecl R_AddValidResolution(int width, int height, int resolutionCount, int
     {
         return resolutionCount;
     }
+#ifdef KISAK_NX
+    // 960x540 is the handheld game resolution (nx_main.cpp): the PC floor of
+    // 800x600 dropped it, and r_mode then refused "960x540".
+    if ( width < 800 || height < 540 )
+        return resolutionCount;
+#else
     if ( width < 800 || height < 600 )
         return resolutionCount;
+#endif
     (*availableResolutions)[2 * resolutionCount] = width;
     (*availableResolutions)[2 * resolutionCount + 1] = height;
     return resolutionCount + 1;

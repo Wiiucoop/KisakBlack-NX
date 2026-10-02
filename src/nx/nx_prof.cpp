@@ -139,6 +139,46 @@ static void NxProf_Report()
     s_frames = 0;
 }
 
+// Hitches: a main-thread frame over NX_HITCH_MS outside loading prints that
+// frame's costliest scopes -- the 600-frame report averages a 1.5 s frame
+// away. Each frame snapshots every site's ticks to diff against the next.
+extern volatile bool g_nxLoadingHint;   // nx_d3d9_null.cpp
+constexpr double NX_HITCH_MS = 100.0;
+constexpr int NX_HITCH_REPORTS = 60;
+static std::unordered_map<NxProfSite *, Snapshot> s_frameLast;
+static uint64_t s_frameLastTick;
+static int s_hitchReports;
+
+static void NxProf_FrameHitch()
+{
+    const uint64_t now = armGetSystemTick();
+    const double ms = s_frameLastTick ? (double)(now - s_frameLastTick) * 1000.0 / armGetSystemTickFreq() : 0.0;
+    const bool report = ms > NX_HITCH_MS && !g_nxLoadingHint && s_hitchReports < NX_HITCH_REPORTS;
+    std::vector<Row> rows;
+    for ( NxProfSite *site = s_sites.load(std::memory_order_acquire); site; site = site->next )
+    {
+        Snapshot &last = s_frameLast[site];
+        for ( int slot = 0; slot < NX_PROF_THREADS; ++slot )
+        {
+            const uint64_t ticks = site->ticks[slot];
+            if ( report && ticks != last.ticks[slot] )
+                rows.push_back({site->name, slot, ticks - last.ticks[slot], site->calls[slot] - last.calls[slot]});
+            last.ticks[slot] = ticks;
+            last.calls[slot] = site->calls[slot];
+        }
+    }
+    s_frameLastTick = now;
+    if ( !report )
+        return;
+    ++s_hitchReports;
+    std::sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) { return a.ticks > b.ticks; });
+    const double ticksPerMs = (double)armGetSystemTickFreq() / 1000.0;
+    printf("[nx-hitch] main frame %llu took %.1f ms; costliest scopes in it:", (unsigned long long)s_framesTotal, ms);
+    for ( size_t i = 0; i < rows.size() && i < 12; ++i )
+        printf(" | %s %s %.1f (%u)", s_threadNames[rows[i].slot], rows[i].name, rows[i].ticks / ticksPerMs, rows[i].calls);
+    printf("\n");
+}
+
 void NxProf_FrameMark()
 {
     const int slot = NxProf_ThreadSlot();
@@ -154,6 +194,7 @@ void NxProf_FrameMark()
         return;
     if ( !strncmp(s_threadNames[slot], "thread ", 7) )
         NxProf_SetThreadName("main");
+    NxProf_FrameHitch();
     if ( !s_lastReportTick )
     {
         s_lastReportTick = armGetSystemTick();

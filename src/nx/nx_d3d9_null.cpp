@@ -5965,6 +5965,28 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
         u64 t = armGetSystemTick();
         if (s_prevPresentTick && t - s_prevPresentTick > s_maxPresentTicks)
             s_maxPresentTicks = t - s_prevPresentTick;
+        // A present more than 100 ms after the last one, outside loading:
+        // what this layer spent in that frame, by kind (the main thread's
+        // side is the [nx-hitch] line from nx_prof.cpp).
+        static u64 s_profAtLastPresent[NXP_COUNT];
+        static unsigned s_buildsAtLastPresent, s_hitchLines;
+        const double gapMs = s_prevPresentTick ? armTicksToNs(t - s_prevPresentTick) / 1e6 : 0.0;
+        if (gapMs > 100.0 && !g_nxLoadingHint && s_hitchLines < 60) {
+            ++s_hitchLines;
+            printf("[nx-hitch] present %u came %.1f ms after the last; GL work in it, ms:", s_nSwapPresent + 1, gapMs);
+            for (int i = 0; i < NXP_COUNT; ++i) {
+                // The summary zeroes the counters: a count below the snapshot
+                // started again from zero.
+                u64 since = s_profTicks[i] >= s_profAtLastPresent[i] ? s_profTicks[i] - s_profAtLastPresent[i]
+                                                                      : s_profTicks[i];
+                double ms = armTicksToNs(since) / 1e6;
+                if (ms >= 1.0)
+                    printf(" | %s %.1f", s_profNames[i] + strspn(s_profNames[i], " "), ms);
+            }
+            printf(" | programs built %u\n", s_nProgLinked - s_buildsAtLastPresent);
+        }
+        memcpy(s_profAtLastPresent, s_profTicks, sizeof(s_profAtLastPresent));
+        s_buildsAtLastPresent = s_nProgLinked;
         s_prevPresentTick = t;
     }
     ++s_nSwapPresent;

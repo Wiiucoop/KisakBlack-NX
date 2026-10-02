@@ -964,6 +964,23 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   four presents later without waiting; the summary prints
   `GPU time by part, ms per frame`. What the list leaves out (the HUD, the
   2D) is the first entry less the rest.
+- **540p did not apply at first.** The log said `'960x540' is not a valid
+  value for dvar 'r_mode'`: `R_AddValidResolution` drops modes under 800x600,
+  so the enum never had it. On NX the floor is 800x540. The startup `+set`
+  runs before `R_Init` registers `r_mode`, and the registration keeps a
+  startup value that is in the enum, so the window is created at 960x540.
+  (The in-game video menu showing 720 was right: it had not changed.)
+- **GPU by part, 1280x720 handheld at 460.8 MHz (first reading).** Whole 3D
+  frame (`RB_StandardDrawCommands`) 12-28 ms; Lit 7-18 ms -- the bulk, and
+  the part that scales with pixels; post effects 2.4-3.3 ms; Emissive
+  0.4-1.5 ms; the 3D frame less those (clears, sky, decals, resolves) 5-9 ms.
+  Frames 31-36 ms with GPU time 19-22 ms.
+- **Stutters are not shader builds.** Every in-game window showed 0 programs
+  built, yet slowest frames of 165-510 ms and once 1.57 s (with a 1 s GPU
+  frame). A frame over 100 ms outside loading now prints two `[nx-hitch]`
+  lines: from `nx_prof.cpp`, that main-thread frame's costliest scopes on
+  every thread (each frame snapshots every site to diff against the next);
+  from the GL layer, that present's GL work by kind and programs built.
 - **Restart Map, still broken (SP).** Reloading the level now gets past the
   UI shutdown but crashes unloading the map's zones: `DB_FreeUnusedResources`
   -> `Mark_WeaponVariantDef` -> `Mark_XModelPtr` follows a weapon (still

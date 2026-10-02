@@ -199,7 +199,7 @@ translate anything itself; homebrew cannot use NVN, so Mesa it is.
 | `Clear` | honours the viewport, its rectangles and the scissor, as D3D9 does |
 | vertex / index buffers | `Lock`/`Unlock` write into real memory and record the locked range; the draw path sends only the changed range (`glBufferSubData`), the whole buffer on first use or after `D3DLOCK_DISCARD` |
 | `CreateVertexShader` / `CreatePixelShader` | translated to GLSL ES 3.00 (below), compiled on first use, linked per pair |
-| `Set{Vertex,Pixel}ShaderConstantF` | uploaded as the `vsc[]` / `psc[]` uniform arrays |
+| `Set{Vertex,Pixel}ShaderConstantF` | kept as register files; a draw whose stage file changed copies the rows its shader reads into a persistent-mapped uniform buffer, bound to the `NxVsConst` / `NxPsConst` std140 blocks |
 | `SetTexture` / `SetSamplerState` | textures on the unit of the same number, sampler state on one GL sampler object per slot; vertex texture slots (257+) on units 16+ |
 | textures | DXT1/3/5 through `EXT_texture_compression_s3tc`, plus the uncompressed formats, with a swizzle that gives `A8`, `L8` and `A8L8` their D3D9 meaning |
 | vertex declarations | every element feeds the attribute its usage maps to (`NX_ShaderAttribLocation`) |
@@ -831,6 +831,17 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   in uniform buffers (vsc/psc as std140 blocks, written into the
   persistent-mapped ring and bound with `glBindBufferRange`), so a draw binds a
   buffer instead of pushing constant data through the command stream.
+- **Constants in uniform buffers** (done). The profile from `PROF_SCOPED`
+  (section 3) showed the main thread waiting on the render thread for most
+  of the frame, and the render thread spending 16-29 ms of 21-42 ms under
+  "constants". The translator now declares `vsc`/`psc` as std140 blocks
+  (`NxVsConst`, `NxPsConst`); `nxGlBindConstants` copies a stage's rows
+  into a 4 x 2 MB persistent-mapped buffer (segments fenced like the vertex
+  ring) only when its file version changed, and binds the range at binding
+  0 / 1. Block bindings are set after every link and binary load. The alpha
+  test and half-pixel uniforms are sent only when their value changes. The
+  old "constants" timer also covered sampler and attribute setup; those
+  are now their own rows (`samplers`, `attributes`).
 - **Zombie corpses in T-pose:** SP converts the actor into a corpse in place
   (`Actor_BecomeCorpse`), and the client draws the corpse through
   `actorCorpseInfo[slot]`, whose tree starts empty; retail hides that with the

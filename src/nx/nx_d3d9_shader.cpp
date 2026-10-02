@@ -465,8 +465,13 @@ char *NX_TranslateD3D9Shader(const DWORD *tok, NxShaderInfo *info)
         o << "uniform vec2 nxHalfPixel;\n";
     }
     // Size the constant array to the highest register the shader references (not a blanket
-    // 256). Relative addressing (c[a0.x+N]) forces maxConst to 255.
-    if (c.usedConst) o << "uniform vec4 " << c.cArr() << "[" << (c.maxConst + 1) << "];\n";
+    // 256). Relative addressing (c[a0.x+N]) forces maxConst to 255. The array sits in a
+    // uniform block (NxVsConst / NxPsConst, std140: one vec4 per 16 bytes, the D3D9 register
+    // file's own layout), which the device fills from a mapped buffer: plain uniforms cost
+    // the driver several glUniform calls a draw, the largest item in the frame.
+    if (c.usedConst)
+        o << "layout(std140) uniform " << (c.isPixel ? "NxPsConst" : "NxVsConst") << " { vec4 "
+          << c.cArr() << "[" << (c.maxConst + 1) << "]; };\n";
     for (auto &d : c.defs) {
         // %.9g round-trips a float exactly; the ostream default of 6 digits does not.
         char v[4][32];

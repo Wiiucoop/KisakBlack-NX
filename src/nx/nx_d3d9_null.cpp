@@ -1204,14 +1204,9 @@ static float s_vsConst[NX_VS_CONST_ROWS][4];
 // 256 keeps the two files the same shape.
 enum { NX_PS_CONST_ROWS = 256 };
 static float s_psConst[NX_PS_CONST_ROWS][4];
-// Bumped by every Set*ShaderConstantF; see NxProgram::vsVersion.
+// Bumped by every Set*ShaderConstantF that changes a value: a draw re-sends a
+// stage's constants only when its file changed (see "Constant buffers").
 static unsigned s_vsConstVersion = 1, s_psConstVersion = 1;
-// The version at which each register last took a different value. A program
-// re-sends only the registers changed since it last drew: the engine re-sets
-// the same values draw after draw, and every re-send is constant data copied
-// into the command stream -- the largest item in the frame once the buffer
-// uploads were gone.
-static unsigned s_vsConstSerial[256], s_psConstSerial[256];
 static bool s_vsConstWritten[NX_VS_CONST_ROWS];
 static unsigned s_vsConstBase;   // the register quad used as the transform
 
@@ -1860,11 +1855,14 @@ enum NxProf {
     NXP_TARGET,        // nxGlBindTarget and the scissor
     NXP_STATE,         // blend, depth and stencil
     NXP_GETERROR,      // the two glGetError calls around the draw
+    NXP_SAMPLERS,      // a translated pair's textures and samplers
+    NXP_ATTRIBS,       // a translated pair's vertex attributes
     NXP_COUNT
 };
 static const char *const s_profNames[NXP_COUNT] = {
     "draw total", "  glDrawElements", "  buffer whole", "  buffer partial", "  constants",
     "  glUseProgram", "texture upload", "swap", "  pipeline", "  program", "  target", "  state", "  glGetError",
+    "  samplers", "  attributes",
 };
 static u64 s_profTicks[NXP_COUNT];
 static unsigned s_profCalls[NXP_COUNT];
@@ -2970,21 +2968,16 @@ struct NxShaderBuildTimer {
     }
 };
 
-enum { NX_CONST_RUNS = 16 };
-
 struct NxProgram {
     GLuint name;       // 0 when the link failed; kept so it is not retried
-    GLint vsc, psc;    // uniform array locations, -1 when unused
-    GLint vscCount, pscCount;
     GLint alphaFunc, alphaRef, halfPixel;
-    // The constant file versions this program's uniforms last received:
-    // uniforms are per program, so an unchanged file needs no upload.
-    mutable unsigned vsVersion, psVersion;
-    // The registers each stage reads, as contiguous runs (small gaps merged),
-    // with the uniform location of each run's first element: only these go up.
-    struct ConstRun { GLint loc; unsigned short start, count; };
-    ConstRun vsRuns[NX_CONST_RUNS], psRuns[NX_CONST_RUNS];
-    int vsRunCount, psRunCount;
+    // Registers in each stage's constant block (NxVsConst at binding 0,
+    // NxPsConst at 1), 0 when the stage reads none: see "Constant buffers".
+    GLint vsRows, psRows;
+    // The values the small uniforms last received: uniforms are per program,
+    // so an unchanged value needs no call.
+    mutable GLint lastAlphaFunc;
+    mutable float lastAlphaRef, lastHalfX, lastHalfY;
 };
 static std::map<std::pair<const NxShader *, const NxShader *>, NxProgram> s_programs;
 // The last pair looked up: consecutive draws mostly share one. Map entries do
@@ -3033,38 +3026,20 @@ static GLuint nxGlShaderObject(NxShader *s)
 
 // The linked program for the bound pair, or null to use the built-in one, with
 // the reason counted. GL thread only.
-// Splits the registers a stage reads into at most NX_CONST_RUNS runs, merging
-// gaps of up to 8 registers, and finds each run's uniform location. Returns 0
-// when the array is not active; the caller then uploads nothing.
-static int nxConstRuns(GLuint prog, const char *arr, const uint32_t mask[8], GLint count,
-                       NxProgram::ConstRun *runs)
+// Points a stage's constant block at its binding and returns how many
+// registers it holds, 0 when the stage has none (or the linker dropped it).
+// Done after every link and every binary load: block bindings are program
+// state, and a loaded binary starts with them all at 0.
+static GLint nxGlConstBlock(GLuint prog, const char *block, GLuint binding, GLint maxRows)
 {
-    if (count <= 0)
+    GLuint index = glGetUniformBlockIndex(prog, block);
+    if (index == GL_INVALID_INDEX)
         return 0;
-    auto used = [&](int r) { return r < count && (mask[r >> 5] >> (r & 31)) & 1; };
-    int n = 0;
-    for (int gap = 8; ; gap *= 2) {
-        n = 0;
-        int r = 0;
-        while (r < count && n <= NX_CONST_RUNS) {
-            while (r < count && !used(r)) ++r;
-            if (r >= count) break;
-            int start = r, last = r;
-            for (int k = r + 1; k < count && k - last <= gap; ++k)
-                if (used(k)) last = k;
-            if (n < NX_CONST_RUNS) { runs[n].start = (unsigned short)start; runs[n].count = (unsigned short)(last - start + 1); }
-            ++n;
-            r = last + 1;
-        }
-        if (n <= NX_CONST_RUNS)
-            break;
-    }
-    for (int i = 0; i < n; ++i) {
-        char name[16];
-        snprintf(name, sizeof(name), "%s[%u]", arr, (unsigned)runs[i].start);
-        runs[i].loc = glGetUniformLocation(prog, name);
-    }
-    return n;
+    glUniformBlockBinding(prog, index, binding);
+    GLint bytes = 0;
+    glGetActiveUniformBlockiv(prog, index, GL_UNIFORM_BLOCK_DATA_SIZE, &bytes);
+    GLint rows = (bytes + 15) / 16;
+    return rows < maxRows ? rows : maxRows;
 }
 
 // ---------------------------------------------------------------------------
@@ -3200,7 +3175,10 @@ static const NxProgram *nxGlProgram(void)
     }
 
     NxShaderBuildTimer buildTimer;
-    NxProgram p = { 0, -1, -1, 0, 0, -1, -1, -1 };
+    NxProgram p = {};
+    p.alphaFunc = p.alphaRef = p.halfPixel = -1;
+    p.lastAlphaFunc = -1;
+    p.lastAlphaRef = p.lastHalfX = p.lastHalfY = -1.0f;
 
     // A program linked before, on any run, comes back from the cache.
     uint64_t binKey = 0;
@@ -3242,27 +3220,13 @@ static const NxProgram *nxGlProgram(void)
             nxGlStoreProgramBinary(prog, binKey);
     }
     p.name = prog;
-    p.vsc = glGetUniformLocation(prog, "vsc");
-    p.psc = glGetUniformLocation(prog, "psc");
     p.alphaFunc = glGetUniformLocation(prog, "uAlphaTestFunc");
     p.alphaRef = glGetUniformLocation(prog, "uAlphaRef");
     p.halfPixel = glGetUniformLocation(prog, "nxHalfPixel");
-    // The arrays are sized to the highest register each shader reads, so only
+    // The blocks are sized to the highest register each shader reads, so only
     // that many rows go up per draw.
-    GLint uniforms = 0;
-    glGetProgramiv(prog, GL_ACTIVE_UNIFORMS, &uniforms);
-    for (GLint i = 0; i < uniforms; ++i) {
-        char name[64];
-        GLint size = 0;
-        GLenum type = 0;
-        glGetActiveUniform(prog, (GLuint)i, sizeof(name), nullptr, &size, &type, name);
-        if (!strncmp(name, "vsc", 3) && (name[3] == '[' || !name[3])) p.vscCount = size;
-        if (!strncmp(name, "psc", 3) && (name[3] == '[' || !name[3])) p.pscCount = size;
-    }
-    if (p.vscCount > NX_VS_CONST_ROWS) p.vscCount = NX_VS_CONST_ROWS;
-    if (p.pscCount > NX_PS_CONST_ROWS) p.pscCount = NX_PS_CONST_ROWS;
-    p.vsRunCount = nxConstRuns(prog, "vsc", s_vs->info.constMask, p.vscCount, p.vsRuns);
-    p.psRunCount = nxConstRuns(prog, "psc", s_ps->info.constMask, p.pscCount, p.psRuns);
+    p.vsRows = nxGlConstBlock(prog, "NxVsConst", 0, NX_VS_CONST_ROWS);
+    p.psRows = nxGlConstBlock(prog, "NxPsConst", 1, NX_PS_CONST_ROWS);
     // Sampler sN reads texture unit N and svN unit 16 + N, for good.
     glUseProgram(prog);
     for (int i = 0; i < NX_MAX_SAMPLERS; ++i) {
@@ -3317,26 +3281,102 @@ static void nxGlBindShaderSampler(GLuint unit, NxTexture *t, unsigned char dim, 
                       : want == GL_TEXTURE_3D       ? s_white3D : s_whiteTex);
 }
 
-// Sends, for each run, the registers from the first to the last one changed
-// after version `since` (array elements have consecutive locations).
-static void nxGlUploadConstRuns(const NxProgram::ConstRun *runs, int n, const float (*file)[4],
-                                const unsigned *serial, unsigned since)
+// ---------------------------------------------------------------------------
+// Constant buffers
+// ---------------------------------------------------------------------------
+// A translated shader reads its constants from a uniform block. Uploading them
+// as plain uniforms took several glUniform calls a draw at ~20-30 us of driver
+// time per draw, over half the frame in Zombies. Now a draw whose stage file
+// changed copies that stage's rows into one persistent-mapped buffer and binds
+// the range: binding 0 the vertex file, 1 the pixel file. The buffer is
+// NX_UBO_SEGMENTS segments used in turn; leaving one fences it and entering
+// one waits on its fence, so the GPU never reads rows being replaced.
+// Without persistent mapping the rows go up with glBufferSubData instead.
+enum { NX_UBO_SEGMENTS = 4, NX_UBO_SEGMENT = 2 << 20 };
+
+static GLuint s_uboName;
+static BYTE *s_uboMap;             // null: glBufferSubData
+static GLsync s_uboFence[NX_UBO_SEGMENTS];
+static int s_uboSeg;
+static GLintptr s_uboSegOff;
+static GLint s_uboAlign = 256;
+// What each binding holds: the file version and rows it was copied at, 0 for
+// nothing. A draw re-sends only when its stage's file changed since, or needs
+// more rows than were sent.
+static unsigned s_uboVersion[2];
+static GLint s_uboRows[2];
+
+static bool nxGlUboInit(void)
 {
-    for (int i = 0; i < n; ++i) {
-        const NxProgram::ConstRun &run = runs[i];
-        if (run.loc < 0)
-            continue;
-        int first = -1, last = -1;
-        for (int r = run.start; r < run.start + run.count; ++r) {
-            if (serial[r] > since) {
-                if (first < 0)
-                    first = r;
-                last = r;
-            }
+    if (s_uboName)
+        return true;
+    glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &s_uboAlign);
+    if (s_uboAlign < 16)
+        s_uboAlign = 16;
+    const GLsizeiptr total = (GLsizeiptr)NX_UBO_SEGMENTS * NX_UBO_SEGMENT;
+    glGenBuffers(1, &s_uboName);
+    glBindBuffer(GL_UNIFORM_BUFFER, s_uboName);
+    if (s_ringMode && s_glBufferStorage) {
+        while (glGetError() != GL_NO_ERROR) {}
+        s_glBufferStorage(GL_UNIFORM_BUFFER, total, nullptr, s_ringMode->storage);
+        if (glGetError() == GL_NO_ERROR)
+            s_uboMap = (BYTE *)glMapBufferRange(GL_UNIFORM_BUFFER, 0, total, s_ringMode->map);
+        if (!s_uboMap) {
+            glDeleteBuffers(1, &s_uboName);   // immutable storage: start over
+            glGenBuffers(1, &s_uboName);
+            glBindBuffer(GL_UNIFORM_BUFFER, s_uboName);
         }
-        if (first >= 0)
-            glUniform4fv(run.loc + (first - run.start), last - first + 1, file[first]);
     }
+    if (!s_uboMap)
+        glBufferData(GL_UNIFORM_BUFFER, total, nullptr, GL_STREAM_DRAW);
+    printf("[nx-gl] constant buffer: %d x %d KB, offset alignment %d, %s\n", NX_UBO_SEGMENTS,
+           NX_UBO_SEGMENT >> 10, s_uboAlign, s_uboMap ? s_ringMode->name : "glBufferSubData");
+    return s_uboName != 0;
+}
+
+// Room for `size` bytes, aligned: the offset into the whole buffer.
+static GLintptr nxGlUboAlloc(GLsizeiptr size)
+{
+    GLintptr off = (s_uboSegOff + s_uboAlign - 1) & ~(GLintptr)(s_uboAlign - 1);
+    if (off + size > NX_UBO_SEGMENT) {
+        s_uboFence[s_uboSeg] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        s_uboSeg = (s_uboSeg + 1) % NX_UBO_SEGMENTS;
+        if (GLsync f = s_uboFence[s_uboSeg]) {
+            if (glClientWaitSync(f, GL_SYNC_FLUSH_COMMANDS_BIT, 0) == GL_TIMEOUT_EXPIRED) {
+                ++s_ringWaits;
+                glClientWaitSync(f, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000ull);
+            }
+            glDeleteSync(f);
+            s_uboFence[s_uboSeg] = 0;
+        }
+        off = 0;
+        // Both bindings may point into a segment that comes round again before
+        // their files change: have the next draw send them anew.
+        s_uboVersion[0] = s_uboVersion[1] = 0;
+    }
+    s_uboSegOff = off + size;
+    return (GLintptr)s_uboSeg * NX_UBO_SEGMENT + off;
+}
+
+static void nxGlBindConstants(GLuint binding, const float (*file)[4], unsigned version, GLint rows)
+{
+    if (rows <= 0 || (s_uboVersion[binding] == version && s_uboRows[binding] >= rows))
+        return;
+    const GLsizeiptr size = (GLsizeiptr)rows * 16;
+    const GLintptr off = nxGlUboAlloc(size);
+    if (s_uboMap) {
+        memcpy(s_uboMap + off, file, (size_t)size);
+        if (s_ringMode->flush) {
+            glBindBuffer(GL_UNIFORM_BUFFER, s_uboName);
+            glFlushMappedBufferRange(GL_UNIFORM_BUFFER, off, size);
+        }
+    } else {
+        glBindBuffer(GL_UNIFORM_BUFFER, s_uboName);
+        glBufferSubData(GL_UNIFORM_BUFFER, off, size, file);
+    }
+    glBindBufferRange(GL_UNIFORM_BUFFER, binding, s_uboName, off, size);
+    s_uboVersion[binding] = version;
+    s_uboRows[binding] = rows;
 }
 
 // Everything a translated pair needs before the draw call.
@@ -3346,37 +3386,53 @@ static void nxGlSetupTranslated(const NxProgram *p)
         NxProfScope useProf(NXP_USE_PROGRAM);
         glUseProgram(p->name);
     }
-    NxProfScope prof(NXP_CONSTANTS);
-    // Only the registers each shader reads, as the runs found at link.
-    // Of those, only the span changed since this program last drew.
-    if (p->vsVersion != s_vsConstVersion) {
-        nxGlUploadConstRuns(p->vsRuns, p->vsRunCount, s_vsConst, s_vsConstSerial, p->vsVersion);
-        p->vsVersion = s_vsConstVersion;
-    }
-    if (p->psVersion != s_psConstVersion) {
-        nxGlUploadConstRuns(p->psRuns, p->psRunCount, s_psConst, s_psConstSerial, p->psVersion);
-        p->psVersion = s_psConstVersion;
-    }
-    if (p->alphaFunc >= 0)
-        glUniform1i(p->alphaFunc, s_rs[D3DRS_ALPHATESTENABLE] ? (GLint)s_rs[D3DRS_ALPHAFUNC] : 0);
-    if (p->alphaRef >= 0)
-        glUniform1f(p->alphaRef, (float)(s_rs[D3DRS_ALPHAREF] & 0xFF) / 255.0f);
-    if (p->halfPixel >= 0) {
-        float w = s_vp.Width ? (float)s_vp.Width : 1.0f;
-        float h = s_vp.Height ? (float)s_vp.Height : 1.0f;
-        glUniform2f(p->halfPixel, -1.0f / w, 1.0f / h);
+    {
+        NxProfScope prof(NXP_CONSTANTS);
+        if (nxGlUboInit()) {
+            nxGlBindConstants(0, s_vsConst, s_vsConstVersion, p->vsRows);
+            nxGlBindConstants(1, s_psConst, s_psConstVersion, p->psRows);
+        }
+        if (p->alphaFunc >= 0) {
+            GLint func = s_rs[D3DRS_ALPHATESTENABLE] ? (GLint)s_rs[D3DRS_ALPHAFUNC] : 0;
+            if (func != p->lastAlphaFunc) {
+                glUniform1i(p->alphaFunc, func);
+                p->lastAlphaFunc = func;
+            }
+        }
+        if (p->alphaRef >= 0) {
+            float ref = (float)(s_rs[D3DRS_ALPHAREF] & 0xFF) / 255.0f;
+            if (ref != p->lastAlphaRef) {
+                glUniform1f(p->alphaRef, ref);
+                p->lastAlphaRef = ref;
+            }
+        }
+        if (p->halfPixel >= 0) {
+            float w = s_vp.Width ? (float)s_vp.Width : 1.0f;
+            float h = s_vp.Height ? (float)s_vp.Height : 1.0f;
+            float x = -1.0f / w, y = 1.0f / h;
+            if (x != p->lastHalfX || y != p->lastHalfY) {
+                glUniform2f(p->halfPixel, x, y);
+                p->lastHalfX = x;
+                p->lastHalfY = y;
+            }
+        }
     }
 
-    unsigned mask = s_ps->info.samplerMask;
-    for (unsigned i = 0; mask; ++i, mask >>= 1)
-        if (mask & 1)
-            nxGlBindShaderSampler(i, s_samplerTex[i], s_ps->info.samplerDim[i], (int)i);
-    mask = s_vs->info.samplerMask;
-    for (unsigned i = 0; mask && i < NX_SHADER_VS_SAMPLERS; ++i, mask >>= 1)
-        if (mask & 1)
-            nxGlBindShaderSampler(NX_SHADER_VS_SAMPLER_UNIT + i, s_vtxSamplerTex[i],
-                                  s_vs->info.samplerDim[i], -1);
-    glActiveTexture(GL_TEXTURE0);
+    {
+        NxProfScope samplerProf(NXP_SAMPLERS);
+        unsigned mask = s_ps->info.samplerMask;
+        for (unsigned i = 0; mask; ++i, mask >>= 1)
+            if (mask & 1)
+                nxGlBindShaderSampler(i, s_samplerTex[i], s_ps->info.samplerDim[i], (int)i);
+        mask = s_vs->info.samplerMask;
+        for (unsigned i = 0; mask && i < NX_SHADER_VS_SAMPLERS; ++i, mask >>= 1)
+            if (mask & 1)
+                nxGlBindShaderSampler(NX_SHADER_VS_SAMPLER_UNIT + i, s_vtxSamplerTex[i],
+                                      s_vs->info.samplerDim[i], -1);
+        glActiveTexture(GL_TEXTURE0);
+    }
+
+    NxProfScope attribProf(NXP_ATTRIBS);
 
     // Every element of the declaration, at the location its usage maps to.
     // Anything the shader reads that the declaration does not supply reads a
@@ -5040,7 +5096,6 @@ HRESULT IDirect3DDevice9::SetVertexShaderConstantF(UINT startRegister, const flo
                 ++s_vsConstVersion;
             changed = true;
             memcpy(s_vsConst[r], data + i * 4, 4 * sizeof(float));
-            s_vsConstSerial[r] = s_vsConstVersion;
         }
     }
 
@@ -5083,7 +5138,6 @@ HRESULT IDirect3DDevice9::SetPixelShaderConstantF(UINT startRegister, const floa
                 ++s_psConstVersion;
             changed = true;
             memcpy(s_psConst[r], data + i * 4, 4 * sizeof(float));
-            s_psConstSerial[r] = s_psConstVersion;
         }
     }
     return D3D_OK;

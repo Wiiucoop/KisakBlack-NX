@@ -860,6 +860,17 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
 - **`ui_viewer_mp` cannot be converted**: it contains a `ComWorld` (asset type
   13), map data the converter does not handle yet. The engine carries on
   without it.
+- **Light glows drawn away from their lights** (Zombies: the Quick Revive
+  machine, the lamps outside), more visibly from afar. Not found yet. Ruled
+  out: light coronas (`IDirect3DQuery9::GetData` reports 0 visible pixels, so
+  `RB_DrawCorona` never draws one), and the `*_eyeoffset` FX vertex shaders
+  (translated, they pull the sprite towards the eye along x, y, z and w
+  together, which leaves its screen position alone). Left: the FX sprites
+  themselves and the bloom. To split them on hardware, `cmdline.txt`:
+  `+set fx_draw 0` hides the effects, `+set nx_bloom 0` adds no bloom
+  (`RB_BloomLDR`). To read a material's shaders offline,
+  `FFCONV_SHADERDUMP=<dir> convert.exe <zone.ff> <out.kbz>` writes each
+  shader's bytecode and a material -> techset -> technique -> shader index.
 
 ---
 

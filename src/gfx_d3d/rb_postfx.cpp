@@ -1329,6 +1329,14 @@ void __cdecl RB_BloomLDR(const GfxViewInfo *viewInfo)
 
     PROF_SCOPED("LDR Bloom");
 
+#ifdef KISAK_NX
+    // nx_bloom 0: skip the downsample, blur and streak passes and add black,
+    // to tell bloom artifacts from the scene's own (README-SWITCH, renderer).
+    const bool nxBloomOff = nx_bloom && !nx_bloom->current.enabled;
+    srcRt = R_RENDERTARGET_BLOOM_MIP3_PING;
+    if ( nxBloomOff )
+        goto apply;
+#endif
     R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_BLOOM_MIP1);
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_BLOOM_MIP1);
     R_ClearRenderTargetForMultiGpu(gfxCmdBufContext, R_RENDERTARGET_BLOOM_MIP1);
@@ -1406,10 +1414,18 @@ void __cdecl RB_BloomLDR(const GfxViewInfo *viewInfo)
     tmp = srcRt;
     srcRt = dstRt;
     dstRt = tmp;
+#ifdef KISAK_NX
+apply:
+#endif
     R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_SCENE);
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_SCENE);
     RB_SetFilmCurveConstants(viewInfo);
     R_SetCodeImageTexture(&gfxCmdBufSourceState, 0x22u, gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
+#ifdef KISAK_NX
+    if ( nxBloomOff )
+        R_SetCodeImageTexture(&gfxCmdBufSourceState, 0x23u, rgp.blackImage);
+    else
+#endif
     R_SetCodeImageTexture(&gfxCmdBufSourceState, 0x23u, gfxRenderTargets[srcRt].image);
     R_SetCodeImageTexture(&gfxCmdBufSourceState, 0x24u, gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].image);
     RB_Filter(rgp.bloomApplyLDR, viewInfo);

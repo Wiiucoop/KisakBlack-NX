@@ -135,10 +135,12 @@ static Prelink::Loc emitInlineStr(Prelink &z, const std::string &s) {
 //   -1         -> inline NUL-terminated string follows now
 //   -2 (alias) -> pointer-insert back-ref (unused in code_* zones)
 //   other      -> block/offset back-ref into already-emitted data (resolved p2)
+static std::string g_lastXString;   // the last inline string, for debug dumps
 static void putXStringFromTag(Reader &r, Prelink &z, Prelink::Loc obj, uint32_t field, uint32_t tag,
                               int line = __builtin_LINE()) {
+    g_lastXString.clear();
     if (tag == TAG_NULL) { z.putPtr(obj, field, Prelink::none()); return; }
-    if (tag == TAG_INLINE) { std::string s = r.cstr(); z.putPtr(obj, field, emitInlineStr(z, s)); return; }
+    if (tag == TAG_INLINE) { std::string s = r.cstr(); g_lastXString = s; z.putPtr(obj, field, emitInlineStr(z, s)); return; }
     if (tag == TAG_ALIAS) { ++g_cntAlias; z.putPtr(obj, field, Prelink::none()); return; }
     uint32_t blk = (tag - 1) >> 29, off = (tag - 1) & 0x1FFFFFFF;
     if (blk == 4) g_deferred.push_back({obj, field, off, g_curAsset, line}); // zero until pass 2
@@ -319,10 +321,32 @@ static void tMaterialVertexDeclaration(Reader &r, Prelink &z, Prelink::Loc obj) 
     r.skip(72);                     // routing.decl[18]
 }
 
+// FFCONV_SHADERDUMP=<dir>: write every inline shader's bytecode to
+// <dir>/<vs|ps>_<name>.bin and the material -> techset -> technique -> shader
+// map to <dir>/index.txt, to inspect what a material really runs.
+static const char *shaderDumpDir() {
+    static const char *dir = getenv("FFCONV_SHADERDUMP");
+    return dir;
+}
+static FILE *shaderDumpIndex() {
+    static FILE *f = shaderDumpDir() ? fopen((std::string(shaderDumpDir()) + "/index.txt").c_str(), "a") : nullptr;
+    return f;
+}
+static std::string g_passDesc;     // shaders of the pass being read
+static std::string g_techDesc;     // passes of the technique being read
+static std::map<uint64_t, std::string> g_techsetNames;   // techset loc -> name
+static std::map<uint32_t, std::string> g_shaderNamesX86; // shader x86 block-4 offset -> name
+static std::string g_lastShaderName;
+static void noteSharedShader(const char *kind, uint32_t tag) {
+    if (!shaderDumpDir()) return;
+    auto it = g_shaderNamesX86.find((tag - 1) & 0x1FFFFFFF);
+    g_passDesc += std::string(" ") + kind + "=" + (it != g_shaderNamesX86.end() ? it->second : "?");
+}
+
 // MaterialVertexShader / MaterialPixelShader: {char* name; prog} 16 -> 32.
 // prog.vs (or .ps) is a runtime D3D object; only the load def carries over.
 // Load order: the whole 16-byte block, then the name string, then the bytecode.
-static void tMaterialShader(Reader &r, Prelink &z, Prelink::Loc obj) {
+static void tMaterialShader(Reader &r, Prelink &z, Prelink::Loc obj, const char *kind) {
     uint32_t nameTag  = r.u32();
     r.u32();                        // vs/ps -- runtime object, dropped
     uint32_t progTag  = r.u32();
@@ -330,6 +354,8 @@ static void tMaterialShader(Reader &r, Prelink &z, Prelink::Loc obj) {
     r.u16();                        // padding
 
     putXStringFromTag(r, z, obj, 0, nameTag);
+    const std::string name = g_lastXString;
+    g_lastShaderName = name;
     putU16(z, obj, 24, progSize);   // prog.loadDef.programSize
 
     if (progTag != TAG_NULL) {
@@ -338,7 +364,12 @@ static void tMaterialShader(Reader &r, Prelink &z, Prelink::Loc obj) {
         r.bytes(z.at(buf), n);
         b4Reserve(3, n, buf);
         z.putPtr(obj, 16, buf);     // prog.loadDef.program
+        if (shaderDumpDir() && !name.empty()) {
+            std::string path = std::string(shaderDumpDir()) + "/" + kind + "_" + name + ".bin";
+            if (FILE *f = fopen(path.c_str(), "wb")) { fwrite(z.at(buf), 1, n, f); fclose(f); }
+        }
     }
+    g_passDesc += std::string(" ") + kind + "=" + (name.empty() ? "?" : name);
 }
 
 // The union tail of MaterialShaderArgument. Load_MaterialArgumentDef reads
@@ -372,6 +403,7 @@ static void tMaterialPass(Reader &r, Prelink &z, Prelink::Loc obj) {
     uint32_t argsTag = r.u32();
 
     memcpy(z.at(obj) + 24, counts, 4);
+    g_passDesc.clear();
 
     if (declTag == TAG_INLINE) {
         Prelink::Loc d = z.alloc(OUT, SZ_VERTEX_DECL, 8);
@@ -384,20 +416,24 @@ static void tMaterialPass(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     if (vsTag == TAG_INLINE) {
         Prelink::Loc s = z.alloc(OUT, SZ_SHADER, 8);
-        b4Reserve(3, 16, s);
-        tMaterialShader(r, z, s);
+        const uint32_t x86 = b4Reserve(3, 16, s);
+        tMaterialShader(r, z, s, "vs");
+        g_shaderNamesX86[x86] = g_lastShaderName;
         z.putPtr(obj, 8, s);
     } else if (vsTag != TAG_NULL) {
         putStructOffsetRef(z, obj, 8, vsTag);
+        noteSharedShader("vs", vsTag);
     }
 
     if (psTag == TAG_INLINE) {
         Prelink::Loc s = z.alloc(OUT, SZ_SHADER, 8);
-        b4Reserve(3, 16, s);
-        tMaterialShader(r, z, s);
+        const uint32_t x86 = b4Reserve(3, 16, s);
+        tMaterialShader(r, z, s, "ps");
+        g_shaderNamesX86[x86] = g_lastShaderName;
         z.putPtr(obj, 16, s);
     } else if (psTag != TAG_NULL) {
         putStructOffsetRef(z, obj, 16, psTag);
+        noteSharedShader("ps", psTag);
     }
 
     if (argsTag != TAG_NULL) {
@@ -420,6 +456,7 @@ static void tMaterialPass(Reader &r, Prelink &z, Prelink::Loc obj) {
         }
         z.putPtr(obj, 32, a);
     }
+    g_techDesc += " [" + g_passDesc + " ]";
 }
 
 // MaterialTechnique: {char* name; u16 flags; u16 passCount; MaterialPass
@@ -438,12 +475,16 @@ static Prelink::Loc tMaterialTechnique(Reader &r, Prelink &z) {
 
     // Load_MaterialPassArray reads all the fixed 20-byte records as one
     // block, then walks them; tMaterialPass mirrors that per element.
+    g_techDesc.clear();
     for (uint16_t i = 0; i < passCount; ++i) {
         Prelink::Loc p{t.blk, t.off + SZ_TECH_HDR + (uint32_t)i * SZ_PASS};
         tMaterialPass(r, z, p);
     }
 
     putXStringFromTag(r, z, t, 0, nameTag);
+    if (shaderDumpIndex())
+        fprintf(shaderDumpIndex(), "    technique %s:%s\n",
+                g_lastXString.empty() ? "?" : g_lastXString.c_str(), g_techDesc.c_str());
     return t;
 }
 
@@ -459,10 +500,15 @@ static void tMaterialTechniqueSet(Reader &r, Prelink &z, Prelink::Loc obj) {
     for (int i = 0; i < 130; ++i) techTags[i] = r.u32();
 
     putXStringFromTag(r, z, obj, 0, nameTag);
+    if (shaderDumpIndex()) {
+        g_techsetNames[((uint64_t)obj.blk << 32) | obj.off] = g_lastXString;
+        fprintf(shaderDumpIndex(), "  techset %s\n", g_lastXString.empty() ? "?" : g_lastXString.c_str());
+    }
 
     for (int i = 0; i < 130; ++i) {
         const uint32_t field = 16 + (uint32_t)i * 8;
         if (techTags[i] == TAG_INLINE) {
+            if (shaderDumpIndex()) fprintf(shaderDumpIndex(), "   [%d]", i);
             Prelink::Loc t = tMaterialTechnique(r, z);
             z.putPtr(obj, field, t);
         } else if (techTags[i] != TAG_NULL) {
@@ -578,6 +624,8 @@ static void tMaterial(Reader &r, Prelink &z, Prelink::Loc obj) {
 
     // --- then the referenced data, in Load_Material's order ---
     putXStringFromTag(r, z, info, 0, infoNameTag);
+    if (shaderDumpIndex())
+        fprintf(shaderDumpIndex(), "material %s\n", g_lastXString.empty() ? "?" : g_lastXString.c_str());
 
     if (techTag == TAG_INLINE || techTag == TAG_ALIAS) {
         Prelink::Loc t = z.alloc(OUT, SZ_TECHSET, 8);
@@ -587,7 +635,12 @@ static void tMaterial(Reader &r, Prelink &z, Prelink::Loc obj) {
         z.addAsset(AT_TECHSET, t);          // Load_MaterialTechniqueSetAsset, db_load.cpp:2442
         z.putPtr(obj, 176, t);
     } else if (techTag != TAG_NULL) {
-        putAssetHandleRef(z, obj, 176, techTag);
+        Prelink::Loc t = putAssetHandleRef(z, obj, 176, techTag);
+        if (shaderDumpIndex()) {
+            auto it = g_techsetNames.find(((uint64_t)t.blk << 32) | t.off);
+            fprintf(shaderDumpIndex(), "  techset %s (shared)\n",
+                    it != g_techsetNames.end() ? it->second.c_str() : "?");
+        }
     }
 
     const int nTex   = counts[0];

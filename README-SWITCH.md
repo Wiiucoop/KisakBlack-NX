@@ -1030,6 +1030,24 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   server all stalled the same ~1.06 s, then ~60 frames of ~100 ms with
   `RB_StandardDrawCommands` ~100 ms but almost no GL draws -- what the player
   did then decides where to look.
+- **picmip 2, `r_stream 0` (log of 2026-10-02 13:00).** Applied for the map
+  this time. In-game frames 19-30 ms by area, GPU 12-19 ms, slowest frame of
+  each 600 44-85 ms. The hitches left in game are the main thread in
+  `SV_AllowPackets` for 0.5-1.1 s waiting on the server thread, which sat in
+  `SERVER: msg recv` (`Com_ServerPacketEvent`) with no scope under it; the
+  worst also had the swap waiting 1.1 s. `Com_ServerPacketEvent` now scopes
+  the socket read (`NET_GetClientPacket`), the loopback read and each
+  `SV_PacketEvent`, and `SV_ExecuteClientMessage`, `SV_ExecuteClientCommand`,
+  `ClientThink_real`, `ClientCommand` and `Pmove` got scopes, so the next
+  `[nx-hitch]` line names the part.
+- **Streaming without stutters (not done).** The streaming hitches had three
+  parts: the Stream thread's reads (off the main thread, harmless alone), the
+  render thread uploading every streamed texture whole at its next bind
+  (15-45 ms upload, 35-90 ms under samplers), and the sound streams sharing
+  the Stream thread and its SD reads. Making it smooth means spreading the
+  uploads over frames with a per-frame budget (keeping the old mips bound
+  until the new ones are in), and keeping the sound reads ahead of the
+  texture reads.
 - **Restart Map, still broken (SP).** Reloading the level now gets past the
   UI shutdown but crashes unloading the map's zones: `DB_FreeUnusedResources`
   -> `Mark_WeaponVariantDef` -> `Mark_XModelPtr` follows a weapon (still

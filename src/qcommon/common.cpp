@@ -1087,6 +1087,41 @@ void __cdecl Com_ServerPacketEvent()
     //LargeLocal::LargeLocal(&msgBuf_large_local, 0x10000);
     msgBuf = (unsigned __int8 (*)[65536])msgBuf_large_local.GetBuf(); // LargeLocal::GetBuf(&msgBuf_large_local);
     MSG_Init(&netmsg, (unsigned __int8 *)msgBuf, 0x10000);
+#ifdef KISAK_NX
+    // Scoped apart for the hitch reports: 0.5-1.1 s stalls sat inside this
+    // function with nothing under them -- the socket read, the loopback read
+    // and the processing of each packet.
+    if ( com_sv_running->current.enabled )
+    {
+        for ( ;; )
+        {
+            bool got;
+            {
+                PROF_SCOPED("NET_GetClientPacket");
+                got = NET_GetClientPacket(&adr, &netmsg);
+            }
+            if ( !got )
+                break;
+            PROF_SCOPED("SV_PacketEvent (net)");
+            SV_PacketEvent(adr, &netmsg);
+        }
+    }
+    for ( ;; )
+    {
+        bool got;
+        {
+            PROF_SCOPED("NET_GetLoopPacket");
+            got = NET_GetLoopPacket(NS_SERVER, &adr, &netmsg);
+        }
+        if ( !got )
+            break;
+        if ( com_sv_running->current.enabled )
+        {
+            PROF_SCOPED("SV_PacketEvent (loop)");
+            SV_PacketEvent(adr, &netmsg);
+        }
+    }
+#else
     if ( com_sv_running->current.enabled )
     {
         while ( NET_GetClientPacket(&adr, &netmsg) )
@@ -1097,6 +1132,7 @@ void __cdecl Com_ServerPacketEvent()
         if ( com_sv_running->current.enabled )
             SV_PacketEvent(adr, &netmsg);
     }
+#endif
     //LargeLocal::~LargeLocal(&msgBuf_large_local);
 }
 

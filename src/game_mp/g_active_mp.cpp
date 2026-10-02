@@ -1286,6 +1286,7 @@ void __cdecl G_PlayerVehiclePositionAndBlend(gentity_s *ent, gentity_s *pTurretE
 
 void __cdecl ClientThink_real(gentity_s *ent, usercmd_s *ucmd)
 {
+    PROF_SCOPED("ClientThink_real");   // NX: hitch attribution
     int v2; // ecx
     float *origin; // [esp+1Ch] [ebp-240h]
     float *maxs; // [esp+2Ch] [ebp-230h]

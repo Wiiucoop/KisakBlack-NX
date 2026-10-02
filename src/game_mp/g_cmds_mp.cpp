@@ -1299,6 +1299,7 @@ void __cdecl Cmd_SoundLength_f()
 
 void __cdecl ClientCommand(int clientNum)
 {
+    PROF_SCOPED("ClientCommand");   // NX: hitch attribution
     char errMsg[68]; // [esp+4h] [ebp-450h] BYREF
     gentity_s *ent; // [esp+48h] [ebp-40Ch]
     char cmd[1028]; // [esp+4Ch] [ebp-408h] BYREF

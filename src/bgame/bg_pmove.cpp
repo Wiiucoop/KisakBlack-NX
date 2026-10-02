@@ -5718,6 +5718,7 @@ void __cdecl set_stance(pmove_t *pm)
 
 void __cdecl Pmove(pmove_t *pm)
 {
+    PROF_SCOPED("Pmove");   // NX: hitch attribution
     gjkcc_input_t gjkcc_in; // [esp+0h] [ebp-20h] BYREF
     int savedregs; // [esp+20h] [ebp+0h] BYREF
 

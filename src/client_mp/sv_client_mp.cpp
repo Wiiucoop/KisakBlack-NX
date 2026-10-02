@@ -2708,6 +2708,7 @@ void __cdecl SV_UnmutePlayer_f(client_t *cl)
 
 void __cdecl SV_ExecuteClientCommand(client_t *cl, const char *s, int clientOK, int fromOldServer)
 {
+    PROF_SCOPED("SV_ExecuteClientCommand");   // NX: hitch attribution
     const ucmd_t *u; // [esp+14h] [ebp-4h]
 
     if ( (unsigned int)(cl - svs.clients) >= com_maxclients->current.integer
@@ -3063,6 +3064,7 @@ void __cdecl SV_UserMove(client_t *cl, msg_t *msg, int delta)
 
 void __cdecl SV_ExecuteClientMessage(client_t *cl, msg_t *msg)
 {
+    PROF_SCOPED("SV_ExecuteClientMessage");   // NX: hitch attribution
     msg_t v2; // [esp+0h] [ebp-70h] BYREF
     int c; // [esp+30h] [ebp-40h] BYREF
     msg_t msgCompressed; // [esp+34h] [ebp-3Ch] BYREF

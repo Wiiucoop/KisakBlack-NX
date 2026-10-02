@@ -30,7 +30,7 @@ UILocalVarContext *__cdecl UILocalVar_Find(UILocalVarContext *context, const cha
     unsigned int hash; // [esp+0h] [ebp-4h] BYREF
 
     if ( UILocalVar_FindLocation(context, name, &hash) )
-        return (UILocalVarContext *)((char *)context + 12 * hash);
+        return (UILocalVarContext *)&context->table[hash];   // nx-port: was context + 12 * hash, the x86 stride
     else
         return 0;
 }
@@ -75,7 +75,7 @@ UILocalVarContext *__cdecl UILocalVar_FindOrCreate(UILocalVarContext *context, c
     unsigned int hash; // [esp+4h] [ebp-4h] BYREF
 
     if ( UILocalVar_FindLocation(context, name, &hash) )
-        return (UILocalVarContext *)((char *)context + 12 * hash);
+        return (UILocalVarContext *)&context->table[hash];   // nx-port: was context + 12 * hash, the x86 stride
     var = &context->table[hash];
     var->name = CopyString(name, "UILocalVar_FindOrCreate", 36, SCRIPTINSTANCE_SERVER);
     var->type = UILOCALVAR_INT;

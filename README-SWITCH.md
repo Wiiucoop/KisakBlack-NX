@@ -929,6 +929,17 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   SD card. SP now restarts by queueing `devmap`/`map` for the current map, the
   path the first load takes. Script runtime error headers (channel 6) are
   now logged too; the stacks used to appear without their message.
+- **Sixth result: GPU-bound.** With the mid-frame flushes the render thread's
+  drawing fell to ~14-24 ms a frame and the swap rose to ~10-14 ms: it now
+  waits on the GPU (~21-26 ms a frame at 1280x720). Further gains are GPU
+  work: fewer pixels shaded (a lower game resolution is upscaled by the
+  present blit already, `GL_LINEAR` when the sizes differ) or cheaper passes.
+- **Crash reloading the level (Restart Map)**, `UI_Shutdown` ->
+  `DevGui_FreeMenu_r` -> `UILocalVar_Shutdown` -> `FreeString(0x200000000)`.
+  `UILocalVar_Find` / `UILocalVar_FindOrCreate` returned `context + 12 * hash`,
+  the x86 stride of `UILocalVar` (24 bytes on LP64), so every UI local
+  variable was read and written in the wrong place; shutdown freed a garbage
+  name. They return `&context->table[hash]` now.
 - **Vision sets (SP).** `player VisionSetNaked()` was a no-op stub; it now does
   what the global `VisionSetNaked` does (configstring 1550, which the client
   lerps to). `VisionSetLastStand` stays a stub: this client has no last-stand

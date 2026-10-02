@@ -1275,7 +1275,10 @@ MessageWindow *__cdecl Con_GetDestWindow(int localClientNum, print_msg_dest_t de
     {
         __debugbreak();
     }
-    return (MessageWindow *)&con.messageBuffer[localClientNum].gamemsgText[2][52 * dest + 1892];
+    // Was &gamemsgText[2][52 * dest + 1892]: x86 sizeof(MessageWindow) (0x34) baked
+    // in. Under LP64 the struct is larger and game windows 2 and 3 landed
+    // inside window 1 (crash on the frontend's first subtitle).
+    return &con.messageBuffer[localClientNum].gamemsgWindows[dest - CON_DEST_GAME_FIRST];
 }
 
 void __cdecl Con_UpdateNotifyLine(int localClientNum, unsigned int channel, bool lineFeed, int flags)

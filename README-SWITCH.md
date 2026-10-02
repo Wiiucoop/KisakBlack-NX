@@ -360,7 +360,7 @@ worth grepping for before the next one finds you:
 | --- | --- | --- |
 | a pointer read as a 32-bit word at a 4-byte stride | `*((unsigned int *)&rgp.poisonFXMaterial + n)` (the blur material) | index the array it meant |
 | a pointer read through an overlapping `int` of a union | `*(const char **)(dvar->domain.integer.max + 4 * i)` (enum dvar strings, 5 sites) | use the union member that is the pointer |
-| x86 struct sizes as literals | `Expression_Alloc(.., 16)`, `12 * numRpn` (menu expressions) | `sizeof` |
+| x86 struct sizes as literals | `Expression_Alloc(.., 16)`, `12 * numRpn` (menu expressions), `gamemsgText[2][52 * dest + 1892]` (console game message windows) | `sizeof` |
 
 [`docs/lp64-sweeps/`](docs/lp64-sweeps/) is the standing census for the classes
 the compiler *cannot* see, with the tooling that produces it: the same headers
@@ -1154,6 +1154,16 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   `Start3DCinematic("frontend")` opens a stubbed Bink and shows nothing.
   Starting Zombies from the menu changes level, which goes through the zone
   unload that still crashes on Restart Map (section 6).
+- **Frontend boot, first run (2026-10-02 16:15).** The title screen and the
+  3D scene loaded; the first subtitle of the scene's voice-over crashed
+  (assert `messageIndex` 250 not in [0, 15) in `Con_UpdateMessage`, via
+  `SND_NotifyPump` -> `CL_SubtitlePrint`). `Con_GetDestWindow` found game
+  message window N at `&gamemsgText[2][52 * dest + 1892]` -- x86
+  `sizeof(MessageWindow)` -- so under LP64 windows 2 and 3 were read from
+  inside window 1. It indexes `gamemsgWindows` now. Zombies never printed to
+  those windows. The rest of that boot: `patch_ui` missing (warning), and with
+  it `ui/menus.txt` and a few lobby/loading materials (`loadscreen_frontend`,
+  `ui_blur`, `menu_mp_lobby_scrollbar_*`).
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

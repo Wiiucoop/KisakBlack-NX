@@ -344,6 +344,7 @@ const dvar_s *r_exposureValue;
 const dvar_s *r_bloomTweaks;
 #ifdef KISAK_NX
 const dvar_s *nx_bloom;
+const dvar_s *nx_switchglyphs;
 #endif
 const dvar_s *r_bloomBlurRadius;
 const dvar_s *r_bloomTintWeights;
@@ -2177,6 +2178,7 @@ void __cdecl R_RegisterDvars()
     r_bloomTweaks = _Dvar_RegisterBool("r_bloomTweaks", 0, 0x5000u, "enbale bloom tweaks");
 #ifdef KISAK_NX
     nx_bloom = _Dvar_RegisterBool("nx_bloom", 1, 0, "Add the bloom to the scene (0 skips its passes; diagnostic)");
+    nx_switchglyphs = _Dvar_RegisterBool("nx_switchglyphs", 1, 0x1u, "Show A/B and X/Y button prompts as the Switch labels them (visual only)");
 #endif
     r_bloomBlurRadius = _Dvar_RegisterFloat("r_bloomBlurRadius", 1.75, 1.0, 3.0, 0x5000u, "bloom blur radius");
     r_bloomTintWeights = _Dvar_RegisterVec4(

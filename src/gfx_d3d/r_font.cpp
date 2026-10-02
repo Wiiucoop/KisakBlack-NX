@@ -8,6 +8,7 @@
 #include <stringed/stringed_hooks.h>
 #include <ctype.h>
 #include "r_init.h"
+#include "r_dvars.h"
 
 const char MYRANDOMNUMCHARS[10] =
 { '0', '2', '3', '4', '5', '6', '7', '8', '9', '\0' };
@@ -91,6 +92,14 @@ const Glyph *__cdecl R_GetCharacterGlyph(Font_s *font, unsigned int letter)
     int bottom; // [esp+8h] [ebp-8h]
     int mid; // [esp+Ch] [ebp-4h]
 
+#ifdef KISAK_NX
+    // Gamepad buttons are font glyphs at codes 1 (A), 2 (B), 3 (X), 4 (Y)
+    // (Key_KeynumToString). The Switch's buttons sit the other way round --
+    // A right, B bottom, X top, Y left -- so with nx_switchglyphs the prompts
+    // show the Switch's labels: the glyphs swap, the bindings do not.
+    if ( letter >= 1 && letter <= 4 && nx_switchglyphs && nx_switchglyphs->current.enabled )
+        letter = (letter == 1) ? 2 : (letter == 2) ? 1 : (letter == 3) ? 4 : 3;
+#endif
     if ( letter < 0x20 || letter > 0x7F )
     {
         top = font->glyphCount - 1;

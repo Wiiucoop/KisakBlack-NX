@@ -70,6 +70,7 @@ it is moved to the end of the line, so `+set` lines always apply first):
 | `nx_vsync` | 0 | the refresh wait rounded frames up to 33/50 ms |
 | `nx_glflush` | 64 | flush every N draws so CPU and GPU overlap |
 | `nx_splog` | 0 | SP bring-up traces off the log |
+| `nx_switchglyphs` | 1 | button prompts show A/B and X/Y as the Switch labels them (visual only) |
 | shadows, depth prepass, DoF, distortion, flame, marks, brass | off | the low preset (`nx_main.cpp`) |
 
 **Shader warm-up.** Every shader pair ever built is listed in
@@ -1097,6 +1098,16 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   before. They are in `pairs.txt` now, so later sessions warm them while
   loading. The other 3 were the first frames entering the map. Covering
   first-time compiles in game needs the background builds (second context).
+- **Button prompts in the Switch's labels.** The game draws gamepad buttons
+  as font glyphs at codes 1 (A), 2 (B), 3 (X), 4 (Y) (`Key_KeynumToString`
+  returns the code when translating). `R_GetCharacterGlyph` swaps 1<->2 and
+  3<->4 while `nx_switchglyphs` is set (default 1), so a prompt for the
+  bottom button reads B and the right one A, as on the Switch. Bindings are
+  untouched.
+- **KBZ rebuilt from an untranslated game set (2026-10-02).** All zones the
+  port uses converted and validated (`tools/nx/convert-zones.sh`);
+  `frontend_patch.ff` is not in this set (the engine runs without it). Most
+  `.kbz` came out byte-for-byte the size of the previous conversion.
 - **Streaming without stutters (not done).** The streaming hitches had three
   parts: the Stream thread's reads (off the main thread, harmless alone), the
   render thread uploading every streamed texture whole at its next bind

@@ -344,6 +344,7 @@ extern const dvar_s *r_exposureValue;
 extern const dvar_s *r_bloomTweaks;
 #ifdef KISAK_NX
 extern const dvar_s *nx_bloom;
+extern const dvar_s *nx_switchglyphs;
 #endif
 extern const dvar_s *r_bloomBlurRadius;
 extern const dvar_s *r_bloomTintWeights;

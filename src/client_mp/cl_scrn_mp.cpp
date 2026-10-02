@@ -470,6 +470,14 @@ void    SCR_UpdateFrame()
 
     PROF_SCOPED("SCR_UpdateFrame"); // LWSS ADD
 
+#ifdef KISAK_NX
+    // The GL layer builds cached shader programs ahead of use with a large
+    // time slice while a map loads and a small one in game (nx_d3d9_null.cpp,
+    // "Program warm-up").
+    extern volatile bool g_nxLoadingHint;
+    g_nxLoadingHint = CL_GetLocalClientConnectionState(0) != CA_ACTIVE;
+#endif
+
     streamingFrame = streamFrontendGlob.frame;
 
     iassert(Sys_IsMainThread() || Sys_IsRenderThread());

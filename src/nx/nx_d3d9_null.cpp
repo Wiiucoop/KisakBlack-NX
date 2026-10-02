@@ -41,7 +41,11 @@
 #include "nx_d3d9_shader.h"
 
 #include <map>
+#include <mutex>
+#include <set>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 // For the texture report only. Nothing in the D3D9 API carries a name, and
 // GfxImage is where the engine keeps it -- see nxImageFromOutPtr.
@@ -652,10 +656,15 @@ struct NxShader {
     // The shader itself, translated to GLSL at creation (any thread) and
     // compiled on first use (the GL thread) -- see "Translated shaders".
     char *glsl;              // null when the stream could not be translated
+    uint64_t glslHash;       // FNV-1a of glsl: names the shader in shadercache/pairs.txt
     NxShaderInfo info;
     GLuint glName;
     bool glFailed;           // compile failed once; not retried
 };
+// "Program warm-up": the live shaders by glslHash, and the pairs ever drawn.
+static void nxShaderRegister(NxShader *s);
+static void nxShaderUnregister(NxShader *s);
+static void nxWarmNotePair(const NxShader *vs, const NxShader *ps);
 
 struct NxVDecl {
     NxD3DObject obj;
@@ -832,6 +841,120 @@ static ULONG nxAddRef(void *self)
 
 static void nxDestroy(NxD3DObject *o);
 
+// ---------------------------------------------------------------------------
+// Tracked GL bindings
+// ---------------------------------------------------------------------------
+// Mesa re-validates state a call touches even when the value is the one
+// already set, and bills it to the next draw. After the constants moved to
+// uniform buffers the per-draw time showed up under samplers (~10 ms a frame)
+// and attributes (~11 ms) instead: every draw re-issued glActiveTexture,
+// glBindTexture, glBindSampler, glVertexAttribPointer and a glVertexAttrib4f
+// per unfed location, nearly all of them unchanged. These remember what is
+// bound and skip the call when nothing changes. Every texture, sampler and
+// attribute binding in this file goes through them; a deleted name is
+// forgotten first, since GL hands names out again. GL thread only.
+enum { NX_TEX_UNITS = 32, NX_ATTRIBS = 16 };
+
+static GLuint s_activeUnit = ~0u;
+static GLuint s_unitTex[NX_TEX_UNITS][3];   // per unit: 2D, cube, 3D
+static GLuint s_unitSampler[NX_TEX_UNITS];
+
+static void nxActiveTexture(GLuint unit)
+{
+    if (unit != s_activeUnit) {
+        glActiveTexture(GL_TEXTURE0 + unit);
+        s_activeUnit = unit;
+    }
+}
+
+static void nxBindTexture(GLenum target, GLuint name)
+{
+    int slot = target == GL_TEXTURE_CUBE_MAP ? 1 : target == GL_TEXTURE_3D ? 2 : target == GL_TEXTURE_2D ? 0 : -1;
+    if (slot < 0 || s_activeUnit >= NX_TEX_UNITS) {
+        glBindTexture(target, name);
+        return;
+    }
+    if (s_unitTex[s_activeUnit][slot] != name) {
+        glBindTexture(target, name);
+        s_unitTex[s_activeUnit][slot] = name;
+    }
+}
+
+static void nxBindSampler(GLuint unit, GLuint sampler)
+{
+    if (unit >= NX_TEX_UNITS) {
+        glBindSampler(unit, sampler);
+        return;
+    }
+    if (s_unitSampler[unit] != sampler) {
+        glBindSampler(unit, sampler);
+        s_unitSampler[unit] = sampler;
+    }
+}
+
+static void nxDeleteTexture(GLuint *name)
+{
+    for (auto &unit : s_unitTex)
+        for (GLuint &bound : unit)
+            if (bound == *name)
+                bound = 0;
+    glDeleteTextures(1, name);
+}
+
+struct NxAttribPointer {
+    GLuint buffer;
+    GLint size;
+    GLenum type;
+    GLboolean normalized;
+    GLsizei stride;
+    uintptr_t offset;
+};
+static NxAttribPointer s_attribPointer[NX_ATTRIBS];
+static float s_attribValue[NX_ATTRIBS][4];
+static bool s_attribValueKnown[NX_ATTRIBS];
+
+static void nxVertexAttribPointer(GLuint attr, GLuint buffer, GLint size, GLenum type,
+                                  GLboolean normalized, GLsizei stride, uintptr_t offset)
+{
+    if (attr < NX_ATTRIBS) {
+        NxAttribPointer &p = s_attribPointer[attr];
+        if (p.buffer == buffer && p.size == size && p.type == type && p.normalized == normalized
+         && p.stride == stride && p.offset == offset)
+            return;
+        p.buffer = buffer;
+        p.size = size;
+        p.type = type;
+        p.normalized = normalized;
+        p.stride = stride;
+        p.offset = offset;
+    }
+    glVertexAttribPointer(attr, size, type, normalized, stride, (const void *)offset);
+}
+
+// The value a disabled attribute array reads.
+static void nxVertexAttribValue(GLuint attr, float x, float y, float z, float w)
+{
+    if (attr < NX_ATTRIBS && s_attribValueKnown[attr] && s_attribValue[attr][0] == x
+     && s_attribValue[attr][1] == y && s_attribValue[attr][2] == z && s_attribValue[attr][3] == w)
+        return;
+    glVertexAttrib4f(attr, x, y, z, w);
+    if (attr < NX_ATTRIBS) {
+        s_attribValue[attr][0] = x;
+        s_attribValue[attr][1] = y;
+        s_attribValue[attr][2] = z;
+        s_attribValue[attr][3] = w;
+        s_attribValueKnown[attr] = true;
+    }
+}
+
+static void nxDeleteBuffer(GLuint *name)
+{
+    for (NxAttribPointer &p : s_attribPointer)
+        if (p.buffer == *name)
+            p.buffer = ~0u;   // matches nothing: the next pointer call goes through
+    glDeleteBuffers(1, name);
+}
+
 static ULONG nxRelease(void *self)
 {
     NxD3DObject *o = nxRefTarget(self);
@@ -856,7 +979,7 @@ static void nxDestroy(NxD3DObject *o)
             break;
         nxForgetSurface(s);
         if (s->glName && s_glReady && nxGlAcquire())
-            glDeleteTextures(1, &s->glName);
+            nxDeleteTexture(&s->glName);
         free(s->bits);
         free(s);
         break;
@@ -880,7 +1003,7 @@ static void nxDestroy(NxD3DObject *o)
         // Same rule as the buffers below: only the thread that owns the
         // context may delete a GL name, and a leak beats a lost context.
         if (t->glName && s_glReady && nxGlAcquire()) {
-            glDeleteTextures(1, &t->glName);
+            nxDeleteTexture(&t->glName);
             t->glName = 0;
         }
         for (UINT i = 0; i < n; ++i)
@@ -905,7 +1028,7 @@ static void nxDestroy(NxD3DObject *o)
         if (b->ring)
             nxGlReleaseRing(b);
         else if (b->glName && s_glReady && nxGlAcquire())
-            glDeleteBuffers(1, &b->glName);
+            nxDeleteBuffer(&b->glName);
         free(b->bits);
         free(b);
         break;
@@ -913,6 +1036,7 @@ static void nxDestroy(NxD3DObject *o)
     case 101:   // vertex shader
     case 102: { // pixel shader
         NxShader *sh = (NxShader *)o;
+        nxShaderUnregister(sh);
         nxForgetShader(sh);   // unbinds it and drops every program linked from it
         if (sh->glName && s_glReady && nxGlAcquire())
             glDeleteShader(sh->glName);
@@ -1729,10 +1853,10 @@ static bool nxGlEnsurePipeline(void)
         glUseProgram(s_prog);
         glUniform1i(s_locTex, 0);   // texture unit 0, set once and left
     }
-    glActiveTexture(GL_TEXTURE0);
+    nxActiveTexture(0);
 
     glGenTextures(1, &s_whiteTex);
-    glBindTexture(GL_TEXTURE_2D, s_whiteTex);
+    nxBindTexture(GL_TEXTURE_2D, s_whiteTex);
     static const GLubyte whiteTexel[4] = { 255, 255, 255, 255 };
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0,
@@ -1742,7 +1866,7 @@ static bool nxGlEnsurePipeline(void)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glGenTextures(1, &s_whiteCube);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, s_whiteCube);
+    nxBindTexture(GL_TEXTURE_CUBE_MAP, s_whiteCube);
     for (GLenum face = 0; face < 6; ++face)
         glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, GL_RGBA8, 1, 1, 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, whiteTexel);
@@ -1750,12 +1874,12 @@ static bool nxGlEnsurePipeline(void)
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glGenTextures(1, &s_white3D);
-    glBindTexture(GL_TEXTURE_3D, s_white3D);
+    nxBindTexture(GL_TEXTURE_3D, s_white3D);
     glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8, 1, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whiteTexel);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, 0);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glBindTexture(GL_TEXTURE_2D, s_whiteTex);
+    nxBindTexture(GL_TEXTURE_2D, s_whiteTex);
 
     // Whether the DXT blocks can go up untouched is a runtime question on
     // this driver, and the answer decides whether most of the game's images
@@ -1897,10 +2021,61 @@ static void nxNoteWholeUpload(const NxBuffer *b, bool first, bool discard)
     }
 }
 
+// Texture levels uploaded since the last report, by image: in game a few
+// milliseconds a frame went to "texture upload" with no way to tell what.
+struct NxTexUpload {
+    char name[64];
+    unsigned width, height, count;
+    uint64_t bytes, ticks;
+};
+static NxTexUpload s_texUploads[32];
+static unsigned s_texUploadsDropped;
+
+static void nxNoteTexUpload(const char *name, unsigned width, unsigned height, unsigned bytes, uint64_t ticks)
+{
+    if (!name || !name[0])
+        name = "<no GfxImage>";
+    for (NxTexUpload &u : s_texUploads) {
+        if (u.name[0] && strcmp(u.name, name))
+            continue;
+        if (!u.name[0]) {
+            snprintf(u.name, sizeof(u.name), "%s", name);
+            u.width = width;
+            u.height = height;
+        }
+        ++u.count;
+        u.bytes += bytes;
+        u.ticks += ticks;
+        return;
+    }
+    ++s_texUploadsDropped;
+}
+
+static void nxTexUploadReport(unsigned frames)
+{
+    for (int n = 0; n < 5; ++n) {
+        NxTexUpload *best = nullptr;
+        for (NxTexUpload &u : s_texUploads)
+            if (u.name[0] && u.count && (!best || u.ticks > best->ticks))
+                best = &u;
+        if (!best)
+            break;
+        printf("        texture upload: %s (%ux%u): %.2f ms per present, %u levels, %.1f KB\n", best->name,
+               best->width, best->height, armTicksToNs(best->ticks) / 1e6 / frames, best->count,
+               best->bytes / 1024.0);
+        best->count = 0;
+    }
+    if (s_texUploadsDropped)
+        printf("        texture upload: %u levels of further images not tallied\n", s_texUploadsDropped);
+    memset(s_texUploads, 0, sizeof(s_texUploads));
+    s_texUploadsDropped = 0;
+}
+
 static void nxProfReport(unsigned frames)
 {
     if (!frames)
         return;
+    nxTexUploadReport(frames);
     printf("        profile, ms per present:");
     for (int i = 0; i < NXP_COUNT; ++i)
         printf("%s %s %.2f (%u)", i ? "," : "", s_profNames[i],
@@ -1963,7 +2138,7 @@ static bool nxGlRingSlot(NxGlRing *r, int slot, GLenum target, UINT length)
     s_glBufferStorage(target, (GLsizeiptr)length, nullptr, s_ringMode->storage);
     r->map[slot] = (BYTE *)glMapBufferRange(target, 0, (GLsizeiptr)length, s_ringMode->map);
     if (!r->map[slot]) {
-        glDeleteBuffers(1, &r->name[slot]);
+        nxDeleteBuffer(&r->name[slot]);
         r->name[slot] = 0;
         return false;
     }
@@ -2060,7 +2235,7 @@ static void nxGlReleaseRing(NxBuffer *b)
             if (r->fence[i])
                 glDeleteSync(r->fence[i]);
             if (r->name[i])
-                glDeleteBuffers(1, &r->name[i]);
+                nxDeleteBuffer(&r->name[i]);
         }
     }
     free(r);
@@ -2076,7 +2251,7 @@ static bool nxGlSyncBuffer(NxBuffer *b, GLenum target)
         // A buffer first uploaded the old way, before the mode was picked,
         // moves over: its GL buffer goes, and the ring starts from the CPU copy.
         if (!b->ring && b->glName) {
-            glDeleteBuffers(1, &b->glName);
+            nxDeleteBuffer(&b->glName);
             b->glName = 0;
             b->glAllocated = false;
         }
@@ -2180,6 +2355,12 @@ static void nxGlUploadLevel(const NxTexture *t, const NxTexFormat *f,
     UINT d = nxMipDim(t->depth, level);
     UINT pitch, size;
     nxLevelLayout(t->format, w, h, &pitch, &size);
+    struct Tally {
+        const NxTexture *t;
+        UINT bytes;
+        u64 start = armGetSystemTick();
+        ~Tally() { nxNoteTexUpload(t->imageName, t->width, t->height, bytes, armGetSystemTick() - start); }
+    } tally{t, size * (d ? d : 1)};
     const void *bits = t->levelBits[face * t->levels + level];
 
     if (faceTarget == GL_TEXTURE_3D) {
@@ -2314,7 +2495,7 @@ static bool nxGlSyncRenderTexture(NxTexture *t)
         if (!t->glName)
             return false;
     }
-    glBindTexture(target, t->glName);
+    nxBindTexture(target, t->glName);
     if (t->glAllocated)
         return true;
 
@@ -2358,7 +2539,7 @@ static bool nxGlSyncSurface(NxSurface *s)
     glGenTextures(1, &s->glName);
     if (!s->glName)
         return false;
-    glBindTexture(GL_TEXTURE_2D, s->glName);
+    nxBindTexture(GL_TEXTURE_2D, s->glName);
     glTexImage2D(GL_TEXTURE_2D, 0, (GLint)st.internalFormat,
                  (GLsizei)s->width, (GLsizei)s->height, 0,
                  st.format, st.type, nullptr);
@@ -2398,7 +2579,7 @@ static bool nxGlSyncTexture(NxTexture *t)
             return false;
         t->glDirty = true;
     }
-    glBindTexture(target, t->glName);
+    nxBindTexture(target, t->glName);
     if (!t->glDirty)
         return true;
 
@@ -2742,7 +2923,7 @@ static void nxGlApplySampler(unsigned stage, GLuint unit)
         }
         s_sampDirty[stage] = false;
     }
-    glBindSampler(unit, smp);
+    nxBindSampler(unit, smp);
 }
 
 // ---------------------------------------------------------------------------
@@ -2929,11 +3110,12 @@ static bool nxGlBindAttrib(GLuint attr, const D3DVERTEXELEMENT9 *elem)
     // glVertexAttribPointer takes its buffer from whatever is bound to
     // GL_ARRAY_BUFFER, which nxGlSyncBuffer has just left as this stream's.
     UINT offset = s_streamOffset[elem->Stream] + elem->Offset;
-    glEnableVertexAttribArray(attr);
-    s_attribEnabled |= 1u << attr;
-    glVertexAttribPointer(attr, fmt.size, fmt.type, fmt.normalized,
-                          (GLsizei)s_streamStride[elem->Stream],
-                          (const void *)(uintptr_t)offset);
+    if (!(s_attribEnabled & (1u << attr))) {
+        glEnableVertexAttribArray(attr);
+        s_attribEnabled |= 1u << attr;
+    }
+    nxVertexAttribPointer(attr, vb->glName, fmt.size, fmt.type, fmt.normalized,
+                          (GLsizei)s_streamStride[elem->Stream], (uintptr_t)offset);
     return true;
 }
 
@@ -3242,6 +3424,7 @@ static const NxProgram *nxGlProgram(void)
         if (loc >= 0) glUniform1i(loc, NX_SHADER_VS_SAMPLER_UNIT + i);
     }
     ++s_nProgLinked;
+    nxWarmNotePair(s_vs, s_ps);
     return &(s_programs[key] = p);
 }
 
@@ -3260,24 +3443,150 @@ static void nxForgetPrograms(const NxShader *s)
     }
 }
 
+// ---------------------------------------------------------------------------
+// Program warm-up
+// ---------------------------------------------------------------------------
+// A cached binary is no cure for the first-use hitch: Mesa still runs its
+// back end on glProgramBinary, ~18 ms a program (Zombies, stock clocks). So
+// the programs a map will need are built while it loads instead. Every pair
+// built or loaded is noted in shadercache/pairs.txt by the GLSL hashes of its
+// two shaders, which name the same shader on every run of the same
+// translator. After each present the GL thread builds the listed pairs whose
+// shaders are both alive and that have no program yet: up to
+// NX_WARM_LOADING_MS a present while the client is not active (the loading
+// screen, the menus), none in game -- one build there is a hitch of its own.
+// pairs.txt is small and build-independent, so it can ship in the NRO.
+enum { NX_WARM_LOADING_MS = 120 };
+static const char NX_PROGRAM_PAIRS_FILE[] = "shadercache/pairs.txt";
+
+volatile bool g_nxLoadingHint;   // SCR_UpdateFrame: the client is not active
+
+static std::mutex s_shaderRegLock;
+static std::unordered_map<uint64_t, NxShader *> s_shaderReg[2];   // vertex, pixel
+static unsigned s_shaderRegGen;          // bumped by every registration
+static std::vector<std::pair<uint64_t, uint64_t>> s_warmPairs;
+static std::set<std::pair<uint64_t, uint64_t>> s_warmPairSet;
+static bool s_warmListRead, s_warmPending;
+static unsigned s_warmSeenGen = ~0u;
+static unsigned s_warmBuilt, s_warmBuiltTotal;
+static u64 s_warmTicks;
+
+static void nxShaderRegister(NxShader *s)
+{
+    if (!s->glsl)
+        return;
+    std::lock_guard<std::mutex> lock(s_shaderRegLock);
+    s_shaderReg[s->info.isPixel ? 1 : 0][s->glslHash] = s;
+    ++s_shaderRegGen;
+}
+
+static void nxShaderUnregister(NxShader *s)
+{
+    if (!s->glsl)
+        return;
+    std::lock_guard<std::mutex> lock(s_shaderRegLock);
+    auto &reg = s_shaderReg[s->info.isPixel ? 1 : 0];
+    auto it = reg.find(s->glslHash);
+    if (it != reg.end() && it->second == s)
+        reg.erase(it);
+}
+
+static void nxWarmReadList(void)
+{
+    s_warmListRead = true;
+    FILE *f = fopen(NX_PROGRAM_PAIRS_FILE, "r");
+    if (!f)
+        return;
+    unsigned long long vs, ps;
+    while (fscanf(f, "%llx %llx", &vs, &ps) == 2) {
+        auto pair = std::make_pair((uint64_t)vs, (uint64_t)ps);
+        if (s_warmPairSet.insert(pair).second)
+            s_warmPairs.push_back(pair);
+    }
+    fclose(f);
+    printf("[nx-gl] warm-up: %u shader pairs listed in %s\n", (unsigned)s_warmPairs.size(),
+           NX_PROGRAM_PAIRS_FILE);
+}
+
+static void nxWarmNotePair(const NxShader *vs, const NxShader *ps)
+{
+    if (!s_progCacheOn || !vs || !ps)
+        return;
+    if (!s_warmListRead)
+        nxWarmReadList();
+    auto pair = std::make_pair(vs->glslHash, ps->glslHash);
+    if (!s_warmPairSet.insert(pair).second)
+        return;
+    s_warmPairs.push_back(pair);
+    if (FILE *f = fopen(NX_PROGRAM_PAIRS_FILE, "a")) {
+        fprintf(f, "%016llx %016llx\n", (unsigned long long)pair.first, (unsigned long long)pair.second);
+        fclose(f);
+    }
+}
+
+// GL thread, after a swap.
+static void nxGlWarmPrograms(void)
+{
+    if (!s_progCacheOn || !g_nxLoadingHint)
+        return;
+    if (!s_warmListRead)
+        nxWarmReadList();
+    unsigned gen;
+    {
+        std::lock_guard<std::mutex> lock(s_shaderRegLock);
+        gen = s_shaderRegGen;
+    }
+    if (gen == s_warmSeenGen && !s_warmPending)
+        return;   // nothing new loaded, nothing left over
+    s_warmSeenGen = gen;
+    s_warmPending = false;
+
+    const u64 start = armGetSystemTick();
+    const u64 budget = armNsToTicks((u64)NX_WARM_LOADING_MS * 1000000);
+    NxShader *const savedVs = s_vs, *const savedPs = s_ps;
+    for (const auto &pair : s_warmPairs) {
+        if (armGetSystemTick() - start > budget) {
+            s_warmPending = true;
+            break;
+        }
+        // Held across the build, so neither shader can be freed under it.
+        std::lock_guard<std::mutex> lock(s_shaderRegLock);
+        auto v = s_shaderReg[0].find(pair.first);
+        auto p = s_shaderReg[1].find(pair.second);
+        if (v == s_shaderReg[0].end() || p == s_shaderReg[1].end())
+            continue;
+        if (s_programs.count(std::make_pair((const NxShader *)v->second, (const NxShader *)p->second)))
+            continue;
+        u64 t0 = armGetSystemTick();
+        s_vs = v->second;
+        s_ps = p->second;
+        nxGlProgram();
+        s_warmTicks += armGetSystemTick() - t0;
+        ++s_warmBuilt;
+        ++s_warmBuiltTotal;
+    }
+    s_vs = savedVs;
+    s_ps = savedPs;
+}
+
 // One sampler of a translated pair: the slot's texture on `unit` if it has one
 // of the dimension the shader declared and it can be made resident, the white
 // dummy of that dimension otherwise.
 static void nxGlBindShaderSampler(GLuint unit, NxTexture *t, unsigned char dim, int stage)
 {
-    glActiveTexture(GL_TEXTURE0 + unit);
+    nxActiveTexture(unit);
     GLenum want = dim == 3 ? GL_TEXTURE_CUBE_MAP : dim == 4 ? GL_TEXTURE_3D : GL_TEXTURE_2D;
     if (t && nxTexTarget(t) == want && nxGlSyncTexture(t)) {
         if (stage >= 0)
             nxGlApplySampler((unsigned)stage, unit);
         else
-            glBindSampler(unit, 0);   // vertex slots: the texture's own parameters
+            nxBindSampler(unit, 0);   // vertex slots: the texture's own parameters
         nxFrameNoteTexture(t);
         return;
     }
     ++s_frame.samplersMissing;
-    glBindSampler(unit, 0);
-    glBindTexture(want, want == GL_TEXTURE_CUBE_MAP ? s_whiteCube
+    nxBindSampler(unit, 0);
+    nxBindTexture(want, want == GL_TEXTURE_CUBE_MAP ? s_whiteCube
                       : want == GL_TEXTURE_3D       ? s_white3D : s_whiteTex);
 }
 
@@ -3429,7 +3738,8 @@ static void nxGlSetupTranslated(const NxProgram *p)
             if (mask & 1)
                 nxGlBindShaderSampler(NX_SHADER_VS_SAMPLER_UNIT + i, s_vtxSamplerTex[i],
                                       s_vs->info.samplerDim[i], -1);
-        glActiveTexture(GL_TEXTURE0);
+        // The active unit stays where it ended: every bind goes through
+        // nxActiveTexture / nxBindTexture, which know where they are.
     }
 
     NxProfScope attribProf(NXP_ATTRIBS);
@@ -3452,9 +3762,9 @@ static void nxGlSetupTranslated(const NxProgram *p)
         if (bound & (1u << loc))
             continue;
         if (loc == 5 || loc == 6)   // COLOR0, COLOR1
-            glVertexAttrib4f(loc, 1.0f, 1.0f, 1.0f, 1.0f);
+            nxVertexAttribValue(loc, 1.0f, 1.0f, 1.0f, 1.0f);
         else
-            glVertexAttrib4f(loc, 0.0f, 0.0f, 0.0f, 1.0f);
+            nxVertexAttribValue(loc, 0.0f, 0.0f, 0.0f, 1.0f);
     }
 }
 
@@ -3715,7 +4025,7 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     // The built-in program reads locations 0..2 through unit 0; whatever a
     // translated draw left enabled or active beyond that goes first.
     nxGlKeepAttribs(0x7u);
-    glActiveTexture(GL_TEXTURE0);
+    nxActiveTexture(0);
 
     glUseProgram(s_prog);
     if (s_locTransform >= 0) {
@@ -3739,7 +4049,7 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
         // current generic attribute, so white it is -- see s_vsSrc.
         ++s_nColorDefault;
         nxGlKeepAttribs(s_attribEnabled & ~(1u << NX_ATTR_COLOR));
-        glVertexAttrib4f(NX_ATTR_COLOR, 1.0f, 1.0f, 1.0f, 1.0f);
+        nxVertexAttribValue(NX_ATTR_COLOR, 1.0f, 1.0f, 1.0f, 1.0f);
         s_lastDrawHadColor = false;
     }
 
@@ -3753,7 +4063,7 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     } else {
         ++s_nTexcoordDefault;
         nxGlKeepAttribs(s_attribEnabled & ~(1u << NX_ATTR_TEXCOORD));
-        glVertexAttrib2f(NX_ATTR_TEXCOORD, 0.0f, 0.0f);
+        nxVertexAttribValue(NX_ATTR_TEXCOORD, 0.0f, 0.0f, 0.0f, 1.0f);
     }
 
     // The sampler the pixel shader reads: its first declared 2D sampler (see
@@ -3801,8 +4111,8 @@ static void nxGlDrawIndexed(D3DPRIMITIVETYPE type, INT baseVertexIndex,
     if (bound) {
         nxGlApplySampler(stage, 0);
     } else {
-        glBindSampler(0, 0);   // the white texel's own nearest filtering
-        glBindTexture(GL_TEXTURE_2D, s_whiteTex);
+        nxBindSampler(0, 0);   // the white texel's own nearest filtering
+        nxBindTexture(GL_TEXTURE_2D, s_whiteTex);
     }
 
     if (!nxGlBindAttrib(NX_ATTR_POS, pos)) { ++s_nSkipNoBuffer; return; }
@@ -4670,6 +4980,7 @@ static void nxShaderTranslate(NxShader *s, const DWORD *code)
         return;
     }
     ++s_nShTranslated;
+    s->glslHash = nxFnv1a(0xCBF29CE484222325ull, s->glsl, strlen(s->glsl) + 1);
     if (s->info.unknownOps && ++s_nShSuspect <= 8) {
         printf("[nx-gl] %s shader translated with %u instruction(s) skipped, first opcode %u\n",
                s->info.isPixel ? "pixel" : "vertex", s->info.unknownOps, s->info.firstUnknownOp);
@@ -4685,6 +4996,7 @@ HRESULT IDirect3DDevice9::CreateVertexShader(const DWORD *code, IDirect3DVertexS
     s->obj.type = (D3DRESOURCETYPE)101;
     nxShaderRead(s, code);
     nxShaderTranslate(s, code);
+    nxShaderRegister(s);
     *shader = (IDirect3DVertexShader9 *)s;
     return D3D_OK;
 }
@@ -4695,6 +5007,7 @@ HRESULT IDirect3DDevice9::CreatePixelShader(const DWORD *code, IDirect3DPixelSha
     s->obj.type = (D3DRESOURCETYPE)102;
     nxShaderRead(s, code);
     nxShaderTranslate(s, code);
+    nxShaderRegister(s);
     *shader = (IDirect3DPixelShader9 *)s;
     return D3D_OK;
 }
@@ -5252,6 +5565,7 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     }
     EGLint eglErr = eglGetError();
     GLenum errAfterSwap = report ? glGetError() : GL_NO_ERROR;
+    nxGlWarmPrograms();
 
     if (!blitted && (summary || s_nSwapPresent < 3))
         printf("[nx-gl] present %u: the back buffer could not be copied to the "
@@ -5297,6 +5611,11 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
                    s_shaderBuilds, s_progCacheHits, s_progCacheStores,
                    armTicksToNs(s_shaderBuildTicks) / 1e6,
                    armTicksToNs(s_shaderBuildMaxTicks) / 1e6);
+        if (s_warmBuilt)
+            printf("[nx-gl] warm-up: %u programs built ahead of use, %.1f ms (%u this run, %u pairs listed)\n",
+                   s_warmBuilt, armTicksToNs(s_warmTicks) / 1e6, s_warmBuiltTotal, (unsigned)s_warmPairs.size());
+        s_warmBuilt = 0;
+        s_warmTicks = 0;
         s_ringWaits = 0;
         s_shaderBuilds = 0;
         s_progCacheHits = s_progCacheStores = 0;

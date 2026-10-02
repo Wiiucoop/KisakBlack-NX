@@ -842,6 +842,28 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   test and half-pixel uniforms are sent only when their value changes. The
   old "constants" timer also covered sampler and attribute setup; those
   are now their own rows (`samplers`, `attributes`).
+- **Result, and the per-draw state behind it.** Constants fell to ~1 ms a
+  frame, but the frame barely moved (36-44 ms): the time reappeared under
+  samplers (~10 ms) and attributes (~11 ms). Mesa re-validates whatever a call
+  touches, even to the same value, and bills it to the next call -- the real
+  cost is ~37 us of driver work per draw. So every texture, sampler and
+  attribute binding now goes through tracked wrappers (`nxBindTexture`,
+  `nxBindSampler`, `nxActiveTexture`, `nxVertexAttribPointer`,
+  `nxVertexAttribValue`) that skip unchanged calls; deletes forget the name
+  first, since GL reuses names. The report also names the textures behind
+  "texture upload" (4-6 ms a frame in game, cause unknown yet).
+- **Program warm-up.** Cached binaries still cost ~18 ms each (Mesa runs its
+  back end on `glProgramBinary`), so the first use of a program is a hitch
+  with or without the cache. Every pair built is now listed in
+  `shadercache/pairs.txt` by the GLSL hashes of its shaders, and after each
+  present while the client is not active (loading screen, menus) the GL
+  thread builds, for up to 120 ms, the listed pairs whose shaders are loaded
+  and that have no program (`nxGlWarmPrograms`). The summary prints
+  `warm-up: N programs built ahead of use`. The list fills while playing, so
+  warm-up starts from the second session. It is small and build-independent:
+  shipping it in the NRO gives new players the same warm-up (their binaries
+  are then made on that first load). Next: spread the warm-up over more cores
+  (a second GL context), and build the stragglers in game in the background.
 - **Zombie corpses in T-pose:** SP converts the actor into a corpse in place
   (`Actor_BecomeCorpse`), and the client draws the corpse through
   `actorCorpseInfo[slot]`, whose tree starts empty; retail hides that with the

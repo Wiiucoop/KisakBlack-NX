@@ -265,6 +265,12 @@ int main(int argc, char **argv)
         " +set sm_enable 0 +set r_depthPrepass 0"
         " +set r_dof_enable 0 +set r_distortion 0 +set r_flame_allowed 0 +set nx_bloom 0"
         " +set fx_marks 0 +set fx_marks_ents 0 +set cg_brass 0";
+    // The game resolution by where the title starts: 960x540 handheld, where
+    // the GPU (307-460 MHz) is the limit, 1280x720 docked. The present blit
+    // scales it to the 1280x720 window. Chosen once, at boot: docking later
+    // keeps it (changing it live is a vid_restart this port has not done).
+    strcat(cmdline, appletGetOperationMode() == AppletOperationMode_Handheld
+                        ? " +set r_mode 960x540" : " +set r_mode 1280x720");
     nxAppendCmdlineFile(cmdline, sizeof(cmdline));
     printf("command line: %s\n", cmdline);
     nx_set_command_line(cmdline);

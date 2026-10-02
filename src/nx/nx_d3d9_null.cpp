@@ -40,6 +40,7 @@
 
 #include "nx_d3d9_shader.h"
 #include "nx_clock.h"
+#include <universal/profile.h>
 
 #include <map>
 #include <mutex>
@@ -4935,16 +4936,20 @@ HRESULT IDirect3D9::GetAdapterIdentifier(UINT, DWORD, D3DADAPTER_IDENTIFIER9 *id
     return D3D_OK;
 }
 
+// 960x540 is the handheld game resolution (nx_main.cpp picks r_mode by the
+// operation mode); the present blit scales it up to the 1280x720 window.
 static const D3DDISPLAYMODE s_modes[] = {
     { 1280, 720, 60, D3DFMT_X8R8G8B8 },
     { 1920, 1080, 60, D3DFMT_X8R8G8B8 },
+    { 960, 540, 60, D3DFMT_X8R8G8B8 },
 };
+enum { NX_MODE_COUNT = sizeof(s_modes) / sizeof(s_modes[0]) };
 
-UINT IDirect3D9::GetAdapterModeCount(UINT, D3DFORMAT) { return 2; }
+UINT IDirect3D9::GetAdapterModeCount(UINT, D3DFORMAT) { return NX_MODE_COUNT; }
 
 HRESULT IDirect3D9::EnumAdapterModes(UINT, D3DFORMAT, UINT mode, D3DDISPLAYMODE *displayMode)
 {
-    if (mode >= 2) return D3DERR_INVALIDCALL;
+    if (mode >= NX_MODE_COUNT) return D3DERR_INVALIDCALL;
     *displayMode = s_modes[mode];
     return D3D_OK;
 }
@@ -5798,6 +5803,120 @@ static int s_gpuQueryNext;
 static u64 s_gpuNs, s_gpuNsMax;
 static unsigned s_gpuFrames;
 
+// GPU time by part of the frame: a GL_TIMESTAMP pair around each render scope
+// nx_prof.cpp lists (NxProfZone calls NxProf_GpuBegin/End), in per-frame sets
+// of queries read back NX_GPU_SCOPE_FRAMES presents later without waiting.
+// glQueryCounter and the 64-bit read are not in the linked library, so they
+// are looked up.
+enum { NX_GPU_SCOPE_FRAMES = 4, NX_GPU_SCOPE_QUERIES = 96, NX_GPU_SCOPE_MAX = 16, NX_GPU_SCOPE_DEPTH = 16 };
+struct NxGpuScopeFrame {
+    GLuint query[NX_GPU_SCOPE_QUERIES];
+    unsigned char pairScope[NX_GPU_SCOPE_QUERIES / 2];
+    unsigned char pairBegin[NX_GPU_SCOPE_QUERIES / 2], pairEnd[NX_GPU_SCOPE_QUERIES / 2];
+    int used, pairs;
+    bool pending;
+};
+static NxGpuScopeFrame s_gpuScopeFrames[NX_GPU_SCOPE_FRAMES];
+static int s_gpuScopeCur;
+static int s_gpuScopeStack[NX_GPU_SCOPE_DEPTH][2];   // scope, query index (-1: not timed)
+static int s_gpuScopeDepth;
+static u64 s_gpuScopeNs[NX_GPU_SCOPE_MAX];
+static unsigned s_gpuScopeFramesRead;
+static PFNGLQUERYCOUNTERPROC s_glQueryCounter;
+static PFNGLGETQUERYOBJECTUI64VPROC s_glGetQueryObjectui64v;
+static int s_gpuScopeState;   // 0 untried, 1 ready, -1 unavailable
+
+static bool nxGpuScopeReady(void)
+{
+    if (!s_glReady || Sys_GetCurrentThreadId() != s_glThreadId)
+        return false;
+    if (!s_gpuScopeState) {
+        s_glQueryCounter = (PFNGLQUERYCOUNTERPROC)eglGetProcAddress("glQueryCounter");
+        s_glGetQueryObjectui64v = (PFNGLGETQUERYOBJECTUI64VPROC)eglGetProcAddress("glGetQueryObjectui64v");
+        s_gpuScopeState = s_glQueryCounter && s_glGetQueryObjectui64v ? 1 : -1;
+        if (s_gpuScopeState > 0)
+            for (NxGpuScopeFrame &f : s_gpuScopeFrames)
+                glGenQueries(NX_GPU_SCOPE_QUERIES, f.query);
+        printf("[nx-gl] GPU time by part: %s\n", s_gpuScopeState > 0 ? "on" : "glQueryCounter unavailable");
+    }
+    return s_gpuScopeState > 0;
+}
+
+void NxProf_GpuBegin(int scope)
+{
+    if (!nxGpuScopeReady() || s_gpuScopeDepth >= NX_GPU_SCOPE_DEPTH)
+        return;
+    NxGpuScopeFrame &f = s_gpuScopeFrames[s_gpuScopeCur];
+    int index = -1;
+    if (!f.pending && f.used + 2 <= NX_GPU_SCOPE_QUERIES && scope < NX_GPU_SCOPE_MAX) {
+        index = f.used++;
+        s_glQueryCounter(f.query[index], GL_TIMESTAMP);
+    }
+    s_gpuScopeStack[s_gpuScopeDepth][0] = scope;
+    s_gpuScopeStack[s_gpuScopeDepth][1] = index;
+    ++s_gpuScopeDepth;
+}
+
+void NxProf_GpuEnd(int scope)
+{
+    if (!nxGpuScopeReady() || s_gpuScopeDepth <= 0)
+        return;
+    --s_gpuScopeDepth;
+    const int begin = s_gpuScopeStack[s_gpuScopeDepth][1];
+    if (begin < 0 || s_gpuScopeStack[s_gpuScopeDepth][0] != scope)
+        return;
+    NxGpuScopeFrame &f = s_gpuScopeFrames[s_gpuScopeCur];
+    if (f.used >= NX_GPU_SCOPE_QUERIES)
+        return;
+    const int end = f.used++;
+    s_glQueryCounter(f.query[end], GL_TIMESTAMP);
+    f.pairScope[f.pairs] = (unsigned char)scope;
+    f.pairBegin[f.pairs] = (unsigned char)begin;
+    f.pairEnd[f.pairs] = (unsigned char)end;
+    ++f.pairs;
+}
+
+// After each swap: the frame just issued waits to be read; the oldest one is
+// read if its queries are done, and dropped if not.
+static void nxGpuScopeFrameEnd(void)
+{
+    if (s_gpuScopeState <= 0)
+        return;
+    s_gpuScopeDepth = 0;
+    s_gpuScopeFrames[s_gpuScopeCur].pending = s_gpuScopeFrames[s_gpuScopeCur].pairs > 0;
+    s_gpuScopeCur = (s_gpuScopeCur + 1) % NX_GPU_SCOPE_FRAMES;
+    NxGpuScopeFrame &f = s_gpuScopeFrames[s_gpuScopeCur];
+    if (f.pending) {
+        GLuint ready = 0;
+        glGetQueryObjectuiv(f.query[f.used - 1], GL_QUERY_RESULT_AVAILABLE, &ready);
+        if (ready) {
+            for (int i = 0; i < f.pairs; ++i) {
+                GLuint64 t0 = 0, t1 = 0;
+                s_glGetQueryObjectui64v(f.query[f.pairBegin[i]], GL_QUERY_RESULT, &t0);
+                s_glGetQueryObjectui64v(f.query[f.pairEnd[i]], GL_QUERY_RESULT, &t1);
+                if (t1 > t0)
+                    s_gpuScopeNs[f.pairScope[i]] += t1 - t0;
+            }
+            ++s_gpuScopeFramesRead;
+        }
+    }
+    f.pending = false;
+    f.used = f.pairs = 0;
+}
+
+static void nxGpuScopeReport(void)
+{
+    if (!s_gpuScopeFramesRead)
+        return;
+    printf("[nx-gl] GPU time by part, ms per frame (%u frames):", s_gpuScopeFramesRead);
+    for (int i = 0; i < NxProf_GpuScopeCount() && i < NX_GPU_SCOPE_MAX; ++i)
+        if (s_gpuScopeNs[i])
+            printf(" | %s %.2f", NxProf_GpuScopeName(i), s_gpuScopeNs[i] / 1e6 / s_gpuScopeFramesRead);
+    printf("\n");
+    memset(s_gpuScopeNs, 0, sizeof(s_gpuScopeNs));
+    s_gpuScopeFramesRead = 0;
+}
+
 static void nxGlGpuTimerEnd(void)
 {
     if (s_gpuQueryOpen < 0)
@@ -5934,6 +6053,7 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
     EGLint eglErr = eglGetError();
     GLenum errAfterSwap = report ? glGetError() : GL_NO_ERROR;
     nxGlGpuTimerBegin();
+    nxGpuScopeFrameEnd();
     nxGlWarmPrograms();
     nxGlPreuploadTextures();
 
@@ -5991,6 +6111,7 @@ HRESULT IDirect3DSwapChain9::Present(const RECT *, const RECT *, HWND, const voi
             printf("[nx-gl] GPU time: %.1f ms per frame, slowest %.1f ms (%u frames timed)\n",
                    s_gpuNs / 1e6 / s_gpuFrames, s_gpuNsMax / 1e6, s_gpuFrames);
         s_gpuNs = s_gpuNsMax = 0;
+        nxGpuScopeReport();
         if (s_midFrameFlushes)
             printf("[nx-gl] mid-frame flushes: %.1f per present\n", (double)s_midFrameFlushes / frames);
         s_midFrameFlushes = 0;

@@ -946,6 +946,24 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   `nx_gpuclock` (MHz: 307 / 384 / 460, default 460; 0 leaves the system's),
   only in handheld mode, re-checked every ~2 s since docking resets it, and
   restores the clock it found on exit.
+- **The clock yields to sys-clk.** `NX_ClockUpdate` only replaces the
+  system's handheld default (307.2 MHz); any other clock was set by someone
+  else (sys-clk, an overclock tool) and stays. On exit it puts the original
+  back only if the clock is still the one it set.
+- **540p handheld, 720p docked.** `nx_main.cpp` adds `+set r_mode 960x540`
+  when the title starts in handheld mode, `1280x720` docked (960x540 is now
+  in both mode lists, `s_modes` and `EnumDisplaySettingsA`). The window stays
+  1280x720 and the present blit scales the back buffer up (`GL_LINEAR`); the
+  touchscreen point is scaled to the game window (`NX_GameWindowSize`). It is
+  chosen at boot only: docking later keeps it, since changing it live would
+  be a `vid_restart` with every render target remade.
+- **GPU time by part.** Render scopes listed in `nx_prof.cpp`
+  (`s_gpuScopes`: the whole command execution, the 3D frame, depth prepass,
+  Lit, LitPostResolve, Dynamic Lights, Emissive, post effects) also put a
+  `GL_TIMESTAMP` pair around themselves (`NxProf_GpuBegin/End`), read back
+  four presents later without waiting; the summary prints
+  `GPU time by part, ms per frame`. What the list leaves out (the HUD, the
+  2D) is the first entry less the rest.
 - **Restart Map, still broken (SP).** Reloading the level now gets past the
   UI shutdown but crashes unloading the map's zones: `DB_FreeUnusedResources`
   -> `Mark_WeaponVariantDef` -> `Mark_XModelPtr` follows a weapon (still

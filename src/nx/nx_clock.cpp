@@ -5,8 +5,9 @@
 // Zombies (~22 ms of GPU a frame at 307.2), so nx_gpuclock picks the handheld
 // clock: 307, 384 or 460 (default), 0 to leave the system's. Docked, the
 // system's 768 MHz is left alone. Docking and undocking reset the clock, so it
-// is checked again every couple of seconds; the clock found the first time it
-// was changed goes back on exit.
+// is checked again every couple of seconds. Only the system default (307.2) is
+// replaced: a clock set by sys-clk or another tool is left as it is. The clock
+// found the first time it was changed goes back on exit.
 #include "nx_clock.h"
 
 #include <switch.h>
@@ -15,6 +16,8 @@
 
 namespace
 {
+constexpr u32 NX_HANDHELD_DEFAULT_HZ = 307200000;   // what the system sets undocked
+
 bool s_useClkrst, s_usePcv;
 ClkrstSession s_gpuSession;
 u32 s_originalHz;        // the handheld clock before the first change, 0 before it
@@ -87,6 +90,10 @@ void NX_ClockUpdate(int handheldMhz)
     u32 current = 0;
     if ( !nxClockGet(&current) || current == want )
         return;
+    // Only the system's own handheld clock is replaced. Anything else was set
+    // by someone -- sys-clk, an overclock tool -- and that choice stands.
+    if ( current != NX_HANDHELD_DEFAULT_HZ )
+        return;
     if ( !s_originalHz )
         s_originalHz = current;
     if ( nxClockSet(want) && want != s_lastReportedHz )
@@ -98,7 +105,10 @@ void NX_ClockUpdate(int handheldMhz)
 
 void NX_ClockExit()
 {
-    if ( s_originalHz && appletGetOperationMode() == AppletOperationMode_Handheld )
+    // Put back only our own change: a clock another tool set since stays.
+    u32 current = 0;
+    if ( s_originalHz && appletGetOperationMode() == AppletOperationMode_Handheld && nxClockGet(&current)
+        && current == s_lastReportedHz )
         nxClockSet(s_originalHz);
     if ( s_useClkrst )
     {

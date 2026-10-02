@@ -29,12 +29,19 @@ struct NxProfSite
     NxProfSite *next;
     uint64_t ticks[NX_PROF_THREADS];
     uint32_t calls[NX_PROF_THREADS];
+    int gpuScope;   // >= 0: also timed on the GPU (NxProf_GpuScopeName), -1 not
     explicit NxProfSite(const char *siteName);
 };
 
 int NxProf_ThreadSlot();
 void NxProf_SetThreadName(const char *threadName);
 void NxProf_FrameMark();
+// GPU timestamps around the render scopes listed in nx_prof.cpp; implemented
+// by the GL layer (nx_d3d9_null.cpp), which ignores calls off its thread.
+void NxProf_GpuBegin(int scope);
+void NxProf_GpuEnd(int scope);
+int NxProf_GpuScopeCount();
+const char *NxProf_GpuScopeName(int scope);
 
 static inline uint64_t NxProf_Now()
 {
@@ -48,9 +55,15 @@ struct NxProfZone
     NxProfSite *site;
     uint64_t start;
     int slot;
-    explicit NxProfZone(NxProfSite *s) : site(s), start(NxProf_Now()), slot(NxProf_ThreadSlot()) {}
+    explicit NxProfZone(NxProfSite *s) : site(s), start(NxProf_Now()), slot(NxProf_ThreadSlot())
+    {
+        if ( site->gpuScope >= 0 )
+            NxProf_GpuBegin(site->gpuScope);
+    }
     ~NxProfZone()
     {
+        if ( site->gpuScope >= 0 )
+            NxProf_GpuEnd(site->gpuScope);
         if ( slot >= 0 )
         {
             site->ticks[slot] += NxProf_Now() - start;

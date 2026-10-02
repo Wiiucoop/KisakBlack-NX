@@ -329,10 +329,19 @@ BOOL EnumDisplayMonitors(HDC, const RECT *, MONITORENUMPROC proc, LPARAM data)
 
 LONG ChangeDisplaySettingsA(LPDEVMODEA, DWORD) { return DISP_CHANGE_SUCCESSFUL; }
 
+// The game window's size, which is the game resolution (960x540 handheld,
+// 1280x720 docked): the touchscreen reports 1280x720 and is scaled to it.
+extern "C" void NX_GameWindowSize(int *w, int *h)
+{
+    *w = s_window.inUse && s_window.w > 0 ? s_window.w : 1280;
+    *h = s_window.inUse && s_window.h > 0 ? s_window.h : 720;
+}
+
 BOOL EnumDisplaySettingsA(LPCSTR, DWORD modeNum, LPDEVMODEA devMode)
 {
-    static const int modes[][3] = { { 1280, 720, 60 }, { 1920, 1080, 60 } };
-    if (modeNum >= 2 || !devMode) return FALSE;
+    // Same list as IDirect3D9's modes (nx_d3d9_null.cpp); 960x540 is handheld.
+    static const int modes[][3] = { { 1280, 720, 60 }, { 1920, 1080, 60 }, { 960, 540, 60 } };
+    if (modeNum >= 3 || !devMode) return FALSE;
     memset(devMode, 0, sizeof(*devMode));
     devMode->dmPelsWidth = (DWORD)modes[modeNum][0];
     devMode->dmPelsHeight = (DWORD)modes[modeNum][1];

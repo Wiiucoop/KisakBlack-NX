@@ -47,8 +47,37 @@ struct Row
 };
 }
 
-NxProfSite::NxProfSite(const char *siteName) : name(siteName), next(nullptr), ticks(), calls()
+// The render scopes also timed on the GPU (the GL layer prints them with its
+// summary). Whole frame first; anything not listed -- the HUD, the 2D --
+// is the total less the parts.
+static const char *const s_gpuScopes[] = {
+    "RB_CallExecuteRenderCommands",
+    "RB_StandardDrawCommands",
+    "R_DepthPrepass",
+    "Lit",
+    "LitPostResolve",
+    "Dynamic Lights",
+    "Emissive",
+    "postEmissiveBrightening",
+    "RB_StandardPostEffects",
+    "RB_ApplyLatePostEffects",
+};
+
+int NxProf_GpuScopeCount()
 {
+    return (int)(sizeof(s_gpuScopes) / sizeof(s_gpuScopes[0]));
+}
+
+const char *NxProf_GpuScopeName(int scope)
+{
+    return scope >= 0 && scope < NxProf_GpuScopeCount() ? s_gpuScopes[scope] : "?";
+}
+
+NxProfSite::NxProfSite(const char *siteName) : name(siteName), next(nullptr), ticks(), calls(), gpuScope(-1)
+{
+    for ( int i = 0; i < NxProf_GpuScopeCount(); ++i )
+        if ( !strcmp(siteName, s_gpuScopes[i]) )
+            gpuScope = i;
     NxProfSite *head = s_sites.load(std::memory_order_relaxed);
     do
         next = head;

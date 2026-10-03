@@ -388,8 +388,65 @@ static char s_nroPath[512];
 // Asks the homebrew loader to start <nroName> from this NRO's folder once this
 // one exits; the caller then quits normally (Sys_Quit -> exit). A loader that
 // cannot chain-load (envHasNextLoad false) just returns to its menu.
+// The installed title (a forwarder) whose NACP name is <name>, or 0. Logs every
+// installed title with "kisak" in its name, so a renamed forwarder shows up.
+static u64 nxFindInstalledTitle(const char *name)
+{
+    if (R_FAILED(nsInitialize()))
+        return 0;
+    NsApplicationControlData *control = (NsApplicationControlData *)malloc(sizeof(NsApplicationControlData));
+    NsApplicationRecord records[32];
+    s32 offset = 0, count = 0;
+    u64 found = 0;
+    while (control && !found && R_SUCCEEDED(nsListApplicationRecord(records, 32, offset, &count)) && count > 0) {
+        for (s32 i = 0; i < count && !found; ++i) {
+            u64 size = 0;
+            NacpLanguageEntry *entry = nullptr;
+            if (R_FAILED(nsGetApplicationControlData(NsApplicationControlSource_Storage, records[i].application_id,
+                                                     control, sizeof(*control), &size))
+                || R_FAILED(nacpGetLanguageEntry(&control->nacp, &entry)) || !entry)
+                continue;
+            char lower[sizeof(entry->name)];
+            size_t n = 0;
+            for (; n + 1 < sizeof(lower) && entry->name[n]; ++n)
+                lower[n] = (char)tolower((unsigned char)entry->name[n]);
+            lower[n] = '\0';
+            if (strstr(lower, "kisak"))
+                printf("[nx] installed title %016lx '%s'\n", records[i].application_id, entry->name);
+            if (!strcasecmp(entry->name, name))
+                found = records[i].application_id;
+        }
+        offset += count;
+    }
+    free(control);
+    nsExit();
+    return found;
+}
+
 extern "C" bool NX_ChainLoadSibling(const char *nroName)
 {
+    // Started as an application (a forwarder, or hbmenu's title takeover):
+    // launch the sibling's forwarder as its own title. The system starts it in
+    // a fresh process after this one exits. Chain-loading runs the next NRO in
+    // this process, where this one's threads, audio and GPU state are still
+    // alive, and the MP NRO crashed before writing its log.
+    const AppletType appletType = appletGetAppletType();
+    if (appletType == AppletType_Application || appletType == AppletType_SystemApplication) {
+        char title[64];
+        snprintf(title, sizeof(title), "%s", nroName);
+        if (char *dot = strrchr(title, '.'))
+            *dot = '\0';
+        const u64 titleId = nxFindInstalledTitle(title);
+        if (titleId) {
+            Result rc = appletRequestLaunchApplication(titleId, nullptr);
+            printf("[nx] launch title %016lx '%s' after exit (rc 0x%x)\n", titleId, title, rc);
+            if (R_SUCCEEDED(rc))
+                return true;
+        } else {
+            printf("[nx] no installed title named '%s'; chain-loading the NRO instead\n", title);
+        }
+    }
+
     char path[512];
     const char *slash = strrchr(s_nroPath, '/');
     if (s_nroPath[0] && slash)

@@ -1236,8 +1236,17 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   printed and the assert skipped. The log's second line says which NRO
   started and whether the loader can chain-load (`envHasNextLoad`); hbmenu
   can, a forwarder may not, and then the game just quits to its menu.
-  Closing the title from the Home menu still crashes (section 6) -- that is a
-  different exit.
+  Closing from the Home menu is a different exit (section 6).
+  First test (14:06, from a sphaira forwarder): SP set the next load (rc 0)
+  and quit cleanly, and MP never reached its log -- the in-process chain-load
+  ran the MP NRO beside SP's still-live threads, audio and GPU state. Now,
+  when running as an application (forwarder, or hbmenu title takeover),
+  `NX_ChainLoadSibling` first looks for an installed title whose NACP name is
+  the target (`KisakBlack-MP` / `KisakBlack`, as sphaira's forwarders copy
+  it) and asks the system to launch it after this one exits
+  (`appletRequestLaunchApplication`): a fresh process. Installed titles with
+  "kisak" in the name are logged. With no such title it falls back to
+  `envSetNextLoad`.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

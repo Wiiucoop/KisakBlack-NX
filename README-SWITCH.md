@@ -1321,6 +1321,18 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   loading screen shows `loadscreen_zombie_pentagon`, which `code_post_gfx`
   carries. Boot it with `+devmap zombie_pentagon` or from Solo in the menu.
   OpenBLOPS notes its doors as broken; not looked at yet.
+- **SP <-> MP handoff works (2026-10-03 15:23).** Both directions, through
+  sphaira: the threads now exit at their waits, their stacks unmap, and hbl
+  loads the other NRO. Loading takes a while (a full engine start).
+- **Five: opening a door crashed.** Some of Five's doors are `"physics"`
+  blockers (`_zombiemode_blockers.gsc` `physics_launch_door`: `NotSolid`,
+  `ConnectPaths`, `PhysicsLaunch`, delete after 60 s). With `nx_physics 0`
+  `Phys_ObjCreate` fails, and `G_CreatePhysicsObject`'s failure path called
+  `DObjGetName(obj)` with no DObj (a brush model) -- assert `obj`
+  (`dobj.cpp:1356`) on the server thread. It names it "sbmodel" now, like
+  the no-preset branch. The door piece then stays where it is, not solid,
+  until the script deletes it a minute later: the way is open, the piece
+  does not fly off.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

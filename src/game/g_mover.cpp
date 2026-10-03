@@ -667,7 +667,9 @@ void __cdecl G_CreatePhysicsObject(gentity_s *ent)
         }
         else
         {
-            Name = DObjGetName(obj);
+            // obj is null for a brush model (sbmodel); with nx_physics 0 every
+            // Phys_ObjCreate fails, and a Five door launched by physics asserted here.
+            Name = obj ? DObjGetName(obj) : "sbmodel";
             Com_PrintWarning(1, "Failed to create physics object for '%s'.\n", Name);
             ent->physObjId = -1;
             Sys_LeaveCriticalSection(CRITSECT_PHYSICS);

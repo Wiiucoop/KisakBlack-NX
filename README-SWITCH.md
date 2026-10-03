@@ -1288,6 +1288,18 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   `eglTerminate`; GL stays off afterwards), waiting up to 2 s, and only then
   freezes the threads. `nvExit` runs only if EGL was released. The log line
   says `EGL released` or `NOT released`.
+- **Clean exit, fourth run (14:55): the exit completes; hbl aborts.** SP
+  logged `EGL released, 7 engine threads frozen`, and the Atmosphere report
+  (`01772050750_...`) had a single thread left -- hbl's own -- stopped on a
+  user break with kernel result `0xD401` (invalid current memory state):
+  loading the next NRO into the heap, the kernel refused some of its pages.
+  The likely ones are the guard pages (`nx_wincompat.cpp`: a `Perm_None` page
+  after each `VirtualAlloc` block and large malloc, up to 1500 live), never
+  freed at exit. `userAppExit` now walks the memory map
+  (`nxRestoreHeapForNextLoad`): every heap range made read-write again,
+  uncached marks cleared, and ranges still borrowed / IPC- / device-mapped
+  logged (`[nx] exit: heap restored ...` and `... still held ...`, written
+  straight to the log file).
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

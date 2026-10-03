@@ -517,10 +517,56 @@ static void nxExitWatchdog(void *)
     svcExitProcess();
 }
 
+// Last step before the loader takes the heap back to load the next NRO into
+// it. hbl aborted with 0xD401 (invalid current memory state) on the first
+// exit that got this far: the heap still had the guard pages
+// (nx_wincompat.cpp: a Perm_None page after every VirtualAlloc block and
+// large malloc, up to 1500, never freed at exit). Make every heap page plain
+// read-write again and clear uncached marks; log what was fixed and anything
+// still borrowed, IPC- or device-mapped (a service still holds it).
+static void nxExitWrite(const char *line, int n)
+{
+    if (s_logFd >= 0 && n > 0)
+        write(s_logFd, line, (size_t)n);
+}
+
+static void nxRestoreHeapForNextLoad(void)
+{
+    char line[200];
+    int permFixed = 0, attrFixed = 0, held = 0;
+    u64 permBytes = 0;
+    MemoryInfo info;
+    u32 pageInfo;
+    for (u64 addr = 0; R_SUCCEEDED(svcQueryMemory(&info, &pageInfo, addr)) && info.size; addr = info.addr + info.size) {
+        if (info.addr + info.size <= addr)
+            break;   // wrapped: end of the address space
+        if (info.type != MemType_Heap)
+            continue;
+        if (info.perm != Perm_Rw && R_SUCCEEDED(svcSetMemoryPermission((void *)info.addr, info.size, Perm_Rw))) {
+            ++permFixed;
+            permBytes += info.size;
+        }
+        if ((info.attr & MemAttr_IsUncached)
+            && R_SUCCEEDED(svcSetMemoryAttribute((void *)info.addr, info.size, MemAttr_IsUncached, 0)))
+            ++attrFixed;
+        if (info.attr & (MemAttr_IsBorrowed | MemAttr_IsIpcMapped | MemAttr_IsDeviceMapped)) {
+            if (held++ < 20)
+                nxExitWrite(line, snprintf(line, sizeof(line),
+                    "[nx] exit: heap %#lx +%#lx still held: attr %#x ipc %u device %u\n",
+                    info.addr, info.size, info.attr, info.ipc_refcount, info.device_refcount));
+        }
+    }
+    nxExitWrite(line, snprintf(line, sizeof(line),
+        "[nx] exit: heap restored for the next NRO: %d ranges made read-write (%lu KB), %d uncached cleared, %d still held\n",
+        permFixed, (unsigned long)(permBytes >> 10), attrFixed, held));
+}
+
 extern "C" void userAppExit(void)
 {
     if (!s_exitWatchdogRunning)
         return;
+    nxExitStep("userAppExit: restoring the heap");
+    nxRestoreHeapForNextLoad();
     nxExitStep("userAppExit");
     ueventSignal(&s_exitDone);
     threadWaitForExit(&s_exitWatchdog);

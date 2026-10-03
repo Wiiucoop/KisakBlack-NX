@@ -408,6 +408,27 @@ extern "C" bool NX_ChainLoadSibling(const char *nroName)
     return true;
 }
 
+// Called from Win_GetEvent on the main thread every frame. Nothing read the
+// applet's messages before, so closing the title from HOME went unanswered:
+// with appletLockExit held the system waited, then killed the process (shown
+// as a crash), and settings were never written. True once the system asks the
+// title to close; the caller then runs the normal quit, which exits through
+// exit() -> atexit appletUnlockExit. Other messages get libnx's handling.
+extern "C" bool NX_PumpAppletMessages(void)
+{
+    static bool s_exitRequested;
+    u32 msg = 0;
+    while (!s_exitRequested && R_SUCCEEDED(appletGetMessage(&msg))) {
+        if (msg == AppletMessage_ExitRequest) {
+            printf("[nx] the system asked the title to close (HOME); quitting\n");
+            s_exitRequested = true;
+        } else {
+            appletProcessMessage(msg);
+        }
+    }
+    return s_exitRequested;
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 0 && argv && argv[0])

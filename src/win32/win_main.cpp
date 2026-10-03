@@ -405,6 +405,10 @@ void __cdecl Sys_LoadingKeepAlive()
     while ( v1.evType );
 }
 
+#ifdef KISAK_NX
+extern "C" bool NX_PumpAppletMessages(void); // nx_main.cpp: true once HOME asks the title to close
+#endif
+
 sysEvent_t *__cdecl Win_GetEvent(sysEvent_t *result)
 {
     int v2; // [esp+0h] [ebp-50h]
@@ -418,6 +422,10 @@ sysEvent_t *__cdecl Win_GetEvent(sysEvent_t *result)
     {
         if ( Sys_QueryWin32QuitEvent() )
             Com_Quit_f();
+#ifdef KISAK_NX
+        if ( NX_PumpAppletMessages() )
+            Com_Quit_f();
+#endif
 
         if (IsDedicatedServer())
         {

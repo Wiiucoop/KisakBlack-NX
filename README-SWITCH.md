@@ -1297,11 +1297,16 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
 
 ## 6. Known problems
 
-- **Settings only persist on a clean quit or an explicit apply.** Closing the
-  title from the Home menu kills the process before the config is written.
-- **Crash on forced exit.** The worker threads are never stopped, so tearing
-  the title down from the home menu takes the process apart underneath them.
-  Harmless in practice.
+- **Closing from the Home menu (2026-10-03).** Nothing read the applet's
+  messages, so the system's close request went unanswered: with
+  `appletLockExit` held it waited (the game kept running at ~140 ms a frame in
+  the background), then killed the process -- shown as a crash, and settings
+  were never written. `Win_GetEvent` now calls `NX_PumpAppletMessages` each
+  frame; on `AppletMessage_ExitRequest` it runs the normal quit
+  (`Com_Quit_f`, config written), which exits through `exit` and the atexit
+  `appletUnlockExit`. Other messages go to `appletProcessMessage`. Untested:
+  if the normal quit itself trips on worker threads still running, that is
+  the next thing to fix.
 - **Renderer gaps** (section 2): no depth, stencil or culling yet; no
   `DrawPrimitive` / `DrawPrimitiveUP`; one render target of an MRT set; no
   sRGB.

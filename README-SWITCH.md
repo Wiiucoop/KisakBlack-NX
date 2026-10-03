@@ -1164,6 +1164,30 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   those windows. The rest of that boot: `patch_ui` missing (warning), and with
   it `ui/menus.txt` and a few lobby/loading materials (`loadscreen_frontend`,
   `ui_blur`, `menu_mp_lobby_scrollbar_*`).
+- **Frontend, second run (2026-10-03): the main menu works; Solo -> Kino
+  stops.** No crash and nothing loads. How retail starts a level from the
+  menu: the map item's action is `setDvar ui_load_level "zombie_theater"`
+  followed by a compiled `if (zombiemode || ui_zombiemode)` whose branch runs
+  `close self; open dummy_menu; uiscript sendMenuNotify "startlevel 0"`
+  (the zone shares that branch between items, so string dumps show it once,
+  under Cuba). `sendMenuNotify` sends `cmd mlvl startlevel 0`; the server's
+  `Cmd_MenuLevelMessage_f` calls `CodeCallback_MenuMessage` -> the frontend's
+  `level.onMenuMessage` (`maps/frontend.gsc` `menu_message`) ->
+  `DoStartLevelSequence` -> `ChangeLevel(ui_load_level, false, 0)`;
+  `GScr_UpdateChangeLevel_SP` then issues `spmap`/`spdevmap` a second later.
+  Every step logs a line starting `SP `, which `nx_splog 0` dropped; those
+  lines (`SP sendMenuNotify`, `SP menu level message`, `SP ChangeLevel`) now
+  pass the filter. The `frontend.gsc` source can be read by inflating
+  `frontend.ff` after its 12-byte header and inflating the zlib streams in it.
+- **SP online menus grey out.** The SP build already has
+  `OPENBLOPS_OFFLINE_MENUS` (the sign-in/stats expressions report success),
+  so something else greys them. Menus grey an item two ways: a dvar test
+  (`dvarTest` + `enableDvar`, drawn in the menu's `disableColor`) or a
+  `forecolor A` expression. Each is now reported once per item:
+  `[nx-ui] disabled '<item>' in '<menu>': dvarTest ...` and
+  `[nx-ui] dimmed '<item>' in '<menu>': alpha ... calls: <functions>`
+  (`Expression_NxRpnFunctionName` names a function by its `rpnFunctions`
+  pointer once evaluated).
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

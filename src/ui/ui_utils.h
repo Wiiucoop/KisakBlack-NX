@@ -27,6 +27,9 @@ void __cdecl Window_SetStaticFlags(windowDef_t *w, int flags);
 void __cdecl Menu_SetCursorItem(int contextIndex, menuDef_t *menu, int cursorItem);
 int __cdecl Item_IsVisible(int localClientNum, int contextIndex, itemDef_s *item);
 bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag);
+#ifdef KISAK_NX
+void Item_NxReportDvarGate(const itemDef_s *item, int flag);
+#endif
 void __cdecl Item_SetTextRect(int contextIndex, itemDef_s *item, const rectDef_s *textRect);
 int __cdecl Item_GetCursorPosOffset(int contextIndex, itemDef_s *item, const char *text, int delta);
 bool __cdecl ListBox_HasValidCursorPos(int contextIndex, itemDef_s *item);

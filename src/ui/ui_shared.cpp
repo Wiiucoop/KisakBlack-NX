@@ -6753,6 +6753,9 @@ void __cdecl Item_TextColor(UiContext *dc, itemDef_s *item, float (*newColor)[4]
         && (item->dvarFlags & 3) != 0
         && !Item_EnableShowViaDvar(item, 1))
     {
+#ifdef KISAK_NX
+        Item_NxReportDvarGate(item, 1);
+#endif
         disableColor = parent->disableColor;
         (*newColor)[0] = parent->disableColor[0];
         (*newColor)[1] = disableColor[1];
@@ -8885,7 +8888,38 @@ void __cdecl Item_Paint(int localClientNum, UiContext *dc, itemDef_s *item)
         if ( (item->dvarFlags & 0xC) == 0 || Item_EnableShowViaDvar(item, 4) )
         {
             if ( item->forecolorAExp.filename )
+            {
                 item->window.foreColor[3] = GetExpressionFloat(localClientNum, item, &item->forecolorAExp);
+#ifdef KISAK_NX
+                // Once per item: a 'forecolor A' expression dimming it (the
+                // other way menus grey an option out), with the functions it calls.
+                if ( item->window.foreColor[3] < 0.99f )
+                {
+                    static const itemDef_s *s_dimmed[512];
+                    static int s_dimmedCount;
+                    bool seen = false;
+                    for ( int i = 0; i < s_dimmedCount && !seen; ++i )
+                        seen = s_dimmed[i] == item;
+                    if ( !seen && s_dimmedCount < 512 )
+                    {
+                        s_dimmed[s_dimmedCount++] = item;
+                        char calls[256] = "";
+                        size_t used = 0;
+                        for ( int i = 0; i < item->forecolorAExp.numRpn && used + 40 < sizeof(calls); ++i )
+                        {
+                            const char *function = Expression_NxRpnFunctionName(&item->forecolorAExp.rpn[i]);
+                            if ( function )
+                                used += snprintf(calls + used, sizeof(calls) - used, " %s", function);
+                        }
+                        Com_Printf(13, "[nx-ui] dimmed '%s' in '%s': alpha %.2f from %s:%d, calls:%s\n",
+                                   item->window.name ? item->window.name : "<unnamed>",
+                                   parent && parent->window.name ? parent->window.name : "?",
+                                   item->window.foreColor[3], item->forecolorAExp.filename,
+                                   item->forecolorAExp.line, calls);
+                    }
+                }
+#endif
+            }
             //if ( item->window.name )
             //    //PIXBeginNamedEvent(-1, "Item_IsVisible %s", item->window.name);
             //else

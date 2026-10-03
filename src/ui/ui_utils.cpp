@@ -163,6 +163,29 @@ bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
     return (flag & item->dvarFlags) != 0;
 }
 
+#ifdef KISAK_NX
+// Once per item: an item a dvar test disables or hides, with the test, so a
+// menu whose options all come up grey says which dvar did it.
+void Item_NxReportDvarGate(const itemDef_s *item, int flag)
+{
+    static const itemDef_s *s_reported[512];
+    static int s_reportedCount;
+    for ( int i = 0; i < s_reportedCount; ++i )
+    {
+        if ( s_reported[i] == item )
+            return;
+    }
+    if ( s_reportedCount >= 512 )
+        return;
+    s_reported[s_reportedCount++] = item;
+    Com_Printf(13, "[nx-ui] %s '%s' in '%s': dvarTest %s = '%s', values '%s', dvarFlags 0x%x\n",
+               flag == 1 ? "disabled" : "hidden",
+               item->window.name ? item->window.name : "<unnamed>",
+               item->parent && item->parent->window.name ? item->parent->window.name : "?",
+               item->dvarTest, Dvar_GetVariantString(item->dvarTest), item->enableDvar, item->dvarFlags);
+}
+#endif
+
 void __cdecl Item_SetTextRect(int contextIndex, itemDef_s *item, const rectDef_s *textRect)
 {
     if ( contextIndex

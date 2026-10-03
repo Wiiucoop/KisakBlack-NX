@@ -14143,6 +14143,33 @@ int __cdecl Expression_GetFunctionForOp(int op)
     return s_indexToFunctionMap[op - NUM_EXPRESSION_OPERATORS] + NUM_EXPRESSION_OPERATORS;
 }
 
+#ifdef KISAK_NX
+// The name of the function an RPN entry calls, or null for a constant or an
+// operator. Evaluated entries hold the function pointer (type 2), not the op,
+// so those are found by pointer.
+const char *Expression_NxRpnFunctionName(const expressionRpn *rpn)
+{
+    int function = -1;
+    if ( rpn->type == 1 )
+        function = Expression_GetFunctionForOp(rpn->data.cmdIdx);
+    else if ( rpn->type == 2 )
+    {
+        for ( int i = NUM_EXPRESSION_OPERATORS; i < (int)ARRAY_COUNT(rpnFunctions); ++i )
+        {
+            if ( (void *)rpnFunctions[i] == rpn->data.cmd )
+            {
+                function = i;
+                break;
+            }
+        }
+    }
+    function -= NUM_EXPRESSION_OPERATORS;
+    if ( function < 0 || function >= (int)ARRAY_COUNT(g_expFunctionNames) )
+        return nullptr;
+    return g_expFunctionNames[function];
+}
+#endif
+
 char resultString_2[256];
 char *__cdecl GetExpressionResultString(int localClientNum, itemDef_s *item, ExpressionStatement *statement)
 {

@@ -402,6 +402,12 @@ static bool Com_NxDropSpTrace(const char *msg)
         return false;
     if ( !dropping && strncmp(msg, "SP ", 3) )
         return false;
+    // Rare and needed to follow a menu choice into a level load: the menu's
+    // notify, the server's menu message, and ChangeLevel's steps.
+    if ( !dropping
+        && (!strncmp(msg, "SP sendMenuNotify", 17) || !strncmp(msg, "SP menu level message", 21)
+            || !strncmp(msg, "SP ChangeLevel", 14)) )
+        return false;
     dropping = !strchr(msg, '\n');
     return true;
 }

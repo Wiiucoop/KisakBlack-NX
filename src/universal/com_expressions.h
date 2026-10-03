@@ -157,3 +157,6 @@ void __cdecl Expression_Init();
 
 
 extern const char *g_expFunctionNames[457];
+#ifdef KISAK_NX
+const char *Expression_NxRpnFunctionName(const expressionRpn *rpn);
+#endif

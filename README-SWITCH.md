@@ -1314,6 +1314,13 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   not exit is paused as before and counted. The log line reads
   `... N engine threads exited, M paused`. The heap audit runs after the
   watchdog is closed.
+- **Five (`zombie_pentagon`) converted (2026-10-03).** `zombie_pentagon`,
+  `zombie_pentagon_patch` and `en_zombie_pentagon` converted and validated
+  (`tools/nx/convert-zones.sh` now lists them; block sizes match, no missing
+  refs). Its solo Bink load movie is never started on NX, as for Kino: the
+  loading screen shows `loadscreen_zombie_pentagon`, which `code_post_gfx`
+  carries. Boot it with `+devmap zombie_pentagon` or from Solo in the menu.
+  OpenBLOPS notes its doors as broken; not looked at yet.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

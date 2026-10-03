@@ -18241,7 +18241,7 @@ static bool GScr_CanChangeLevel_SP()
     // player and g_reloading == 0. The field id and health offset are
     // independently corroborated by this reconstruction's G_Find callers
     // and gentity_s layout.
-    gentity_s *player = G_Find(NULL, 356, scr_const.player);
+    gentity_s *player = G_Find(NULL, G_FIND_CLASSNAME, scr_const.player);
     return player && player->health > 0 && g_reloading && g_reloading->current.integer == 0;
 }
 

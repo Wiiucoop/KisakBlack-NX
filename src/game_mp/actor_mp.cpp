@@ -552,7 +552,7 @@ void __cdecl Actor_FreeExpendable()
     float vDelta[3]; // [esp+40h] [ebp-Ch]
 
     Com_Printf(18, "^3trying to delete somebody to make room for spawned AI (time %d)\n", level.time);
-    player = G_Find(0, 356, scr_const.player);
+    player = G_Find(0, G_FIND_CLASSNAME, scr_const.player);
     if ( !player && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game_mp\\actor_mp.cpp", 634, 0, "%s", "player") )
         __debugbreak();
     if ( !player->client

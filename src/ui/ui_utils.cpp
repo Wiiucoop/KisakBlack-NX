@@ -132,6 +132,35 @@ int __cdecl Item_IsVisible(int localClientNum, int contextIndex, itemDef_s *item
     }
     if ( !item->visibleExp.filename || IsExpressionTrue(localClientNum, item, &item->visibleExp) )
         return 1;
+#ifdef KISAK_NX
+    // Once per item with an action: hidden by its 'visible when'. Console-style
+    // menus pair each button with a grey copy shown when the condition fails,
+    // so a menu of grey options is a set of these; the calls say which check.
+    if ( item->onEvent )
+    {
+        static const itemDef_s *s_reported[512];
+        static int s_reportedCount;
+        bool seen = false;
+        for ( int i = 0; i < s_reportedCount && !seen; ++i )
+            seen = s_reported[i] == item;
+        if ( !seen && s_reportedCount < 512 )
+        {
+            s_reported[s_reportedCount++] = item;
+            char calls[256] = "";
+            size_t used = 0;
+            for ( int i = 0; i < item->visibleExp.numRpn && used + 40 < sizeof(calls); ++i )
+            {
+                const char *function = Expression_NxRpnFunctionName(&item->visibleExp.rpn[i]);
+                if ( function )
+                    used += snprintf(calls + used, sizeof(calls) - used, " %s", function);
+            }
+            Com_Printf(13, "[nx-ui] hidden '%s' in '%s': 'visible when' false at %s:%d, calls:%s\n",
+                       item->window.name ? item->window.name : "<unnamed>",
+                       item->parent && item->parent->window.name ? item->parent->window.name : "?",
+                       item->visibleExp.filename, item->visibleExp.line, calls);
+        }
+    }
+#endif
     if ( uiscript_debug && uiscript_debug->current.integer )
     {
         if ( item->window.name )

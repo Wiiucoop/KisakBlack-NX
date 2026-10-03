@@ -55,7 +55,7 @@ int __cdecl G_GetFreePlayerCorpseIndex()
 
     bestDistSq = -1.0f;
     bestIndex = 0;
-    ent = G_Find(0, 356, scr_const.player);
+    ent = G_Find(0, G_FIND_CLASSNAME, scr_const.player);
     if ( !ent && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game\\g_player_corpse.cpp", 135, 0, "%s", "ent") )
         __debugbreak();
     playerPos[0] = ent->s.lerp.pos.trBase[0];

@@ -1884,7 +1884,7 @@ double __cdecl Path_GetDebugStringScale(const float *cameraPos, const float *ori
     if ( !origin && !Assert_MyHandler("C:\\projects_pc\\cod\\codsrc\\src\\game\\pathnode.cpp", 2660, 0, "%s", "origin") )
         __debugbreak();
     scale = 1.0f;
-    player = G_Find(0, 356, scr_const.player);
+    player = G_Find(0, G_FIND_CLASSNAME, scr_const.player);
     if ( player )
     {
         delta[0] = *cameraPos - *origin;
@@ -2131,7 +2131,7 @@ void __cdecl Path_DrawVisData()
     node = 0;
     pSourceNode = 0;
     CL_GetDebugViewPos(viewPos);
-    player = G_Find(0, 356, scr_const.player);
+    player = G_Find(0, G_FIND_CLASSNAME, scr_const.player);
     if ( player )
     {
         pSourceNode = Sentient_NearestNode(player->sentient);

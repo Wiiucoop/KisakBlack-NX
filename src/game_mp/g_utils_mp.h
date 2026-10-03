@@ -69,6 +69,10 @@ DObjAnimMat *__cdecl G_DObjGetLocalBoneIndexMatrix(const gentity_s *ent, int bon
 void __cdecl G_DObjGetWorldBoneIndexPos(const gentity_s *ent, int boneIndex, float *pos);
 void __cdecl G_DObjGetWorldBoneIndexMatrix(const gentity_s *ent, int boneIndex, float (*tagMat)[3]);
 gentity_s *__cdecl G_Find(gentity_s *from, int fieldofs, unsigned __int16 match);
+// G_Find's field offset counts from s.number. Callers passed 356, the x86 offset of
+// classname; under LP64 that read another field and never found the player
+// (ChangeLevel from the frontend menu did nothing).
+#define G_FIND_CLASSNAME ((int)(offsetof(gentity_s, classname) - offsetof(gentity_s, s.number)))
 void __cdecl G_InitGentity(gentity_s *e);
 void __cdecl G_PrintEntities();
 gentity_s *__cdecl G_Spawn();

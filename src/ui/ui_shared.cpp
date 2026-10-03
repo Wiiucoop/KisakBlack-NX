@@ -10528,6 +10528,9 @@ void __cdecl Item_OwnerDraw_Paint(int localClientNum, UiContext *dc, itemDef_s *
     }
     if ((item->dvarFlags & 3) != 0 && !Item_EnableShowViaDvar(item, 1))
     {
+#ifdef KISAK_NX
+        Item_NxReportDvarGate(item, 1);
+#endif
         color[0] = parent->disableColor[0];
         color[1] = parent->disableColor[1];
         color[2] = parent->disableColor[2];

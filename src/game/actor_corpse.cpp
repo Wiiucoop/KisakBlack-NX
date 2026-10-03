@@ -57,7 +57,7 @@ int __cdecl G_GetFreeActorCorpseIndex(int reuse)
     farthest90DegreeIndex = 0;
     farthestDistSq = -1.0f;
     farthestIndex = 0;
-    ent = G_Find(0, 356, scr_const.player);
+    ent = G_Find(0, G_FIND_CLASSNAME, scr_const.player);
     if ( ent )
     {
         Sentient_GetEyePosition(ent->sentient, vRefPos);

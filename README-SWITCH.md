@@ -360,7 +360,7 @@ worth grepping for before the next one finds you:
 | --- | --- | --- |
 | a pointer read as a 32-bit word at a 4-byte stride | `*((unsigned int *)&rgp.poisonFXMaterial + n)` (the blur material) | index the array it meant |
 | a pointer read through an overlapping `int` of a union | `*(const char **)(dvar->domain.integer.max + 4 * i)` (enum dvar strings, 5 sites) | use the union member that is the pointer |
-| x86 struct sizes as literals | `Expression_Alloc(.., 16)`, `12 * numRpn` (menu expressions), `gamemsgText[2][52 * dest + 1892]` (console game message windows) | `sizeof` |
+| x86 struct sizes as literals | `Expression_Alloc(.., 16)`, `12 * numRpn` (menu expressions), `gamemsgText[2][52 * dest + 1892]` (console game message windows), `G_Find(0, 356, ...)` (classname) | `sizeof` |
 
 [`docs/lp64-sweeps/`](docs/lp64-sweeps/) is the standing census for the classes
 the compiler *cannot* see, with the tooling that produces it: the same headers
@@ -1188,6 +1188,24 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   `[nx-ui] dimmed '<item>' in '<menu>': alpha ... calls: <functions>`
   (`Expression_NxRpnFunctionName` names a function by its `rpnFunctions`
   pointer once evaluated).
+- **Frontend, third run (2026-10-03 11:06): ChangeLevel refused.** The
+  traces showed the whole menu side working (`sendMenuNotify "startlevel 0"`
+  -> `menu level message: state 'startlevel'`) and then `SP ChangeLevel
+  ignored: no live player`. `GScr_CanChangeLevel_SP` finds the player with
+  `G_Find(NULL, 356, scr_const.player)`: 356 is the x86 offset of
+  `gentity_s::classname` from `s.number`, so under LP64 it compared another
+  field and found nobody. All seven callers use `G_FIND_CLASSNAME`
+  (`offsetof`) now. The other six also run in Zombies and were silently
+  getting no player: corpse slot reuse (`G_GetFreeActorCorpseIndex` prefers
+  corpses behind the player), actor teleport's "player could see the goal"
+  check, `Actor_FreeExpendable` (would have asserted), the player-corpse
+  pick, and a pathnode debug scale.
+- **Grey online options, round two.** The dvar-test and `forecolor A`
+  reports found nothing greyed (one pulsing alpha on a decoration). The
+  likely way is the console menus' button pairs: a grey copy of each button
+  shown when a `visible when` fails, the real one hidden. Items with an
+  action hidden by `visible when` are now reported once:
+  `[nx-ui] hidden '<item>' in '<menu>': 'visible when' false at <file>:<line>, calls: ...`.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

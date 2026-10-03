@@ -486,7 +486,7 @@ extern "C" bool NX_ChainLoadSibling(const char *nroName)
 // atexit handlers.
 // ---------------------------------------------------------------------------
 void SD_Shutdown();                                 // nx_snd.cpp
-extern "C" int NX_FreezeEngineThreads(void);        // nx_wincompat.cpp
+extern "C" int NX_FreezeEngineThreads(int *pausedOut); // nx_wincompat.cpp
 extern "C" bool NX_GlRelease(unsigned int timeoutMs); // nx_d3d9_null.cpp
 static bool s_exitPrepared;
 static bool s_glReleased;
@@ -565,13 +565,13 @@ extern "C" void userAppExit(void)
 {
     if (!s_exitWatchdogRunning)
         return;
-    nxExitStep("userAppExit: restoring the heap");
-    nxRestoreHeapForNextLoad();
     nxExitStep("userAppExit");
     ueventSignal(&s_exitDone);
     threadWaitForExit(&s_exitWatchdog);
     threadClose(&s_exitWatchdog);
     s_exitWatchdogRunning = false;
+    // After the watchdog is gone, so its own stack is not counted as held.
+    nxRestoreHeapForNextLoad();
 }
 
 extern "C" void NX_PrepareExit(void)
@@ -586,11 +586,12 @@ extern "C" void NX_PrepareExit(void)
     SD_Shutdown();
     nxExitStep("releasing EGL on the render thread");
     s_glReleased = NX_GlRelease(2000);
-    nxExitStep("freezing engine threads");
-    const int frozen = NX_FreezeEngineThreads();
+    nxExitStep("stopping engine threads");
+    int paused = 0;
+    const int exited = NX_FreezeEngineThreads(&paused);
     s_exitPrepared = true;
-    printf("[nx] exit: audio closed, EGL %s, %d engine threads frozen\n",
-           s_glReleased ? "released" : "NOT released (render thread did not answer)", frozen);
+    printf("[nx] exit: audio closed, EGL %s, %d engine threads exited, %d paused (did not exit)\n",
+           s_glReleased ? "released" : "NOT released (render thread did not answer)", exited, paused);
     nxExitStep("exit(): atexit handlers registered after main's (mesa, libraries)");
 }
 

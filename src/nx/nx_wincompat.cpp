@@ -117,6 +117,7 @@ struct NxThread {
     bool started;
     bool done;
     bool isMain;
+    bool closed;        // threadClose done (NX_FreezeEngineThreads at exit)
     DWORD exitCode;
     DWORD threadId;
 };
@@ -136,6 +137,23 @@ static void nxTrackThread(NxThread *t, bool add)
         }
     }
     mutexUnlock(&s_liveThreadsLock);
+}
+
+// Exit: NX_FreezeEngineThreads sets this, and every wait below (events,
+// semaphores, mutexes, thread joins, Sleep) then ends the calling engine
+// thread at its next wake -- waits slice themselves to NX_WAIT_SLICE_NS so
+// that is soon. A thread that exits can have its stack unmapped; a paused one
+// could not (its 1 MB stack stayed borrowed and hbl's next load failed with
+// 0xD401).
+static volatile bool s_threadsExit;
+static thread_local NxThread *s_nxSelf;
+#define NX_WAIT_SLICE_NS 20000000ull
+
+// Call with no shim lock held.
+static void nxExitIfAsked(void)
+{
+    if (s_threadsExit && s_nxSelf)
+        threadExit();
 }
 
 struct NxMutexH {
@@ -214,10 +232,13 @@ BOOL PulseEvent(HANDLE handle)
 static DWORD nxEventWait(NxEvent *ev, DWORD ms)
 {
     DWORD result = WAIT_TIMEOUT;
+    nxExitIfAsked();
     mutexLock(&ev->mutex);
     if (ms == INFINITE) {
-        while (!ev->signaled)
-            condvarWait(&ev->cond, &ev->mutex);
+        while (!ev->signaled) {
+            condvarWaitTimeout(&ev->cond, &ev->mutex, NX_WAIT_SLICE_NS);
+            if (s_threadsExit && s_nxSelf) { mutexUnlock(&ev->mutex); threadExit(); }
+        }
         result = WAIT_OBJECT_0;
     } else if (ms == 0) {
         result = ev->signaled ? WAIT_OBJECT_0 : WAIT_TIMEOUT;
@@ -227,7 +248,8 @@ static DWORD nxEventWait(NxEvent *ev, DWORD ms)
             uint64_t now = armGetSystemTick();
             if (now >= deadline) break;
             uint64_t remainNs = armTicksToNs(deadline - now);
-            condvarWaitTimeout(&ev->cond, &ev->mutex, remainNs);
+            condvarWaitTimeout(&ev->cond, &ev->mutex, remainNs < NX_WAIT_SLICE_NS ? remainNs : NX_WAIT_SLICE_NS);
+            if (s_threadsExit && s_nxSelf) { mutexUnlock(&ev->mutex); threadExit(); }
         }
         result = ev->signaled ? WAIT_OBJECT_0 : WAIT_TIMEOUT;
     }
@@ -260,6 +282,7 @@ BOOL ReleaseMutex(HANDLE handle)
 
 static DWORD nxMutexWait(NxMutexH *m, DWORD ms)
 {
+    nxExitIfAsked();
     if (ms == INFINITE) {
         rmutexLock(&m->m);
         return WAIT_OBJECT_0;
@@ -270,6 +293,7 @@ static DWORD nxMutexWait(NxMutexH *m, DWORD ms)
             return WAIT_OBJECT_0;
         if (armGetSystemTick() >= deadline)
             return WAIT_TIMEOUT;
+        nxExitIfAsked();
         svcSleepThread(100000); // 0.1ms
     }
 }
@@ -299,17 +323,22 @@ BOOL ReleaseSemaphore(HANDLE handle, LONG count, LPLONG prev)
 static DWORD nxSemWait(NxSemaphore *s, DWORD ms)
 {
     DWORD result = WAIT_TIMEOUT;
+    nxExitIfAsked();
     mutexLock(&s->mutex);
     if (ms == INFINITE) {
-        while (s->count <= 0)
-            condvarWait(&s->cond, &s->mutex);
+        while (s->count <= 0) {
+            condvarWaitTimeout(&s->cond, &s->mutex, NX_WAIT_SLICE_NS);
+            if (s_threadsExit && s_nxSelf) { mutexUnlock(&s->mutex); threadExit(); }
+        }
         result = WAIT_OBJECT_0;
     } else {
         uint64_t deadline = armGetSystemTick() + armNsToTicks((uint64_t)ms * 1000000ull);
         while (s->count <= 0) {
             uint64_t now = armGetSystemTick();
             if (now >= deadline) break;
-            condvarWaitTimeout(&s->cond, &s->mutex, armTicksToNs(deadline - now));
+            uint64_t remainNs = armTicksToNs(deadline - now);
+            condvarWaitTimeout(&s->cond, &s->mutex, remainNs < NX_WAIT_SLICE_NS ? remainNs : NX_WAIT_SLICE_NS);
+            if (s_threadsExit && s_nxSelf) { mutexUnlock(&s->mutex); threadExit(); }
         }
         result = s->count > 0 ? WAIT_OBJECT_0 : WAIT_TIMEOUT;
     }
@@ -353,6 +382,7 @@ extern "C" void nx_wincompat_init_main_thread(void)
 static void nxThreadEntry(void *arg)
 {
     NxThread *t = (NxThread *)arg;
+    s_nxSelf = t;
     DWORD code = t->start ? t->start(t->param) : 0;
     mutexLock(&t->mutex);
     t->exitCode = code;
@@ -471,6 +501,13 @@ DWORD SetThreadIdealProcessor(HANDLE handle, DWORD processor)
 
 void Sleep(DWORD ms)
 {
+    nxExitIfAsked();
+    // Long sleeps in slices, so an exit request ends the thread soon.
+    while (ms > 20) {
+        svcSleepThread(20000000ll);
+        ms -= 20;
+        nxExitIfAsked();
+    }
     svcSleepThread((s64)ms * 1000000ll);
 }
 
@@ -485,6 +522,7 @@ static thread_local int s_pendingApcs = 0;
 
 DWORD SleepEx(DWORD ms, BOOL alertable)
 {
+    nxExitIfAsked();
     if (alertable && s_pendingApcs > 0) {
         s_pendingApcs--;
         return WAIT_IO_COMPLETION;
@@ -496,7 +534,7 @@ DWORD SleepEx(DWORD ms, BOOL alertable)
             // get here the completion already happened synchronously.
             return WAIT_IO_COMPLETION;
         }
-        for (;;) svcSleepThread(1000000000ll);
+        for (;;) { svcSleepThread(20000000ll); nxExitIfAsked(); }
     }
     svcSleepThread((s64)ms * 1000000ll);
     return 0;
@@ -537,17 +575,22 @@ BOOL TlsSetValue(DWORD index, LPVOID value)
 static DWORD nxThreadWait(NxThread *t, DWORD ms)
 {
     DWORD result;
+    nxExitIfAsked();
     mutexLock(&t->mutex);
     if (ms == INFINITE) {
-        while (!t->done)
-            condvarWait(&t->cond, &t->mutex);
+        while (!t->done) {
+            condvarWaitTimeout(&t->cond, &t->mutex, NX_WAIT_SLICE_NS);
+            if (s_threadsExit && s_nxSelf) { mutexUnlock(&t->mutex); threadExit(); }
+        }
         result = WAIT_OBJECT_0;
     } else {
         uint64_t deadline = armGetSystemTick() + armNsToTicks((uint64_t)ms * 1000000ull);
         while (!t->done) {
             uint64_t now = armGetSystemTick();
             if (now >= deadline) break;
-            condvarWaitTimeout(&t->cond, &t->mutex, armTicksToNs(deadline - now));
+            uint64_t remainNs = armTicksToNs(deadline - now);
+            condvarWaitTimeout(&t->cond, &t->mutex, remainNs < NX_WAIT_SLICE_NS ? remainNs : NX_WAIT_SLICE_NS);
+            if (s_threadsExit && s_nxSelf) { mutexUnlock(&t->mutex); threadExit(); }
         }
         result = t->done ? WAIT_OBJECT_0 : WAIT_TIMEOUT;
     }
@@ -599,9 +642,11 @@ BOOL CloseHandle(HANDLE handle)
         NxThread *t = (NxThread *)h;
         if (t->isMain) return TRUE; // never free the main-thread record
         nxTrackThread(t, false);
-        if (t->started)
-            threadWaitForExit(&t->thread);
-        threadClose(&t->thread);
+        if (!t->closed) {
+            if (t->started)
+                threadWaitForExit(&t->thread);
+            threadClose(&t->thread);
+        }
         free(t);
         return TRUE;
     }
@@ -1998,30 +2043,44 @@ LONG RegCloseKey(HKEY) { return ERROR_SUCCESS; }
 
 // Exit, before returning to the homebrew loader: the engine's threads (render,
 // server, job workers, streaming...) have no stop request and were still
-// running when the loader unloaded this NRO -- the next NRO it started
-// crashed with KisakBlack's render thread executing unmapped code (Atmosphere
-// report, 2026-10-03). Pause each one that has not finished, then free it:
-// threadClose unmaps its stack and closes its handle, so the next NRO can use
-// that memory. A paused thread never runs again. Returns how many it froze.
-extern "C" int NX_FreezeEngineThreads(void)
+// running when the loader unloaded this NRO -- the next NRO crashed with
+// KisakBlack's render thread executing unmapped code (Atmosphere report,
+// 2026-10-03). Ask every engine thread to exit at its next wait
+// (s_threadsExit), wait up to a second for them, then close each: an exited
+// thread's stack unmaps, so the next NRO can load into that memory. A thread
+// that did not exit (blocked outside the shim's waits, e.g. in a socket
+// select) is paused for good instead; its stack may stay borrowed.
+// Returns how many exited; *pausedOut gets how many had to be paused.
+extern "C" int NX_FreezeEngineThreads(int *pausedOut)
 {
     u64 self = 0;
     svcGetThreadId(&self, CUR_THREAD_HANDLE);
-    NxThread *frozen[256];
-    int count = 0;
+    s_threadsExit = true;
+
+    const u64 deadline = armGetSystemTick() + armNsToTicks(1000000000ull);
+    int exited = 0, paused = 0;
     mutexLock(&s_liveThreadsLock);
     for (int i = 0; i < 256; ++i) {
         NxThread *t = s_liveThreads[i];
-        if (!t || !t->started || t->done || t->isMain)
+        if (!t || !t->started || t->isMain || t->closed)
             continue;
         u64 id = 0;
         if (R_FAILED(svcGetThreadId(&id, t->thread.handle)) || id == self)
             continue;
-        if (R_SUCCEEDED(threadPause(&t->thread)))
-            frozen[count++] = t;
+        const u64 now = armGetSystemTick();
+        const u64 waitNs = now < deadline ? armTicksToNs(deadline - now) : 0;
+        if (R_SUCCEEDED(waitSingleHandle(t->thread.handle, waitNs))) {
+            ++exited;
+        } else {
+            threadPause(&t->thread);
+            ++paused;
+        }
+        threadClose(&t->thread);
+        t->closed = true;
+        s_liveThreads[i] = nullptr;
     }
-    for (int i = 0; i < count; ++i)
-        threadClose(&frozen[i]->thread);
     mutexUnlock(&s_liveThreadsLock);
-    return count;
+    if (pausedOut)
+        *pausedOut = paused;
+    return exited;
 }

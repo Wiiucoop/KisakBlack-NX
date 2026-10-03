@@ -1300,6 +1300,20 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   uncached marks cleared, and ranges still borrowed / IPC- / device-mapped
   logged (`[nx] exit: heap restored ...` and `... still held ...`, written
   straight to the log file).
+- **Clean exit, fifth run (15:0x): heap audit.** 15 guard-page ranges were
+  made read-write, but 10 heap ranges stayed borrowed (`attr 0x1`) and hbl
+  failed the same way: the 146 MB at the heap base is the running NRO's own
+  image (hbl unmaps it first), the rest were thread stacks -- 1 MB and 128 KB
+  ones (engine threads) and the watchdog's 16 KB. A paused thread's stack did
+  not unmap with `threadClose`. Now the threads exit instead:
+  `NX_FreezeEngineThreads` sets a shim-wide flag, and every shim wait (events,
+  semaphores, mutex try-loops, thread joins, `Sleep`/`SleepEx`) wakes at least
+  every 20 ms and, with the flag set, releases its lock and calls
+  `threadExit()` for an engine thread (`s_nxSelf`, set in `nxThreadEntry`).
+  Each thread is then waited on (1 s budget) and `threadClose`d; one that did
+  not exit is paused as before and counted. The log line reads
+  `... N engine threads exited, M paused`. The heap audit runs after the
+  watchdog is closed.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

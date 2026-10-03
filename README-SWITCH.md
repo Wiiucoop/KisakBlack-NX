@@ -1264,6 +1264,19 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   the next NRO gets. The log thread and sockets close in their own atexit
   handlers. The handoff prefers the loader's chain-load again; launching an
   installed forwarder title is the fallback for loaders that cannot.
+- **Clean exit, second run (14:46): exit() hangs.** SP logged `next load ...
+  (rc 0x0)` and `exit: audio closed, 7 engine threads frozen`, then froze
+  inside `exit()` (the log thread stops there, so the log cannot say where).
+  An exit watchdog now runs from `NX_PrepareExit`: each step records its name
+  (`nxExitStep`: mesa's and other later atexit handlers, then ours --
+  `NX_ClockExit`, `appletUnlockExit`, `socketExit` x2, log shutdown's fflush
+  and thread join, `nvExit` -- then destructors and libc cleanup). libnx's
+  `userAppExit` hook (after all of those) stops it. If exit has not reached
+  it within 8 s, it writes `[nx] exit stalled for 8 s at: <step>` straight to
+  the log file and calls `svcExitProcess`, so the title closes instead of
+  hanging. Suspects: a lock a frozen thread held (stdout, malloc), the
+  `tmem` waits in `socketExit`/`nvExit` (engine threads were frozen inside
+  `select()`), mesa's own atexit handlers.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

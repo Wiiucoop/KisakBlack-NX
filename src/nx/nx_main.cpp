@@ -163,10 +163,14 @@ static void nxLogThread(void *)
 }
 
 // Exit: everything printed reaches the file.
+static void nxExitStep(const char *step);
+
 static void nxLogShutdown(void)
 {
+    nxExitStep("atexit: log shutdown, fflush(stdout/stderr)");
     fflush(stdout);
     fflush(stderr);
+    nxExitStep("atexit: log shutdown, stopping the log thread");
     mutexLock(&s_logLock);
     s_logStop = true;
     condvarWakeAll(&s_logHasData);
@@ -485,22 +489,68 @@ void SD_Shutdown();                                 // nx_snd.cpp
 extern "C" int NX_FreezeEngineThreads(void);        // nx_wincompat.cpp
 static bool s_exitPrepared;
 
+// Exit watchdog. The first clean-exit build froze in exit() after the threads
+// were frozen, with the log thread already gone. Each step below records its
+// name; if exit has not reached userAppExit (after every atexit handler and
+// destructor) within 8 s, the watchdog writes the step straight to the log
+// file and ends the process -- the title closes instead of hanging.
+static const char *volatile s_exitStep = "not exiting";
+static Thread s_exitWatchdog;
+static UEvent s_exitDone;
+static bool s_exitWatchdogRunning;
+
+static void nxExitStep(const char *step)
+{
+    s_exitStep = step;
+}
+
+static void nxExitWatchdog(void *)
+{
+    if (R_SUCCEEDED(waitSingle(waiterForUEvent(&s_exitDone), 8000000000ull)))
+        return;
+    char line[160];
+    int n = snprintf(line, sizeof(line), "[nx] exit stalled for 8 s at: %s; ending the process\n", (const char *)s_exitStep);
+    if (s_logFd >= 0 && n > 0)
+        write(s_logFd, line, (size_t)n);
+    svcExitProcess();
+}
+
+extern "C" void userAppExit(void)
+{
+    if (!s_exitWatchdogRunning)
+        return;
+    nxExitStep("userAppExit");
+    ueventSignal(&s_exitDone);
+    threadWaitForExit(&s_exitWatchdog);
+    threadClose(&s_exitWatchdog);
+    s_exitWatchdogRunning = false;
+}
+
 extern "C" void NX_PrepareExit(void)
 {
     if (s_exitPrepared)
         return;
+    ueventCreate(&s_exitDone, false);
+    if (R_SUCCEEDED(threadCreate(&s_exitWatchdog, nxExitWatchdog, nullptr, nullptr, 0x4000, 0x2B, -2))
+        && R_SUCCEEDED(threadStart(&s_exitWatchdog)))
+        s_exitWatchdogRunning = true;
+    nxExitStep("SD_Shutdown");
     SD_Shutdown();
+    nxExitStep("freezing engine threads");
     const int frozen = NX_FreezeEngineThreads();
     s_exitPrepared = true;
     printf("[nx] exit: audio closed, %d engine threads frozen\n", frozen);
+    nxExitStep("exit(): atexit handlers registered after main's (mesa, libraries)");
 }
 
 static void nxReleaseGpuAtExit(void)
 {
     if (!s_exitPrepared)
         return;
+    nxExitStep("atexit: nvExit");
     for (int i = 0; i < 16; ++i)   // mesa's references and any of ours; extra calls do nothing
         nvExit();
+    nxExitStep("after atexit: C++ destructors, libc cleanup");
 }
 
 // Called from Win_GetEvent on the main thread every frame. Nothing read the
@@ -537,16 +587,16 @@ int main(int argc, char **argv)
 
     socketInitializeDefault();
 
-    atexit(socketExit);
+    atexit([]{ nxExitStep("atexit: socketExit (2)"); socketExit(); });
     mkdir(NX_GAME_DIR, 0777);
     socketInitializeDefault();
-    atexit(socketExit);
-    atexit([]{ appletUnlockExit(); });
+    atexit([]{ nxExitStep("atexit: socketExit (1)"); socketExit(); });
+    atexit([]{ nxExitStep("atexit: appletUnlockExit"); appletUnlockExit(); });
     chdir(NX_GAME_DIR);
 
     nxSetupLogging();
     NX_ClockInit();
-    atexit(NX_ClockExit);
+    atexit([]{ nxExitStep("atexit: NX_ClockExit"); NX_ClockExit(); });
 
     nx_wincompat_init_main_thread();
 

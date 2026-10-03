@@ -1277,6 +1277,17 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   hanging. Suspects: a lock a frozen thread held (stdout, malloc), the
   `tmem` waits in `socketExit`/`nvExit` (engine threads were frozen inside
   `select()`), mesa's own atexit handlers.
+- **Clean exit, third run (14:51): the watchdog named `nvExit`.** libnx's nv
+  cleanup waits for the GPU service to give back its transfer memory, which
+  it does not while mesa's context still exists -- and that belonged to the
+  frozen render thread. Skipping `nvExit` would leave that memory (taken from
+  the heap the next NRO gets) unusable. Now `NX_PrepareExit` first asks the
+  render thread to tear EGL down itself (`NX_GlRelease` ->
+  `NX_GlServiceRenderThread`, polled at the top of `RB_RenderThread`'s loop:
+  `glFinish`, `eglMakeCurrent(none)`, destroy context and surface,
+  `eglTerminate`; GL stays off afterwards), waiting up to 2 s, and only then
+  freezes the threads. `nvExit` runs only if EGL was released. The log line
+  says `EGL released` or `NOT released`.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

@@ -487,7 +487,9 @@ extern "C" bool NX_ChainLoadSibling(const char *nroName)
 // ---------------------------------------------------------------------------
 void SD_Shutdown();                                 // nx_snd.cpp
 extern "C" int NX_FreezeEngineThreads(void);        // nx_wincompat.cpp
+extern "C" bool NX_GlRelease(unsigned int timeoutMs); // nx_d3d9_null.cpp
 static bool s_exitPrepared;
+static bool s_glReleased;
 
 // Exit watchdog. The first clean-exit build froze in exit() after the threads
 // were frozen, with the log thread already gone. Each step below records its
@@ -536,10 +538,13 @@ extern "C" void NX_PrepareExit(void)
         s_exitWatchdogRunning = true;
     nxExitStep("SD_Shutdown");
     SD_Shutdown();
+    nxExitStep("releasing EGL on the render thread");
+    s_glReleased = NX_GlRelease(2000);
     nxExitStep("freezing engine threads");
     const int frozen = NX_FreezeEngineThreads();
     s_exitPrepared = true;
-    printf("[nx] exit: audio closed, %d engine threads frozen\n", frozen);
+    printf("[nx] exit: audio closed, EGL %s, %d engine threads frozen\n",
+           s_glReleased ? "released" : "NOT released (render thread did not answer)", frozen);
     nxExitStep("exit(): atexit handlers registered after main's (mesa, libraries)");
 }
 
@@ -547,9 +552,13 @@ static void nxReleaseGpuAtExit(void)
 {
     if (!s_exitPrepared)
         return;
-    nxExitStep("atexit: nvExit");
-    for (int i = 0; i < 16; ++i)   // mesa's references and any of ours; extra calls do nothing
-        nvExit();
+    // With EGL still up the nv session cannot give its transfer memory back and
+    // nvExit would wait forever; skip it then (the next NRO may still crash).
+    if (s_glReleased) {
+        nxExitStep("atexit: nvExit");
+        for (int i = 0; i < 16; ++i)   // any references mesa left; extra calls do nothing
+            nvExit();
+    }
     nxExitStep("after atexit: C++ destructors, libc cleanup");
 }
 

@@ -5264,6 +5264,9 @@ static const void *data; // an unrelated global `data` also exists in r_water_si
 #else
 const void *data;
 #endif
+#ifdef KISAK_NX
+extern "C" void NX_GlServiceRenderThread(void);
+#endif
 void     RB_RenderThread(unsigned int threadContext)
 {
     void *Value; // eax
@@ -5303,6 +5306,9 @@ void     RB_RenderThread(unsigned int threadContext)
     }
     while ( 1 )
     {
+#ifdef KISAK_NX
+        NX_GlServiceRenderThread();   // nx_d3d9_null.cpp: tear EGL down here when exit asks
+#endif
         {
             PROF_SCOPED("R_StreamUpdate_ProcessFileCallbacks"); // LWSS ADD
             R_StreamAlloc_Lock();

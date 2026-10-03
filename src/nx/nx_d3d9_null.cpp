@@ -324,6 +324,41 @@ static bool nxGlAcquire(void)
     }
     return true;
 }
+
+// Exit before chain-loading another NRO: EGL must be torn down on the thread
+// that owns the context, or mesa keeps the GPU service open and libnx's nvExit
+// waits forever for its transfer memory (exit watchdog: "atexit: nvExit").
+// NX_PrepareExit asks; the render thread's loop answers through
+// NX_GlServiceRenderThread. After it, GL is off for good (s_glFailed).
+static volatile bool s_glReleaseRequested;
+static volatile bool s_glReleased;
+
+extern "C" void NX_GlServiceRenderThread(void)
+{
+    if (!s_glReleaseRequested || s_glReleased)
+        return;
+    mutexLock(&s_glLock);
+    if (s_glReady && Sys_GetCurrentThreadId() == s_glThreadId) {
+        glFinish();
+        deinitEgl();
+        s_glReady = false;
+        s_glFailed = true;
+        s_glReleased = true;
+    }
+    mutexUnlock(&s_glLock);
+}
+
+// True once EGL is gone (or was never up). Waits up to timeoutMs for the
+// render thread to do it.
+extern "C" bool NX_GlRelease(unsigned int timeoutMs)
+{
+    if (!s_glReady)
+        return true;
+    s_glReleaseRequested = true;
+    for (unsigned int waited = 0; !s_glReleased && waited < timeoutMs; ++waited)
+        svcSleepThread(1000000);
+    return s_glReleased;
+}
 // ===========================================================================
 // format helpers
 // ===========================================================================

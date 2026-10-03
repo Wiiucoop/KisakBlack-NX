@@ -5003,6 +5003,9 @@ void DB_ArchiveAssets()
 
 void DB_FreeUnusedResources()
 {
+    // nx-port: the entry fields were read as asset[1].type / asset[1].header, the
+    // bytes after an x86 XAsset (8 bytes). Under LP64 XAsset is 16 and asset[1].header
+    // lands past nextOverride, so unloading a zone (frontend -> map) asserted on garbage.
     unsigned int String; // eax
     const char *v1; // eax
     const char *XAssetTypeName; // eax
@@ -5020,10 +5023,10 @@ void DB_FreeUnusedResources()
     DB_EnableInUseCache(data);
     for ( i = 0; i < 0x8000; ++i )
     {
-        for ( j = db_hashTable[i]; j; j = HIWORD(asset[1].type) )
+        for ( j = db_hashTable[i]; j; j = g_assetEntryPool[j].entry.nextHash )
         {
             asset = &g_assetEntryPool[j].entry.asset;
-            if ( LOBYTE(asset[1].type) )
+            if ( g_assetEntryPool[j].entry.zoneIndex )
             {
                 varXAsset = asset;
                 Mark_XAsset();
@@ -5038,21 +5041,21 @@ void DB_FreeUnusedResources()
         {
             j = (unsigned __int16)*v7;
             asset = &g_assetEntryPool[j].entry.asset;
-            if ( LOBYTE(asset[1].type) )
+            if ( g_assetEntryPool[j].entry.zoneIndex )
             {
-                v7 = (_WORD *)&asset[1].type + 1;
+                v7 = &g_assetEntryPool[j].entry.nextHash;
             }
-            else if ( BYTE1(asset[1].type) )
+            else if ( g_assetEntryPool[j].entry.inuse )
             {
                 str = (char *)DB_GetXAssetName(asset);
                 String = SL_GetString(str, 4u, SCRIPTINSTANCE_SERVER);
                 name = SL_ConvertToString(String, SCRIPTINSTANCE_SERVER);
                 DB_SetXAssetName(asset, name);
-                v7 = (_WORD *)&asset[1].type + 1;
+                v7 = &g_assetEntryPool[j].entry.nextHash;
             }
             else
             {
-                if ( LOWORD(asset[1].header.xmodelPieces)
+                if ( g_assetEntryPool[j].entry.nextOverride
                     && !Assert_MyHandler(
                                 "C:\\projects_pc\\cod\\codsrc\\src\\database\\db_registry.cpp",
                                 5847,
@@ -5062,7 +5065,7 @@ void DB_FreeUnusedResources()
                 {
                     __debugbreak();
                 }
-                *v7 = HIWORD(asset[1].type);
+                *v7 = g_assetEntryPool[j].entry.nextHash;
                 if ( !g_defaultAssetCount
                     && !Assert_MyHandler(
                                 "C:\\projects_pc\\cod\\codsrc\\src\\database\\db_registry.cpp",

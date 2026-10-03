@@ -3259,7 +3259,15 @@ void __cdecl PrivatePartyHost(int localClientNum, itemDef_s *item, OperandStack 
     Operand result; // [esp+0h] [ebp-8h] BYREF
 
     result.dataType = VAL_INT;
+#if defined(OPENBLOPS_OFFLINE_MENUS) && defined(KISAK_SP)
+    // SP's frontend is a running level, so InPrivateParty() answers 1; with no
+    // party layer the player is never its host, and the Zombies online menu
+    // (xboxlive.menu) hid its real buttons behind grey copies. Offline, the
+    // player is always the host of their own party.
+    result.internals.intVal = 1;
+#else
     result.internals.intVal = 0;
+#endif
     if ( uiscript_debug && uiscript_debug->current.integer )
         Expression_TraceInternal("PrivatePartyHost() = %i\n", result.internals.intVal);
     AddOperandToStack(dataStack, &result);

@@ -360,7 +360,7 @@ worth grepping for before the next one finds you:
 | --- | --- | --- |
 | a pointer read as a 32-bit word at a 4-byte stride | `*((unsigned int *)&rgp.poisonFXMaterial + n)` (the blur material) | index the array it meant |
 | a pointer read through an overlapping `int` of a union | `*(const char **)(dvar->domain.integer.max + 4 * i)` (enum dvar strings, 5 sites) | use the union member that is the pointer |
-| x86 struct sizes as literals | `Expression_Alloc(.., 16)`, `12 * numRpn` (menu expressions), `gamemsgText[2][52 * dest + 1892]` (console game message windows), `G_Find(0, 356, ...)` (classname) | `sizeof` |
+| x86 struct sizes as literals | `Expression_Alloc(.., 16)`, `12 * numRpn` (menu expressions), `gamemsgText[2][52 * dest + 1892]` (console game message windows), `G_Find(0, 356, ...)` (classname), `asset[1].header` (asset entry fields after an `XAsset`) | `sizeof` |
 
 [`docs/lp64-sweeps/`](docs/lp64-sweeps/) is the standing census for the classes
 the compiler *cannot* see, with the tooling that produces it: the same headers
@@ -1206,6 +1206,22 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   shown when a `visible when` fails, the real one hidden. Items with an
   action hidden by `visible when` are now reported once:
   `[nx-ui] hidden '<item>' in '<menu>': 'visible when' false at <file>:<line>, calls: ...`.
+- **Frontend, fourth run (2026-10-03 11:26): Kino starts loading, crashes
+  unloading the frontend.** `ChangeLevel` now runs (`spmap zombie_theater`).
+  Unloading `en_frontend` asserted `!assetEntry->nextOverride` in
+  `DB_FreeUnusedResources`, which read the `XAssetEntry` fields as
+  `asset[1].type` / `asset[1].header` -- the bytes after an x86 `XAsset`
+  (8 bytes). Under LP64 `XAsset` is 16: `zoneIndex`, `inuse` and `nextHash`
+  still landed right by chance, `nextOverride` did not. It uses the named
+  fields now. This is the zone-unload path Restart Map and quit-to-menu go
+  through, so their crash may be the same one.
+- **Grey online options: found.** `menu_xboxlive`'s three real buttons
+  (`xboxlive.menu` 319/325/331) are hidden by a `visible when` calling
+  `privatepartyhost`, `inprivateparty`, `dvarbool`. In SP the frontend is a
+  running level, so `InPrivateParty()` (= `com_sv_running`) is 1 while
+  `PrivatePartyHost()` is a 0 stub: in a party, never its host, so the grey
+  copies showed. Under `OPENBLOPS_OFFLINE_MENUS` the SP build's
+  `PrivatePartyHost()` returns 1 (MP unchanged: its frontend runs no server).
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

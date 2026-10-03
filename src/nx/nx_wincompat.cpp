@@ -121,6 +121,23 @@ struct NxThread {
     DWORD threadId;
 };
 
+// Every thread CreateThread made and CloseHandle has not freed, for
+// NX_FreezeEngineThreads at exit.
+static NxThread *s_liveThreads[256];
+static Mutex s_liveThreadsLock;
+
+static void nxTrackThread(NxThread *t, bool add)
+{
+    mutexLock(&s_liveThreadsLock);
+    for (int i = 0; i < 256; ++i) {
+        if (add ? !s_liveThreads[i] : s_liveThreads[i] == t) {
+            s_liveThreads[i] = add ? t : nullptr;
+            break;
+        }
+    }
+    mutexUnlock(&s_liveThreadsLock);
+}
+
 struct NxMutexH {
     NxHandleBase h;
     RMutex m;
@@ -371,6 +388,7 @@ HANDLE CreateThread(LPSECURITY_ATTRIBUTES, SIZE_T stackSize, LPTHREAD_START_ROUT
         t->threadId = (DWORD)id;
         *threadId = t->threadId;
     }
+    nxTrackThread(t, true);
     if (!(flags & CREATE_SUSPENDED)) {
         threadStart(&t->thread);
         t->started = true;
@@ -580,6 +598,7 @@ BOOL CloseHandle(HANDLE handle)
     case NXH_THREAD: {
         NxThread *t = (NxThread *)h;
         if (t->isMain) return TRUE; // never free the main-thread record
+        nxTrackThread(t, false);
         if (t->started)
             threadWaitForExit(&t->thread);
         threadClose(&t->thread);
@@ -1976,3 +1995,33 @@ LONG RegCreateKeyExA(HKEY, LPCSTR, DWORD, LPSTR, DWORD, DWORD, LPSECURITY_ATTRIB
     return ERROR_ACCESS_DENIED;
 }
 LONG RegCloseKey(HKEY) { return ERROR_SUCCESS; }
+
+// Exit, before returning to the homebrew loader: the engine's threads (render,
+// server, job workers, streaming...) have no stop request and were still
+// running when the loader unloaded this NRO -- the next NRO it started
+// crashed with KisakBlack's render thread executing unmapped code (Atmosphere
+// report, 2026-10-03). Pause each one that has not finished, then free it:
+// threadClose unmaps its stack and closes its handle, so the next NRO can use
+// that memory. A paused thread never runs again. Returns how many it froze.
+extern "C" int NX_FreezeEngineThreads(void)
+{
+    u64 self = 0;
+    svcGetThreadId(&self, CUR_THREAD_HANDLE);
+    NxThread *frozen[256];
+    int count = 0;
+    mutexLock(&s_liveThreadsLock);
+    for (int i = 0; i < 256; ++i) {
+        NxThread *t = s_liveThreads[i];
+        if (!t || !t->started || t->done || t->isMain)
+            continue;
+        u64 id = 0;
+        if (R_FAILED(svcGetThreadId(&id, t->thread.handle)) || id == self)
+            continue;
+        if (R_SUCCEEDED(threadPause(&t->thread)))
+            frozen[count++] = t;
+    }
+    for (int i = 0; i < count; ++i)
+        threadClose(&frozen[i]->thread);
+    mutexUnlock(&s_liveThreadsLock);
+    return count;
+}

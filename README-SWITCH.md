@@ -1247,6 +1247,23 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   (`appletRequestLaunchApplication`): a fresh process. Installed titles with
   "kisak" in the name are logged. With no such title it falls back to
   `envSetNextLoad`.
+- **Clean exit (2026-10-03).** The Atmosphere report for the SP -> MP crash
+  (`01772049487_058bdbf7eb411000.log`) showed the cause: after the loader
+  had unloaded KisakBlack (only `hbl` left in the module list), seven of its
+  threads were still alive -- six parked in waits, and the render thread
+  (`RB_RenderThread` -> `Sys_WaitForSingleObjectTimeout`) executing unmapped
+  code. Sphaira and DBI start other NROs the same way; they exit clean.
+  `Sys_Quit` now calls `NX_PrepareExit` before `exit`: `SD_Shutdown` stops the
+  mixer thread and closes audout, and `NX_FreezeEngineThreads`
+  (`nx_wincompat.cpp`, which now tracks every thread `CreateThread` made)
+  pauses each unfinished engine thread for good and `threadClose`s it,
+  unmapping its stack. The last atexit step drops libnx's `nv` service to
+  zero references: mesa's EGL holds one, `eglTerminate` never runs (the
+  context belongs to the frozen render thread), and closing the session
+  frees the GPU allocations and the nv transfer memory taken from the heap
+  the next NRO gets. The log thread and sockets close in their own atexit
+  handlers. The handoff prefers the loader's chain-load again; launching an
+  installed forwarder title is the fallback for loaders that cannot.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

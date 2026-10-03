@@ -425,11 +425,29 @@ static u64 nxFindInstalledTitle(const char *name)
 
 extern "C" bool NX_ChainLoadSibling(const char *nroName)
 {
-    // Started as an application (a forwarder, or hbmenu's title takeover):
-    // launch the sibling's forwarder as its own title. The system starts it in
-    // a fresh process after this one exits. Chain-loading runs the next NRO in
-    // this process, where this one's threads, audio and GPU state are still
-    // alive, and the MP NRO crashed before writing its log.
+    char path[512];
+    const char *slash = strrchr(s_nroPath, '/');
+    if (s_nroPath[0] && slash)
+        snprintf(path, sizeof(path), "%.*s/%s", (int)(slash - s_nroPath), s_nroPath, nroName);
+    else
+        snprintf(path, sizeof(path), "%s/%s", NX_GAME_DIR, nroName);
+
+    // The loader (hbmenu, sphaira, a forwarder) starts the NRO once this one
+    // exits, as for any homebrew. That needs a clean exit (NX_PrepareExit):
+    // before it, KisakBlack's threads outlived the exit and the next NRO
+    // crashed (Atmosphere report: the render thread running unmapped code).
+    if (envHasNextLoad()) {
+        char args[600];
+        snprintf(args, sizeof(args), "\"%s\"", path);
+        Result rc = envSetNextLoad(path, args);
+        printf("[nx] next load: %s (rc 0x%x)\n", path, rc);
+        if (R_SUCCEEDED(rc))
+            return true;
+    }
+
+    // A loader that cannot chain-load: when running as an application, launch
+    // the sibling's installed forwarder title instead (a fresh process after
+    // this one exits).
     const AppletType appletType = appletGetAppletType();
     if (appletType == AppletType_Application || appletType == AppletType_SystemApplication) {
         char title[64];
@@ -442,27 +460,47 @@ extern "C" bool NX_ChainLoadSibling(const char *nroName)
             printf("[nx] launch title %016lx '%s' after exit (rc 0x%x)\n", titleId, title, rc);
             if (R_SUCCEEDED(rc))
                 return true;
-        } else {
-            printf("[nx] no installed title named '%s'; chain-loading the NRO instead\n", title);
         }
     }
-
-    char path[512];
-    const char *slash = strrchr(s_nroPath, '/');
-    if (s_nroPath[0] && slash)
-        snprintf(path, sizeof(path), "%.*s/%s", (int)(slash - s_nroPath), s_nroPath, nroName);
-    else
-        snprintf(path, sizeof(path), "%s/%s", NX_GAME_DIR, nroName);
-
-    if (!envHasNextLoad()) {
-        printf("[nx] cannot start %s: this loader does not support chain-loading; quitting\n", path);
-        return true;
-    }
-    char args[600];
-    snprintf(args, sizeof(args), "\"%s\"", path);
-    Result rc = envSetNextLoad(path, args);
-    printf("[nx] next load: %s (rc 0x%x)\n", path, rc);
+    printf("[nx] cannot start %s from this loader; quitting\n", path);
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Clean exit back to the homebrew loader. The loader runs the next NRO (the
+// SP <-> MP button, or just its menu) in this same process, so nothing of this
+// one may keep running or keep memory the next one will use. Sys_Quit calls
+// NX_PrepareExit right before exit():
+//  - the mixer thread stops and audout closes (SD_Shutdown; idempotent);
+//  - every engine thread is paused for good and its stack freed
+//    (NX_FreezeEngineThreads, nx_wincompat.cpp);
+// and as the very last atexit step the GPU service is closed: mesa's EGL took
+// a reference to libnx's nv service, whose transfer memory comes out of the
+// heap the next NRO gets, and eglTerminate never runs (the GL context belongs
+// to the render thread, now frozen). Closing the session frees every GPU
+// allocation in the kernel. The log thread and sockets close in their own
+// atexit handlers.
+// ---------------------------------------------------------------------------
+void SD_Shutdown();                                 // nx_snd.cpp
+extern "C" int NX_FreezeEngineThreads(void);        // nx_wincompat.cpp
+static bool s_exitPrepared;
+
+extern "C" void NX_PrepareExit(void)
+{
+    if (s_exitPrepared)
+        return;
+    SD_Shutdown();
+    const int frozen = NX_FreezeEngineThreads();
+    s_exitPrepared = true;
+    printf("[nx] exit: audio closed, %d engine threads frozen\n", frozen);
+}
+
+static void nxReleaseGpuAtExit(void)
+{
+    if (!s_exitPrepared)
+        return;
+    for (int i = 0; i < 16; ++i)   // mesa's references and any of ours; extra calls do nothing
+        nvExit();
 }
 
 // Called from Win_GetEvent on the main thread every frame. Nothing read the
@@ -488,6 +526,9 @@ extern "C" bool NX_PumpAppletMessages(void)
 
 int main(int argc, char **argv)
 {
+    // Registered first, so it runs last of the atexit handlers.
+    atexit(nxReleaseGpuAtExit);
+
     if (argc > 0 && argv && argv[0])
         snprintf(s_nroPath, sizeof(s_nroPath), "%s", argv[0]);
 

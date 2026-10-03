@@ -264,6 +264,10 @@ void    Sys_Error(char *error, ...)
     exit(0);
 }
 
+#ifdef KISAK_NX
+extern "C" void NX_PrepareExit(void); // nx_main.cpp
+#endif
+
 void __cdecl    Sys_Quit()
 {
     Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
@@ -287,6 +291,9 @@ void __cdecl    Sys_Quit()
     if ( !com_errorEntered )
         track_shutdown(0);
     Con_ShutdownChannels();
+#ifdef KISAK_NX
+    NX_PrepareExit();   // nx_main.cpp: stop audio and the engine threads before exit
+#endif
     exit(0);
 }
 

@@ -8,6 +8,9 @@
 #include <physics/physpreset_load_obj.h>
 #include <universal/com_math_anglevectors.h>
 #include <qcommon/cm_load.h>
+#ifdef KISAK_NX
+extern const dvar_t *nx_physics;   // phys_main.cpp
+#endif
 #include <qcommon/dobj_management.h>
 #include <xanim/dobj_utils.h>
 #include <bgame/bg_misc.h>
@@ -674,6 +677,25 @@ void __cdecl G_CreatePhysicsObject(gentity_s *ent)
             ent->physObjId = -1;
             Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
             Sys_LeaveCriticalSection(CRITSECT_PHYSICS_UPDATE);
+#ifdef KISAK_NX
+            // KNOWN LIMITATION while physics is off: a launched entity cannot
+            // fly, and it would hang where it was -- a ghost door in Five's
+            // doorways for the 60 s until physics_launch_door deletes it. Hide
+            // it and make it non-solid at once, as the Hide() and NotSolid()
+            // builtins do; the script still deletes it later, so it is not
+            // deleted here (a second delete of a freed entity would be a
+            // script error). Remove this with the solver port.
+            if ( !nx_physics || !nx_physics->current.enabled )
+            {
+                ent->s.lerp.eFlags |= 0x20u;    // EF_NODRAW
+                ent->r.clientMask[0] = -1;
+                G_ClearGroundEntityRefs(ent);
+                ent->r.contents = 0;
+                ent->s.lerp.eFlags |= 1u;
+                SV_LinkEntity(ent);
+                Com_Printf(15, "[nx] physics off: '%s' (ent %d) hidden instead of launched\n", Name, ent->s.number);
+            }
+#endif
         }
     }
     else

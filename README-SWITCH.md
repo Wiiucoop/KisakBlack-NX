@@ -1434,6 +1434,14 @@ the SP front end (`frontend.ff`) is itself a 3D scene.
 - **Physics is off** (`nx_physics 0`): the solver is still at x86 offsets.
   No ragdolls; Zombies corpses are hidden when their death animation ends
   (section 3, physics).
+- **Physics-launched entities vanish instead of flying (physics off).** When
+  script launches an entity into physics (`PhysicsLaunch`; Five's `"physics"`
+  doors in `_zombiemode_blockers.gsc` `physics_launch_door`), `Phys_ObjCreate`
+  fails and `G_CreatePhysicsObject` now hides the entity and makes it
+  non-solid right away (as `Hide()` + `NotSolid()`), so no frozen "ghost
+  door" hangs in the doorway; the script still deletes it 60 s later. The
+  door panel does not fly off. Revisit with the physics solver port: remove
+  the `KISAK_NX` block in `g_mover.cpp`.
 - **No light coronas**: occlusion queries report 0 visible pixels, so
   `RB_DrawCorona` never draws one.
 - **`r_water_sim.cpp` is not LP64-clean** (dozens of pointer/int casts); maps

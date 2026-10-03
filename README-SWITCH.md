@@ -1222,6 +1222,22 @@ loads `code_pre_gfx`, `code_post_gfx`, `patch` (+ `en_`) at boot, then
   `PrivatePartyHost()` is a 0 stub: in a party, never its host, so the grey
   copies showed. Under `OPENBLOPS_OFFLINE_MENUS` the SP build's
   `PrivatePartyHost()` returns 1 (MP unchanged: its frontend runs no server).
+- **SP <-> MP handoff (2026-10-03).** The SP menu's Multiplayer button runs
+  `frontend.gsc` `DoStartMultiplayerSequence` -> `StartMultiplayerGame()` ->
+  `startMultiplayer` -> `Sys_QuitAndStartProcess("BlackOpsMP.exe")`; at quit
+  `Sys_SpawnQuitProcess` -> `LiveSteam_LaunchOtherApp` opened
+  `steam://run/42710` (the MP build's Singleplayer button: `CoDSP_rd.exe`,
+  42700). On NX that function now asks the homebrew loader to start the
+  sibling NRO from the running NRO's folder (`argv[0]`) once this one exits
+  (`NX_ChainLoadSibling` -> `envSetNextLoad`): `KisakBlack-MP.nro` from SP,
+  `KisakBlack.nro` from MP. The quit then finishes normally (`exit`), which is
+  required: a crash or `svcExitProcess` loses the request. It used to crash at
+  `SL_Shutdown`'s leaked-script-string assert (2 leaks); on NX the leaks are
+  printed and the assert skipped. The log's second line says which NRO
+  started and whether the loader can chain-load (`envHasNextLoad`); hbmenu
+  can, a forwarder may not, and then the game just quits to its menu.
+  Closing the title from the Home menu still crashes (section 6) -- that is a
+  different exit.
 - **Aim assist on (2026-10-02).** The console aim assist code runs on PC too
   (`AimTarget` collects targets every frame), but
   `AimAssist_PlayerDisabledAutoAim()` returns 1 on PC, which sets

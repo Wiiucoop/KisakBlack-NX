@@ -380,10 +380,38 @@ static __attribute__((noinline)) void nxCrashReport(ThreadExceptionDump *ctx)
     svcExitProcess();
 }
 
+// The NRO this process was started from (argv[0] from the homebrew loader or a
+// forwarder), for chain-loading its sibling.
+static char s_nroPath[512];
+
+// The SP <-> MP handoff (retail: BlackOps.exe / BlackOpsMP.exe through Steam).
+// Asks the homebrew loader to start <nroName> from this NRO's folder once this
+// one exits; the caller then quits normally (Sys_Quit -> exit). A loader that
+// cannot chain-load (envHasNextLoad false) just returns to its menu.
+extern "C" bool NX_ChainLoadSibling(const char *nroName)
+{
+    char path[512];
+    const char *slash = strrchr(s_nroPath, '/');
+    if (s_nroPath[0] && slash)
+        snprintf(path, sizeof(path), "%.*s/%s", (int)(slash - s_nroPath), s_nroPath, nroName);
+    else
+        snprintf(path, sizeof(path), "%s/%s", NX_GAME_DIR, nroName);
+
+    if (!envHasNextLoad()) {
+        printf("[nx] cannot start %s: this loader does not support chain-loading; quitting\n", path);
+        return true;
+    }
+    char args[600];
+    snprintf(args, sizeof(args), "\"%s\"", path);
+    Result rc = envSetNextLoad(path, args);
+    printf("[nx] next load: %s (rc 0x%x)\n", path, rc);
+    return true;
+}
+
 int main(int argc, char **argv)
 {
-    (void)argc;
-    (void)argv;
+    if (argc > 0 && argv && argv[0])
+        snprintf(s_nroPath, sizeof(s_nroPath), "%s", argv[0]);
 
     // Keep the applet alive while the game runs its own main loop.
     appletLockExit();
@@ -410,6 +438,8 @@ int main(int argc, char **argv)
     enable_OutputDebugString = 0;
 
     printf("KisakBlack Switch port starting (dir: %s)\n", NX_GAME_DIR);
+    printf("nro: %s (chain-load %s)\n", s_nroPath[0] ? s_nroPath : "<no argv[0]>",
+           envHasNextLoad() ? "supported" : "not supported by this loader");
     printf("build: " __DATE__ " " __TIME__ " (KBZ loader rev6-loadcount)\n");
     nxReportMemory();
 

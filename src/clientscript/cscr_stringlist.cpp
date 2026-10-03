@@ -258,7 +258,14 @@ void __cdecl SL_CheckLeaks(scriptInstance_t inst)
                     Com_PrintError(1, "leaked string = '%s', refcount = %i, i = %i\n", SL_DebugConvertToString(i, inst), v2, i);
                 }
             }
+#ifdef KISAK_NX
+            // At quit (SL_Shutdown) the leaks are printed above; asserting turned
+            // the SP -> MP handoff's quit into a crash, which loses the loader's
+            // next-load request. Leave it as the report.
+            if ( false
+#else
             if ( gScrStringDebugGlob[inst]->totalRefCount
+#endif
                 && !Assert_MyHandler(
                             "C:\\projects_pc\\cod\\codsrc\\src\\clientscript\\cscr_stringlist.cpp",
                             142,

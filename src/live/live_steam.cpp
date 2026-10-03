@@ -152,6 +152,10 @@ unsigned int __stdcall ShellExecuteThredProc(const char *lpParam)
     return 0;
 }
 
+#ifdef KISAK_NX
+extern "C" bool NX_ChainLoadSibling(const char *nroName); // nx_main.cpp
+#endif
+
 bool __cdecl LiveSteam_LaunchOtherApp(const char *cmd)
 {
     const char *v1; // eax
@@ -159,6 +163,15 @@ bool __cdecl LiveSteam_LaunchOtherApp(const char *cmd)
     int result; // [esp+4h] [ebp-8h]
     DWORD dwThreadID; // [esp+8h] [ebp-4h] BYREF
 
+#ifdef KISAK_NX
+    // No Steam: the Switch build chain-loads the other NRO from the same folder.
+    {
+        if ( !I_stricmp(cmd, "BlackOps.exe") || !I_stricmp(cmd, "CoDSP_rd.exe") )
+            return NX_ChainLoadSibling("KisakBlack.nro");
+        if ( !I_stricmp(cmd, "BlackOpsMP.exe") || !I_stricmp(cmd, "CoDMP_rd.exe") )
+            return NX_ChainLoadSibling("KisakBlack-MP.nro");
+    }
+#endif
 #ifdef KISAK_SP
     // Retail SP 0x00466080 recognizes the shipped executable names.  Keep the
     // reconstruction's development aliases accepted as well so existing MP behavior

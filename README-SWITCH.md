@@ -1576,7 +1576,76 @@ renderer is what transfers here, not its engine-side work.
 
 ---
 
-## 9. Credits
+## 9. Future: online play and split screen (assessment, not started)
+
+Notes from 2026-10-03, for whoever picks these up. Nothing here is built.
+
+### Online play
+
+The realistic model is **PC-hosted dedicated servers that KisakBlack players
+(Switch, and a PC build of this tree) join**. The Switch is already near its
+frame budget rendering one player, so it should be a client, not a host.
+
+What already exists:
+
+- The engine's client/server networking is intact: Zombies already runs on
+  it, client and server in one process over loopback.
+- Switch UDP sockets work (libnx `socketInitializeDefault` in `nx_main.cpp`;
+  the SP build read its socket every frame until that was dropped for
+  stutter, see "packet-path hitches" above).
+- A dedicated-server build mode, `KISAK_DEDICATED`, appears in 19 files,
+  including an SP setting of `com_maxclients` 4 ("Maximum Zombies clients").
+- SP has paths for a client that is not the host:
+  `CG_ApplyRemoteAnimSnapshot_SP` / `CG_GetRemoteAnimEntity_SP` drive zombie
+  animation from snapshots when `com_sv_running` is false.
+
+What is missing or risky:
+
+- **Bugs that only show over a real network.** The 4-bit `actorNum` field
+  (32 actor slots in SP, see "Double-speed and mixed crawler/walker
+  zombies") is that kind: anything in the net field tables (`msg_mp.cpp`)
+  sized for MP or packed with x86 assumptions surfaces only between machines.
+- **No server browser.** Retail's browser and matchmaking were DemonWare;
+  here `DW/` is compiled out and `live/` stubbed. A browser needs a small
+  master server (someone hosts it), the server's info reply (`getinfo` is
+  commented out in `sv_main_mp.cpp:801`), and a UI feeder for the list.
+- **No retail or Plutonium players.** Different protocol, checksums and
+  authentication: only KisakBlack builds can play together.
+- **The PC server build.** A dedicated server for Windows/Linux from this tree
+  (no renderer, no window) needs bringing up; `KISAK_DEDICATED` is the start.
+- **Home-router (NAT) issues** for anyone hosting outside a LAN.
+
+Suggested order, easiest first:
+
+1. **Direct IP** (`connect <ip>`) to a PC listen or dedicated server, Zombies
+   co-op. Moderate: mostly debugging network-only bugs as they turn up.
+2. **LAN discovery** through the existing System Link menus (local broadcast).
+3. **Internet server browser**: master server + `getinfo` reply + UI list.
+   The most work.
+
+### Split screen
+
+Console-only in retail; the PC executable was compiled for one local player.
+Far harder than online play, and the frame rate would struggle:
+
+- `MAX_LOCAL_CLIENTS` is 1 (`cg_local_mp.h`). Per-player arrays are sized
+  `[1]` (`cg_entitiesArray[1]`, `cg_entityOriginArray[1]`), at least 43 loops
+  are hardcoded `localClientNum < 1`, and many asserts require index 0
+  (`MAX_POSSIBLE_LOCAL_CLIENTS`). Functions still take `localClientNum`,
+  which helps, but wherever the compiler folded the index away it must be
+  rebuilt by hand.
+- Every system needs a second player: two scene views per frame, two
+  controllers to two players, per-player UI contexts and menus, two sound
+  listeners, and SP's own per-player state.
+- Two full views per frame roughly doubles render work: from today's 33-50
+  fps handheld, likely under 25 even with resolution and detail cut.
+- The only real reference is the console executables (Xbox 360 / PS3), a
+  separate reverse-engineering project.
+
+Feasibility: low. Possible in principle, a long project with a weak
+frame-rate outcome.
+
+## 10. Credits
 
 - [KisakBlack](https://github.com/SwagSoftware/KisakBlack) — the decompiled
   engine this is a port of.
